@@ -203,18 +203,7 @@ export async function runPrepareAudiobookWorkflow({
         synchronizationUnits.length > MAX_NARRATION_CHUNKS
       ) {
         stage = "content-limit";
-        logEvent(
-          "content-limit",
-          "The narration exceeds the conversion's content ceiling; the preparation fails.",
-          {
-            attributes: {
-              [TELEMETRY_ATTRIBUTES.CONVERSION_ID]: conversionId,
-              [TELEMETRY_ATTRIBUTES.NARRATION_TEXT_CHARACTERS]: narrationTextCharacters,
-              [TELEMETRY_ATTRIBUTES.NARRATION_CHUNKS]: synchronizationUnits.length,
-            },
-          },
-        );
-        throw new ContentLimitError();
+        throw new ContentLimitError(narrationTextCharacters, synchronizationUnits.length);
       }
 
       const { narrationLanguage } = await detectNarrationLanguage({
@@ -277,15 +266,27 @@ export async function runPrepareAudiobookWorkflow({
         PROCESSING_STEP_CONFIG,
         async () => {
           // A content limit is an expected outcome, which the `content-limit` warning records. Any
-          // other failure is captured first in this step, which never retries: a replay of the run
-          // reuses the recorded event ID, and an owner that cannot record the phase or the outcome
-          // still leaves the failure reported.
-          const diagnosticReference =
-            error instanceof ContentLimitError
-              ? undefined
-              : captureException(error, {
-                  tags: { [TELEMETRY_ATTRIBUTES.CONVERSION_FAILURE_CATEGORY]: stage },
-                });
+          // other failure is captured. Both happen first in this step, which never retries: a replay
+          // of the run reuses the step's result instead of reporting again, and an owner that cannot
+          // record the phase or the outcome still leaves the failure reported.
+          let diagnosticReference: string | undefined;
+          if (error instanceof ContentLimitError) {
+            logEvent(
+              "content-limit",
+              "The narration exceeds the conversion's content ceiling; the preparation fails.",
+              {
+                attributes: {
+                  [TELEMETRY_ATTRIBUTES.CONVERSION_ID]: conversionId,
+                  [TELEMETRY_ATTRIBUTES.NARRATION_TEXT_CHARACTERS]: error.narrationTextCharacters,
+                  [TELEMETRY_ATTRIBUTES.NARRATION_CHUNKS]: error.narrationChunks,
+                },
+              },
+            );
+          } else {
+            diagnosticReference = captureException(error, {
+              tags: { [TELEMETRY_ATTRIBUTES.CONVERSION_FAILURE_CATEGORY]: stage },
+            });
+          }
           await execution.phaseStarted(ConversionPhase.FINALIZATION);
           return {
             failureCategory: stage,
@@ -491,8 +492,13 @@ function logMissingCoverImage(
 }
 
 class ContentLimitError extends CupError {
-  constructor() {
+  readonly narrationTextCharacters: number;
+  readonly narrationChunks: number;
+
+  constructor(narrationTextCharacters: number, narrationChunks: number) {
     super("Narration exceeds the conversion content ceiling");
     this.name = "ContentLimitError";
+    this.narrationTextCharacters = narrationTextCharacters;
+    this.narrationChunks = narrationChunks;
   }
 }

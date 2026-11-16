@@ -524,6 +524,44 @@ test("a stored segment whose synthesis language differs from the manifest is not
   expect(await storedSynthesisLanguages(artifactPrefix)).toEqual(["de", undefined]);
 });
 
+test("a narration over the content limit logs one content-limit warning, also when the run is replayed", async () => {
+  const { grant, grantId, conversionId } = await createConversion();
+  const step = createReplayingStep();
+  const run = () =>
+    runPrepareAudiobookWorkflow({
+      env: environment,
+      event: {
+        workflowName: "provider-failure-test",
+        instanceId: conversionId,
+        payload: { grantId, sourceUrl: SOURCE_URL },
+        timestamp: new globalThis.Date(Temporal.Now.instant().epochMilliseconds),
+      },
+      step,
+      services: {
+        // More narration text than the content limit of 40,000 characters.
+        prepareSourceMaterial: createControlledSourceMaterialPreparer({
+          url: SOURCE_URL,
+          html: `<article><h1>Too long</h1><p>${"word ".repeat(9_000)}</p></article>`,
+        }),
+        loadCoverImage: async () => {
+          throw new Error("No cover image was declared");
+        },
+        selectNarrationContent: createFakeNarrationContentSelector(),
+        detectNarrationLanguage: createFakeNarrationLanguageDetector({ answer: "en" }),
+      },
+    });
+
+  await expect(run()).rejects.toThrow("Narration exceeds the conversion content ceiling");
+  // A replay reruns the code between steps and reuses each step's recorded result.
+  await expect(run()).rejects.toThrow("Narration exceeds the conversion content ceiling");
+
+  expect(await grant.getConversion(conversionId)).toMatchObject({
+    status: "failed",
+    failureCategory: "content-limit",
+  });
+  expect(loggedEvents("content-limit")).toHaveLength(1);
+});
+
 test("a document exceeding the available duration reserves nothing", async () => {
   const { grant, grantId, conversionId, now } = await createConversion();
   // Enough for either segment alone, but not for the whole document.
@@ -1029,6 +1067,22 @@ function createImmediateRetryStep(): WorkflowStep {
       throw new Error("Unexpected workflow event");
     },
   };
+}
+
+/** A step whose runs share recorded results, as a replay of a Workflow run reuses them. */
+function createReplayingStep(): WorkflowStep {
+  const results = new Map<string, unknown>();
+  const step = createImmediateRetryStep();
+  const runStep = step.do.bind(step);
+  step.do = async (name: string, ...rest: unknown[]) => {
+    if (results.has(name)) {
+      return results.get(name);
+    }
+    const result: unknown = await Reflect.apply(runStep, step, [name, ...rest]);
+    results.set(name, result);
+    return result;
+  };
+  return step;
 }
 
 async function doStep<T>(
