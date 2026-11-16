@@ -1290,9 +1290,18 @@ test(
 async function waitForAddDialogAtRest(page: Page): Promise<number> {
   const dialog = page.getByRole("dialog", { name: "Add a track" });
   await expect(dialog).toBeVisible();
-  await dialog.evaluate((element) =>
-    Promise.all(element.getAnimations().map((animation) => animation.finished)),
-  );
+  await dialog.evaluate(async (element) => {
+    // A cancelled animation, such as one a restarted transition replaces, rejects `finished` with an
+    // AbortError, so wait until no animation is still running instead of for the first set.
+    const runningAnimations = () =>
+      element
+        .getAnimations()
+        .filter((animation) => animation.pending || animation.playState === "running");
+    for (let animations = runningAnimations(); animations.length > 0;) {
+      await Promise.allSettled(animations.map((animation) => animation.finished));
+      animations = runningAnimations();
+    }
+  });
   return readAddDialogTop(page);
 }
 
