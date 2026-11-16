@@ -387,7 +387,7 @@ export class PlayerHost {
    * duration is the narration track's listed one, the timeline the reader and the position bar use,
    * not the element's.
    */
-  private reportToMediaSession = () => {
+  private reportToMediaSession = (event?: Event) => {
     const { loaded } = this.snapshot;
     if (!loaded) {
       return;
@@ -399,6 +399,8 @@ export class PlayerHost {
     mediaSession.setPlaybackState({
       playbackState: isPlaying ? "playing" : "paused",
       isWaiting: isBuffering,
+      // The player returns to the start on `ended`, so the element no longer reads as ended.
+      hasEnded: event?.type === "ended",
     });
     mediaSession.setPositionState({
       durationMilliseconds,

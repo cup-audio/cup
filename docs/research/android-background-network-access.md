@@ -1,5 +1,7 @@
 # Android background network access and freezing
 
+> Outcome, 2026-11-16: [ADR 0029](../adr/0029-play-the-narration-track-in-the-android-app-through-the-webview-with-a-media3-media-session.md) runs a `mediaPlayback` foreground service with a Media3 media session while Cup plays, which keeps Cup unfrozen and its network reachable; the WebView's `<audio>` stays the engine.
+
 Research date: 2026-11-14, for [CUP-71](https://linear.app/cup-audio/issue/CUP-71). Observed on the mobile E2E suite's emulator `cup-mobile-e2e-api36-ram4g` (Android 16, Google APIs system image `android-36` `arm64-v8a`, emulator 36.4.10.0, WebView Chrome 133.0.6943.137), running the debug build of the Android shell from commit `fc4d38ae` without a test origin, so it talked to production `https://cup.audio`. The probes sent only `GET /` to Cup and streamed one public-domain LibriVox MP3 from archive.org. External claims come from Android's [Android 15 behavior changes](https://developer.android.com/about/versions/15/behavior-changes-all#background-network-access), read on the research date. No physical device took part.
 
 ## Question

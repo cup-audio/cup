@@ -38,11 +38,11 @@ test("the browser's media session shows the audiobook, sends its actions, and cl
       positionMilliseconds: 5_500,
       playbackRate: 1.5,
     });
-    port.setPlaybackState({ playbackState: "playing", isWaiting: false });
+    port.setPlaybackState({ playbackState: "playing", isWaiting: false, hasEnded: false });
     const playing = session.playbackState;
-    port.setPlaybackState({ playbackState: "playing", isWaiting: true });
+    port.setPlaybackState({ playbackState: "playing", isWaiting: true, hasEnded: false });
     const waiting = session.playbackState;
-    port.setPlaybackState({ playbackState: "paused", isWaiting: false });
+    port.setPlaybackState({ playbackState: "paused", isWaiting: false, hasEnded: false });
     const paused = session.playbackState;
     const published = {
       title: session.metadata?.title,

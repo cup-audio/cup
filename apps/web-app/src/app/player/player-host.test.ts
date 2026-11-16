@@ -163,8 +163,8 @@ class FakeMediaSession implements MediaSessionPort {
     this.published.push(artworkUrl ? `${title} (${artworkUrl})` : title);
   }
 
-  setPlaybackState({ playbackState, isWaiting }: MediaPlaybackStateInput) {
-    this.playbackState = isWaiting ? `${playbackState}, waiting` : playbackState;
+  setPlaybackState({ playbackState, isWaiting, hasEnded }: MediaPlaybackStateInput) {
+    this.playbackState = `${playbackState}${isWaiting ? ", waiting" : ""}${hasEnded ? ", ended" : ""}`;
     this.calls.push(`playbackState:${this.playbackState}`);
   }
 
@@ -1479,7 +1479,7 @@ test("a seek and the end of the audiobook are reported to the system's media con
     "playbackState:paused",
     "positionState:9000/15000@1",
     // A finished audiobook starts over.
-    "playbackState:paused",
+    "playbackState:paused, ended",
     "positionState:0/15000@1",
   ]);
 });

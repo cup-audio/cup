@@ -179,6 +179,16 @@ One Android test launches with the real plugin (`realGoogleSignIn: true`) on the
 
 [`test/android/back-button.test.ts`](test/android/back-button.test.ts) relaunches a signed-in Cup so Recents is the first screen, which also covers the session in Secure Storage across a relaunch; on iOS, the signed-in share that starts Cup covers it. Back closes the Add dialog and leaves a track's page for Recents; on Recents, Back puts Cup in the background with its page kept, which the test checks by bringing Cup back to the foreground. Android's first Back closes an open on-screen keyboard instead of reaching Cup. The Add dialog focuses itself, not its URL field, so no keyboard opens: the test checks that the dialog holds focus and that no keyboard is on screen before pressing Back.
 
+## Media session (Android)
+
+[`test/android/media-session.test.ts`](test/android/media-session.test.ts) checks the Android app's [media session plugin](../../apps/mobile-app/README.md#playback) in one test. Signed in, it plays the new audiobook, whose narration track the test Worker serves from its fake synthesis, and checks what Android sees with `adb`, through `AndroidAppDevice.dumpsys()` and `pressMediaKey()`:
+
+- `dumpsys media_session` lists a session of `audio.cup.app` whose metadata description is the audiobook's title and whose state is `PLAYING(3)`;
+- `dumpsys activity services audio.cup.app` shows `MediaPlaybackService` with `isForeground=true` and `types=0x00000002`, the `mediaPlayback` type;
+- `input keyevent KEYCODE_MEDIA_PAUSE` turns the player's button in the WebView's DOM to Play, a position save reaches the Worker, and the session shows `PAUSED(2)`; `KEYCODE_MEDIA_PLAY` turns it back to Pause.
+
+`dumpsys media_session` prints no duration, so `AndroidAppDevice.readMediaControlsProgress()` opens the notification shade and reads System UI's media controls, whose progress bar System UI describes as, for example, `9 seconds of 19 seconds`; the whole duration there must match the narration track's within a second. Playback saves the position as soon as it starts and then every 5 seconds, so the test presses Pause right after that first save, and the save that follows comes from the pause. Loopback is exempt from Android's background network cut and probably from the freezer, so the test does not show listening with the screen locked; that stays manual.
+
 ## Native networking
 
 [`test/native-networking.test.ts`](test/native-networking.test.ts), on both platforms, signs in, submits the Add dialog with the source URL the test Worker's fake source preparation accepts, and waits for Recents to list the new conversion. From the Worker's request log it checks that the conversion's `POST /api/account/conversions` arrived without an Origin header but with the `X-Create-Audiobook-From-URL-Request` header and the JSON content type, as only `CapacitorHttp`'s native requests send it, and that every account request since carried a bearer token the test's fake auth provider signed.

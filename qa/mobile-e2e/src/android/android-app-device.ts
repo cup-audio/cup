@@ -245,6 +245,39 @@ export class AndroidAppDevice implements AppDevice {
     await this.adb(["shell", "input", "keyevent", "KEYCODE_BACK"]);
   }
 
+  /**
+   * Presses a media key, such as `KEYCODE_MEDIA_PAUSE`, as a headset or a keyboard does. Android
+   * delivers it to the active media session.
+   */
+  async pressMediaKey(keyCode: `KEYCODE_MEDIA_${string}`): Promise<void> {
+    await this.adb(["shell", "input", "keyevent", keyCode]);
+  }
+
+  /**
+   * The progress the media controls in the notification shade show for the playing session, such as
+   * `9 seconds of 19 seconds`: System UI's own reading of the session's position and duration,
+   * which `dumpsys media_session` does not print. It opens the shade and closes it again.
+   */
+  async readMediaControlsProgress(): Promise<string> {
+    await this.driver.switchContext("NATIVE_APP");
+    await this.driver.openNotifications();
+    try {
+      const progress = this.driver.$(
+        'android=new UiSelector().packageName("com.android.systemui").descriptionMatches(".+ of .+")',
+      );
+      await progress.waitForExist({ timeout: 10_000 });
+      return (await progress.getAttribute("content-desc")) ?? "";
+    } finally {
+      await this.pressBack();
+    }
+  }
+
+  /** The output of `dumpsys <service>`, such as `media_session` or `activity services`. */
+  async dumpsys(service: string, ...args: string[]): Promise<string> {
+    const { stdout } = await this.adb(["shell", "dumpsys", service, ...args]);
+    return stdout;
+  }
+
   async continueGoogleSignIn(): Promise<void> {
     // The debug build's sign-in fake answers without showing anything.
   }
