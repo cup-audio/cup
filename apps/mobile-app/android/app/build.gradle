@@ -40,8 +40,12 @@ android {
     }
     buildTypes {
         release {
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            // R8 shrinks code and resources, and AGP embeds its mapping file in the bundle for Play's
+            // crash reports. Capacitor core's consumer rules keep every plugin class, so
+            // `proguard-rules.pro` holds no rules of its own (decision: issue #437; mobile app README).
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             signingConfig signingConfigs.upload
         }
     }

@@ -110,6 +110,8 @@ pnpm --filter '@cup/mobile-app' android:release --skip-upload
 
 Each build's version comes from its UTC build time ([ADR 0029](../../docs/adr/0029-derive-mobile-build-versions-from-the-utc-build-time.md)): `versionCode` is the whole minutes since `2026-01-01T00:00Z` and `versionName` the date as `YYYY.MM.DD`. The release name is `<versionName> (<7-character short SHA>)`, for example `2026.11.14 (8e5c815)`; use it as the Play release name, so that you can tell which commit a tester runs. Debug builds keep `versionCode 1` and `versionName "0.0.0"`.
 
+Release builds are shrunk by R8, with resource shrinking and the optimizing default rules (`proguard-android-optimize.txt`), which cuts the bundle to a little over half its size and the app's code to about an eighth ([decision](https://github.com/patricktree/cup/issues/437)). Cup adds no keep rules of its own: Capacitor core's rules keep every plugin class by name, including `AndroidSharePlugin`, so `proguard-rules.pro` stays empty. R8 prints warnings about invalid stack map tables in `play-services-auth`; they don't fail the build. AGP embeds the R8 mapping file in the bundle at `BUNDLE-METADATA/com.android.tools.build.obfuscation/proguard.map`, so Play deobfuscates crash reports with no separate upload. Debug builds, which the mobile E2E suite runs, are not shrunk, so only a release build on a device exercises R8.
+
 Before Gradle starts, the command refuses, listing every failure at once and pointing here, when:
 
 - tracked files have changes (ignored and untracked files don't count), so the release name would not describe what testers run;
@@ -281,7 +283,7 @@ What the web app does with a share, such as repeat shares, `cup.audio` links and
 The rest stays manual on physical devices with release-signed builds, listed in [CUP-44](https://linear.app/cup-audio/issue/CUP-44/test-the-android-and-ios-apps-native-functionality-on-physical-devices):
 
 1. Playback through a locked device, lock-screen, notification and headset controls, and audio focus: on iOS, with the narration track's signed URL from the shell's origin; on Android, what the emulator cannot show, such as earbuds, headphone disconnects, other apps taking focus and a long locked listen against production, was checked by hand on the operator's Pixel as CUP-41's acceptance check ([#435](https://github.com/patricktree/cup/issues/435)), with no checked-in protocol.
-2. Release-signed builds: install and run, reach `https://cup.audio` through `CapacitorHttp`, and carry no debug override, cleartext exception or sign-in fake.
+2. Release-signed builds: install and run, reach `https://cup.audio` through `CapacitorHttp`, and carry no debug override, cleartext exception or sign-in fake. On Android, R8 shrinks only these builds, so Google sign-in, Secure Storage after a restart, sharing text into the app and the back button need checking on them.
 3. Real Google sign-in: the Android account picker with a real account, switching accounts after signing out, and on iOS Google's page in the sign-in sheet, which the tests replace with the fake auth provider's redirect.
 4. Sharing from real apps: Cup in the Android Sharesheet, sharing from Safari and from Chrome on iOS, and the `CupShare` handoff on a physical iPhone after each iOS update, each starting the conversion signed in without a further tap, with Cup started by the share and running.
 5. App shell: icons and splash screen, and a tapped `cup.audio` link opening the browser, not the app.
