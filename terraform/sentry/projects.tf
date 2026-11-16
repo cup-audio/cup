@@ -69,7 +69,7 @@ resource "sentry_project_inbound_data_filter" "legacy_browsers" {
 
   organization = data.sentry_organization.cup.slug
   project      = sentry_project.cup[each.key].slug
-  filter_id    = "legacy-browser"
+  filter_id    = "legacy-browsers"
   subfilters   = local.legacy_browser_subfilters
 }
 
@@ -83,10 +83,16 @@ resource "sentry_project_spike_protection" "cup" {
 
 # Sends Sentry's own notification, an email, when spike protection starts dropping events.
 resource "sentry_notification_action" "spike_protection" {
+  # Sentry accepts one project per spike-protection action.
+  for_each = local.projects
+
   organization = data.sentry_organization.cup.slug
-  projects     = [for key in sort(keys(local.projects)) : sentry_project.cup[key].slug]
+  projects     = [sentry_project.cup[each.key].slug]
   trigger_type = "spike-protection"
   service_type = "sentry_notification"
+  # Sentry accepts only this one target for its own notification.
+  target_identifier = "default"
+  target_display    = "default"
 }
 
 # Public by design: a DSN only lets a client send events. Copy each into `@cup/telemetry.core`.

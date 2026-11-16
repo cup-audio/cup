@@ -35,7 +35,7 @@ locals {
   sentry_api_base_url = "https://de.sentry.io/api/"
 
   # The operator creates the organisation with this slug in the Sentry UI.
-  organization_slug = "cup-audio"
+  organization_slug = "cupaudio"
 }
 
 # Created by the operator in the UI (free Developer plan, Germany region) and only read here, never
