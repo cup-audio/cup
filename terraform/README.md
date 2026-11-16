@@ -2,10 +2,10 @@
 
 Run each root independently from the repository root.
 
-| Root                             | Managed resources                                                                                                            | GCS state prefix |
-| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------- |
-| [bootstrap](bootstrap/main.tf)   | Infrastructure project and state bucket                                                                                      | bootstrap        |
-| [production](production/main.tf) | Existing cup-production GCP project and Terraform-created Supabase project; Cloudflare R2 bucket, DNS, Access and AI Gateway | production       |
+| Root                             | Managed resources                                                                                                                           | GCS state prefix |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
+| [bootstrap](bootstrap/main.tf)   | Infrastructure project and state bucket                                                                                                     | bootstrap        |
+| [production](production/main.tf) | Existing cup-production GCP project and Terraform-created Supabase project; Cloudflare R2 bucket, DNS, Email Routing, Access and AI Gateway | production       |
 
 Both roots use `cup-infrastructure-646301813623-tfstate` in Frankfurt (`europe-west3`).
 The bootstrap project uses Cup Billing (`01EF28-40C66E-325909`).
@@ -85,18 +85,32 @@ The former sending domain `cup-audio.com` (f4b08144-5f30-4792-9491-3cac68af01b4)
 The [Cloudflare configuration](production/cloudflare.tf) declares:
 
 - The R2 bucket `create-audiobook-from-url-audio`, the Worker's `AUDIO_BUCKET`, in location `eeur`, with `prevent_destroy`.
-- The hand-made DNS records of `cup.audio` and `cup-audio.com`: Resend's DKIM, `send` and `rsend` records, and on both zones a null MX, `v=spf1 -all` and a `p=reject` DMARC policy. The proxied AAAA records for the Worker's custom domains belong to Wrangler and stay out.
+- The hand-made DNS records of `cup.audio` and `cup-audio.com`: Resend's DKIM, `send` and `rsend` records, a `p=reject` DMARC policy on both zones, and on `cup-audio.com` a null MX and `v=spf1 -all`. The proxied AAAA records for the Worker's custom domains belong to Wrangler and stay out.
+- Email Routing on `cup.audio`, which forwards `support@cup.audio` to the operator (see [Support mail](#support-mail)).
 - The Access application and its reusable allow policy that protect `cup.audio/api/operator/*` (see the [operator runbook](../apps/operator/README.md#configure-cloudflare-access)). The output `operator_access_audience` is the AUD tag the Worker's `OPERATOR_ACCESS_AUDIENCE` must equal.
 - The AI Gateway `default`, which development and production share, with a spend limit of 30 USD per rolling 30 days and `prevent_destroy`. The Google AI Studio key in its key store is not managed here. Cup wants no rate limit from the gateway, because Google limits the project and the application waits out its rejections ([ADR 0008](../docs/adr/0008-synthesize-the-whole-narration-document.md)). Provider 5.28.1 requires one, so the configuration sets a ceiling of 10,000 requests per sliding 60 seconds, ten times the 1,000 requests per minute Google allowed for speech on 2026-10-11. If Google's limit rises toward the ceiling, raise the ceiling too.
 
 Terraform generated the configuration from the live resources on 2026-11-09. On the same day, import blocks adopted the 13 resources from `main`, and the apply set the gateway's previously unset rate limit to the ceiling above; the following plan reported no changes. Plan and apply only from an up-to-date `main`: a checkout whose configuration lacks resources held in state proposes destroying them, and `prevent_destroy` guards only the bucket and the gateway.
 
-The provider reads `CLOUDFLARE_API_TOKEN`. Store a Cloudflare API token under that name in `terraform/.env.local`, with Zone Read and DNS Edit for `cup.audio` and `cup-audio.com`, and the account permissions Workers R2 Storage Edit, Access: Apps and Policies Edit, and AI Gateway Edit. Wrangler's OAuth login cannot serve as this token: it expires within hours and cannot request DNS, Access or AI Gateway permissions. Keep `CLOUDFLARE_API_KEY` out of the Terraform shell, because the provider treats that name as a global API key; the development token in `apps/cloudflare-worker/.env.local` uses it.
+The provider reads `CLOUDFLARE_API_TOKEN`. Store a Cloudflare API token under that name in `terraform/.env.local`, with Zone Read and DNS Edit for `cup.audio` and `cup-audio.com`, Zone Settings Edit and Email Routing Rules Edit for `cup.audio`, and the account permissions Workers R2 Storage Edit, Access: Apps and Policies Edit, AI Gateway Edit, and Email Routing Addresses Edit. Wrangler's OAuth login cannot serve as this token: it expires within hours and cannot request DNS, Access or AI Gateway permissions. Keep `CLOUDFLARE_API_KEY` out of the Terraform shell, because the provider treats that name as a global API key; the development token in `apps/cloudflare-worker/.env.local` uses it.
 
 Not managed here:
 
 - The bucket's default rule that aborts incomplete multipart uploads after seven days.
 - The Resend records are copied from the Resend dashboard; when Resend changes them, update them here.
+
+### Support mail
+
+`support@cup.audio` is the public developer email of the Google Play developer account. [Cloudflare Email Routing](https://developers.cloudflare.com/email-routing/) receives it and forwards it to the operator's private address; there is no catch-all rule, so mail to any other `cup.audio` address is rejected. Enabling Email Routing (`cloudflare_email_routing_dns.cup_audio`) adds and locks Cloudflare's MX records, an SPF record including `_spf.mx.cloudflare.net` and a DKIM record on the zone, so those records stay out of Terraform. Destroying that resource disables Email Routing.
+
+The repository is public, so the destination address is the sensitive input variable `support_email_destination`, never committed. Store it as `TF_VAR_support_email_destination` in `terraform/.env.local`. When the destination is created or changed, Cloudflare mails it a verification link; the rule forwards nothing until the operator clicks it.
+
+Enabling Email Routing fails while the zone has an MX record that is not Cloudflare's, and `cup.audio` had a null MX and `v=spf1 -all` until this configuration replaced them. The first apply therefore runs in two steps from an up-to-date `main`, removing the two former records before enabling Email Routing:
+
+```sh
+node --env-file=terraform/.env.local --input-type=module -e 'import cp from "node:child_process"; process.exitCode = cp.spawnSync("terraform", ["-chdir=terraform/production", "apply", "-target=cloudflare_dns_record.cup_audio_null_mx", "-target=cloudflare_dns_record.cup_audio_spf"], {stdio: "inherit"}).status;'
+node --env-file=terraform/.env.local --input-type=module -e 'import cp from "node:child_process"; process.exitCode = cp.spawnSync("terraform", ["-chdir=terraform/production", "apply"], {stdio: "inherit"}).status;'
+```
 
 ## Google sign-in configuration
 
