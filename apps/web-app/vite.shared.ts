@@ -6,6 +6,7 @@ import url from "node:url";
 import { defineConfig } from "vite";
 
 import { WEB_APP_CSP_NONCE_PLACEHOLDER } from "@cup/listener-api.routes";
+import { webReleasePlugin } from "@cup/telemetry.browser/vite";
 
 export const WEB_APP_DIRECTORY = url.fileURLToPath(new URL("./", import.meta.url));
 const WYW_CONFIG_FILE = url.fileURLToPath(
@@ -39,6 +40,8 @@ export function createWebAppViteConfig() {
         keepComments: true,
       }),
       react(),
+      // Names the bundle's Sentry release in the built `index.html` (`src/telemetry.ts` reads it).
+      webReleasePlugin(),
     ],
     server: {
       allowedHosts: [

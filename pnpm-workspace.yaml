@@ -19,6 +19,8 @@ packages:
 
 allowBuilds:
   '@google/genai': true
+  # Its postinstall only checks that the sibling SDK versions match, which the sentry-client catalog pins.
+  '@sentry/capacitor': false
   # The mobile E2E suite installs its Appium drivers on its first run, never at install time.
   appium: false
   # WebdriverIO pulls in desktop browser drivers (edgedriver, geckodriver) the mobile suite never uses.
@@ -75,6 +77,11 @@ catalogs:
     # @sentry/cloudflare depends on exactly its own @sentry/core version; move both together.
     "@sentry/cloudflare": 11.10.0
     "@sentry/core": 11.10.0
+  sentry-client:
+    # @sentry/capacitor pins its own @sentry/browser and @sentry/core and peers on exactly one
+    # @sentry/react; move the family only together with a @sentry/capacitor release.
+    "@sentry/capacitor": 4.5.0
+    "@sentry/react": 10.76.2
 
 packageExtensions:
   eslint-plugin-react-you-might-not-need-an-effect@1.0.2:

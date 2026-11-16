@@ -11,9 +11,24 @@ Every Worker entry point is wrapped with `@sentry/cloudflare` in the [Worker ent
 - **Logs**, only Cup's own [log records](#log-records), at `info` and above.
 - **The release**, the deployed Worker version from the `CF_VERSION_METADATA` binding, and the environment `production`.
 
-Sentry's projects, keys and privacy settings are managed in [Terraform](../../terraform/README.md#sentry); the two public DSNs are constants in `@cup/telemetry.core`. The `cup-app` project for the web app and the shells exists, and the [telemetry tunnel](#telemetry-tunnel) forwards to it, but no client sends yet.
+Sentry's projects, keys and privacy settings are managed in [Terraform](../../terraform/README.md#sentry); the two public DSNs are constants in `@cup/telemetry.core`.
 
-Planned by the spec and not built yet: alerts and monitors including the uptime monitor on `/api/health`, client telemetry in the web app and the shells, and source map upload.
+Planned by the spec and not built yet: alerts and monitors including the uptime monitor on `/api/health`, client telemetry in the shells, and source map upload.
+
+## What the web app sends
+
+In the browser on `https://cup.audio`, the web app reports through `@sentry/capacitor` with `@sentry/react` to the `cup-app` project, always through the [telemetry tunnel](#telemetry-tunnel) at the API origin. [`initializeTelemetry`](../../apps/web-app/src/telemetry.ts) starts it with the options of [`@cup/telemetry.browser`](../../libs/telemetry.browser/README.md); the [web app page](web-app.md#telemetry) describes where it hooks into the app.
+
+- **Errors**: uncaught errors and unhandled rejections, render errors through a Sentry `ErrorBoundary` and React's error handlers, and the failures the web app captures where nothing awaits them. Failed requests, a Listener API 5xx included, are breadcrumbs only, since the Worker captured the server failure. Known browser noise, such as `ResizeObserver loop` and requests aborted by a navigation, is ignored.
+- **Traces**, every page load and navigation, named after its TanStack Router route, with long animation frames, streamed span by span. Requests to the API origin carry Sentry's trace headers and join the Worker's trace; no other host receives them. Each trace links the previous one through session storage, which is session-scoped trace linking, not a telemetry identifier.
+- **Sessions**, one per route.
+- **Logs**: `enableLogs` is on, at `info` and above; the web app writes none yet.
+- **The user** is the opaque account ID once signed in, and `signed-out` otherwise.
+- **The release** `web@<hash>`, the first 16 hex digits of the SHA-256 of the entry chunk, which imports every other chunk by its hashed name. A Vite plugin of `@cup/telemetry.browser` writes it into the built `index.html` at build time, so it changes exactly when the bundle's code does, and Turbo can replay E2E suites that ran an unchanged bundle.
+
+Sentry's Supabase integration adds spans and breadcrumbs of the auth client without query data; its auth-error events are dropped, because the web app handles those failures. Off: Zod errors, console capture, feedback, view hierarchy, profiling, CapacitorHttp tracing and replay.
+
+> > > > > > > worktree-agent-a2011e2fdb45a738e
 
 ## Capture rule
 
@@ -104,8 +119,9 @@ Sentry's Workflow wrapper makes every step a span named after the step, and each
 | ------------------------------------------------------------------------ | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`@cup/telemetry.core`](../../libs/telemetry.core/README.md)             | any, no SDK | The `cup.*` attribute keys, the log event catalogue and the `beforeSendLog` severity filter, URL masking and the masking `beforeSendSpan`, the signed-out user, and both production DSNs                                                                                                     |
 | [`@cup/telemetry.cloudflare`](../../libs/telemetry.cloudflare/README.md) | Workers     | The Worker's Sentry options with the on/off rule, the server `beforeSend` and `beforeSendSpan`, the typed log-event helper `logEvent` and the conversion outcome records, the stuck-conversion and stuck-conversion-deletion reports, the conversion scope helpers, and the telemetry tunnel |
+| [`@cup/telemetry.browser`](../../libs/telemetry.browser/README.md)       | DOM         | The client's Sentry options with the on/off rule, the client `beforeSend` and `beforeBreadcrumb`, the user rule, and the web release                                                                                                                                                         |
 
-Cup code calls Sentry's API directly, such as `captureException` from `@sentry/core`; the libraries hold keys, options, privacy hooks and the log-event helper, not a wrapper around Sentry. The server and client SDK families move on different majors, so the `sentry-server` catalog in `pnpm-workspace.yaml` pins the server family, and the [workspace check](../../qa/workspace-checks/README.md#sentry-sdk-family-check) keeps the families out of each other's packages.
+Cup code calls Sentry's API directly, such as `captureException` from `@sentry/core` or `@sentry/react`; the libraries hold keys, options, privacy hooks and the log-event helper, not a wrapper around Sentry. The server and client SDK families move on different majors, so the `sentry-server` and `sentry-client` catalogs in `pnpm-workspace.yaml` pin each family, and the [workspace check](../../qa/workspace-checks/README.md#sentry-sdk-family-check) keeps the families out of each other's packages. The client family moves only with a `@sentry/capacitor` release, which pins its own `@sentry/browser` and peers on exactly one `@sentry/react`.
 
 ## Telemetry tunnel
 
@@ -128,7 +144,14 @@ The Worker's options set every key of Sentry's `dataCollection`, so no user info
 - mask the values of credential query parameters (`token`, `key`, `sig`, `signature`, `auth`, `code`, `access_token`) in URLs, span names and attributes, breadcrumbs and error messages, with the one masking function of `@cup/telemetry.core`;
 - keep the messages only of Cup's own errors. A foreign error anywhere in the captured `cause` chain, such as a Drizzle query error that embeds SQL parameters, keeps its class name as its type and loses its message and the properties `extraErrorDataIntegration` copied from it. Cup's own errors are plain `Error`s and the few subclasses that [`libs/errors`](../../libs/errors/README.md) lists.
 
-Sentry's organisation settings scrub again at ingest; the [Terraform guide](../../terraform/README.md#sentry) describes them.
+The client options set `sendDefaultPii: false` and leave `dataCollection` unset, since setting any of its keys makes the others permissive. The client `beforeSend` and `beforeBreadcrumb` in `@cup/telemetry.browser` then:
+
+- keep only the user's ID and set its IP address to null; the tunnel strips the IP headers and keeps only the country;
+- remove the device identifiers `contexts.device.id` and `contexts.app.device_app_hash`, which a native SDK copies onto JS events;
+- mask credential query parameters with the same function, in URLs, messages, exception values and every breadcrumb, because scope sync copies breadcrumbs onto native events, which pass no `beforeSend` of Cup's;
+- drop the auth errors of Sentry's Supabase integration.
+
+The masking `beforeSendSpan` and `beforeSendLog` of `@cup/telemetry.core` apply to the client too. Sentry's organisation settings scrub again at ingest; the [Terraform guide](../../terraform/README.md#sentry) describes them.
 
 ## Nothing is sent outside production
 
@@ -150,6 +173,8 @@ The Worker's `SENTRY_DSN` is a plain var, public by design. The options factory 
 | [Registry tests](../../libs/registry/wrangler.test.jsonc)                            | `"false"`           | the same discard port, read only by the Sentry-wrapped deletion coordinator test object, or a Sentry stub's DSN |
 
 `SENTRY_TUNNEL_DSNS` is empty everywhere but production, so the tunnel forwards nothing; a test allowlists a Sentry stub DSN through `useWorker({ vars })`, and a suite running the test Worker through `--var`. The Worker's [config test](../../apps/cloudflare-worker/test/wrangler-config.test.ts) and the test Worker's config test pin these values. Tests that check what reaches Sentry start a [Sentry stub](../../qa/sentry-stub/README.md), which records envelopes and forwards nothing.
+
+The web app decides at runtime, because every web E2E suite runs the production bundle: the browser sends only when the page's origin is exactly `https://cup.audio`, so local development, the component tests and the E2E suites start no Sentry at all. A shared [Playwright fixture](../../qa/sentry-stub/README.md#telemetry-request-guard) in the app and source-material E2E suites fails any test whose page requests a `*.sentry.io` host or `/_/e`, so a regression of that rule fails the suites.
 
 ## Build
 

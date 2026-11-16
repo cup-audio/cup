@@ -1,0 +1,64 @@
+{
+  "name": "@cup/telemetry.browser",
+  "private": true,
+  "description": "Sentry options, privacy hooks and the user rule for the web app and the shells' WebView",
+  "files": [
+    "src/**"
+  ],
+  "type": "module",
+  "imports": {
+    "#src/*": "./src/*",
+    "#test/*.ts": "./test/*.ts"
+  },
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "default": "./src/index.ts"
+    },
+    "./vite": {
+      "types": "./dist/types/web-release.vite.d.ts",
+      "default": "./src/web-release.vite.ts"
+    }
+  },
+  "scripts": {
+    "build": "turbo run turbo:build",
+    "clean": "del-cli --dot=true \"dist\" \"*.tsbuildinfo\"",
+    "lint": "turbo run turbo:lint",
+    "lint:fix": "turbo run turbo:lint:fix",
+    "test": "vitest run",
+    "turbo:build": "prepare-declaration-build --declaration-output-dir ./dist/types --build-info-file ./dist/tsconfig.build.tsbuildinfo --source-package-json ./src/package.json && tsc --build ./tsconfig.json",
+    "turbo:lint": "oxlint --type-aware --max-warnings 0 .",
+    "turbo:lint:fix": "pnpm run turbo:lint --fix",
+    "turbo:test": "pnpm run test"
+  },
+  "dependencies": {
+    "@cup/telemetry.core": "workspace:*",
+    "@sentry/capacitor": "catalog:sentry-client",
+    "@sentry/react": "catalog:sentry-client"
+  },
+  "devDependencies": {
+    "@capacitor/core": "^8.5.3",
+    "@cup/config-oxlint": "workspace:*",
+    "@cup/prepare-declaration-build": "workspace:*",
+    "@patricktree-stack/config-typescript": "workspace:*",
+    "@patricktree-stack/config-vitest": "workspace:*",
+    "@types/node": "catalog:",
+    "@typescript/native": "catalog:",
+    "oxlint": "catalog:",
+    "oxlint-tsgolint": "catalog:",
+    "react": "catalog:web-app",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "@capacitor/core": "^8.5.3",
+    "react": "catalog:web-app"
+  },
+  "cup": {
+    "subpathExportExceptions": {
+      "./vite": "The Vite plugin that names the web release, for the web app's Vite configuration in Node, without loading the browser SDK."
+    }
+  }
+}

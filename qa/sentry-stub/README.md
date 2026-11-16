@@ -8,3 +8,7 @@ Tests that exercise Sentry use this stub (`@cup/sentry-stub`): a local stand-in 
 - A request for another project or path answers 404 and is not recorded.
 
 The stub models the envelope format of Sentry's developer docs as read on 2026-11-16; it does not check the DSN's key or rate-limit. Unlike the [Resend stub](../resend-stub/README.md), it has no live contract test.
+
+## Telemetry request guard
+
+The web E2E suites must send nothing to Sentry, so the app and source-material suites extend their Playwright `test` with `telemetryRequestGuard` from `@cup/sentry-stub/playwright` ([`src/telemetry-request-guard.ts`](src/telemetry-request-guard.ts)). The automatic fixture watches every browser context the test opens, the `page` fixture's and those of `browser.newPage()` alike, and fails the test when a page requested a `*.sentry.io` host or the telemetry tunnel at `/_/e`, also when a route answered the request. Each suite has a test that requests telemetry and is expected to fail.
