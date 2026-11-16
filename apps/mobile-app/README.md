@@ -94,13 +94,19 @@ Git ignores the keystore (`*.jks` in `android/.gitignore`). In a linked worktree
 
 ### Build a release
 
-On the operator's Mac, with `JAVA_HOME` set as for [Android locally](#android-locally), build a release-signed Android App Bundle from the checked-out commit:
+On the operator's Mac, with `JAVA_HOME` set as for [Android locally](#android-locally), build a release-signed Android App Bundle from the checked-out commit and [upload it](#upload-to-the-internal-testing-track) to Google Play's internal testing track:
+
+```sh
+pnpm --filter '@cup/mobile-app' android:release
+```
+
+The command runs `env:check`, checks the release preconditions, builds the web app, syncs Capacitor for Android, runs Gradle's `bundleRelease`, runs the [bundle safety check](#bundle-safety-check), and uploads the bundle. It prints the bundle's path, `android/app/build/outputs/bundle/release/app-release.aab`, and the release name. No [validation gate](../../AGENTS.md#validation-gates) runs; pick the one that fits the moment yourself.
+
+With `--skip-upload`, the command stops after the bundle safety check, prints the bundle's path and the release name, and touches nothing in Google Play. Use it to inspect a build, or for the first upload, which Google requires to be made by hand in the Play Console:
 
 ```sh
 pnpm --filter '@cup/mobile-app' android:release --skip-upload
 ```
-
-The command runs `env:check`, checks the release preconditions, builds the web app, syncs Capacitor for Android, runs Gradle's `bundleRelease`, and runs the [bundle safety check](#bundle-safety-check). It prints the bundle's path, `android/app/build/outputs/bundle/release/app-release.aab`, and the release name. No [validation gate](../../AGENTS.md#validation-gates) runs; pick the one that fits the moment yourself. Uploading isn't implemented yet: without `--skip-upload` the command stops before doing anything, so upload the bundle in the Play Console.
 
 Each build's version comes from its UTC build time ([ADR 0029](../../docs/adr/0029-derive-mobile-build-versions-from-the-utc-build-time.md)): `versionCode` is the whole minutes since `2026-01-01T00:00Z` and `versionName` the date as `YYYY.MM.DD`. The release name is `<versionName> (<7-character short SHA>)`, for example `2026.11.14 (8e5c815)`; use it as the Play release name, so that you can tell which commit a tester runs. Debug builds keep `versionCode 1` and `versionName "0.0.0"`.
 
@@ -127,6 +133,16 @@ After `bundleRelease`, before any upload, the command checks that the bundle car
 - the bundle contains any `.so` entry, so that a dependency bringing native code is noticed before Google Play's 16 KB page-size rule can block an update ([#436](https://github.com/patricktree/cup/issues/436)).
 
 A debug class name outside a `.dex` entry, such as in R8's mapping file, doesn't count. A refused bundle stays at its path for inspection, but the command uploads nothing.
+
+### Upload to the internal testing track
+
+Without `--skip-upload`, once the bundle safety check passes, the command uploads the bundle to Google Play's internal testing track in one Play edit ([#363](https://github.com/patricktree/cup/issues/363)): it opens the edit, uploads the bundle, replaces the track's releases with one release of the bundle's `versionCode`, named with the release name and rolled out as `completed` to every invited tester, and commits the edit. Play applies nothing until the commit, so when any step before it fails, the command abandons the edit, reports the error, and Play stays as it was. It checks no higher `versionCode` on Play and adds no release notes; testers get the build as a normal Play update within minutes.
+
+The upload authenticates as the uploader service account `play-publisher@cup-production.iam.gserviceaccount.com`, impersonated through the operator's application-default credentials, so no service account key exists. Sign in once with `gcloud auth application-default login`; without those credentials the command fails before Gradle starts. The account, its impersonation and its Play Console invitation are described in [Google Play uploads](../../docs/production-configuration.md#google-play-uploads).
+
+The internal testing track holds one release, so a build cut from a feature branch replaces every tester's build until a later build from `main` replaces it in turn; upload `main` again once you are done checking the branch.
+
+Agents run `android:release` without `--skip-upload` only when the operator asks for an upload in the session, because an upload replaces every tester's build. `--skip-upload` uploads nothing, so agents may run it freely.
 
 ## iOS
 

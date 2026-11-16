@@ -12,6 +12,12 @@ import util from "node:util";
 import { Temporal } from "temporal-polyfill";
 
 import { findBundleViolations } from "#scripts/release/bundle-safety-check.mts";
+import {
+  createGooglePlayPublisher,
+  UPLOADER_SERVICE_ACCOUNT,
+} from "#scripts/release/google-play-publisher.mts";
+import { uploadToInternalTesting } from "#scripts/release/play-upload.mts";
+import type { PlayPublisher } from "#scripts/release/play-upload.mts";
 import { findFailedReleasePreconditions } from "#scripts/release/release-preconditions.mts";
 import type { ReleaseGit } from "#scripts/release/release-preconditions.mts";
 import { deriveReleaseVersion, formatReleaseName } from "#scripts/release/release-version.mts";
@@ -65,12 +71,6 @@ const { values: options } = util.parseArgs({
 if (process.platform !== "darwin") {
   fail("The upload key's password lives in the macOS Keychain, so release from a Mac.");
 }
-if (!options["skip-upload"]) {
-  // TODO(#446): upload the bundle to the internal testing track after the bundle safety check.
-  fail(
-    "Uploading to Google Play isn't implemented yet. Run `android:release --skip-upload` to build the bundle, and upload it in the Play Console.",
-  );
-}
 
 console.log("Checking the environment.");
 runVisible("pnpm", ["env:check"], REPOSITORY_ROOT, process.env);
@@ -81,6 +81,9 @@ if (failures.length > 0) {
     `Refusing to release:\n${failures.map((failure) => `  - ${failure}`).join("\n")}\nSetup is documented in ${SETUP_DOCS}.`,
   );
 }
+
+// Reads the credentials before the build, so missing ones fail before Gradle starts rather than after it.
+const publisher = options["skip-upload"] ? undefined : await createPublisher();
 
 // Read once, so `versionCode` and `versionName` describe the same instant.
 const version = deriveReleaseVersion(Temporal.Now.instant());
@@ -136,10 +139,42 @@ if (violations.length > 0) {
   );
 }
 
-console.log(`Built the release-signed bundle.
+if (publisher === undefined) {
+  console.log(`Built the release-signed bundle and skipped the upload.
 
 Bundle:       ${BUNDLE}
 Release name: ${releaseName}`);
+  process.exit(0);
+}
+
+console.log(`Uploading ${releaseName} to Google Play's internal testing track.`);
+try {
+  await uploadToInternalTesting({
+    publisher,
+    bundlePath: BUNDLE,
+    versionCode: version.versionCode,
+    releaseName,
+  });
+} catch (error) {
+  fail(
+    `Uploading to Google Play failed; Play applies nothing from an edit whose commit didn't succeed:\n${util.inspect(error)}\nThe bundle stays at ${BUNDLE}. Uploads are documented in ${SETUP_DOCS}.`,
+  );
+}
+
+console.log(`Rolled out the release to every tester of the internal testing track.
+
+Bundle:       ${BUNDLE}
+Release name: ${releaseName}`);
+
+async function createPublisher(): Promise<PlayPublisher> {
+  try {
+    return await createGooglePlayPublisher();
+  } catch (error) {
+    return fail(
+      `Reading your Google application-default credentials failed:\n${util.inspect(error)}\nSign in with \`gcloud auth application-default login\`; uploads impersonate ${UPLOADER_SERVICE_ACCOUNT} through them. Setup is documented in ${SETUP_DOCS}.`,
+    );
+  }
+}
 
 function runVisible(
   command: string,

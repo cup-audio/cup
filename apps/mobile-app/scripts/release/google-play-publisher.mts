@@ -1,0 +1,73 @@
+/*
+ * The publisher `play-upload.mts` drives, on the Google Play Developer API. It authenticates as the
+ * uploader service account by impersonating it through the operator's application-default
+ * credentials (`gcloud auth application-default login`), so no service account key exists. Terraform
+ * creates the account and lets the operator impersonate it (`terraform/production/google-play.tf`);
+ * the Play Console invitation is manual (docs/production-configuration.md, "Google Play uploads").
+ */
+import { androidpublisher } from "@googleapis/androidpublisher";
+import { GoogleAuth, Impersonated } from "google-auth-library";
+import fs from "node:fs";
+
+import type { PlayPublisher } from "#scripts/release/play-upload.mts";
+
+// Matches `appId` in `capacitor.config.ts` and `applicationId` in `android/app/build.gradle`.
+const PACKAGE_NAME = "audio.cup.app";
+export const UPLOADER_SERVICE_ACCOUNT = "play-publisher@cup-production.iam.gserviceaccount.com";
+
+// Minting a token for another account needs the source credentials' cloud-platform scope.
+const SOURCE_SCOPES = ["https://www.googleapis.com/auth/cloud-platform"];
+const ANDROID_PUBLISHER_SCOPES = ["https://www.googleapis.com/auth/androidpublisher"];
+const TOKEN_LIFETIME_SECONDS = 3600;
+
+/**
+ * Reads the application-default credentials, without a network request, and returns a publisher
+ * that impersonates the uploader service account on its first call.
+ */
+export async function createGooglePlayPublisher(): Promise<PlayPublisher> {
+  const sourceClient = await new GoogleAuth({ scopes: SOURCE_SCOPES }).getClient();
+  const auth = new Impersonated({
+    sourceClient,
+    targetPrincipal: UPLOADER_SERVICE_ACCOUNT,
+    targetScopes: ANDROID_PUBLISHER_SCOPES,
+    lifetime: TOKEN_LIFETIME_SECONDS,
+  });
+  const edits = androidpublisher({ version: "v3", auth }).edits;
+
+  return {
+    insertEdit: async () => {
+      const response = await edits.insert({ packageName: PACKAGE_NAME });
+      const editId = response.data.id;
+      if (editId === undefined || editId === null || editId === "") {
+        throw new Error("Google Play opened an edit but returned no edit ID.");
+      }
+      return editId;
+    },
+    uploadBundle: async (editId, bundlePath) => {
+      const response = await edits.bundles.upload({
+        packageName: PACKAGE_NAME,
+        editId,
+        media: { mimeType: "application/octet-stream", body: fs.createReadStream(bundlePath) },
+      });
+      const versionCode = response.data.versionCode;
+      if (typeof versionCode !== "number") {
+        throw new Error(`Google Play accepted ${bundlePath} but returned no versionCode.`);
+      }
+      return { versionCode };
+    },
+    updateTrack: async (editId, track, release) => {
+      await edits.tracks.update({
+        packageName: PACKAGE_NAME,
+        editId,
+        track,
+        requestBody: { track, releases: [{ ...release, versionCodes: [...release.versionCodes] }] },
+      });
+    },
+    commitEdit: async (editId) => {
+      await edits.commit({ packageName: PACKAGE_NAME, editId });
+    },
+    deleteEdit: async (editId) => {
+      await edits.delete({ packageName: PACKAGE_NAME, editId });
+    },
+  };
+}
