@@ -119,6 +119,9 @@
     // The `cup-worker` DSN (CUP_WORKER_DSN in @cup/telemetry.core), public by design. It must agree
     // with LOCAL_DEVELOPMENT: `pnpm dev:services` sets it to "" next to LOCAL_DEVELOPMENT=true.
     "SENTRY_DSN": "https://aa6ceda71485efec30877677d4eb919b@o4512441473040384.ingest.de.sentry.io/4512441485623377",
+    // The telemetry tunnel at /_/e forwards only to these DSNs, comma-separated: exactly the `cup-app`
+    // DSN (CUP_APP_DSN in @cup/telemetry.core). `pnpm dev:services` sets it to "".
+    "SENTRY_TUNNEL_DSNS": "https://4675dd0e4efd764f8941a9a0482a044d@o4512441473040384.ingest.de.sentry.io/4512441485623376",
     "SIGNUP_IP_LIMIT": "10",
     "CONVERSION_IP_LIMIT": "60",
     "CONVERSION_OWNER_LIMIT": "10",

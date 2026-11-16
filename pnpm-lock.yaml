@@ -974,6 +974,9 @@ importers:
       '@cup/registry':
         specifier: workspace:*
         version: link:../registry
+      '@cup/telemetry.cloudflare':
+        specifier: workspace:*
+        version: link:../telemetry.cloudflare
       '@sentry/core':
         specifier: catalog:sentry-server
         version: 11.10.0

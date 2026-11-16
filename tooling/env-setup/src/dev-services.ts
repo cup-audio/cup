@@ -204,6 +204,8 @@ async function run(command: { action: "start"; tailnet: boolean } | { action: "s
       // Local development never sends to Sentry: with a DSN next to LOCAL_DEVELOPMENT=true, every
       // Worker invocation throws (@cup/telemetry.cloudflare).
       SENTRY_DSN: "",
+      // The telemetry tunnel forwards nothing either.
+      SENTRY_TUNNEL_DSNS: "",
       LOCAL_TEST_ACCOUNT_EMAIL: TEST_ACCOUNT_EMAIL,
       LOCAL_TEST_ACCOUNT_PASSWORD: TEST_ACCOUNT_PASSWORD,
     };

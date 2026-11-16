@@ -10,18 +10,30 @@ Every Worker entry point is wrapped with `@sentry/cloudflare` in the [Worker ent
 - **Traces**, every request at a sample rate of 1, streamed span by span. A request's trace includes its Durable Object RPC calls: Sentry appends the trace context to each RPC call on the Worker's own Durable Object bindings, and the wrapped receiver removes it again. Durable Object SQL and storage spans are dropped, because they would outnumber all others.
 - **The release**, the deployed Worker version from the `CF_VERSION_METADATA` binding, and the environment `production`.
 
-Sentry's projects, keys and privacy settings are managed in [Terraform](../../terraform/README.md#sentry); the two public DSNs are constants in `@cup/telemetry.core`. The `cup-app` project for the web app and the shells exists, but nothing sends to it yet.
+Sentry's projects, keys and privacy settings are managed in [Terraform](../../terraform/README.md#sentry); the two public DSNs are constants in `@cup/telemetry.core`. The `cup-app` project for the web app and the shells exists, and the [telemetry tunnel](#telemetry-tunnel) forwards to it, but no client sends yet.
 
-Planned by the spec and not built yet: Cup's own log records through `Sentry.logger`, the `cup.conversion.id` join key on every conversion-scoped record, `traceId` in error bodies, captures in the Durable Objects and Workflows, the stuck checks, alerts and monitors, the telemetry tunnel, client telemetry in the web app and the shells, `/api/health`, and source map upload.
+Planned by the spec and not built yet: Cup's own log records through `Sentry.logger`, the `cup.conversion.id` join key on every conversion-scoped record, `traceId` in error bodies, captures in the Durable Objects and Workflows, the stuck checks, alerts and monitors, client telemetry in the web app and the shells, `/api/health`, and source map upload.
 
 ## Telemetry libraries
 
-| Library                                                                  | Runtime     | Holds                                                                                                                   |
-| ------------------------------------------------------------------------ | ----------- | ----------------------------------------------------------------------------------------------------------------------- |
-| [`@cup/telemetry.core`](../../libs/telemetry.core/README.md)             | any, no SDK | The `cup.*` attribute keys, URL masking and the masking `beforeSendSpan`, the signed-out user, and both production DSNs |
-| [`@cup/telemetry.cloudflare`](../../libs/telemetry.cloudflare/README.md) | Workers     | The Worker's Sentry options with the on/off rule, and the server `beforeSend` and `beforeSendSpan`                      |
+| Library                                                                  | Runtime     | Holds                                                                                                                    |
+| ------------------------------------------------------------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------ |
+| [`@cup/telemetry.core`](../../libs/telemetry.core/README.md)             | any, no SDK | The `cup.*` attribute keys, URL masking and the masking `beforeSendSpan`, the signed-out user, and both production DSNs  |
+| [`@cup/telemetry.cloudflare`](../../libs/telemetry.cloudflare/README.md) | Workers     | The Worker's Sentry options with the on/off rule, the server `beforeSend` and `beforeSendSpan`, and the telemetry tunnel |
 
 Cup code calls Sentry's API directly, such as `captureException` from `@sentry/core`; the libraries hold keys, options and privacy hooks, not a wrapper around Sentry. The server and client SDK families move on different majors, so the `sentry-server` catalog in `pnpm-workspace.yaml` pins the server family, and the [workspace check](../../qa/workspace-checks/README.md#sentry-sdk-family-check) keeps the families out of each other's packages.
+
+## Telemetry tunnel
+
+Browser and shell JS telemetry reaches Sentry through Cup's own domain, so ad blockers that block Sentry's hosts don't drop it. The [API server](../../libs/api-server/src/api-server.ts) serves the tunnel at `POST /_/e`, outside `/api/*` and the Listener API contract, without authentication or validation middleware; its path avoids "sentry" so filter lists don't match it. It answers CORS for the shells' origins, `capacitor://localhost` and `https://localhost`, without credentials; the browser posts from the same origin.
+
+The handler in [`@cup/telemetry.cloudflare`](../../libs/telemetry.cloudflare/src/telemetry-tunnel.ts) rewrites each envelope before Sentry's `handleTunnelRequest` forwards it:
+
+- it forwards only envelopes whose DSN is on the Worker var `SENTRY_TUNNEL_DSNS` and answers any other with a 403, the Worker's own `cup-worker` DSN included, so the tunnel is no open proxy. Production's list is exactly the `cup-app` DSN;
+- it removes the headers that carry the listener's IP address, so Sentry receives no `X-Sentry-Forwarded-For`;
+- it sets `user.geo` to `{ country_code }` from `request.cf.country` on every `event` and `transaction` item, replacing any geo the client sent, with Cloudflare's `XX` (unknown) and `T1` (Tor) as reported, and rewrites those items' length headers. Every other item, `span` included, passes unchanged.
+
+The tunnel has no rate limit of its own: the DSN is public anyway, and Sentry's quota and spike protection cap abuse.
 
 ## Privacy
 
@@ -52,7 +64,7 @@ The Worker's `SENTRY_DSN` is a plain var, public by design. The options factory 
 | [Test Worker](../../qa/test-worker/README.md)                                        | `"true"`            | empty                                                                                                    |
 | [Worker integration tests](../../apps/cloudflare-worker/AGENTS.md#integration-tests) | `"false"`           | `http://test@127.0.0.1:9/1`, a discard port, or the Sentry stub's DSN through `useWorker({ sentryDsn })` |
 
-The Worker's [config test](../../apps/cloudflare-worker/test/wrangler-config.test.ts) and the test Worker's config test pin these values. Tests that check what reaches Sentry start a [Sentry stub](../../qa/sentry-stub/README.md), which records envelopes and forwards nothing.
+`SENTRY_TUNNEL_DSNS` is empty everywhere but production, so the tunnel forwards nothing; a test allowlists a Sentry stub DSN through `useWorker({ vars })`, and a suite running the test Worker through `--var`. The Worker's [config test](../../apps/cloudflare-worker/test/wrangler-config.test.ts) and the test Worker's config test pin these values. Tests that check what reaches Sentry start a [Sentry stub](../../qa/sentry-stub/README.md), which records envelopes and forwards nothing.
 
 ## Build
 

@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import { test } from "vitest";
 
-import { CUP_WORKER_DSN } from "@cup/telemetry.core";
+import { CUP_APP_DSN, CUP_WORKER_DSN } from "@cup/telemetry.core";
 
 import { TEST_SECRETS } from "#test/use-worker.ts";
 import {
@@ -210,6 +210,13 @@ test("production reports to the cup-worker project, and the integration tests to
   expect(testConfig.vars?.["LOCAL_DEVELOPMENT"]).toBe("false");
   expect(testConfig.vars?.["SENTRY_DSN"]).toBe("http://test@127.0.0.1:9/1");
   expect(testConfig.version_metadata).toStrictEqual(production.version_metadata);
+});
+
+test("production's telemetry tunnel forwards only to the cup-app project, and the integration tests' to none", ({
+  expect,
+}) => {
+  expect(readProductionConfig().vars?.["SENTRY_TUNNEL_DSNS"]).toBe(CUP_APP_DSN);
+  expect(readTestConfig().vars?.["SENTRY_TUNNEL_DSNS"]).toBe("");
 });
 
 /** The SQLite-backed classes that remain after applying every migration in order. */
