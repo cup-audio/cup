@@ -14,6 +14,7 @@ import {
 import { CupError } from "@cup/errors";
 import {
   captureAlarmFailure,
+  captureStoppedWorkflow,
   logAudioSegmentSettled,
   logEvent,
   logPreparationSettled,
@@ -301,12 +302,17 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
     await this.scheduleUsagePublication();
   }
 
-  /** Releases the segment's reservation and sends `audio-segment-settled` if it had one. */
+  /**
+   * Releases the segment's reservation and sends `audio-segment-settled` if it had one; returns
+   * whether it had one.
+   */
   private release(conversionId: string, sequence: number, attempts: number | undefined) {
     const releasedAtMs = Temporal.Now.instant().epochMilliseconds;
-    if (this.sqlite.releaseAudioSegment(conversionId, sequence, releasedAtMs)) {
+    const isReleased = this.sqlite.releaseAudioSegment(conversionId, sequence, releasedAtMs);
+    if (isReleased) {
       this.logAudioSegmentSettled(conversionId, sequence, "released", attempts, releasedAtMs);
     }
+    return isReleased;
   }
 
   private logAudioSegmentSettled(
@@ -611,6 +617,8 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
           if (job.state === "delivered") {
             const status = await (await workflow.get(job.conversionId)).status();
             if (status.status === "errored" || status.status === "terminated") {
+              // The instance stopped without recording a failed outcome, so nothing captured it.
+              captureStoppedWorkflow({ kind: "preparation", conversionId: job.conversionId });
               this.settle(
                 job.conversionId,
                 {
@@ -679,8 +687,16 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
           },
           { canResume: this.canExecute(segment.conversionId, account.executionEpoch) },
         );
-        if (result === "stopped") {
-          this.release(segment.conversionId, segment.sequence, undefined);
+        // The instance stopped without releasing the segment itself, so nothing captured it.
+        if (
+          result === "stopped" &&
+          this.release(segment.conversionId, segment.sequence, undefined)
+        ) {
+          captureStoppedWorkflow({
+            kind: "audio-segment",
+            conversionId: segment.conversionId,
+            sequence: segment.sequence,
+          });
         }
       });
     }

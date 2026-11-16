@@ -319,7 +319,8 @@ test(
     const { grant } = await createGrant();
     const conversionId = await startGrantConversion(grant, T0_MS);
     await recordGrantConversionReady(grant, conversionId, T0_MS);
-    await grant.stopSegmentWorkflowsForTest();
+    await grant.stopWorkflowsForTest();
+    await grant.failSegmentReleaseForTest();
 
     expect(await grant.failingReconcileAtForTest(T0_MS + 61 * MINUTE_MS)).toBe(
       "Segment release failed",

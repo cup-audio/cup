@@ -14,6 +14,7 @@ export {
   type WorkerComponent,
   type WorkerSentryEnvironment,
 } from "#src/worker-sentry-options.ts";
+export { captureStoppedWorkflow, type StoppedWorkflow } from "#src/stopped-workflow.ts";
 export { reportStuckConversions, type StuckConversionCandidate } from "#src/stuck-conversion.ts";
 export {
   reportStuckConversionDeletions,

@@ -47,26 +47,33 @@ export async function runAudioSegmentWorkflow({
 
   const execution = resolveConversionExecution(env, params);
   const { artifactPrefix: prefix, artifactBucket: bucket } = execution;
-  const audiobook = await step.do(
-    phaseStepName(ConversionPhase.AUDIO_SEGMENT_PRODUCTION, "load prepared narration"),
-    async () => {
-      const manifest = await execution.getReadyAudiobookReference();
-      if (!manifest || manifest.key !== `${prefix}audiobook.json`) {
-        throw new NonRetryableError("Prepared narration is unavailable");
-      }
-      return loadAudiobook({ bucket, audiobookReference: manifest });
-    },
-  );
-  const unit = audiobook.narrationDocument.synchronizationUnits[sequence];
-  if (!unit) {
-    throw new NonRetryableError("Synchronization unit does not exist");
-  }
+  const loadPreparedNarration = async () => {
+    const audiobook = await step.do(
+      phaseStepName(ConversionPhase.AUDIO_SEGMENT_PRODUCTION, "load prepared narration"),
+      async () => {
+        const manifest = await execution.getReadyAudiobookReference();
+        if (!manifest || manifest.key !== `${prefix}audiobook.json`) {
+          throw new NonRetryableError("Prepared narration is unavailable");
+        }
+        return loadAudiobook({ bucket, audiobookReference: manifest });
+      },
+    );
+    const unit = audiobook.narrationDocument.synchronizationUnits[sequence];
+    if (!unit) {
+      throw new NonRetryableError("Synchronization unit does not exist");
+    }
+    return { audiobook, unit };
+  };
 
   // Each synthesis step counts the run's attempts so far: its own plus those that the steps before
   // a rate limit wait returned. The release after a final failure reports the count of the step that
   // ran last; a replay of the run skips step callbacks, so a release after a replay reports none.
   let lastStepAttempts: number | undefined;
-  const synthesize = (rateLimitWaits: number, earlierAttempts: number) =>
+  const synthesize = (
+    { audiobook, unit }: Awaited<ReturnType<typeof loadPreparedNarration>>,
+    rateLimitWaits: number,
+    earlierAttempts: number,
+  ) =>
     step.do(
       phaseStepName(
         ConversionPhase.AUDIO_SEGMENT_PRODUCTION,
@@ -119,10 +126,13 @@ export async function runAudioSegmentWorkflow({
       },
     );
 
+  // Loading the narration is inside the `try`, so a segment whose narration cannot be loaded fails
+  // finally too: it is released and captured instead of left reserved for the alarm to restart.
   try {
+    const narration = await loadPreparedNarration();
     let earlierAttempts = 0;
     for (let rateLimitWaits = 0; ; rateLimitWaits += 1) {
-      const outcome = await synthesize(rateLimitWaits, earlierAttempts);
+      const outcome = await synthesize(narration, rateLimitWaits, earlierAttempts);
       if (outcome.result === "settled") {
         return outcome.segment;
       }

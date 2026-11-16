@@ -1,6 +1,7 @@
 /*
- * The conversion outcome `info` events both owners send when they record an outcome, against a
- * Sentry stub (`@cup/sentry-stub`). Both owners run Sentry-wrapped, as in the Worker.
+ * The conversion outcome `info` events both owners send when they record an outcome, and the
+ * issues their alarms open for a Workflow that stopped, against a Sentry stub (`@cup/sentry-stub`).
+ * Both owners run Sentry-wrapped, as in the Worker.
  */
 
 import nodeUrl from "node:url";
@@ -8,7 +9,12 @@ import { Temporal } from "temporal-polyfill";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { createTestHarness } from "wrangler";
 
-import { startSentryStub, type SentryLog, type SentryStub } from "@cup/sentry-stub";
+import {
+  startSentryStub,
+  type SentryErrorEvent,
+  type SentryLog,
+  type SentryStub,
+} from "@cup/sentry-stub";
 
 import type {
   SentryAccountDurableObject,
@@ -230,6 +236,132 @@ test(
   TEST_TIMEOUT_MS,
 );
 
+test(
+  "a trial preparation whose Workflow stopped opens one issue, whose event ID is the failed outcome's diagnostic reference",
+  async () => {
+    const { grant, grantId } = await createGrant();
+    const conversionId = await startGrantConversion(
+      grant,
+      Temporal.Now.instant().epochMilliseconds,
+    );
+    await grant.stopWorkflowsForTest();
+
+    await grant.reconcileAtForTest(Temporal.Now.instant().epochMilliseconds);
+
+    await waitForFailureEvents(conversionId, 1);
+    const events = failureEvents(conversionId);
+    expect(events).toEqual([
+      expect.objectContaining({
+        tags: expect.objectContaining({
+          "cup.conversion.failure_category": "workflow-platform",
+          "cup.owner.kind": "grant",
+          "cup.conversion_grant.id": grantId,
+        }),
+      }),
+    ]);
+    const conversion = await grant.getConversion(conversionId);
+    expect(conversion?.status === "failed" && conversion.diagnosticReference).toBe(
+      events[0]?.event_id,
+    );
+  },
+  TEST_TIMEOUT_MS,
+);
+
+test(
+  "an account preparation whose Workflow stopped opens one issue",
+  async () => {
+    const { account, accountId } = await createAccount();
+    await account.acceptPreparationForTest();
+    const conversionId = await startAccountConversion(
+      account,
+      Temporal.Now.instant().epochMilliseconds,
+    );
+    await account.stopWorkflowsForTest();
+
+    await account.reconcileForTest();
+
+    await waitForFailureEvents(conversionId, 1);
+    expect(failureEvents(conversionId)).toEqual([
+      expect.objectContaining({
+        tags: expect.objectContaining({
+          "cup.conversion.failure_category": "workflow-platform",
+          "cup.owner.kind": "account",
+          "cup.account.id": accountId,
+        }),
+      }),
+    ]);
+    expect((await account.getConversion(conversionId))?.outcome).toMatchObject({
+      status: "failed",
+      failureCategory: "workflow-platform",
+    });
+  },
+  TEST_TIMEOUT_MS,
+);
+
+test(
+  "each trial segment that the alarm releases because its Workflow stopped opens one issue",
+  async () => {
+    const { grant } = await createGrant();
+    const conversionId = await startGrantConversion(
+      grant,
+      Temporal.Now.instant().epochMilliseconds,
+    );
+    await grant.recordReady(
+      conversionId,
+      readyGrantOutcome(conversionId),
+      NARRATION_TEXT_CHARACTERS_BY_SEGMENT,
+    );
+    await grant.stopWorkflowsForTest();
+
+    await grant.reconcileAtForTest(Temporal.Now.instant().epochMilliseconds);
+
+    await waitForFailureEvents(conversionId, 2);
+    expect(
+      failureEvents(conversionId).map((event) => [
+        event.tags?.["cup.conversion.failure_category"],
+        event.tags?.["cup.audio_segment.sequence"],
+      ]),
+    ).toEqual([
+      ["segment", "0"],
+      ["segment", "1"],
+    ]);
+  },
+  TEST_TIMEOUT_MS,
+);
+
+test(
+  "each account segment that the alarm releases because its Workflow stopped opens one issue",
+  async () => {
+    const { account, accountId } = await createAccount();
+    const conversionId = await startAccountConversion(
+      account,
+      Temporal.Now.instant().epochMilliseconds,
+    );
+    await account.settleConversion(
+      conversionId,
+      readyAccountOutcome(accountId, conversionId),
+      Temporal.Now.instant().epochMilliseconds,
+      1,
+      NARRATION_TEXT_CHARACTERS_BY_SEGMENT,
+    );
+    await account.stopWorkflowsForTest();
+
+    await account.reconcileForTest();
+
+    await waitForFailureEvents(conversionId, 2);
+    expect(
+      failureEvents(conversionId).map((event) => [
+        event.tags?.["cup.conversion.failure_category"],
+        event.tags?.["cup.audio_segment.sequence"],
+      ]),
+    ).toEqual([
+      ["segment", "0"],
+      ["segment", "1"],
+    ]);
+  },
+  TEST_TIMEOUT_MS,
+);
+
 async function createAccount() {
   const accountId = crypto.randomUUID();
   const account = bindings.SENTRY_ACCOUNTS.get(bindings.SENTRY_ACCOUNTS.idFromName(accountId));
@@ -290,6 +422,36 @@ function readyGrantOutcome(conversionId: string) {
       etag: "fixture",
     },
   };
+}
+
+function readyAccountOutcome(accountId: string, conversionId: string) {
+  return {
+    status: "ready" as const,
+    title: "Book",
+    audiobookReference: {
+      key: `accounts/${accountId}/conversions/${conversionId}/executions/1/audiobook.json`,
+      contentType: "application/json" as const,
+      byteLength: 123,
+      etag: "fixture",
+    },
+  };
+}
+
+function failureEvents(conversionId: string): SentryErrorEvent[] {
+  return stub
+    .errorEvents("cup-worker")
+    .filter(
+      (event) =>
+        event.tags?.["cup.conversion.id"] === conversionId &&
+        event.tags["cup.conversion.failure_category"] !== undefined,
+    );
+}
+
+function waitForFailureEvents(conversionId: string, count: number) {
+  return stub.waitFor(
+    `${count} failure event(s) of ${conversionId}`,
+    () => failureEvents(conversionId).length >= count,
+  );
 }
 
 function logs(eventName: string, conversionId: string): SentryLog[] {

@@ -141,7 +141,8 @@ export function resolveConversionExecution(
     completeAudioSegment: async (sequence, duration, attempts) => {
       await grant.completeAudioSegment(conversionId, sequence, duration, attempts);
     },
-    releaseAudioSegment: (sequence, attempts) =>
-      grant.releaseAudioSegment(conversionId, sequence, attempts),
+    releaseAudioSegment: async (sequence, attempts) => {
+      await grant.releaseAudioSegment(conversionId, sequence, attempts);
+    },
   };
 }

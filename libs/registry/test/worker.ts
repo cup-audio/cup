@@ -95,9 +95,13 @@ export class AccountDurableObject extends BaseAccountDurableObject {
       preparationCreations: [],
       terminations: [],
       shouldTerminationFail: false,
+      stoppedStatus: undefined,
     };
     const controlledInstance = (id: string) => ({
       status: async (): Promise<{ status: string }> => {
+        if (workflows.stoppedStatus !== undefined) {
+          return { status: workflows.stoppedStatus };
+        }
         throw new Error("Workflows are controlled by the test");
       },
       restart: async () => {
@@ -193,6 +197,10 @@ export class AccountDurableObject extends BaseAccountDurableObject {
   failTerminationsForTest() {
     this.workflows.shouldTerminationFail = true;
   }
+  /** Every Workflow instance reports `terminated` from now on. */
+  stopWorkflowsForTest() {
+    this.workflows.stoppedStatus = "terminated";
+  }
   failArtifactWriterReconciliationForTest() {
     this.shouldWriterReconciliationFail = true;
   }
@@ -233,6 +241,7 @@ type WorkflowControl = {
   preparationCreations: string[];
   terminations: string[];
   shouldTerminationFail: boolean;
+  stoppedStatus: string | undefined;
 };
 /** Simulates accounts that predate usage projections, so the alarm's backfill can be observed. */
 export class RegistryDurableObject extends BaseRegistryDurableObject {
@@ -255,12 +264,12 @@ export { ConversionGrantDurableObject } from "@cup/conversion-grants";
 /**
  * A grant whose preparation and synthesis dispatch is accepted but never runs, and whose Workflow
  * instances report no status, so the alarm treats them as unreachable and changes nothing. Once a
- * test stops the segment Workflows, they report `terminated`, and the alarm's release of their
- * segments fails. An alarm the platform fires does nothing: tests run the alarm with
+ * test stops the Workflows, every instance reports `terminated`; releasing a segment fails once a
+ * test asks for it. An alarm the platform fires does nothing: tests run the alarm with
  * `reconcileAtForTest()`.
  */
 export class ConversionGrantTestDurableObject extends BaseConversionGrantDurableObject {
-  private readonly segmentWorkflows: { areStopped: boolean };
+  private readonly workflowControl: { areStopped: boolean; shouldSegmentReleaseFail: boolean };
 
   constructor(
     context: DurableObjectState,
@@ -276,30 +285,30 @@ export class ConversionGrantTestDurableObject extends BaseConversionGrantDurable
       },
       restart: async () => {},
     };
+    const workflowControl = { areStopped: false, shouldSegmentReleaseFail: false };
     const acceptingWorkflow = {
       create: async () => {},
-      get: async () => unreachableInstance,
+      get: async () =>
+        workflowControl.areStopped
+          ? { status: async () => ({ status: "terminated" }), restart: async () => {} }
+          : unreachableInstance,
     };
-    const segmentWorkflows = { areStopped: false };
     super(context, {
       ...env,
       PREPARE_AUDIOBOOK_WORKFLOW: acceptingWorkflow,
-      SYNTHESIZE_AUDIO_SEGMENT_WORKFLOW: {
-        create: async () => {},
-        get: async () =>
-          segmentWorkflows.areStopped
-            ? { status: async () => ({ status: "terminated" }), restart: async () => {} }
-            : unreachableInstance,
-      },
+      SYNTHESIZE_AUDIO_SEGMENT_WORKFLOW: acceptingWorkflow,
     });
-    this.segmentWorkflows = segmentWorkflows;
+    this.workflowControl = workflowControl;
   }
   override async alarm() {}
-  stopSegmentWorkflowsForTest() {
-    this.segmentWorkflows.areStopped = true;
+  stopWorkflowsForTest() {
+    this.workflowControl.areStopped = true;
+  }
+  failSegmentReleaseForTest() {
+    this.workflowControl.shouldSegmentReleaseFail = true;
   }
   override async releaseAudioSegment(conversionId: string, sequence: number, attempts?: number) {
-    if (this.segmentWorkflows.areStopped) {
+    if (this.workflowControl.shouldSegmentReleaseFail) {
       throw new CupError("Segment release failed");
     }
     return super.releaseAudioSegment(conversionId, sequence, attempts);

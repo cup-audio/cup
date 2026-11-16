@@ -206,6 +206,41 @@ test("a finally failed segment sends one event tagged segment", async ({
   });
 });
 
+test("a segment whose prepared narration cannot be loaded is released and sends one event tagged segment", async ({
+  expect,
+  onTestFinished,
+}) => {
+  const sentry = await useSentryStub({ onTestFinished });
+  const worker = await useWorker({ onTestFinished, sentryDsn: sentry.dsn("cup-worker") });
+  const workflows = await worker.introspectWorkflow("SYNTHESIZE_AUDIO_SEGMENT_WORKFLOW");
+  onTestFinished(() => workflows.dispose());
+  await workflows.modifyAll(async (modifier) => {
+    await modifier.disableRetryDelays();
+  });
+  const { env, grant, grantId, conversionId, manifestKey } =
+    await createPreparedTrialConversion(worker);
+
+  // Loading the narration fails on every attempt while its manifest is missing.
+  await env.AUDIO_BUCKET.delete(manifestKey);
+  await env.SYNTHESIZE_AUDIO_SEGMENT_WORKFLOW.create(segmentWorkflowParams(conversionId, grantId));
+
+  await expect
+    .poll(async () => (await grant.listAudioSegments(conversionId))[0]?.state, {
+      timeout: 20_000,
+    })
+    .toBe("released");
+  await waitForStepSpan(sentry, "audio-segment-production: release failed segment reservation");
+  const events = sentry.errorEvents("cup-worker");
+  expect(events).toHaveLength(1);
+  expect(events[0]).toMatchObject({
+    tags: {
+      "cup.conversion.id": conversionId,
+      "cup.conversion.failure_category": "segment",
+      "cup.audio_segment.sequence": "0",
+    },
+  });
+});
+
 test("a finally failed segment's owner logs its release with the run's attempts", async ({
   expect,
   onTestFinished,

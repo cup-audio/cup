@@ -18,6 +18,7 @@ import { CupError } from "@cup/errors";
 import { RollingLimits } from "@cup/rolling-limits";
 import {
   captureAlarmFailure,
+  captureStoppedWorkflow,
   logAudioSegmentSettled,
   logPreparationSettled,
   reportStuckConversions,
@@ -343,7 +344,10 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
     });
   }
 
-  /** `attempts` is how many synthesis attempts the segment's Workflow made before it failed. */
+  /**
+   * `attempts` is how many synthesis attempts the segment's Workflow made before it failed. Returns
+   * whether the segment had a reservation to release.
+   */
   async releaseAudioSegment(conversionId: string, sequence: number, attempts?: number) {
     setConversionScope({ conversionId });
     assertAttempts(attempts);
@@ -368,6 +372,7 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
     if (isReleased) {
       await this.logAudioSegmentSettled(conversionId, sequence, "released", attempts, releasedAtMs);
     }
+    return isReleased;
   }
 
   retryPreparation(conversionId: string) {
@@ -899,9 +904,11 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
           const instance = await this.env.PREPARE_AUDIOBOOK_WORKFLOW.get(conversionId);
           const status = await instance.status();
           if (status.status === "errored" || status.status === "terminated") {
+            // The instance stopped without recording a failed outcome, so nothing captured it.
             await this.recordFailed(conversionId, {
               failureCategory: "workflow-platform",
               explanation: "Generation stopped. Unfinished segments did not consume allowance.",
+              diagnosticReference: captureStoppedWorkflow({ kind: "preparation", conversionId }),
               cleanupState: "pending",
             });
           }
@@ -927,8 +934,9 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
           // Reserved work may finish after expiry or revocation, so a grant can always resume it.
           { canResume: true },
         );
-        if (result === "stopped") {
-          await this.releaseAudioSegment(conversionId, sequence);
+        // The instance stopped without releasing the segment itself, so nothing captured it.
+        if (result === "stopped" && (await this.releaseAudioSegment(conversionId, sequence))) {
+          captureStoppedWorkflow({ kind: "audio-segment", conversionId, sequence });
         }
       });
     }
