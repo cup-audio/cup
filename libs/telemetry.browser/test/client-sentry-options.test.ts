@@ -1,3 +1,10 @@
+import {
+  BrowserClient,
+  defaultStackParser,
+  eventFiltersIntegration,
+  makeFetchTransport,
+  type ErrorEvent,
+} from "@sentry/react";
 import { expect, test } from "vitest";
 
 import { CUP_APP_DSN } from "@cup/telemetry.core";
@@ -162,4 +169,40 @@ test("the browser passes no Cocoa options", () => {
   });
 
   expect(options).not.toHaveProperty("cocoaOptions");
+});
+
+/** Whether Sentry's event filters drop an error event of this type and message under the options. */
+function isIgnored(type: string, value: string): boolean {
+  const options = createClientSentryOptions({
+    pageOrigin: "https://cup.audio",
+    apiOrigin: "https://cup.audio",
+    release: "web@0123456789abcdef",
+    router: ROUTER,
+  });
+  const event: ErrorEvent = { type: undefined, exception: { values: [{ type, value }] } };
+  // A client that sends nothing, only to hand the options to Sentry's event filters.
+  const client = new BrowserClient({
+    ...(options?.ignoreErrors === undefined ? {} : { ignoreErrors: options.ignoreErrors }),
+    integrations: [],
+    stackParser: defaultStackParser,
+    transport: makeFetchTransport,
+  });
+  return eventFiltersIntegration().processEvent?.(event, {}, client) === null;
+}
+
+test.each([
+  ["AbortError", "The user aborted a request."],
+  ["AbortError", "The operation was aborted."],
+  ["Error", "ResizeObserver loop completed with undelivered notifications."],
+])("ignores the browser noise %s: %s", (type, value) => {
+  expect(isIgnored(type, value)).toBe(true);
+});
+
+test.each([
+  ["TypeError", "Failed to fetch"],
+  ["TypeError", "Load failed"],
+  ["TypeError", "NetworkError when attempting to fetch resource."],
+  ["Error", "Saving the AbortError handling state failed"],
+])("keeps the failed request or other error %s: %s", (type, value) => {
+  expect(isIgnored(type, value)).toBe(false);
 });

@@ -67,19 +67,12 @@ const SHELL_APP_ID = "audio.cup.app";
 const TUNNEL_PATH = "/_/e";
 
 /**
- * Known browser noise: a layout loop the browser recovers from itself, and requests the browser
- * aborts when the page navigates away or the connection drops. A failed request is a breadcrumb;
- * the Worker has already captured a server failure.
+ * Known browser noise: a layout loop the browser recovers from itself, and a request aborted on
+ * navigation, which rejects with an `AbortError`. Sentry matches a string anywhere in the message,
+ * so each pattern is an anchored regular expression. A request that fails for another reason, such
+ * as a dropped connection, is still captured when nothing handles it.
  */
-const IGNORED_ERRORS = [
-  /^ResizeObserver loop/,
-  "AbortError",
-  "The user aborted a request.",
-  "The operation was aborted.",
-  "Failed to fetch",
-  "Load failed",
-  "NetworkError when attempting to fetch resource.",
-];
+const IGNORED_ERRORS = [/^ResizeObserver loop/, /^AbortError: /];
 
 /**
  * Sentry's options for the web app, or `undefined` when it must send nothing. By the on/off rule:
