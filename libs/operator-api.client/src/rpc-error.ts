@@ -34,7 +34,7 @@ export const ERROR_CODE = {
 
 /**
  * An unsuccessful operator API response, carrying the API error code, HTTP status, retry delay, and
- * the server's request ID.
+ * the request's Sentry trace ID.
  */
 export class RpcError extends ApiRpcError<ErrorCode> {}
 

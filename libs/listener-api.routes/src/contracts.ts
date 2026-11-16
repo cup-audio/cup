@@ -252,11 +252,16 @@ export const ERROR_CODE = {
 } as const;
 export type ErrorCode = (typeof ERROR_CODE)[keyof typeof ERROR_CODE];
 
+/** Sentry's trace ID of the request, which finds the request's trace in Sentry's search. */
+const traceIdSchema = z
+  .string()
+  .regex(/^[0-9a-f]{32}$/, "Must be a 32-character lowercase hex trace ID");
+
 export const errorResponseSchema = z.object({
   error: z.object({
     code: z.enum(ERROR_CODE),
     message: z.string().min(1),
-    requestId: uuidV4Schema,
+    traceId: traceIdSchema,
   }),
 });
 export type ErrorResponse = z.infer<typeof errorResponseSchema>;

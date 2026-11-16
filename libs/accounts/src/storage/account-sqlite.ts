@@ -13,6 +13,7 @@ import {
 } from "@cup/conversion-contracts";
 import { DurationLedger } from "@cup/duration-ledger";
 import { RollingLimits } from "@cup/rolling-limits";
+import type { StuckConversionCandidate } from "@cup/telemetry.cloudflare";
 
 import {
   ACCOUNT_USAGE_PROJECTION_SCHEMA_VERSION,
@@ -221,6 +222,7 @@ export class AccountSqlite {
           createdAtMs: nowMs,
           status: "pending",
           lastStartedPhase: ConversionPhase.CONVERSION_START,
+          stageStartedAtMs: nowMs,
         })
         .run();
       this.database
@@ -245,12 +247,23 @@ export class AccountSqlite {
     });
   }
 
+  /** A reservation of any missing segment starts synthesis again. */
   reserveMissingAudioSegments(
     conversionId: string,
     narrationTextCharactersBySegment: readonly number[],
     nowMs: number,
   ) {
-    return this.duration.reserveMissing(conversionId, narrationTextCharactersBySegment, nowMs);
+    return this.database.transaction(() => {
+      const reservation = this.duration.reserveMissing(
+        conversionId,
+        narrationTextCharactersBySegment,
+        nowMs,
+      );
+      if (reservation.result === "reserved" && reservation.hasChanged) {
+        this.startStage(conversionId, nowMs);
+      }
+      return reservation;
+    });
   }
 
   reservedAudioSegments() {
@@ -266,7 +279,7 @@ export class AccountSqlite {
     return this.duration.complete(conversionId, sequence, durationMilliseconds, nowMs);
   }
 
-  retryPreparation(conversionId: string) {
+  retryPreparation(conversionId: string, nowMs: number) {
     this.requireActive();
     this.database
       .update(accountConversions)
@@ -275,6 +288,8 @@ export class AccountSqlite {
         lastStartedPhase: ConversionPhase.CONVERSION_START,
         completedAtMs: null,
         ...EMPTY_OUTCOME_COLUMNS,
+        stageStartedAtMs: nowMs,
+        stuckReportedAtMs: null,
       })
       .where(
         and(
@@ -496,7 +511,14 @@ export class AccountSqlite {
       // Reserving with the ready outcome leaves no moment in which a prepared conversion has
       // undecided reservations: afterwards a segment without one means the document did not fit.
       if (parsed.status === "ready" && narrationTextCharactersBySegment !== undefined) {
-        this.duration.reserveMissing(conversionId, narrationTextCharactersBySegment, nowMs);
+        const reservation = this.duration.reserveMissing(
+          conversionId,
+          narrationTextCharactersBySegment,
+          nowMs,
+        );
+        if (reservation.result === "reserved" && reservation.hasChanged) {
+          this.startStage(conversionId, nowMs);
+        }
       }
       this.database
         .update(pendingJobs)
@@ -605,6 +627,34 @@ export class AccountSqlite {
       .map((row) => accountConversionDeletionSchema.parse(row));
   }
 
+  /** The marked conversions the stuck-conversion-deletion check has not reported. */
+  unreportedConversionDeletions(): AccountConversionDeletion[] {
+    return this.database
+      .select({
+        conversionId: accountConversions.conversionId,
+        deletingSinceMs: accountConversions.deletingSinceMs,
+      })
+      .from(accountConversions)
+      .where(
+        and(
+          isNotNull(accountConversions.deletingSinceMs),
+          isNull(accountConversions.deletionStuckReportedAtMs),
+        ),
+      )
+      .orderBy(accountConversions.deletingSinceMs, accountConversions.conversionId)
+      .all()
+      .map((row) => accountConversionDeletionSchema.parse(row));
+  }
+
+  /** Records that the stuck-conversion-deletion check reported the marked conversion. */
+  markDeletionStuckReported(conversionId: string, nowMs: number): void {
+    this.database
+      .update(accountConversions)
+      .set({ deletionStuckReportedAtMs: nowMs })
+      .where(eq(accountConversions.conversionId, conversionId))
+      .run();
+  }
+
   /** A conversion marked for deletion reads as missing, which also fences its execution. */
   getConversion(conversionId: string):
     | (AccountConversion & {
@@ -637,11 +687,74 @@ export class AccountSqlite {
     };
   }
 
+  /**
+   * The conversions whose current stage the stuck-conversion check has not reported: pending ones
+   * in preparation, and ready ones with a reserved segment in synthesis. A conversion marked for
+   * deletion is skipped.
+   */
+  stuckConversionCandidates(): StuckConversionCandidate[] {
+    const reservedConversionIds = new Set(
+      this.duration.reservedSegments().map((segment) => segment.conversionId),
+    );
+    return this.database
+      .select({
+        conversionId: accountConversions.conversionId,
+        status: accountConversions.status,
+        lastStartedPhase: accountConversions.lastStartedPhase,
+        stageStartedAtMs: accountConversions.stageStartedAtMs,
+      })
+      .from(accountConversions)
+      .where(
+        and(
+          isNull(accountConversions.deletingSinceMs),
+          isNull(accountConversions.stuckReportedAtMs),
+        ),
+      )
+      .all()
+      .flatMap(
+        ({
+          conversionId,
+          status,
+          lastStartedPhase,
+          stageStartedAtMs,
+        }): StuckConversionCandidate[] => {
+          if (stageStartedAtMs === null) {
+            throw new Error(`Account conversion ${conversionId} has no stage start`);
+          }
+          if (status === "pending") {
+            return [{ conversionId, stage: "preparation", stageStartedAtMs, lastStartedPhase }];
+          }
+          if (status === "ready" && reservedConversionIds.has(conversionId)) {
+            return [{ conversionId, stage: "synthesis", stageStartedAtMs, lastStartedPhase }];
+          }
+          return [];
+        },
+      );
+  }
+
+  /** Records that the stuck-conversion check reported the conversion's current stage. */
+  markStuckReported(conversionId: string, nowMs: number): void {
+    this.database
+      .update(accountConversions)
+      .set({ stuckReportedAtMs: nowMs })
+      .where(eq(accountConversions.conversionId, conversionId))
+      .run();
+  }
+
   markDispatched(conversionId: string): void {
     this.database
       .update(pendingJobs)
       .set({ state: "delivered" })
       .where(eq(pendingJobs.conversionId, conversionId))
+      .run();
+  }
+
+  /** Starts the conversion's stage again, so the stuck-conversion check may report it once more. */
+  private startStage(conversionId: string, nowMs: number): void {
+    this.database
+      .update(accountConversions)
+      .set({ stageStartedAtMs: nowMs, stuckReportedAtMs: null })
+      .where(eq(accountConversions.conversionId, conversionId))
       .run();
   }
 

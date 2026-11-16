@@ -30,7 +30,7 @@ export const OpenGrant = {
           error: {
             code: "operational-error",
             message: "Sign-in is unavailable in this trial story.",
-            requestId: "trial-story",
+            traceId: "0af7651916cd43dd8448eb211c80319c",
           },
         } satisfies ErrorResponse,
         { status: 503 },
@@ -68,7 +68,7 @@ export const OpenGrantForShares = {
           error: {
             code: "operational-error",
             message: "Starting is unavailable in this share story.",
-            requestId: "trial-story",
+            traceId: "0af7651916cd43dd8448eb211c80319c",
           },
         } satisfies ErrorResponse,
         { status: 503 },
@@ -89,7 +89,7 @@ export const InvalidCredential = {
       HttpResponse.json(
         {
           error: {
-            requestId: "09e6d824-d41d-43bb-9417-18f89232ba56",
+            traceId: "0af7651916cd43dd8448eb211c80319c",
             code: "invalid-credential",
             message: "The grant credential is invalid.",
           },
@@ -107,7 +107,7 @@ export const RevokedCredential = {
       HttpResponse.json(
         {
           error: {
-            requestId: "09e6d824-d41d-43bb-9417-18f89232ba56",
+            traceId: "0af7651916cd43dd8448eb211c80319c",
             code: "grant-revoked",
             message: "The grant was revoked.",
           },
@@ -125,7 +125,7 @@ export const CredentialExchangeError = {
       HttpResponse.json(
         {
           error: {
-            requestId: "09e6d824-d41d-43bb-9417-18f89232ba56",
+            traceId: "0af7651916cd43dd8448eb211c80319c",
             code: "dependency-unavailable",
             message: "The service is unavailable.",
           },
@@ -143,7 +143,7 @@ export const GrantLoadError = {
       HttpResponse.json(
         {
           error: {
-            requestId: "09e6d824-d41d-43bb-9417-18f89232ba56",
+            traceId: "0af7651916cd43dd8448eb211c80319c",
             code: "operational-error",
             message: "The Trial could not be loaded.",
           },
@@ -162,7 +162,7 @@ function grantSessionStory(code: "grant-session-required" | "grant-session-inval
         HttpResponse.json(
           {
             error: {
-              requestId: "09e6d824-d41d-43bb-9417-18f89232ba56",
+              traceId: "0af7651916cd43dd8448eb211c80319c",
               code,
               message: "This browser no longer has access. Open the original trial link again.",
             },
@@ -239,7 +239,7 @@ export const StartUnavailable = {
       HttpResponse.json(
         {
           error: {
-            requestId: "09e6d824-d41d-43bb-9417-18f89232ba56",
+            traceId: "0af7651916cd43dd8448eb211c80319c",
             code: "dependency-unavailable",
             message: "The service is unavailable.",
           },

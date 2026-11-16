@@ -8,12 +8,12 @@ type ErrorCode = ListenerErrorCode | OperatorErrorCode;
 
 export function accountAuthError(
   result: "unauthorized" | "unavailable" | "blocked" | "rate-limited",
-  requestId: string,
+  traceId: string,
   retryAfter = 3600,
 ) {
   if (result === "rate-limited") {
     return jsonError(
-      requestId,
+      traceId,
       "rate-limited",
       "Too many new accounts from this connection. Please try later.",
       429,
@@ -21,14 +21,14 @@ export function accountAuthError(
     );
   }
   if (result === "unauthorized") {
-    return jsonError(requestId, "account-session-required", "Sign in to continue.", 401);
+    return jsonError(traceId, "account-session-required", "Sign in to continue.", 401);
   }
   if (result === "blocked") {
-    return jsonError(requestId, "account-blocked", "Account access is blocked.", 403);
+    return jsonError(traceId, "account-blocked", "Account access is blocked.", 403);
   }
   if (result === "unavailable") {
     return jsonError(
-      requestId,
+      traceId,
       "account-setup-pending",
       "Account setup is temporarily unavailable. Please retry.",
       503,
@@ -39,11 +39,11 @@ export function accountAuthError(
 
 export function requireAccessibleGrantState(
   state: GrantState,
-  requestId: string,
+  traceId: string,
 ): Response | undefined {
   if (state === "expired" || state === "revoked") {
     return jsonError(
-      requestId,
+      traceId,
       `grant-${state}`,
       state === "expired"
         ? "This trial has expired. Its audiobooks are no longer accessible."
@@ -55,18 +55,18 @@ export function requireAccessibleGrantState(
 }
 
 /** The error envelope both API contracts declare, with a code from either contract. */
-function createErrorBody(requestId: string, code: ErrorCode, message: string) {
-  return { error: { code, message, requestId } };
+function createErrorBody(traceId: string, code: ErrorCode, message: string) {
+  return { error: { code, message, traceId } };
 }
 
 export function jsonError(
-  requestId: string,
+  traceId: string,
   code: ErrorCode,
   message: string,
   status: 400 | 401 | 403 | 404 | 405 | 409 | 413 | 415 | 416 | 429 | 500 | 503,
   headers?: HeadersInit,
 ): Response {
-  return Response.json(createErrorBody(requestId, code, message), {
+  return Response.json(createErrorBody(traceId, code, message), {
     status,
     ...(headers === undefined ? {} : { headers }),
   });

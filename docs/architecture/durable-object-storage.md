@@ -26,6 +26,8 @@ Writers may target pending or ready conversions; account lifecycle and execution
 
 `account_conversions.deleting_since_ms` is the conversion deletion marker; the account alarm stays armed while any row carries it and deletes the conversion's rows, the marked row last; `workflow_termination_tried_at_ms` records that the alarm took the conversion's one attempt to terminate its workflows ([conversion deletion](conversion-deletion.md)).
 
+`account_conversions.stage_started_at_ms` records when the conversion's current stage started, and `stuck_reported_at_ms` when the [stuck-conversion check](conversion.md#stuck-conversions) reported it; a grant's `conversions` table has the same two columns. `account_conversions.deletion_stuck_reported_at_ms` records when the [stuck-conversion-deletion check](conversion-deletion.md#invariants) reported a marked conversion.
+
 `registry_confirmed_revision` records the duration ledger revision for which the registry confirmed the account's [usage projection](#registry). The revision is the number of ledger events, so every change to the allowance, reserved duration, or spent duration advances it without a separate counter.
 
 Sources: [account-sqlite-schema.ts](../../libs/accounts/src/storage/account-sqlite-schema.ts), [rate-limit-schema.ts](../../libs/rolling-limits/src/rate-limit-schema.ts), [duration-ledger-schema.ts](../../libs/duration-ledger/src/duration-ledger-schema.ts); [migrations](../../libs/accounts/drizzle/account/).

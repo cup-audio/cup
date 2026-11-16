@@ -50,19 +50,19 @@ export async function serveNarrationTrack(
   env: ApiServerEnvironment,
   request: Request,
   conversionId: string,
-  requestId: string,
+  traceId: string,
 ): Promise<Response> {
   const owner = await getRegistryStub(env).findConversionOwner(conversionId);
   if (!owner) {
-    return narrationTrackNotFound(requestId);
+    return narrationTrackNotFound(traceId);
   }
   const reader = resolveConversionReader(env, conversionId, owner);
   if ((await reader.getReadyAudiobookReference()) === undefined) {
-    return narrationTrackNotFound(requestId);
+    return narrationTrackNotFound(traceId);
   }
   const durations = findNarrationTrackDurations(await reader.listAudioSegments());
   if (durations === undefined) {
-    return narrationTrackNotFound(requestId);
+    return narrationTrackNotFound(traceId);
   }
 
   const { segments, totalByteLength } = layOutNarrationTrack(durations);
@@ -89,7 +89,7 @@ export async function serveNarrationTrack(
   if (isRangeRequest) {
     const parsed = parseRange(range, totalByteLength);
     if (parsed === undefined) {
-      return rangeNotSatisfiable(requestId, totalByteLength);
+      return rangeNotSatisfiable(traceId, totalByteLength);
     }
     served = parsed;
   }
@@ -107,7 +107,7 @@ export async function serveNarrationTrack(
   // The first part is read before headers are sent, so a missing object yields an error status.
   const firstBody = await readPart(firstPart);
   if (firstBody === undefined) {
-    return jsonError(requestId, "operational-error", "The narration track could not be read.", 500);
+    return jsonError(traceId, "operational-error", "The narration track could not be read.", 500);
   }
 
   const servedByteLength = served.end - served.start + 1;
@@ -127,23 +127,23 @@ export async function serveCoverImage(
   request: Request,
   conversionId: string,
   isHead: boolean,
-  requestId: string,
+  traceId: string,
 ): Promise<Response> {
   const owner = await getRegistryStub(env).findConversionOwner(conversionId);
   if (!owner) {
-    return coverImageNotFound(requestId);
+    return coverImageNotFound(traceId);
   }
   const reader = resolveConversionReader(env, conversionId, owner);
   const audiobook = await loadReadyAudiobookFromEnvironment(env, conversionId, reader);
   // The manifest decides: an object left by an earlier preparation attempt is not served.
   if (audiobook?.coverImage === undefined) {
-    return coverImageNotFound(requestId);
+    return coverImageNotFound(traceId);
   }
 
   const key = createCoverImageKey(conversionId, reader.artifactPrefix);
   const object = await env.AUDIO_BUCKET.get(key);
   if (object === null) {
-    return coverImageNotFound(requestId);
+    return coverImageNotFound(traceId);
   }
 
   // Its signed media URL changes once per UTC day, so the browser keeps a cover for that long
@@ -355,9 +355,9 @@ function matchesIfNoneMatch(header: string | null, etag: string): boolean {
     .some((tag) => tag === "*" || tag === etag);
 }
 
-function rangeNotSatisfiable(requestId: string, size: number): Response {
+function rangeNotSatisfiable(traceId: string, size: number): Response {
   return jsonError(
-    requestId,
+    traceId,
     "range-not-satisfiable",
     "The requested byte range is not satisfiable.",
     416,
@@ -365,10 +365,10 @@ function rangeNotSatisfiable(requestId: string, size: number): Response {
   );
 }
 
-function narrationTrackNotFound(requestId: string): Response {
-  return jsonError(requestId, "narration-track-not-found", "Narration track not found.", 404);
+function narrationTrackNotFound(traceId: string): Response {
+  return jsonError(traceId, "narration-track-not-found", "Narration track not found.", 404);
 }
 
-function coverImageNotFound(requestId: string): Response {
-  return jsonError(requestId, "cover-image-not-found", "Cover image not found.", 404);
+function coverImageNotFound(traceId: string): Response {
+  return jsonError(traceId, "cover-image-not-found", "Cover image not found.", 404);
 }

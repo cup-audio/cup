@@ -365,9 +365,18 @@ async function run(
     await action(new OperatorApiClient(url.toString(), accessToken), createOutput(global.json));
   } catch (error) {
     const cliError = toCliError(error);
-    process.stderr.write(
-      `${global.json ? JSON.stringify({ error: { code: cliError.code, message: cliError.message } }) : `Error: ${cliError.message}`}\n`,
-    );
+    // An API failure carries the request's Sentry trace ID, which finds the request's trace.
+    const traceId = cliError.cause instanceof RpcError ? cliError.cause.traceId : undefined;
+    if (global.json) {
+      const details = { code: cliError.code, message: cliError.message };
+      process.stderr.write(
+        `${JSON.stringify({ error: traceId === undefined ? details : { ...details, traceId } })}\n`,
+      );
+    } else {
+      process.stderr.write(
+        `Error: ${cliError.message}\n${traceId === undefined ? "" : `Trace ID: ${traceId}\n`}`,
+      );
+    }
     if (global.debug && cliError.cause instanceof Error) {
       process.stderr.write(`${redact(cliError.cause.message)}\n`);
     }

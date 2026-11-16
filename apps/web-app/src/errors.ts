@@ -5,7 +5,14 @@ import { RpcError } from "@cup/listener-api.client";
 export type ErrorCopy = { title: string; detail: string | undefined };
 
 /** What the user is told about a failure, shared by error screens and error toasts. */
-type ErrorDescription = ErrorCopy & { isRetryable: boolean };
+type ErrorDescription = ErrorCopy & {
+  isRetryable: boolean;
+  /**
+   * The server's Sentry trace ID of a failed API request, which a listener can pass on to the
+   * operator to find the request's trace.
+   */
+  reference: string | undefined;
+};
 
 /** Words a lasting API refusal in terms of the page it occurs on. */
 export type DescribeApiRefusal = (error: RpcError) => ErrorCopy;
@@ -45,21 +52,32 @@ export function describeError(
   describeApiRefusal?: DescribeApiRefusal,
 ): ErrorDescription {
   if (error instanceof UserFacingError) {
-    return { title: error.title, detail: error.detail, isRetryable: false };
+    return { title: error.title, detail: error.detail, isRetryable: false, reference: undefined };
   }
 
   if (error instanceof RpcError && error.status < 500) {
     // The API words refusals for users; only rate limiting goes away by trying again.
     if (error.status === 429) {
-      return { title: fallbackTitle, detail: error.message, isRetryable: true };
+      return {
+        title: fallbackTitle,
+        detail: error.message,
+        isRetryable: true,
+        reference: undefined,
+      };
     }
 
     const refusal = describeApiRefusal?.(error) ?? { title: fallbackTitle, detail: error.message };
-    return { ...refusal, isRetryable: false };
+    return { ...refusal, isRetryable: false, reference: undefined };
   }
 
-  // Server failures, lost connections, and app bugs carry no message meant for users.
-  return { title: fallbackTitle, detail: undefined, isRetryable: true };
+  // Server failures, lost connections, and app bugs carry no message meant for users. A server
+  // failure carries the reference that finds it in Sentry.
+  return {
+    title: fallbackTitle,
+    detail: undefined,
+    isRetryable: true,
+    reference: error instanceof RpcError ? error.traceId : undefined,
+  };
 }
 
 /** One line about a failure for text shown next to the control that failed. */

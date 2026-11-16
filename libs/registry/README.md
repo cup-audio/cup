@@ -1,6 +1,6 @@
 # Registry
 
-Registry account provisioning and deletion need the Supabase and Resend settings its [providers](src/providers/) declare. Provisioning always checks the provider identity before activation; integration tests supply a local identity provider. Deletion notice tests send to a [Resend stub](../../qa/resend-stub/src/resend-stub.ts) started per test, and a [holding `ACCOUNTS` double](test/holding-accounts.ts) pins calls that land on the coordinator while it awaits an account.
+Registry account provisioning and deletion need the Supabase and Resend settings its [providers](src/providers/) declare. Provisioning always checks the provider identity before activation; integration tests supply a local identity provider. Deletion notice tests send to a [Resend stub](../../qa/resend-stub/src/resend-stub.ts) started per test, and a [holding `ACCOUNTS` double](test/holding-accounts.ts) pins calls that land on the coordinator while it awaits an account. The [stuck-conversion tests](test/stuck-conversions.test.ts) run Sentry-wrapped account and grant test objects against a [Sentry stub](../../qa/sentry-stub/README.md) started for the file.
 
 This library owns the singleton `RegistryDurableObject`: provider identity mapping, account provisioning, grant inventory, grant and account usage projections, conversion ownership, ingress rate limits, and durable account deletion coordination and notifications. Account and grant objects keep their owner-specific conversion state and accounting. Integration tests here exercise all three Durable Object classes together.
 

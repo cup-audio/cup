@@ -264,7 +264,7 @@ Place `--json` before the grant, account, or conversion command to write one JSO
 pnpm operator --json grant list
 ```
 
-On failure, the CLI exits with status 1 and writes `{ "error": { "code": "...", "message": "..." } }` to standard error. When the API refuses a request, `code` and `message` are the API's own, such as `account-unavailable`. A code this CLI does not know, for example from a newer server, and an API response without an error code report `operational-error` with the API's message. Failures without an API error, such as an unreachable service, report `operator-error`.
+On failure, the CLI exits with status 1 and writes `{ "error": { "code": "...", "message": "..." } }` to standard error. When the API refuses a request, `code` and `message` are the API's own, such as `account-unavailable`, and `traceId` is the request's Sentry trace ID, which finds the request's trace in Sentry; human output prints it as `Trace ID:` below the error message. A code this CLI does not know, for example from a newer server, and an API response without an error code report `operational-error` with the API's message. Failures without an API error, such as an unreachable service, report `operator-error`.
 
 ## Troubleshoot access
 
