@@ -1,6 +1,6 @@
-import { captureEvent } from "@sentry/core";
-
 import { TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
+
+import { reportStuckCases } from "#src/stuck-check.ts";
 
 /** A marked conversion the stuck-conversion-deletion check has not reported. */
 export type StuckConversionDeletionCandidate = {
@@ -26,25 +26,15 @@ export function reportStuckConversionDeletions(
   candidates: readonly StuckConversionDeletionCandidate[],
   nowMs: number,
 ): string[] {
-  const reported: string[] = [];
-  for (const candidate of candidates) {
-    const ageMs = nowMs - candidate.deletingSinceMs;
-    if (ageMs <= CONVERSION_DELETION_STUCK_AFTER_MS) {
-      continue;
-    }
-
-    captureEvent({
-      level: "error",
-      // The conversion ID keeps Sentry's Dedupe integration from dropping the next conversion's
-      // event as a repeat of this one; the fingerprint still groups them into one issue.
+  return reportStuckCases(candidates, nowMs, {
+    idOf: (candidate) => candidate.conversionId,
+    startedAtMsOf: (candidate) => candidate.deletingSinceMs,
+    isStuck: (_candidate, ageMs) => ageMs > CONVERSION_DELETION_STUCK_AFTER_MS,
+    toEvent: (candidate, ageMs) => ({
       message: `Deletion of conversion ${candidate.conversionId} stuck`,
       fingerprint: ["conversion-deletion-stuck"],
       tags: { [TELEMETRY_ATTRIBUTES.CONVERSION_ID]: candidate.conversionId },
-      contexts: {
-        stuck_conversion_deletion: { age_minutes: Math.floor(ageMs / 60_000) },
-      },
-    });
-    reported.push(candidate.conversionId);
-  }
-  return reported;
+      contexts: { stuck_conversion_deletion: { age_minutes: Math.floor(ageMs / 60_000) } },
+    }),
+  });
 }

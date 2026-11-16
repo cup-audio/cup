@@ -1,6 +1,8 @@
-import { captureEvent } from "@sentry/core";
-
+import type { ConversionOwner } from "@cup/conversion-contracts";
 import { TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
+
+import { conversionOwnerKeys } from "#src/conversion-owner.ts";
+import { reportStuckCases } from "#src/stuck-check.ts";
 
 /** The stage a conversion can hang in: its preparation, or the synthesis of its audio segments. */
 type ConversionStage = "preparation" | "synthesis";
@@ -14,10 +16,6 @@ export type StuckConversionCandidate = {
   /** The conversion phase the conversion last started; only preparation reports it. */
   lastStartedPhase: string;
 };
-
-type ConversionOwnerReference =
-  | { kind: "account"; accountId: string }
-  | { kind: "grant"; grantId: string };
 
 /*
  * The thresholds are deliberately generous, so that only a hung Workflow or segment crosses them;
@@ -43,20 +41,14 @@ const STUCK_AFTER_MS_BY_STAGE: Record<ConversionStage, number> = {
  */
 export function reportStuckConversions(
   candidates: readonly StuckConversionCandidate[],
-  owner: ConversionOwnerReference,
+  owner: ConversionOwner,
   nowMs: number,
 ): string[] {
-  const reported: string[] = [];
-  for (const candidate of candidates) {
-    const ageMs = nowMs - candidate.stageStartedAtMs;
-    if (ageMs < STUCK_AFTER_MS_BY_STAGE[candidate.stage]) {
-      continue;
-    }
-
-    captureEvent({
-      level: "error",
-      // The conversion ID keeps Sentry's Dedupe integration from dropping the next conversion's
-      // event as a repeat of this one; the fingerprint still groups them into one issue.
+  return reportStuckCases(candidates, nowMs, {
+    idOf: (candidate) => candidate.conversionId,
+    startedAtMsOf: (candidate) => candidate.stageStartedAtMs,
+    isStuck: (candidate, ageMs) => ageMs >= STUCK_AFTER_MS_BY_STAGE[candidate.stage],
+    toEvent: (candidate, ageMs) => ({
       message: `Conversion ${candidate.conversionId} stuck in ${candidate.stage}`,
       fingerprint: ["conversion-stuck", candidate.stage],
       tags: {
@@ -65,19 +57,11 @@ export function reportStuckConversions(
         ...(candidate.stage === "preparation"
           ? { [TELEMETRY_ATTRIBUTES.CONVERSION_PHASE]: candidate.lastStartedPhase }
           : {}),
-        [TELEMETRY_ATTRIBUTES.OWNER_KIND]: owner.kind,
-        ...(owner.kind === "account"
-          ? { [TELEMETRY_ATTRIBUTES.ACCOUNT_ID]: owner.accountId }
-          : { [TELEMETRY_ATTRIBUTES.CONVERSION_GRANT_ID]: owner.grantId }),
+        ...conversionOwnerKeys(owner),
       },
       contexts: {
-        stuck_conversion: {
-          stage: candidate.stage,
-          age_minutes: Math.floor(ageMs / 60_000),
-        },
+        stuck_conversion: { stage: candidate.stage, age_minutes: Math.floor(ageMs / 60_000) },
       },
-    });
-    reported.push(candidate.conversionId);
-  }
-  return reported;
+    }),
+  });
 }

@@ -1,12 +1,14 @@
 import { getIsolationScope, withIsolationScope } from "@sentry/core";
 
+import type { ConversionOwner } from "@cup/conversion-contracts";
 import { TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
+
+import { conversionOwnerKeys } from "#src/conversion-owner.ts";
 
 /** What an entry point knows about the conversion it works on. */
 export type ConversionTelemetryContext = {
   conversionId: string;
-  /** The conversion owner, structurally `ConversionOwner` of `@cup/conversion-contracts`. */
-  owner?: { kind: "account"; accountId: string } | { kind: "trial"; grantId: string };
+  owner?: ConversionOwner;
   /** The audio segment, for a segment's synthesis. */
   sequence?: number;
 };
@@ -46,17 +48,7 @@ function toConversionKeys({
 }: ConversionTelemetryContext): Record<string, string | number> {
   return {
     [TELEMETRY_ATTRIBUTES.CONVERSION_ID]: conversionId,
-    ...(owner === undefined
-      ? {}
-      : owner.kind === "account"
-        ? {
-            [TELEMETRY_ATTRIBUTES.OWNER_KIND]: "account",
-            [TELEMETRY_ATTRIBUTES.ACCOUNT_ID]: owner.accountId,
-          }
-        : {
-            [TELEMETRY_ATTRIBUTES.OWNER_KIND]: "grant",
-            [TELEMETRY_ATTRIBUTES.CONVERSION_GRANT_ID]: owner.grantId,
-          }),
+    ...(owner === undefined ? {} : conversionOwnerKeys(owner)),
     ...(sequence === undefined ? {} : { [TELEMETRY_ATTRIBUTES.AUDIO_SEGMENT_SEQUENCE]: sequence }),
   };
 }

@@ -2,6 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import { Temporal } from "temporal-polyfill";
 
 import {
+  assertSynthesisAttempts,
   dispatchSegmentWorkflows,
   reconcileSegmentWorkflow,
   type SynthesisWorkflowDispatcher,
@@ -350,7 +351,7 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
    */
   async releaseAudioSegment(conversionId: string, sequence: number, attempts?: number) {
     setConversionScope({ conversionId });
-    assertAttempts(attempts);
+    assertSynthesisAttempts(attempts);
     const releasedAtMs = Temporal.Now.instant().epochMilliseconds;
     const isReleased = await this.ctx.storage.transaction(async () => {
       const releasedCount = this.sqlite.duration.releaseReservations(
@@ -427,7 +428,7 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
     attempts?: number,
   ) {
     setConversionScope({ conversionId });
-    assertAttempts(attempts);
+    assertSynthesisAttempts(attempts);
     if (!Number.isFinite(durationMilliseconds) || durationMilliseconds <= 0) {
       throw new CupError("Generated duration must be positive and finite");
     }
@@ -878,7 +879,7 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
       });
 
       const reported = new Set(
-        reportStuckConversions(candidates, { kind: "grant", grantId: record.grantId }, nowMs),
+        reportStuckConversions(candidates, { kind: "trial", grantId: record.grantId }, nowMs),
       );
       if (reported.size === 0) {
         return;
@@ -1016,11 +1017,5 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
         return state === "expired" || state === "revoked" ? state : undefined;
       },
     );
-  }
-}
-
-function assertAttempts(attempts: number | undefined) {
-  if (attempts !== undefined && (!Number.isSafeInteger(attempts) || attempts < 1)) {
-    throw new CupError("Synthesis attempts must be a positive safe integer");
   }
 }

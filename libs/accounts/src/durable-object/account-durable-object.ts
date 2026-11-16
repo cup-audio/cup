@@ -2,6 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import { Temporal } from "temporal-polyfill";
 
 import {
+  assertSynthesisAttempts,
   type ConversionPhase,
   dispatchSegmentWorkflows,
   reconcileSegmentWorkflow,
@@ -171,7 +172,7 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
   ) {
     setConversionScope({ conversionId });
     this.assertExecution(conversionId, executionEpoch);
-    assertAttempts(attempts);
+    assertSynthesisAttempts(attempts);
     const settledAtMs = Temporal.Now.instant().epochMilliseconds;
     const result = this.sqlite.completeAudioSegment(
       conversionId,
@@ -297,7 +298,7 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
   ) {
     setConversionScope({ conversionId });
     this.assertExecution(conversionId, executionEpoch);
-    assertAttempts(attempts);
+    assertSynthesisAttempts(attempts);
     this.release(conversionId, sequence, attempts);
     await this.scheduleUsagePublication();
   }
@@ -610,62 +611,69 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
     const registry = this.env.REGISTRY;
     const account = this.sqlite.snapshot();
     for (const job of this.sqlite.unsettledConversions()) {
-      const owner = { kind: "account" as const, accountId: account.accountId };
-      await withConversionScope({ conversionId: job.conversionId, owner }, async () => {
-        try {
-          this.assertExecution(job.conversionId, job.executionEpoch);
-          if (job.state === "delivered") {
-            const status = await (await workflow.get(job.conversionId)).status();
-            if (status.status === "errored" || status.status === "terminated") {
-              // The instance stopped without recording a failed outcome, so nothing captured it.
-              captureStoppedWorkflow({ kind: "preparation", conversionId: job.conversionId });
-              this.settle(
-                job.conversionId,
-                {
-                  status: "failed",
-                  failureCategory: "workflow-platform",
-                  explanation: "The conversion could not be completed.",
-                },
-                Temporal.Now.instant().epochMilliseconds,
-                job.executionEpoch,
-              );
-            }
-            return;
-          }
-          const conversion = this.sqlite.getConversion(job.conversionId);
-          if (!conversion) {
-            throw new CupError("Missing conversion dispatch target");
-          }
-          const registryStub = registry.get(registry.idFromName("registry"));
-          await registryStub.bindConversionOwner(job.conversionId, {
-            kind: "account",
-            accountId: account.accountId,
-          });
-
-          // A deletion, even its whole cleanup, can land while the bind is in flight, so the bind may
-          // have recreated an owner the cleanup already removed.
-          if (!this.sqlite.getConversion(job.conversionId)) {
-            await registryStub.removeConversionOwner(job.conversionId);
-            return;
-          }
-
-          const params: AccountWorkflowParams = {
-            v: 2,
-            sourceUrl: conversion.sourceUrl,
-            owner: { kind: "account", accountId: account.accountId },
-            conversionId: job.conversionId,
-            executionEpoch: job.executionEpoch,
-          };
+      await withConversionScope(
+        { conversionId: job.conversionId, owner: this.owner() },
+        async () => {
           try {
-            await workflow.create({ id: job.conversionId, params });
-          } catch {
-            await (await workflow.get(job.conversionId)).status();
+            this.assertExecution(job.conversionId, job.executionEpoch);
+            if (job.state === "delivered") {
+              const status = await (await workflow.get(job.conversionId)).status();
+              if (status.status === "errored" || status.status === "terminated") {
+                // The instance stopped without recording a failed outcome, so nothing captured it.
+                captureStoppedWorkflow({ kind: "preparation", conversionId: job.conversionId });
+                this.settle(
+                  job.conversionId,
+                  {
+                    status: "failed",
+                    failureCategory: "workflow-platform",
+                    explanation: "The conversion could not be completed.",
+                  },
+                  Temporal.Now.instant().epochMilliseconds,
+                  job.executionEpoch,
+                );
+              }
+              return;
+            }
+            const conversion = this.sqlite.getConversion(job.conversionId);
+            if (!conversion) {
+              throw new CupError("Missing conversion dispatch target");
+            }
+            const registryStub = registry.get(registry.idFromName("registry"));
+            await registryStub.bindConversionOwner(job.conversionId, {
+              kind: "account",
+              accountId: account.accountId,
+            });
+
+            // A deletion, even its whole cleanup, can land while the bind is in flight, so the bind may
+            // have recreated an owner the cleanup already removed.
+            if (!this.sqlite.getConversion(job.conversionId)) {
+              await registryStub.removeConversionOwner(job.conversionId);
+              return;
+            }
+
+            const params: AccountWorkflowParams = {
+              v: 2,
+              sourceUrl: conversion.sourceUrl,
+              owner: { kind: "account", accountId: account.accountId },
+              conversionId: job.conversionId,
+              executionEpoch: job.executionEpoch,
+            };
+            try {
+              await workflow.create({ id: job.conversionId, params });
+            } catch {
+              await (await workflow.get(job.conversionId)).status();
+            }
+            this.sqlite.markDispatched(job.conversionId);
+          } catch (error) {
+            // The persisted intent stays, so the alarm retries the dispatch.
+            logEvent(
+              "conversion-dispatch-failed",
+              "A pass of a conversion's preparation dispatch failed; the next alarm retries it.",
+              { attributes: { [TELEMETRY_ATTRIBUTES.CONVERSION_ID]: job.conversionId }, error },
+            );
           }
-          this.sqlite.markDispatched(job.conversionId);
-        } catch {
-          /* Persisted intent and the alarm retry dependency failures. */
-        }
-      });
+        },
+      );
     }
   }
 
@@ -673,8 +681,11 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
   private async reconcileSynthesis() {
     const account = this.sqlite.snapshot();
     for (const segment of this.sqlite.reservedAudioSegments()) {
-      const owner = { kind: "account" as const, accountId: account.accountId };
-      const context = { conversionId: segment.conversionId, owner, sequence: segment.sequence };
+      const context = {
+        conversionId: segment.conversionId,
+        owner: this.owner(),
+        sequence: segment.sequence,
+      };
       await withConversionScope(context, async () => {
         const result = await reconcileSegmentWorkflow(
           this.env.SYNTHESIZE_AUDIO_SEGMENT_WORKFLOW,
@@ -718,10 +729,9 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
 
   /** Sends one Sentry event per stuck conversion and stage; see docs/architecture/conversion.md. */
   private reportStuckConversions(nowMs: number) {
-    const { accountId } = this.sqlite.snapshot();
     const reported = reportStuckConversions(
       this.sqlite.stuckConversionCandidates(),
-      { kind: "account", accountId },
+      this.owner(),
       nowMs,
     );
     for (const conversionId of reported) {
@@ -865,11 +875,5 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
   }
   pendingConversions() {
     return this.sqlite.pendingConversions();
-  }
-}
-
-function assertAttempts(attempts: number | undefined) {
-  if (attempts !== undefined && (!Number.isSafeInteger(attempts) || attempts < 1)) {
-    throw new CupError("Synthesis attempts must be a positive safe integer");
   }
 }

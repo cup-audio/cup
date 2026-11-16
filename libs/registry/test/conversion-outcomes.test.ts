@@ -362,6 +362,26 @@ test(
   TEST_TIMEOUT_MS,
 );
 
+test(
+  "an account conversion whose preparation cannot be dispatched logs a warning, and the alarm retries it",
+  async () => {
+    const { account } = await createAccount();
+
+    // The test object refuses to create preparation Workflows until a test accepts them.
+    const conversionId = await startAccountConversion(
+      account,
+      Temporal.Now.instant().epochMilliseconds,
+    );
+
+    await waitForLogs("conversion-dispatch-failed", conversionId, 1);
+    expect(logs("conversion-dispatch-failed", conversionId)[0]).toMatchObject({
+      level: "warn",
+      attributes: { "exception.type": { value: "Error" } },
+    });
+  },
+  TEST_TIMEOUT_MS,
+);
+
 async function createAccount() {
   const accountId = crypto.randomUUID();
   const account = bindings.SENTRY_ACCOUNTS.get(bindings.SENTRY_ACCOUNTS.idFromName(accountId));

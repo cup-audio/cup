@@ -2036,6 +2036,9 @@ importers:
 
   libs/telemetry.cloudflare:
     dependencies:
+      '@cup/conversion-contracts':
+        specifier: workspace:*
+        version: link:../conversion-contracts
       '@cup/errors':
         specifier: workspace:*
         version: link:../errors
