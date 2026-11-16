@@ -1,5 +1,6 @@
 import { cloudflare } from "@cloudflare/vite-plugin";
 import { check } from "@patricktree-stack/utils-ecma/assert.utils";
+import { sentryCloudflareVitePlugin } from "@sentry/cloudflare/vite";
 import fs from "node:fs";
 import path from "node:path";
 import { defineConfig, loadEnv, mergeConfig, type Plugin } from "vite";
@@ -51,7 +52,15 @@ export default defineConfig(({ command, mode }) => {
   const workerConfig = defineConfig({
     envDir: WORKER_DIRECTORY,
     build: { outDir: path.join(WORKER_DIRECTORY, "dist") },
-    plugins: [cloudflare({ configPath: path.join(WORKER_DIRECTORY, "wrangler.jsonc") })],
+    plugins: [
+      cloudflare({ configPath: path.join(WORKER_DIRECTORY, "wrangler.jsonc") }),
+      /*
+       * Build-time instrumentation only (Hono and `openai` spans). `src/index.ts` wraps the entry
+       * points itself, so that the integration tests, which bundle without Vite, run the same
+       * wrapping. The plugin uploads no source maps.
+       */
+      sentryCloudflareVitePlugin({ autoInstrumentation: false }),
+    ],
   });
 
   if (command === "build") {

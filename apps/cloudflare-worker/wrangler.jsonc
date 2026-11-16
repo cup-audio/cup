@@ -35,24 +35,30 @@
     "html_handling": "none",
     "run_worker_first": true,
   },
+  // Sentry receives the Worker's errors, traces and logs (docs/architecture/observability.md), so
+  // Cloudflare's own observability records nothing: no invocation logs, Workers Logs, traces or Issues.
   "observability": {
-    "enabled": true,
-    // Signed media URLs carry their credential in the `token` query parameter; keep query strings
-    // out of the request URLs that invocation logs and traces record.
-    "redact_query_string": true,
+    "enabled": false,
     "logs": {
-      "enabled": true,
-      "invocation_logs": true,
+      "enabled": false,
+      "invocation_logs": false,
     },
     "traces": {
-      "enabled": true,
-      "head_sampling_rate": 1,
+      "enabled": false,
+    },
+    "issues": {
+      "enabled": false,
     },
   },
   "limits": {
     "cpu_ms": 300000,
   },
-  "upload_source_maps": true,
+  // Source maps go to Sentry, not to Cloudflare.
+  "upload_source_maps": false,
+  // `CF_VERSION_METADATA.id` is the release of every Sentry event.
+  "version_metadata": {
+    "binding": "CF_VERSION_METADATA",
+  },
   "browser": {
     "binding": "BROWSER",
   },
@@ -110,6 +116,9 @@
     // declared keys, so they need these empty defaults.
     "LOCAL_TEST_ACCOUNT_EMAIL": "",
     "LOCAL_TEST_ACCOUNT_PASSWORD": "",
+    // The `cup-worker` DSN (CUP_WORKER_DSN in @cup/telemetry.core), public by design. It must agree
+    // with LOCAL_DEVELOPMENT: `pnpm dev:services` sets it to "" next to LOCAL_DEVELOPMENT=true.
+    "SENTRY_DSN": "https://aa6ceda71485efec30877677d4eb919b@o4512441473040384.ingest.de.sentry.io/4512441485623377",
     "SIGNUP_IP_LIMIT": "10",
     "CONVERSION_IP_LIMIT": "60",
     "CONVERSION_OWNER_LIMIT": "10",

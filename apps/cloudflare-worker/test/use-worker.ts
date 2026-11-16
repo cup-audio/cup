@@ -13,6 +13,11 @@ type UseWorkerOptions = Pick<TestContext, "onTestFinished"> & {
   vars?: Record<string, string>;
   /** Test-only secrets that override the dummy values of `TEST_SECRETS`. */
   secrets?: Record<string, string>;
+  /**
+   * Where Sentry sends, such as a Sentry stub's `dsn("cup-worker")`. Without it, Sentry runs as in
+   * production and sends to the discard port that wrangler.test.jsonc sets.
+   */
+  sentryDsn?: string;
 };
 
 const PACKAGE_DIRECTORY = nodeUrl.fileURLToPath(new URL("..", import.meta.url));
@@ -43,13 +48,14 @@ export async function useWorker({
   onTestFinished,
   vars = {},
   secrets = {},
+  sentryDsn,
 }: UseWorkerOptions): Promise<TestWorker> {
   const testRuntime = createTestHarness({
     root: PACKAGE_DIRECTORY,
     workers: [
       {
         configPath: "./test/wrangler.test.jsonc",
-        vars,
+        vars: sentryDsn === undefined ? vars : { ...vars, SENTRY_DSN: sentryDsn },
         secrets: { ...TEST_SECRETS, ...secrets },
       },
     ],

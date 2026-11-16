@@ -1,6 +1,8 @@
 import fs from "node:fs/promises";
 import { test } from "vitest";
 
+import { CUP_WORKER_DSN } from "@cup/telemetry.core";
+
 import { TEST_SECRETS } from "#test/use-worker.ts";
 import {
   PRODUCTION_CONFIG_PATH,
@@ -184,15 +186,30 @@ test("the production secrets are required, and the integration tests supply each
   expect(Object.keys(TEST_SECRETS)).toStrictEqual(expectedSecrets);
 });
 
-test("observability records every invocation's logs and traces without query strings", ({
+test("Cloudflare's observability is off and source maps stay out of Cloudflare", ({ expect }) => {
+  const production = readProductionConfig();
+
+  expect(production.observability).toStrictEqual({
+    enabled: false,
+    logs: { enabled: false, invocation_logs: false },
+    traces: { enabled: false },
+    issues: { enabled: false },
+  });
+  expect(production.upload_source_maps).toBe(false);
+});
+
+test("production reports to the cup-worker project, and the integration tests to the discard port", ({
   expect,
 }) => {
-  expect(readProductionConfig().observability).toStrictEqual({
-    enabled: true,
-    redact_query_string: true,
-    logs: { enabled: true, invocation_logs: true },
-    traces: { enabled: true, head_sampling_rate: 1 },
-  });
+  const production = readProductionConfig();
+  const testConfig = readTestConfig();
+
+  expect(production.vars?.["LOCAL_DEVELOPMENT"]).toBe("false");
+  expect(production.vars?.["SENTRY_DSN"]).toBe(CUP_WORKER_DSN);
+  expect(production.version_metadata).toStrictEqual({ binding: "CF_VERSION_METADATA" });
+  expect(testConfig.vars?.["LOCAL_DEVELOPMENT"]).toBe("false");
+  expect(testConfig.vars?.["SENTRY_DSN"]).toBe("http://test@127.0.0.1:9/1");
+  expect(testConfig.version_metadata).toStrictEqual(production.version_metadata);
 });
 
 /** The SQLite-backed classes that remain after applying every migration in order. */

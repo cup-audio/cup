@@ -40,7 +40,9 @@
     "@cup/conversion-grants": "workspace:*",
     "@cup/create-audiobook-from-url-workflow": "workspace:*",
     "@cup/registry": "workspace:*",
-    "@cup/web-app": "workspace:*"
+    "@cup/telemetry.cloudflare": "workspace:*",
+    "@cup/web-app": "workspace:*",
+    "@sentry/cloudflare": "catalog:sentry-server"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "catalog:web-app",
@@ -48,6 +50,8 @@
     "@cup/listener-api.routes": "workspace:*",
     "@cup/operator-api.routes": "workspace:*",
     "@cup/prepare-declaration-build": "workspace:*",
+    "@cup/sentry-stub": "workspace:*",
+    "@cup/telemetry.core": "workspace:*",
     "@patricktree-stack/config-typescript": "workspace:*",
     "@patricktree-stack/config-vitest": "workspace:*",
     "@patricktree-stack/utils-ecma": "workspace:*",

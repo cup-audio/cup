@@ -16,6 +16,7 @@ Start with the [glossary](GLOSSARY.md) for Cup's vocabulary and the [system over
 | [Account deletion](architecture/account-deletion.md)               | Fresh authentication, recovery, write fencing, cleanup, and notification retries                         |
 | [Conversion deletion](architecture/conversion-deletion.md)         | Fencing one conversion with a durable marker, releasing its open reservations, and its cleanup           |
 | [Web application screens](architecture/web-app.md)                 | Routes and redirects, Recents with its Add and account dialogs, account recovery, and the detail view    |
+| [Observability](architecture/observability.md)                     | What reaches Sentry, the telemetry libraries, privacy hooks, and why nothing is sent outside production  |
 
 ## Operate and develop Cup
 
@@ -28,6 +29,7 @@ Start with the [glossary](GLOSSARY.md) for Cup's vocabulary and the [system over
 | [Worker development and integration tests](../apps/cloudflare-worker/AGENTS.md)      | Run the Worker locally and test it without external services                                                           |
 | [Application E2E tests](../qa/e2e/README.md)                                         | Run the complete local conversion path and update screenshots                                                          |
 | [Mobile E2E tests](../qa/mobile-e2e/README.md)                                       | Run the debug Android and iOS shells on their own emulator and simulator against a local test Worker                   |
+| [Sentry stub](../qa/sentry-stub/README.md)                                           | Record what a test would have sent to Sentry                                                                           |
 | [Test Worker](../qa/test-worker/README.md)                                           | The test-only Worker with deterministic fakes, its Wrangler harness, the fake auth provider, and the E2E cost boundary |
 | [Recorded source pages](../libs/prepare-source-material/test-e2e/fixtures/README.md) | Replay source-page fixtures in source-material E2E tests                                                               |
 | [Narration evals](../libs/narration-source-analysis/test/evals/README.md)            | Run the paid narration content selection and narration language detection evals                                        |

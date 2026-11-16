@@ -1,3 +1,4 @@
+import { captureException } from "@sentry/core";
 import { Hono, type Context, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { NONCE, secureHeaders } from "hono/secure-headers";
@@ -14,7 +15,7 @@ import {
   toGrantConversionSnapshot,
   type ConversionGrantDurableObject,
 } from "@cup/conversion-grants";
-import { assertUnreachable, findRootCauseDescription, findRootCauseMessage } from "@cup/errors";
+import { assertUnreachable } from "@cup/errors";
 import {
   createListenerApi,
   type Audiobook,
@@ -828,6 +829,7 @@ const operatorApiHandlers: OperatorApiHandlers<ApiServerEnvironment> = {
           400,
         );
       }
+      captureException(error);
       return jsonError(
         context.get("requestId"),
         "operational-error",
@@ -854,6 +856,7 @@ const operatorApiHandlers: OperatorApiHandlers<ApiServerEnvironment> = {
       if (conflict !== undefined) {
         return jsonError(context.get("requestId"), conflict.code, conflict.message, 409);
       }
+      captureException(error);
       // Retrying with the same request ID replays a recorded adjustment, so failures stay safe to retry.
       return jsonError(
         context.get("requestId"),
@@ -976,13 +979,7 @@ const operatorApiHandlers: OperatorApiHandlers<ApiServerEnvironment> = {
           409,
         );
       }
-      console.error(
-        JSON.stringify({
-          event: "grant-creation-failed",
-          requestId: context.get("requestId"),
-          error: findRootCauseMessage(error),
-        }),
-      );
+      captureException(error);
       return jsonError(
         context.get("requestId"),
         "operational-error",
@@ -1026,6 +1023,7 @@ const operatorApiHandlers: OperatorApiHandlers<ApiServerEnvironment> = {
           400,
         );
       }
+      captureException(error);
       return jsonError(
         context.get("requestId"),
         "operational-error",
@@ -1439,14 +1437,8 @@ export function createApiServer(dependencies: ApiServerDependencies = production
   });
 
   app.onError((error, context) => {
-    console.error(
-      JSON.stringify({
-        event: "request-failed",
-        requestId: context.get("requestId"),
-        route: context.req.routePath,
-        error: findRootCauseDescription(error),
-      }),
-    );
+    // Hono hands the error here instead of rethrowing it, so Sentry's handler wrapper never sees it.
+    captureException(error);
     return jsonError(
       context.get("requestId"),
       "operational-error",
@@ -1595,7 +1587,9 @@ async function authenticateGrant(
     return result.result === "valid"
       ? { result: "valid" as const, token, snapshot: result.snapshot }
       : { result: "invalid" as const };
-  } catch {
+  } catch (error) {
+    // Every caller answers this result with a 500.
+    captureException(error);
     return { result: "operational-error" as const };
   }
 }

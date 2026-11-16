@@ -1,3 +1,4 @@
+import { captureException } from "@sentry/core";
 import { Temporal } from "temporal-polyfill";
 
 import { conversionOwnerSchema, type ConversionOwner } from "@cup/conversion-contracts";
@@ -294,7 +295,8 @@ async function requireSignedMediaAccess(
     grantState = (
       await env.CONVERSION_GRANTS.get(env.CONVERSION_GRANTS.idFromName(owner.grantId)).inspect()
     ).state;
-  } catch {
+  } catch (error) {
+    captureException(error);
     return jsonError(requestId, "operational-error", "The grant could not be loaded.", 500);
   }
   return requireAccessibleGrantState(grantState, requestId);

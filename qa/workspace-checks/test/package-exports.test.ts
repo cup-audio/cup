@@ -1,4 +1,3 @@
-import childProcess from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { expect, test } from "vitest";
@@ -6,9 +5,8 @@ import { z } from "zod";
 
 import { findPackageExportProblems, type WorkspaceProject } from "#src/package-exports.ts";
 
-const REPOSITORY_ROOT = path.join(import.meta.dirname, "../../..");
+import { listWorkspaceProjects } from "#test/workspace-projects.ts";
 
-const pnpmProjectListSchema = z.array(z.object({ name: z.string(), path: z.string() }));
 const manifestSchema = z.object({
   // A conditional target without `default` fails here; extend ExportsField when a package needs one.
   exports: z
@@ -25,21 +23,10 @@ const manifestSchema = z.object({
     .optional(),
 });
 
-/** Lists the workspace projects pnpm sees, without the repository root and the shared stack. */
 async function readWorkspaceProjects(): Promise<WorkspaceProject[]> {
-  const pnpmOutput = childProcess.execFileSync(
-    "pnpm",
-    ["ls", "--recursive", "--json", "--depth", "-1"],
-    { cwd: REPOSITORY_ROOT, encoding: "utf8" },
-  );
   const projects: WorkspaceProject[] = [];
 
-  for (const { name, path: projectPath } of pnpmProjectListSchema.parse(JSON.parse(pnpmOutput))) {
-    const directory = path.relative(REPOSITORY_ROOT, projectPath);
-    if (directory === "" || directory.startsWith(".patricktree-stack/")) {
-      continue;
-    }
-
+  for (const { name, directory, absolutePath: projectPath } of listWorkspaceProjects()) {
     const manifest = manifestSchema.parse(
       JSON.parse(await fs.readFile(path.join(projectPath, "package.json"), "utf8")),
     );

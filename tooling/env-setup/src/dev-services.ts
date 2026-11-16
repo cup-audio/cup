@@ -201,6 +201,9 @@ async function run(command: { action: "start"; tailnet: boolean } | { action: "s
       MEDIA_URL_SIGNING_KEY:
         workerEnv["MEDIA_URL_SIGNING_KEY"] ?? randomBytes(32).toString("base64url"),
       LOCAL_DEVELOPMENT: "true",
+      // Local development never sends to Sentry: with a DSN next to LOCAL_DEVELOPMENT=true, every
+      // Worker invocation throws (@cup/telemetry.cloudflare).
+      SENTRY_DSN: "",
       LOCAL_TEST_ACCOUNT_EMAIL: TEST_ACCOUNT_EMAIL,
       LOCAL_TEST_ACCOUNT_PASSWORD: TEST_ACCOUNT_PASSWORD,
     };

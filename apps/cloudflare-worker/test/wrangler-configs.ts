@@ -54,6 +54,8 @@ const wranglerConfigSchema = z.looseObject({
   ai: z.unknown().optional(),
   browser: z.unknown().optional(),
   observability: z.unknown().optional(),
+  upload_source_maps: z.boolean().optional(),
+  version_metadata: z.strictObject({ binding: z.string() }).optional(),
 });
 
 export function readWranglerConfig(configPath: string): WranglerConfig {
