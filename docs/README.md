@@ -12,6 +12,7 @@ Start with the [glossary](GLOSSARY.md) for Cup's vocabulary and the [system over
 | [Durable Object schemas](architecture/durable-object-storage.md)   | SQLite tables, relationships, and naming conventions for all three Durable Object stores                 |
 | [R2 objects and key layout](architecture/r2-storage.md)            | Account and trial prefixes, stored objects, metadata, access, and cleanup                                |
 | [Conversion](architecture/conversion.md)                           | Source preparation through delivery, duration accounting, retries, and failure boundaries                |
+| [Playback](architecture/playback.md)                               | The web player and host, listening-position saves, and the system media controls                         |
 | [Account deletion](architecture/account-deletion.md)               | Fresh authentication, recovery, write fencing, cleanup, and notification retries                         |
 | [Conversion deletion](architecture/conversion-deletion.md)         | Fencing one conversion with a durable marker, releasing its open reservations, and its cleanup           |
 | [Web application screens](architecture/web-app.md)                 | Routes and redirects, Recents with its Add and account dialogs, account recovery, and the detail view    |

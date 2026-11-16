@@ -19,7 +19,7 @@ The Android app's player sometimes showed `Unable to resolve host "cup.audio": N
 
 ## Implications
 
-- Saving a failed position again when Cup returns to the foreground works: the network is back at once. Cup does that since CUP-71 ([positions](../architecture/conversion.md#delivery-positions-and-lifecycle)).
+- Saving a failed position again when Cup returns to the foreground works: the network is back at once. Cup does that since CUP-71 ([positions](../architecture/playback.md#listening-positions)).
 - Background playback on Android needs Cup out of the cached state: a `mediaPlayback` foreground service, as [Capacitor WebView playback](webview-audio-playback.md) already called for, keeps it from being frozen and keeps its network access, so playback and saves continue. Its notification can be the media notification the Android app lacks, since the WebView shows none.
 - The freeze comes first. WebView buffered about 7 minutes ahead and then stopped downloading, so a long narration track would also stall once that buffer runs out without network access, but only if the process were not frozen already.
 

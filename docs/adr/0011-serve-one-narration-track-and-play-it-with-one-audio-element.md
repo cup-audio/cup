@@ -37,4 +37,4 @@ This partially supersedes [ADR 0008](0008-synthesize-the-whole-narration-documen
 
 ### Implementation status
 
-Implemented on 2026-10-27 by patricktree/cup#65 to patricktree/cup#71 (pull request patricktree/cup#73). The [conversion architecture](../architecture/conversion.md#playback) describes the route and the player, and the [authentication architecture](../architecture/authentication.md#signed-media-url) the signed media URL and its renewal. The operator verified playback on physical devices in patricktree/cup#72.
+Implemented on 2026-10-27 by patricktree/cup#65 to patricktree/cup#71 (pull request patricktree/cup#73). The [conversion architecture](../architecture/playback.md) describes the route and the player, and the [authentication architecture](../architecture/authentication.md#signed-media-url) the signed media URL and its renewal. The operator verified playback on physical devices in patricktree/cup#72.

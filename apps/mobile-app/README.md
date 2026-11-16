@@ -155,7 +155,7 @@ Edit the canonical artwork in `tooling/brand-assets/assets/` at the repository r
 
 ## Playback
 
-The shells have no native audio player: both play the narration track through the web player's one `<audio>` in their WebView; see [playback](../../docs/architecture/conversion.md#playback). iOS shows it through WebKit's own Now Playing.
+The shells have no native audio player: both play the narration track through the web player's one `<audio>` in their WebView; see [playback](../../docs/architecture/playback.md). iOS shows it through WebKit's own Now Playing.
 
 The Android app adds a media session plugin ([ADR 0029](../../docs/adr/0029-play-the-narration-track-in-the-android-app-through-the-webview-with-a-media3-media-session.md)), because Android WebView has no Media Session API and Android freezes a cached Cup and cuts its network about a minute after it leaves the foreground ([research](../../docs/research/android-background-network-access.md)). The plugin is app-local Java in `android/app/src/main/java/audio/cup/app/`, registered in `MainActivity` like `AndroidSharePlugin`, and the web app's Android implementation of the media session port, [`media-session.android.ts`](../web-app/src/platform/media-session.android.ts), talks to it:
 

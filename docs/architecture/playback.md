@@ -1,0 +1,46 @@
+# Playback
+
+The web player plays an audiobook's [narration track](../GLOSSARY.md#narration-track), restores and saves the listener's listening position, and drives the system's media controls. The [conversion](conversion.md#delivery-and-lifecycle) page describes how the track is joined from segments and served, and [authentication](authentication.md#signed-media-url) how its signed URL authorizes and renews.
+
+## The web player
+
+The web player plays the narration track with one `<audio>` element, on every platform ([ADR 0011](../adr/0011-serve-one-narration-track-and-play-it-with-one-audio-element.md)). The [player host](../../apps/web-app/src/app/player/player-host.ts) creates the element once for the app shell's lifetime and sets each loaded audiobook's track URL as its `src`; the signed URL carries the authorization, and the content security policy allows media only from the API origin's `/api/files/`.
+
+- **State:** the element and its events are the player state; there is no player state machine.
+- **Timeline:** the response's start offsets map `currentTime` to the current unit, which drives the reader's highlight; seeking sets `currentTime` and nothing swaps sources. A seek waits until the element reports a duration above 0, because WebKit's GStreamer media backend on Linux first reports 0, and a seek then can end playback at once; the next media event that finds the duration known applies it.
+- **Play:** `play()` is called synchronously within the user gesture, because Mobile Safari refuses audio started after an await. A stale or failed track URL is [renewed](authentication.md#signed-media-url) first.
+
+The [app E2E suite](../../qa/e2e/test-e2e/conversion.test.ts) plays a served track in Chromium and WebKit.
+
+## The player host
+
+The web application holds one player for every page inside its [app shell](../../apps/web-app/src/routes/_shell.tsx), so playback continues while the listener moves between pages. Recents controls the loaded audiobook through the [mini player](../../apps/web-app/src/app/components/mini-player.tsx) above its [tab bar](../../apps/web-app/src/app/components/account-tab-bar.tsx), and every detail view controls the audiobook it shows through the [player sheet](../../apps/web-app/src/app/components/player-sheet.tsx), which is disabled until that audiobook has a narration track. The player host holds at most one loaded audiobook; [`player-host.test.ts`](../../apps/web-app/src/app/player/player-host.test.ts) holds these rules:
+
+- **Loading:** an audiobook loads only when the listener plays it, taps a segment, or seeks or skips in the sheet, not when its detail view opens. Loading replaces another loaded audiobook and saves that one's position.
+- **Before loading:** a detail view shows the listener's listening position in the sheet and highlights its segment, without touching the element; while the account is being restored it shows the start.
+- **Unloading:** the loaded audiobook keeps playing until the listener plays another, and is unloaded on leaving the shell, a change of the signed-in user, the track's deletion, or when renewing its URL finds the track gone. A reload does not restore it.
+- **Track:** a loaded narration track never changes, because it exists only once every segment has audio; only its signed URL is [renewed](authentication.md#signed-media-url).
+
+## Listening positions
+
+Each signed-in listener has one saved position per conversion, a synchronization unit and an offset within its audio, which the server replaces on every save; anonymous positions stay on the device. Loading restores it; a loaded player is never moved by query refreshes or other devices' saves, so device switches resume from the last successful save. Saves are serialized to keep their order, and the request layer refuses a save for a user who is no longer signed in. The web application's [`PlaybackSession`](../../apps/web-app/src/app/player/playback-session.ts) converts between a listening position and the track's `currentTime` and orders the saves ([`playback-session.test.ts`](../../apps/web-app/src/app/player/playback-session.test.ts)); the player host sets the save cadence.
+
+A failed save is saved again unless a newer save comes first, because since [Android 15](https://developer.android.com/about/versions/15/behavior-changes-all#background-network-access) the Android app's requests fail with `Unable to resolve host` from a few seconds after it leaves the foreground until it returns, even while it plays ([CUP-71](https://linear.app/cup-audio/issue/CUP-71), [research](../research/android-background-network-access.md)). While the Android app's media session service is in the foreground, from the first Play until 10 minutes after a pause, Cup is neither frozen nor cut off, so saves with the screen locked behave as in the foreground ([ADR 0029](../adr/0029-play-the-narration-track-in-the-android-app-through-the-webview-with-a-media3-media-session.md)); this rule covers the time after that grace, when a save can fail until Cup returns:
+
+- **When:** after a delay, when the device goes online, or when the app returns to the foreground.
+- **What the listener sees:** nothing for a failure that can pass, such as a lost connection or a server error, until a retry fails too or saves have failed for as long as the retry delay; the player then says in plain words that the position is not saved yet, until a save succeeds. A lasting refusal, such as a signed-out listener, shows at once and is not saved again.
+- **Gap:** saving again stops when the audiobook is unloaded, so a final save that fails on unloading is lost.
+
+## System media controls
+
+The player host drives the system's media controls itself through the [media session port](../../apps/web-app/src/platform/media-session.ts), whose browser and iOS implementation sits over `navigator.mediaSession`, and whose Android implementation, chosen by platform, forwards to the Android app's media session plugin, because Android WebView has no Media Session API ([ADR 0029](../adr/0029-play-the-narration-track-in-the-android-app-through-the-webview-with-a-media3-media-session.md)). Both call the same action handlers. The host publishes the loaded audiobook's title and cover image on load and clears the metadata, position state and action handlers whenever it closes the loaded player: on unload, `release`, a track found gone, and loading another audiobook.
+
+- **Actions:** `play` and `pause` go through the host's own Play and Pause, so Play renews a stale track URL first and Pause saves the position; `stop` pauses and keeps the audiobook loaded; `seekto` seeks; `seekbackward` and `seekforward` skip by the interval the system sends, or 15 s without one. There is no `previoustrack` or `nexttrack`, because there is no queue.
+- **State:** the playback state is `playing` or `paused` while an audiobook is loaded and `none` otherwise. The position state reports the narration track's listed duration, the timeline's total of the settled durations, rather than `element.duration`; the position including a pending seek, clamped to that duration; and the element's playback rate.
+- **When:** the host reports on load and on `play`, `pause`, `seeked`, `ratechange`, `waiting`, `playing` and `ended`, never on `timeupdate`; the system extrapolates the position in between. Each playback report also says whether the element waits for data and whether it has just ended. While it waits, the browser implementation reports `paused`, so the shown position does not run ahead of the audio; the Android plugin shows buffering and ended states of its own.
+
+[`player-host.test.ts`](../../apps/web-app/src/app/player/player-host.test.ts) covers these rules against a fake audio element and a fake media session port, [`media-session.web.test.ts`](../../apps/web-app/src/platform/media-session.web.test.ts) covers the browser implementation, and [`media-session.android.test.ts`](../../apps/web-app/src/platform/media-session.android.test.ts) the Android one through a faked Capacitor bridge.
+
+## In the mobile apps
+
+Both shells play through the web player in their WebView and have no native players. On Android, the app's media session plugin keeps playback going with the screen locked or in another app: from the first Play of a loaded audiobook it runs a `mediaPlayback` foreground service whose Media3 session mirrors what the page reports and sends every system command, from the notification, the lock screen, headsets and earbuds, to the page as the same actions ([ADR 0029](../adr/0029-play-the-narration-track-in-the-android-app-through-the-webview-with-a-media3-media-session.md); the [mobile app guide](../../apps/mobile-app/README.md#playback) describes the plugin, and the [mobile E2E suite](../../qa/mobile-e2e/README.md#media-session-android) checks it on the emulator). iOS still plays best effort through WebKit's own Now Playing, which the map [patricktree/cup#386](https://github.com/patricktree/cup/issues/386) takes up. The operator checked lock-screen playback of the web player on an iPhone and an Android phone in production ([patricktree/cup#72](https://github.com/patricktree/cup/issues/72)), before Android's network cut and freezer were found.

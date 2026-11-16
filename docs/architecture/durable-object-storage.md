@@ -20,7 +20,7 @@ Existing columns that predate this convention keep their names until a migration
 
 `AccountDurableObject`. Each account has an isolated database for identity and lifecycle state, conversion history, listening positions, dispatch, duration accounting, artifact writers, and deletion confirmation. The account owns the rows through its Durable Object identity; no table has a foreign key to the singleton `account` row.
 
-`account_playback_positions` has no foreign key to `account_conversions` because signed-in listeners can save listening positions for trial audiobooks that they do not own but are authorized to access through the owning grant. See [position restoration and saves](conversion.md#delivery-positions-and-lifecycle) for player behavior.
+`account_playback_positions` has no foreign key to `account_conversions` because signed-in listeners can save listening positions for trial audiobooks that they do not own but are authorized to access through the owning grant. See [position restoration and saves](playback.md#listening-positions) for player behavior.
 
 Writers may target pending or ready conversions; account lifecycle and execution epochs fence their storage effects.
 

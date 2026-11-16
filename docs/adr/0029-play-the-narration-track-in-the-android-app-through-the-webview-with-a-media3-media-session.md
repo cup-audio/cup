@@ -38,4 +38,4 @@ This supersedes two bullets of [ADR 0011](0011-serve-one-narration-track-and-pla
 
 ### Implementation status
 
-The plugin with its start, mirror and command path was built for [#396](https://github.com/patricktree/cup/issues/396) on the spec's integration branch, 2026-11-16. The stop cases ([#398](https://github.com/patricktree/cup/issues/398)) and the noisy receiver ([#399](https://github.com/patricktree/cup/issues/399)) are separate tickets of the spec, not yet built. The [mobile app guide](../../apps/mobile-app/README.md#playback) describes the plugin, and the [conversion architecture](../architecture/conversion.md#playback) the port.
+The plugin with its start, mirror and command path was built for [#396](https://github.com/patricktree/cup/issues/396) on the spec's integration branch, 2026-11-16. The stop cases ([#398](https://github.com/patricktree/cup/issues/398)) and the noisy receiver ([#399](https://github.com/patricktree/cup/issues/399)) are separate tickets of the spec, not yet built. The [mobile app guide](../../apps/mobile-app/README.md#playback) describes the plugin, and the [conversion architecture](../architecture/playback.md) the port.
