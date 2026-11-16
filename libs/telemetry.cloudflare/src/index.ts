@@ -1,5 +1,4 @@
 export { captureAlarmFailure } from "#src/alarm-failure.ts";
-export { forgetSentryCapture } from "#src/forget-sentry-capture.ts";
 export {
   setConversionScope,
   withConversionScope,

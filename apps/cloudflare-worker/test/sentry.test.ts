@@ -84,6 +84,31 @@ test("a 500's body carries the trace ID of the event Sentry receives", async ({
   expect(event?.contexts?.["trace"]?.["trace_id"]).toBe(body.error.traceId);
 });
 
+test("a Cup error thrown in a Durable Object RPC that fails a request is captured once, by the API server, with its message", async ({
+  expect,
+  onTestFinished,
+}) => {
+  const sentry = await useSentryStub({ onTestFinished });
+  const worker = await useWorker({ onTestFinished, sentryDsn: sentry.dsn("cup-worker") });
+  // The grant was never initialized, so validating the session throws a `CupError` in the grant's
+  // Durable Object, whose Sentry wrapper captures it before the RPC call hands it to the server.
+  const grantId = crypto.randomUUID();
+  const path = `/api/grants/${grantId}`;
+
+  const response = await worker.fetch(`https://cup.audio${path}`, {
+    headers: { Cookie: `__Secure-grant-session-${grantId}=v1.token` },
+  });
+
+  expect(response.status).toBe(500);
+  await waitForRequestSpan(sentry, path);
+  const events = sentry.errorEvents("cup-worker");
+  expect(events).toHaveLength(1);
+  expect(events[0]).toMatchObject({
+    tags: { "cup.component": "fetch" },
+    exception: { values: [{ type: "Error", value: "Conversion grant is not initialized" }] },
+  });
+});
+
 test("a 4xx sends no error event", async ({ expect, onTestFinished }) => {
   const sentry = await useSentryStub({ onTestFinished });
   const worker = await useWorker({ onTestFinished, sentryDsn: sentry.dsn("cup-worker") });

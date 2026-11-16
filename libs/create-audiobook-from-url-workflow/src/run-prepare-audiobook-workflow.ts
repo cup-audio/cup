@@ -36,7 +36,7 @@ import { logEvent, setConversionScope } from "@cup/telemetry.cloudflare";
 import { TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
 
 import { resolveConversionExecution } from "#src/conversion-execution.ts";
-import { keepStepErrors } from "#src/keep-step-errors.ts";
+import { keepStepErrors, originalStepError } from "#src/keep-step-errors.ts";
 import { phaseStepName } from "#src/phase-step-name.ts";
 import type { AudiobookWorkflowEnvironment } from "#src/workflow-environment.ts";
 
@@ -112,7 +112,7 @@ export async function runPrepareAudiobookWorkflow({
   step: WorkflowStep;
   services: PrepareAudiobookWorkflowServices;
 }) {
-  // Cup's own errors keep their messages in telemetry after failing a step.
+  // The failure capture reports a failed step's own error, so Cup's errors keep their messages.
   const step = keepStepErrors(workflowStep);
   const params = conversionParamsSchema.parse(event.payload);
   const { sourceUrl } = params;
@@ -286,7 +286,7 @@ export async function runPrepareAudiobookWorkflow({
               },
             );
           } else {
-            diagnosticReference = captureException(error, {
+            diagnosticReference = captureException(originalStepError(error), {
               tags: { [TELEMETRY_ATTRIBUTES.CONVERSION_FAILURE_CATEGORY]: stage },
             });
           }

@@ -4,6 +4,7 @@ import { extraErrorDataIntegration } from "@sentry/cloudflare";
 import { CupError } from "@cup/errors";
 import { beforeSendLog, TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
 
+import { forgetWrapperCapturesIntegration } from "#src/forget-wrapper-captures.ts";
 import { beforeSendServerEvent, beforeSendServerSpan } from "#src/server-before-send.ts";
 
 /** The Worker entry points Sentry wraps; each event names its own as the `cup.component` tag. */
@@ -107,10 +108,12 @@ export function createWorkerSentryOptions(
     // Object wrapper's capture of the error an RPC caller then captures, or the Workflow wrapper's
     // capture of a failed step. Every Durable Object and Workflow of an isolate shares one cached
     // client, so Dedupe would drop the caller's capture, the one Cup sends. Cup captures each
-    // failure once anyway.
+    // failure once anyway, and `forgetWrapperCapturesIntegration` keeps a wrapper's capture from
+    // making Sentry skip Cup's.
     integrations: (defaultIntegrations) => [
       ...defaultIntegrations.filter((integration) => integration.name !== "Dedupe"),
       extraErrorDataIntegration(),
+      forgetWrapperCapturesIntegration(),
     ],
     beforeSend: beforeSendServerEvent,
     beforeSendSpan: beforeSendServerSpan,

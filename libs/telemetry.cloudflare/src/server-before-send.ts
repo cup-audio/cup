@@ -24,6 +24,11 @@ const DROPPED_MECHANISMS = new Set([
   "auto.faas.cloudflare.durable_object",
 ]);
 
+/** Whether a capture's mechanism is that of one of Sentry's wrappers, which Cup's rule leaves out. */
+export function isWrapperCapture(mechanismType: string | undefined): boolean {
+  return DROPPED_MECHANISMS.has(mechanismType ?? "");
+}
+
 /**
  * The Worker's `beforeSend`: drops the wrappers' own captures, then sends no IP address, no IP
  * headers, no time zone, masked URLs, and only Cup's own error messages. A foreign error in the
@@ -31,9 +36,7 @@ const DROPPED_MECHANISMS = new Set([
  * `extraErrorDataIntegration` copied from it.
  */
 export function beforeSendServerEvent(event: ErrorEvent, hint: EventHint): ErrorEvent | null {
-  if (
-    event.exception?.values?.some((value) => DROPPED_MECHANISMS.has(value.mechanism?.type ?? ""))
-  ) {
+  if (event.exception?.values?.some((value) => isWrapperCapture(value.mechanism?.type))) {
     return null;
   }
 

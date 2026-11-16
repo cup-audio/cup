@@ -52,7 +52,7 @@ test("production without a DSN throws instead of staying quiet", () => {
   );
 });
 
-test("production keeps Sentry's default integrations except Dedupe, and adds extra error data", () => {
+test("production keeps Sentry's default integrations except Dedupe, and adds extra error data and Cup's capture marks", () => {
   const options = createWorkerSentryOptions(
     { LOCAL_DEVELOPMENT: "false", SENTRY_DSN: DSN, CF_VERSION_METADATA: VERSION_METADATA },
     "prepare-audiobook-workflow",
@@ -66,5 +66,6 @@ test("production keeps Sentry's default integrations except Dedupe, and adds ext
   expect(integrations.map((integration) => integration.name)).toEqual([
     "LinkedErrors",
     "ExtraErrorData",
+    "CupForgetWrapperCaptures",
   ]);
 });

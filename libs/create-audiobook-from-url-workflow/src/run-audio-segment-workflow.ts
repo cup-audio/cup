@@ -18,7 +18,7 @@ import { setConversionScope } from "@cup/telemetry.cloudflare";
 import { TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
 
 import { resolveConversionExecution } from "#src/conversion-execution.ts";
-import { keepStepErrors } from "#src/keep-step-errors.ts";
+import { keepStepErrors, originalStepError } from "#src/keep-step-errors.ts";
 import { phaseStepName } from "#src/phase-step-name.ts";
 import type { AudiobookWorkflowEnvironment } from "#src/workflow-environment.ts";
 
@@ -39,7 +39,7 @@ export async function runAudioSegmentWorkflow({
   step: WorkflowStep;
   ai: SpeechSynthesisAi;
 }) {
-  // Cup's own errors keep their messages in telemetry after failing a step.
+  // The failure capture reports a failed step's own error, so Cup's errors keep their messages.
   const step = keepStepErrors(workflowStep);
   const params = segmentWorkflowParamsSchema.parse(event.payload);
   const { conversionId, sequence } = params;
@@ -163,7 +163,7 @@ export async function runAudioSegmentWorkflow({
         );
         // Last in the step, so only a step that released the reservation reports the final failure,
         // and a replay of the run reuses the recorded step instead of capturing again.
-        captureException(error, {
+        captureException(originalStepError(error), {
           tags: { [TELEMETRY_ATTRIBUTES.CONVERSION_FAILURE_CATEGORY]: "segment" },
         });
       },
