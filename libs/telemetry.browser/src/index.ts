@@ -10,3 +10,8 @@ export {
 } from "#src/telemetry-user.ts";
 export { clientSupabaseIntegration } from "#src/supabase-telemetry.ts";
 export { readWebRelease } from "#src/web-release.ts";
+export {
+  takeWebViewProcessLoss,
+  webViewProcessLossMessage,
+  type WebViewProcessLoss,
+} from "#src/webview-process-loss.ts";

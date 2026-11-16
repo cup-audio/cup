@@ -17,8 +17,12 @@ public class MainActivity extends BridgeActivity {
         CrashReportingPlugin.deleteSentryFilesIfDisabled(this);
         registerPlugin(AndroidSharePlugin.class);
         registerPlugin(CrashReportingPlugin.class);
+        registerPlugin(WebViewProcessLossPlugin.class);
         registerPlugin(MediaPlaybackPlugin.class);
         super.onCreate(savedInstanceState);
+        if (getBridge() != null) {
+            getBridge().addWebViewListener(WebViewProcessLoss.recreateOnRendererGone(this));
+        }
     }
 
     @Override

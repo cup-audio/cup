@@ -53,7 +53,7 @@
 		</array>
 		<key>NSPrivacyAccessedAPITypes</key>
 		<array>
-			<!-- The "Send crash reports" switch, which only Cup reads and writes. -->
+			<!-- Data only Cup reads and writes, such as the "Send crash reports" switch. -->
 			<dict>
 				<key>NSPrivacyAccessedAPIType</key>
 				<string>NSPrivacyAccessedAPICategoryUserDefaults</string>

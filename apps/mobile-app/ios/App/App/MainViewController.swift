@@ -4,6 +4,9 @@ import WebKit
 
 /// Cup's only view controller: Capacitor's bridge with the app's own plugins.
 class MainViewController: CAPBridgeViewController {
+    /// The WebView holds its navigation delegate weakly.
+    private var webContentTerminationObserver: WebContentTerminationObserver?
+
     /// UIKit creates the controller from `Main.storyboard`, before the page loads and so before the
     /// web app starts the native Sentry SDK.
     required init?(coder: NSCoder) {
@@ -17,9 +20,22 @@ class MainViewController: CAPBridgeViewController {
         // The app's own plugins are not npm packages, so Capacitor does not find them by itself.
         bridge?.registerPluginInstance(WebAuthenticationPlugin())
         bridge?.registerPluginInstance(CrashReportingPlugin())
+        bridge?.registerPluginInstance(WebViewProcessLossPlugin())
+        observeWebContentTermination()
         #if DEBUG
         applyTestLaunchArguments()
         #endif
+    }
+
+    /// Puts `WebContentTerminationObserver` between the WebView and Capacitor's navigation delegate,
+    /// which Capacitor set while preparing the WebView, before `capacitorDidLoad`.
+    private func observeWebContentTermination() {
+        guard let webView, let capacitorDelegate = webView.navigationDelegate else {
+            fatalError("Capacitor created no WebView with a navigation delegate to observe.")
+        }
+        let observer = WebContentTerminationObserver(capacitorDelegate: capacitorDelegate)
+        webContentTerminationObserver = observer
+        webView.navigationDelegate = observer
     }
 
     #if DEBUG
@@ -51,6 +67,68 @@ class MainViewController: CAPBridgeViewController {
         ))
     }
     #endif
+}
+
+/// Records that the WebView's WebContent process terminated, for `WebViewProcessLossPlugin`, and
+/// forwards every navigation delegate call, that one included, to Capacitor's delegate, which
+/// reloads the page. Selectors this class does not implement reach Capacitor's delegate through
+/// Objective-C message forwarding, so the wrapper keeps working when Capacitor adds a method.
+final class WebContentTerminationObserver: NSObject, WKNavigationDelegate {
+    private let capacitorDelegate: WKNavigationDelegate
+
+    init(capacitorDelegate: WKNavigationDelegate) {
+        self.capacitorDelegate = capacitorDelegate
+        super.init()
+    }
+
+    override func responds(to aSelector: Selector!) -> Bool {
+        super.responds(to: aSelector) || capacitorDelegate.responds(to: aSelector)
+    }
+
+    override func forwardingTarget(for aSelector: Selector!) -> Any? {
+        capacitorDelegate.responds(to: aSelector) ? capacitorDelegate : super.forwardingTarget(for: aSelector)
+    }
+
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        WebViewProcessLoss.record(inForeground: UIApplication.shared.applicationState != .background)
+        capacitorDelegate.webViewWebContentProcessDidTerminate?(webView)
+    }
+}
+
+/// The WebView's WebContent process terminated since the web app last asked: kept in Cup's own
+/// defaults until the reloaded web app takes it.
+enum WebViewProcessLoss {
+    private static let key = "cupWebViewProcessLoss"
+
+    static func record(inForeground: Bool) {
+        UserDefaults.standard.set(["platform": "ios", "inForeground": inForeground], forKey: key)
+    }
+
+    /// Returns the recorded loss, in the shape `@cup/telemetry.browser` parses, and forgets it.
+    static func take() -> [String: Any]? {
+        let loss = UserDefaults.standard.dictionary(forKey: key)
+        UserDefaults.standard.removeObject(forKey: key)
+        return loss
+    }
+}
+
+/// Hands the reloaded web app the WebView process loss `WebViewProcessLoss` recorded, which
+/// `takeWebViewProcessLoss()` of `@cup/telemetry.browser` reports to Sentry.
+@objc(WebViewProcessLossPlugin)
+public class WebViewProcessLossPlugin: CAPPlugin, CAPBridgedPlugin {
+    public let identifier = "WebViewProcessLossPlugin"
+    public let jsName = "WebViewProcessLoss"
+    public let pluginMethods: [CAPPluginMethod] = [
+        CAPPluginMethod(name: "takeLoss", returnType: CAPPluginReturnPromise),
+    ]
+
+    @objc func takeLoss(_ call: CAPPluginCall) {
+        if let loss = WebViewProcessLoss.take() {
+            call.resolve(["loss": loss])
+        } else {
+            call.resolve([:])
+        }
+    }
 }
 
 /// Keeps the Sentry Cocoa SDK's installation ID in memory only. The SDK reads the ID from the file

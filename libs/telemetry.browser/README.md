@@ -18,10 +18,12 @@ The options include the client `beforeSend` and `beforeBreadcrumb` from [`client
 
 [`followAccountSession(session, setUser)`](src/telemetry-user.ts) is the user rule: telemetry's user is `signed-out` until a signed-in listener's opaque account ID has loaded, and `signed-out` again after sign-out. It never sets the auth subject and never unsets the user, because `setUser(null)` would let a native SDK fill in its installation ID.
 
+[`takeWebViewProcessLoss()`](src/webview-process-loss.ts) asks the shell's `WebViewProcessLoss` plugin for the WebView process loss it recorded since the web app last started, checks its shape and forgets it; call it only in a shell. [`webViewProcessLossMessage(loss)`](src/webview-process-loss.ts) is the one event it becomes, for `Sentry.captureMessage(message, context)`: level `error`, the fingerprint `webview-renderer-gone` on Android or `webview-content-terminated` on iOS, and the tags `cup.renderer.cause` and `rendererPriorityAtExit` on Android and `cup.app.state` on both ([WebView process loss](../../apps/mobile-app/README.md#webview-process-loss)).
+
 ## Web release
 
 The browser's release is `web@<content hash of the entry chunk>`. [`webReleasePlugin()`](src/web-release.vite.ts), from `@cup/telemetry.browser/vite`, writes it into a `<meta name="cup-release">` of the built `index.html`; the web app's shared Vite configuration adds it. [`readWebRelease(document)`](src/web-release.ts) reads it at runtime, and returns `undefined` under Vite's development server.
 
 ## Tests
 
-The unit tests cover the on/off rules of the browser and the shells, a shell with crash reports off, the Cocoa options, the client `beforeSend` with the Supabase auth-error drop, the user rule, and the release, by building a small page with Vite. Only this library, the web app and the mobile app, for the native plugin, may depend on the client SDK family ([SDK family check](../../qa/workspace-checks/README.md#sentry-sdk-family-check)); take `@sentry/capacitor` and `@sentry/react` from the `sentry-client` catalog.
+The unit tests cover the on/off rules of the browser and the shells, a shell with crash reports off, the Cocoa options, the client `beforeSend` with the Supabase auth-error drop, the user rule, the WebView process loss event, and the release, by building a small page with Vite. Only this library, the web app and the mobile app, for the native plugin, may depend on the client SDK family ([SDK family check](../../qa/workspace-checks/README.md#sentry-sdk-family-check)); take `@sentry/capacitor` and `@sentry/react` from the `sentry-client` catalog.

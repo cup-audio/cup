@@ -4,7 +4,7 @@ import type { SentryErrorEvent } from "@cup/sentry-stub";
 
 import { asAndroidAppDevice, type AndroidAppDevice } from "#src/android/android-app-device.ts";
 import { useMobileApp } from "#src/fixtures.ts";
-import { signInFromHomeLink } from "#src/journeys.ts";
+import { signInFromHomeLink, waitForRecents } from "#src/journeys.ts";
 import {
   crashNatively,
   distinctEvents,
@@ -58,6 +58,81 @@ test("a shell JS error and a native crash arrive with the account ID, and no ins
   const storedPaths = await device.appDataPaths();
   expect(storedPaths.filter((path) => /\/INSTALLATION$|\.sentry-native/.test(path))).toEqual([]);
 });
+
+test("a renderer crash brings Cup back on Recents and reaches the stub through the tunnel", async () => {
+  const device = asAndroidAppDevice(app.device);
+  await device.launch({ apiOrigin: app.apiOrigin, testSentryDsn: app.testSentryDsn });
+  let webView = await device.webView();
+  await signInFromHomeLink(device, webView);
+  const processId = await device.processId();
+
+  // The debug build's hook loads `chrome://crash` once the script has returned, so the answer
+  // does not wait on the dying page.
+  await webView.execute(() => {
+    setTimeout(() => {
+      const capacitor: RendererCrashGlobal = Reflect.get(window, "Capacitor");
+      void capacitor.Plugins.CupTestRendererCrash.crash();
+    }, 100);
+  });
+
+  await app.sentryStub.waitFor("the renderer-gone event", () => rendererGoneEvents().length > 0, {
+    timeoutMs: SENTRY_EVENT_TIMEOUT_MS,
+  });
+  webView = await attachToRecreatedWebView(device);
+  await waitForRecents(webView, 0);
+  // The same process: Cup recreated its activity instead of Android ending the app.
+  expect(await device.processId()).toBe(processId);
+  expect(await device.appState()).toBe("foreground");
+
+  expect(rendererGoneEvents()).toHaveLength(1);
+  expect(rendererGoneEvents()[0]).toMatchObject({
+    level: "error",
+    // A JS event, which reaches the stub only through the telemetry tunnel.
+    platform: "javascript",
+    tags: { "cup.renderer.cause": "crash", "cup.app.state": "foreground" },
+  });
+  expect(rendererGoneEvents()[0]?.tags?.["rendererPriorityAtExit"]).toMatch(
+    /^(waived|bound|important)$/,
+  );
+  expect(app.worker.requests()).toContainEqual(
+    expect.objectContaining({ method: "POST", path: "/_/e" }),
+  );
+});
+
+/**
+ * Attaches to the WebView of the recreated activity. It lives in the same process as the dead one,
+ * so Chromedriver keeps its session and stays on the dead page's closed window until it switches.
+ */
+async function attachToRecreatedWebView(device: AndroidAppDevice): Promise<WebdriverIO.Browser> {
+  const webView = await device.webView();
+  await webView.waitUntil(
+    async () => {
+      const handles = await webView.getWindowHandles();
+      const newest = handles.at(-1);
+      if (newest === undefined) {
+        return false;
+      }
+      await webView.switchToWindow(newest);
+      return true;
+    },
+    { timeout: 30_000, timeoutMsg: "The recreated WebView has no window." },
+  );
+  return webView;
+}
+
+/** The part of the page's `window.Capacitor` the renderer crash calls: the debug build's hook. */
+type RendererCrashGlobal = { Plugins: { CupTestRendererCrash: { crash(): Promise<void> } } };
+
+function rendererGoneEvents(): SentryErrorEvent[] {
+  return distinctEvents(
+    app.sentryStub
+      .errorEvents("cup-app")
+      .filter(
+        ({ fingerprint }) =>
+          Array.isArray(fingerprint) && fingerprint.includes("webview-renderer-gone"),
+      ),
+  );
+}
 
 test("after turning crash reports off and restarting, a native crash sends nothing and Sentry's files are gone", async () => {
   const device = asAndroidAppDevice(app.device);
