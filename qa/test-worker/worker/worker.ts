@@ -171,8 +171,8 @@ function throttle(response: Response, bytesPerSecond: number): Response {
 
 /**
  * Writes one line per request to Wrangler's output, which the harness reads back as the request
- * log. The prefix must match `REQUEST_LOG_PREFIX` in `src/test-worker.ts`. A POST also logs its
- * body, read from a clone so the API still reads the original.
+ * log. The prefix must match `REQUEST_LOG_PREFIX` in `src/test-worker.ts`. A POST or PUT also logs
+ * its body, read from a clone so the API still reads the original.
  */
 async function logRequest(request: Request): Promise<void> {
   const url = new URL(request.url);
@@ -181,7 +181,9 @@ async function logRequest(request: Request): Promise<void> {
       method: request.method,
       path: url.pathname + url.search,
       headers: Object.fromEntries(request.headers),
-      ...(request.method === "POST" && { body: await request.clone().text() }),
+      ...((request.method === "POST" || request.method === "PUT") && {
+        body: await request.clone().text(),
+      }),
     })}`,
   );
 }

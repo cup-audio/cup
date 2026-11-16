@@ -1,6 +1,8 @@
 package audio.cup.app;
 
 import android.content.Context;
+import android.net.ConnectivityManager;
+import android.net.Network;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
@@ -18,12 +20,18 @@ import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy;
 import com.getcapacitor.JSObject;
+import java.util.Locale;
 
 /**
  * The narration track's engine in the Android app: one Media3 ExoPlayer for the whole process, so
  * a session outlives the activity and its WebView, and a page that starts while it plays takes it
  * over. The {@link MediaPlaybackPlugin} drives it for the page, and the system's media controls
  * reach it through the {@link MediaPlaybackService}'s session.
+ *
+ * <p>The engine is the only writer of the listening position in the app, through the signed
+ * position URL ({@link PositionSaves}), so it saves while the page is suspended: every
+ * {@link PositionSaves#SAVE_INTERVAL_MILLISECONDS} while playing, and at once on pause, seek, the
+ * end, which returns to the start, and close, and before another audiobook replaces the loaded one.
  *
  * <p>The session ends without the page when the listener swipes Cup from recents while paused,
  * swipes the notification away, or the URLs can no longer play: they expired while paused, or the
@@ -50,6 +58,8 @@ final class PlaybackEngine {
 
     /** How far the notification's back and forward buttons skip, as Cup's player does. */
     private static final long SKIP_MILLISECONDS = 15_000;
+    /** How often a playing session checks whether a save is due, like a media element's updates. */
+    private static final long SAVE_CHECK_INTERVAL_MILLISECONDS = 500;
 
     @Nullable
     private static PlaybackEngine instance;
@@ -57,6 +67,8 @@ final class PlaybackEngine {
     private final Context context;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable expiryCheck = this::stopIfExpiredWhilePaused;
+    private final Runnable saveCheck = this::saveIfDueWhilePlaying;
+    private final PositionUrlWriter positionWriter = new PositionUrlWriter(handler);
 
     @Nullable
     private StateListener listener;
@@ -79,6 +91,9 @@ final class PlaybackEngine {
     /** A native stop is on its way, so the states until then report nothing. */
     private boolean isStopping;
 
+    /** Whether the listener heard playback at the last change, so the change to paused saves. */
+    private boolean wasPlaying;
+
     /** What the last native stop reported, until the next load or close. */
     @Nullable
     private JSObject closedState;
@@ -88,7 +103,9 @@ final class PlaybackEngine {
         final String conversionId;
         final String subject;
         final String trackUrl;
+        final String positionUrl;
         final long urlsIssuedAt;
+        final ListeningPositions positions;
         final String title;
         @Nullable
         final String artworkUrl;
@@ -99,7 +116,9 @@ final class PlaybackEngine {
             String conversionId,
             String subject,
             String trackUrl,
+            String positionUrl,
             long urlsIssuedAt,
+            ListeningPositions positions,
             String title,
             @Nullable String artworkUrl,
             long durationMilliseconds,
@@ -108,7 +127,9 @@ final class PlaybackEngine {
             this.conversionId = conversionId;
             this.subject = subject;
             this.trackUrl = trackUrl;
+            this.positionUrl = positionUrl;
             this.urlsIssuedAt = urlsIssuedAt;
+            this.positions = positions;
             this.title = title;
             this.artworkUrl = artworkUrl;
             this.durationMilliseconds = durationMilliseconds;
@@ -122,6 +143,8 @@ final class PlaybackEngine {
         final String subject;
         final long durationMilliseconds;
         TrackUrlExpiry expiry;
+        /** Set right after construction, since its reports name this audiobook. */
+        PositionSaves saves;
 
         Loaded(String conversionId, String subject, long durationMilliseconds, TrackUrlExpiry expiry) {
             this.conversionId = conversionId;
@@ -133,6 +156,16 @@ final class PlaybackEngine {
 
     private PlaybackEngine(Context context) {
         this.context = context;
+        // A failed save is retried as soon as the device has a network again.
+        ConnectivityManager connectivity = context.getSystemService(ConnectivityManager.class);
+        connectivity.registerDefaultNetworkCallback(
+            new ConnectivityManager.NetworkCallback() {
+                @Override
+                public void onAvailable(@NonNull Network network) {
+                    handler.post(PlaybackEngine.this::reconnected);
+                }
+            }
+        );
     }
 
     static PlaybackEngine get(Context context) {
@@ -170,14 +203,25 @@ final class PlaybackEngine {
             )
             .build();
         ExoPlayer exoPlayer = ensurePlayer();
-        loaded = new Loaded(
+        Loaded previous = loaded;
+        if (previous != null) {
+            // The previous audiobook's position, before its media item is replaced.
+            previous.saves.save(exoPlayer.getCurrentPosition());
+            previous.saves.close();
+        }
+        Loaded audiobook = new Loaded(
             request.conversionId,
             request.subject,
             request.durationMilliseconds,
             new TrackUrlExpiry(request.urlsIssuedAt, PlaybackTimings.signedUrlLifetimeMilliseconds)
         );
+        audiobook.saves = new PositionSaves(request.positions, request.positionUrl, new SaveServices(audiobook));
+        loaded = audiobook;
         hasPlaybackError = false;
         closedState = null;
+        // The pause below ends the previous audiobook's playback, whose position is saved already.
+        wasPlaying = false;
+        handler.removeCallbacks(saveCheck);
         // Loading another audiobook leaves it paused, as on the web.
         exoPlayer.pause();
         exoPlayer.setMediaItem(item, request.startPositionMilliseconds);
@@ -230,13 +274,14 @@ final class PlaybackEngine {
     }
 
     /** Replaces the URLs, which the page fetched at `urlsIssuedAt`, keeping the position. */
-    boolean replaceUrls(String trackUrl, long urlsIssuedAt) {
+    boolean replaceUrls(String trackUrl, String positionUrl, long urlsIssuedAt) {
         ExoPlayer exoPlayer = loadedPlayer();
         Loaded audiobook = loaded;
         if (exoPlayer == null || audiobook == null) {
             return false;
         }
         audiobook.expiry = new TrackUrlExpiry(urlsIssuedAt, PlaybackTimings.signedUrlLifetimeMilliseconds);
+        audiobook.saves.replacePositionUrl(positionUrl);
         MediaItem current = exoPlayer.getCurrentMediaItem();
         if (current != null) {
             exoPlayer.setMediaItem(current.buildUpon().setUri(trackUrl).build(), exoPlayer.getCurrentPosition());
@@ -246,12 +291,29 @@ final class PlaybackEngine {
     }
 
     /**
-     * Ends the session for the page: on sign-out or a change of the signed-in user, or when the
-     * loaded audiobook is deleted or a starting page cannot take the session over. Reports nothing.
+     * Ends the session for the page: on sign-out or a change of the signed-in user, which saves the
+     * position one last time, or without saving when the loaded audiobook is deleted or a starting
+     * page cannot take the session over, since a save would race the deletion. Reports nothing.
      */
-    void close() {
+    void close(boolean shouldSave) {
+        ExoPlayer exoPlayer = player;
+        Loaded audiobook = loaded;
+        if (exoPlayer != null && audiobook != null) {
+            if (shouldSave) {
+                // The position URL authorizes this save after the listener's session is gone.
+                audiobook.saves.save(exoPlayer.getCurrentPosition());
+            }
+            audiobook.saves.close();
+        }
         closedState = null;
         releasePlayer();
+    }
+
+    /** The connection may be back: the device has a network again, or Cup returned to the foreground. */
+    void reconnected() {
+        if (loaded != null) {
+            loaded.saves.reconnected();
+        }
     }
 
     /** The current state, the state of the last native stop, or null without either. */
@@ -268,6 +330,7 @@ final class PlaybackEngine {
         if (player == null || loaded == null) {
             return;
         }
+        finishSaves(player.getCurrentPosition());
         JSObject state = readLiveState(false);
         state.put("isPlaying", false);
         state.put("isBuffering", false);
@@ -289,6 +352,7 @@ final class PlaybackEngine {
         if (servicePlayer != sessionPlayer || loaded == null || player == null) {
             return;
         }
+        finishSaves(player.getCurrentPosition());
         JSObject state = readLiveState(false);
         state.put("isPlaying", false);
         state.put("isBuffering", false);
@@ -300,6 +364,21 @@ final class PlaybackEngine {
         if (listener != null) {
             listener.onState(state);
         }
+    }
+
+    /**
+     * Before a native stop, tries one final save unless the last one succeeded or the URLs expired.
+     * If it fails, the position is lost here, but the `closed` state reports it to the page.
+     */
+    private void finishSaves(long positionMilliseconds) {
+        Loaded audiobook = loaded;
+        if (audiobook == null) {
+            return;
+        }
+        if (audiobook.saves.isFailing() && !audiobook.expiry.hasExpired(System.currentTimeMillis())) {
+            audiobook.saves.save(positionMilliseconds);
+        }
+        audiobook.saves.close();
     }
 
     private ExoPlayer ensurePlayer() {
@@ -342,7 +421,9 @@ final class PlaybackEngine {
         loaded = null;
         hasPlaybackError = false;
         isStopping = false;
+        wasPlaying = false;
         handler.removeCallbacks(expiryCheck);
+        handler.removeCallbacks(saveCheck);
     }
 
     @Nullable
@@ -378,6 +459,31 @@ final class PlaybackEngine {
         }
     }
 
+    private void saveIfDueWhilePlaying() {
+        if (player == null || loaded == null || !wasPlaying) {
+            return;
+        }
+        loaded.saves.saveIfDue(player.getCurrentPosition());
+        handler.postDelayed(saveCheck, SAVE_CHECK_INTERVAL_MILLISECONDS);
+    }
+
+    /** Saves when the listener stops hearing playback, and starts or stops the saves during it. */
+    private void followPlayback(boolean isPlaying) {
+        ExoPlayer exoPlayer = player;
+        Loaded audiobook = loaded;
+        if (exoPlayer == null || audiobook == null || isPlaying == wasPlaying) {
+            return;
+        }
+        wasPlaying = isPlaying;
+        handler.removeCallbacks(saveCheck);
+        if (isPlaying) {
+            handler.post(saveCheck);
+        } else {
+            // A pause, a call, a failed load or headphones disconnecting.
+            audiobook.saves.save(exoPlayer.getCurrentPosition());
+        }
+    }
+
     private void sendState(boolean hasEnded) {
         if (player == null || loaded == null || isStopping || listener == null) {
             return;
@@ -392,12 +498,7 @@ final class PlaybackEngine {
             throw new IllegalStateException("The engine has no loaded audiobook to report.");
         }
         int playbackState = exoPlayer.getPlaybackState();
-        // Paused for a transient loss of audio focus, such as a call, ExoPlayer still wants to play.
-        boolean isPlaying =
-            exoPlayer.getPlayWhenReady() &&
-            exoPlayer.getPlaybackSuppressionReason() == Player.PLAYBACK_SUPPRESSION_REASON_NONE &&
-            playbackState != Player.STATE_ENDED &&
-            !hasPlaybackError;
+        boolean isPlaying = isPlayingForListener(exoPlayer);
         long duration = exoPlayer.getDuration();
 
         JSObject state = new JSObject();
@@ -412,7 +513,23 @@ final class PlaybackEngine {
         state.put("error", hasPlaybackError ? "playback" : JSObject.NULL);
         state.put("closed", false);
         state.put("closedReason", JSObject.NULL);
+        PositionSaves saves = audiobook.saves;
+        String refusal = saves.getRefusalDetail();
+        Long failingSince = saves.getFailingSince();
+        state.put("positionSave", saves.getStatus().name().toLowerCase(Locale.ROOT));
+        state.put("positionSaveRefusal", refusal == null ? JSObject.NULL : refusal);
+        state.put("positionSaveFailingSince", failingSince == null ? JSObject.NULL : failingSince);
         return state;
+    }
+
+    /** Paused for a transient loss of audio focus, such as a call, ExoPlayer still wants to play. */
+    private boolean isPlayingForListener(Player exoPlayer) {
+        return (
+            exoPlayer.getPlayWhenReady() &&
+            exoPlayer.getPlaybackSuppressionReason() == Player.PLAYBACK_SUPPRESSION_REASON_NONE &&
+            exoPlayer.getPlaybackState() != Player.STATE_ENDED &&
+            !hasPlaybackError
+        );
     }
 
     /** Whether the server refused the signed URL of a request that failed with `error`. */
@@ -426,6 +543,38 @@ final class PlaybackEngine {
             }
         }
         return false;
+    }
+
+    /** Writes `audiobook`'s saves through its position URL, and reports them while it is loaded. */
+    private final class SaveServices implements PositionSaves.Services {
+        private final Loaded audiobook;
+
+        SaveServices(Loaded audiobook) {
+            this.audiobook = audiobook;
+        }
+
+        @Override
+        public long now() {
+            return System.currentTimeMillis();
+        }
+
+        @Override
+        public void write(String positionUrl, ListeningPosition position, PositionSaves.WriteCallback callback) {
+            positionWriter.write(positionUrl, position, callback);
+        }
+
+        @Override
+        public Runnable setRetryTimer(Runnable callback, long delayMilliseconds) {
+            handler.postDelayed(callback, delayMilliseconds);
+            return () -> handler.removeCallbacks(callback);
+        }
+
+        @Override
+        public void onSaveStateChanged() {
+            if (loaded == audiobook) {
+                sendState(false);
+            }
+        }
     }
 
     /**
@@ -453,14 +602,30 @@ final class PlaybackEngine {
             }
             if (eventPlayer.getPlaybackState() == Player.STATE_ENDED) {
                 // A finished audiobook starts over the next time, as in Cup's player. The seek and the
-                // pause report themselves.
+                // pause report themselves, and the seek saves the start.
+                wasPlaying = false;
+                handler.removeCallbacks(saveCheck);
                 eventPlayer.pause();
                 eventPlayer.seekTo(0);
                 sendState(true);
                 return;
             }
+            followPlayback(isPlayingForListener(eventPlayer));
             sendState(false);
             updateExpiryCheck();
+        }
+
+        @Override
+        public void onPositionDiscontinuity(
+            @NonNull Player.PositionInfo oldPosition,
+            @NonNull Player.PositionInfo newPosition,
+            int reason
+        ) {
+            // The page's seeks and skips, the notification's buttons and seek bar, and the return to
+            // the start at the end. Seeks before the first Play count too, while ExoPlayer is idle.
+            if (reason == Player.DISCONTINUITY_REASON_SEEK && loaded != null) {
+                loaded.saves.save(newPosition.positionMs);
+            }
         }
 
         @Override

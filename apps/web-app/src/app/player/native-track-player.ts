@@ -1,7 +1,13 @@
 import type { PluginListenerHandle } from "@capacitor/core";
 
+import type { NarrationTrack, PlaybackPosition } from "@cup/listener-api.routes";
+
 import { clampToTimeline, findUnitIndexAt } from "#src/app/player/audiobook-timeline.ts";
-import type { PlaybackSession } from "#src/app/player/playback-session.ts";
+import {
+  SAVE_RETRY_DELAY_MILLISECONDS,
+  SAVE_RETRY_FAILURE_MESSAGE,
+  type PlaybackSession,
+} from "#src/app/player/playback-session.ts";
 import {
   isSameSnapshot,
   MEDIA_ERROR_MESSAGE,
@@ -51,14 +57,26 @@ export type NativePlaybackState = {
    */
   closed: boolean;
   closedReason: NativeClosedReason | null;
+  /**
+   * How the plugin's listening-position saves fare: `"failing"` for a reason that can pass, such as
+   * a lost connection, while it retries the latest; `"refused"` for good, in the server's words.
+   */
+  positionSave: "ok" | "failing" | "refused";
+  positionSaveRefusal: string | null;
+  /** When the saves started failing for a reason that can pass, by the page's clock. */
+  positionSaveFailingSince: number | null;
 };
 
 export type NativeLoadOptions = {
   conversionId: string;
   subject: string;
   trackUrl: string;
+  /** The signed position URL, through which the plugin saves the listening position. */
+  positionUrl: string;
   /** When the page received the audiobook response that carried the URLs, by the page's clock. */
   urlsIssuedAt: number;
+  /** Where each synchronization unit starts, in document order, to convert positions to save. */
+  timeline: Array<{ synchronizationUnitId: string; startMilliseconds: number }>;
   title: string;
   artworkUrl: string | undefined;
   /** The narration track's listed duration, which the system's media controls show. */
@@ -81,8 +99,12 @@ export type MediaPlaybackPlugin = {
   /** Skips from ExoPlayer's own position. */
   skipBy(options: { deltaMilliseconds: number }): Promise<void>;
   /** Replaces the URLs, which the page received at `urlsIssuedAt`, keeping the position. */
-  replaceUrls(options: { trackUrl: string; urlsIssuedAt: number }): Promise<void>;
-  /** Releases ExoPlayer and stops the service. */
+  replaceUrls(options: {
+    trackUrl: string;
+    positionUrl: string;
+    urlsIssuedAt: number;
+  }): Promise<void>;
+  /** Releases ExoPlayer and stops the service; `"save"` saves the position one last time. */
   close(options: { position: PositionOnClose }): Promise<void>;
   /** The current state, the last native stop's, or `null` without a session. */
   getState(): Promise<{ state: NativePlaybackState | null }>;
@@ -99,6 +121,11 @@ export type NativePlayerServices = {
   setInterval(callback: () => void, intervalMilliseconds: number): () => void;
   /** Calls `callback` whenever the page becomes visible again, until the returned function. */
   onVisible(callback: () => void): () => void;
+  /**
+   * Writes a listening position into the cached audiobook without a request, so an audiobook opened
+   * again shows where the plugin, which saved it, reported it.
+   */
+  cachePosition(conversionId: string, position: PlaybackPosition): void;
 };
 
 /** How often the shown position moves on while ExoPlayer plays, like a media element's updates. */
@@ -122,9 +149,28 @@ export function createNativePlayers(
     return new NativeTrackPlayer(session, plugin, services, {
       kind: "load",
       subject,
-      trackUrlReceivedAt,
+      urls: readNativeUrls(
+        session.conversionId,
+        session.audiobook.narrationTrack,
+        trackUrlReceivedAt,
+      ),
     });
   };
+}
+
+/** The signed URLs of one audiobook response, which expire together. */
+type NativeUrls = { trackUrl: string; positionUrl: string; receivedAt: number };
+
+/** The server issues the position URL to every account, and only accounts play in the app. */
+function readNativeUrls(
+  conversionId: string,
+  narrationTrack: NarrationTrack,
+  receivedAt: number,
+): NativeUrls {
+  if (narrationTrack.positionUrl === undefined) {
+    throw new Error(`Audiobook ${conversionId} has no position URL to save natively with.`);
+  }
+  return { trackUrl: narrationTrack.url, positionUrl: narrationTrack.positionUrl, receivedAt };
 }
 
 /**
@@ -163,7 +209,7 @@ export function createRunningPlayerFinder(
 
 /** How the player starts: loading the audiobook, or taking over the session that plays it. */
 type NativePlayerStart =
-  | { kind: "load"; subject: string; trackUrlReceivedAt: number }
+  | { kind: "load"; subject: string; urls: NativeUrls }
   | { kind: "adopt"; state: NativePlaybackState };
 
 /**
@@ -171,7 +217,8 @@ type NativePlayerStart =
  *
  * The plugin is the only playback state: the snapshot follows its `state` events, and while it
  * plays, the position moves on from the time it was read. A command shows its effect at once, until
- * the plugin reports. The plugin owns the listening position, so this player saves nothing.
+ * the plugin reports. The plugin owns the listening position, so this player saves nothing: it
+ * writes the reported position into the cached audiobook, and words how the plugin's saves fare.
  *
  * After a native stop the plugin has no media item. The audiobook stays loaded at the last
  * position, seeks move only that position, and the next Play loads the audiobook again and plays.
@@ -186,8 +233,8 @@ class NativeTrackPlayer implements Player {
   private readonly stopListeningForVisibility: () => void;
   private stopPositionUpdates: (() => void) | null = null;
   private state: NativePlaybackState;
-  /** The track URL the next load uses, and when the page received it. */
-  private trackUrl: { url: string; receivedAt: number } | null;
+  /** The URLs the next load uses, and when the page received them. */
+  private urls: NativeUrls | null;
   private failure: string | null = null;
   private isClosed = false;
   private snapshot: PlayerSnapshot;
@@ -206,7 +253,7 @@ class NativeTrackPlayer implements Player {
     if (start.kind === "adopt") {
       this.state = start.state;
       // The session's URLs came from an earlier page, which the next Play renews.
-      this.trackUrl = null;
+      this.urls = null;
     } else {
       this.state = {
         conversionId: session.conversionId,
@@ -220,11 +267,11 @@ class NativeTrackPlayer implements Player {
         error: null,
         closed: false,
         closedReason: null,
+        positionSave: "ok",
+        positionSaveRefusal: null,
+        positionSaveFailingSince: null,
       };
-      this.trackUrl = {
-        url: session.audiobook.narrationTrack.url,
-        receivedAt: start.trackUrlReceivedAt,
-      };
+      this.urls = start.urls;
       this.sendLoad(session.initialPositionMilliseconds);
     }
     this.stopListeningForVisibility = services.onVisible(this.refreshState);
@@ -301,11 +348,18 @@ class NativeTrackPlayer implements Player {
     }
   };
 
-  /** After a native stop the plugin has no item to replace, so the next load uses the URL. */
-  replaceTrackUrl = (url: string, receivedAt: number) => {
-    this.trackUrl = { url, receivedAt };
+  /** After a native stop the plugin has no item to replace, so the next load uses the URLs. */
+  replaceUrls = (narrationTrack: NarrationTrack, receivedAt: number) => {
+    const urls = readNativeUrls(this.session.conversionId, narrationTrack, receivedAt);
+    this.urls = urls;
     if (!this.state.closed) {
-      this.send(this.plugin.replaceUrls({ trackUrl: url, urlsIssuedAt: receivedAt }));
+      this.send(
+        this.plugin.replaceUrls({
+          trackUrl: urls.trackUrl,
+          positionUrl: urls.positionUrl,
+          urlsIssuedAt: urls.receivedAt,
+        }),
+      );
     }
   };
 
@@ -334,7 +388,7 @@ class NativeTrackPlayer implements Player {
   };
 
   private sendLoad(startPositionMilliseconds: number) {
-    if (!this.trackUrl) {
+    if (!this.urls) {
       throw new Error(
         `Audiobook ${this.session.conversionId} has no track URL to load; Play renews it first.`,
       );
@@ -345,8 +399,13 @@ class NativeTrackPlayer implements Player {
       this.plugin.load({
         conversionId,
         subject: this.state.subject,
-        trackUrl: this.trackUrl.url,
-        urlsIssuedAt: this.trackUrl.receivedAt,
+        trackUrl: this.urls.trackUrl,
+        positionUrl: this.urls.positionUrl,
+        urlsIssuedAt: this.urls.receivedAt,
+        timeline: audiobook.narrationDocument.synchronizationUnits.map((unit, index) => ({
+          synchronizationUnitId: unit.id,
+          startMilliseconds: timeline.startMilliseconds[index]!,
+        })),
         title: audiobook.title,
         artworkUrl: audiobook.coverImage?.url,
         durationMilliseconds: timeline.durationMilliseconds,
@@ -361,6 +420,11 @@ class NativeTrackPlayer implements Player {
     }
 
     this.setState(state);
+    // The plugin saved this position, or keeps trying to; a closed session's next Play saves it.
+    this.services.cachePosition(
+      this.session.conversionId,
+      this.session.listeningPositionAt(state.positionMilliseconds),
+    );
     for (const listener of this.playbackChangeListeners) {
       listener({ hasEnded: state.hasEnded });
     }
@@ -433,9 +497,32 @@ class NativeTrackPlayer implements Player {
       playbackRate: 1,
       // A failed load is retried at the same URL; ExoPlayer prepares the item again on Play. Only
       // expired URLs, or a session taken over with URLs of unknown age, need new ones.
-      needsNewTrackUrl: this.state.error === "trackUrlExpired" || this.trackUrl === null,
-      error: this.failure ?? (this.state.error === "playback" ? MEDIA_ERROR_MESSAGE : null),
+      needsNewTrackUrl: this.state.error === "trackUrlExpired" || this.urls === null,
+      error:
+        this.failure ??
+        (this.state.error === "playback" ? MEDIA_ERROR_MESSAGE : null) ??
+        this.readSaveFailure(),
     };
+  }
+
+  /**
+   * The plugin's save failure in the web player's words (`PlaybackSession.getSaveFailure`): a
+   * refusal in the server's, and a failure that can pass only once saves have failed for the retry
+   * delay, which the plugin's report after each failed retry shows.
+   */
+  private readSaveFailure(): string | null {
+    const { positionSave, positionSaveRefusal, positionSaveFailingSince } = this.state;
+    if (positionSave === "refused") {
+      return positionSaveRefusal;
+    }
+    if (
+      positionSave === "failing" &&
+      positionSaveFailingSince !== null &&
+      this.services.now() - positionSaveFailingSince >= SAVE_RETRY_DELAY_MILLISECONDS
+    ) {
+      return SAVE_RETRY_FAILURE_MESSAGE;
+    }
+    return null;
   }
 
   /** Replaces the snapshot only when a value changed, as `useSyncExternalStore` re-renders. */

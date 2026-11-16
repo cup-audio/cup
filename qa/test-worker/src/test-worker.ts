@@ -29,7 +29,7 @@ export type RecordedRequest = {
   readonly path: string;
   /** Header names are lowercase. */
   readonly headers: Readonly<Record<string, string>>;
-  /** The body of a POST request, as text. */
+  /** The body of a POST or PUT request, as text. */
   readonly body?: string;
 };
 

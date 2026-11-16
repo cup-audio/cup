@@ -1,3 +1,5 @@
+import type { NarrationTrack } from "@cup/listener-api.routes";
+
 import { clampToTimeline, findUnitIndexAt } from "#src/app/player/audiobook-timeline.ts";
 import type { PlaybackSession } from "#src/app/player/playback-session.ts";
 import {
@@ -182,10 +184,11 @@ export class NarrationTrackPlayer implements Player {
     this.seekTo(this.readPosition() + deltaMilliseconds);
   };
 
-  replaceTrackUrl = (url: string) => {
+  /** The browser saves through the listener's session, so only the track URL is used. */
+  replaceUrls = (narrationTrack: NarrationTrack) => {
     // A new source resets the element to the start and clears a failed load.
     this.pendingPositionMilliseconds = this.readPosition();
-    this.element.src = url;
+    this.element.src = narrationTrack.url;
     this.publish();
   };
 

@@ -15,7 +15,7 @@ flowchart LR
     end
     operator[Operator CLI]
   end
-  listenerApps -->|/api and web assets, Supabase JWT or grant cookie; media by signed URL| fetch
+  listenerApps -->|/api and web assets, Supabase JWT or grant cookie; media, and the native player's position saves, by signed URL| fetch
   listenerApps -->|Google sign-in| auth
   operator -->|/api/operator| access
   subgraph cloudflare[Cloudflare]

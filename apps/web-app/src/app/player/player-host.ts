@@ -518,7 +518,7 @@ export class PlayerHost {
     }
 
     this.trackUrlReceivedAt = this.services.now();
-    loaded.player.replaceTrackUrl(audiobook.narrationTrack.url, this.trackUrlReceivedAt);
+    loaded.player.replaceUrls(audiobook.narrationTrack, this.trackUrlReceivedAt);
     loaded.player.play();
   }
 

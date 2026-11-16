@@ -12,7 +12,7 @@ import {
   type PlaybackSessionServices,
 } from "#src/app/player/playback-session.js";
 import type { CreatePlayer, FindRunningPlayer } from "#src/app/player/player.js";
-import { savePlaybackPosition } from "#src/data-fetching/reader.js";
+import { cachePlaybackPosition, savePlaybackPosition } from "#src/data-fetching/reader.js";
 import { mediaPlaybackPlugin } from "#src/platform/media-playback.android.js";
 
 /** Connects a loaded audiobook's playback session to position storage. */
@@ -62,6 +62,7 @@ export function createPlatformPlayers(): {
       document.addEventListener("visibilitychange", handleVisibilityChange);
       return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
     },
+    cachePosition: cachePlaybackPosition,
   };
   return {
     createPlayer: createNativePlayers(mediaPlaybackPlugin, services),

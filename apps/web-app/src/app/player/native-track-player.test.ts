@@ -6,7 +6,12 @@ import {
   type MediaPlaybackPlugin,
   type NativePlaybackState,
 } from "#src/app/player/native-track-player.ts";
-import { PlaybackSession, type PlayableAudiobook } from "#src/app/player/playback-session.ts";
+import {
+  PlaybackSession,
+  SAVE_RETRY_DELAY_MILLISECONDS,
+  SAVE_RETRY_FAILURE_MESSAGE,
+  type PlayableAudiobook,
+} from "#src/app/player/playback-session.ts";
 import { PlayerHost, type PlayerHostAccount } from "#src/app/player/player-host.ts";
 import type { MediaSessionPort } from "#src/platform/media-session.ts";
 import { expect, test } from "#src/test-utils/component-test.ts";
@@ -116,6 +121,7 @@ function createAudiobook(
     // Units of 4, 6 and 5 seconds.
     narrationTrack: {
       url: `https://example.com/${title}/narration-track.mp3?token=fixture`,
+      positionUrl: `https://example.com/api/audiobooks/${title}/position?token=fixture`,
       durationMilliseconds: 15_000,
       startMilliseconds: [0, 4_000, 10_000],
     },
@@ -128,6 +134,12 @@ const FIRST = createAudiobook("First", {
 });
 const SECOND = createAudiobook("Second");
 const RENEWED_TRACK_URL = "https://example.com/First/narration-track.mp3?token=renewed";
+const RENEWED_POSITION_URL = "https://example.com/api/audiobooks/first/position?token=renewed";
+const RENEWED_TRACK = {
+  ...FIRST.narrationTrack,
+  url: RENEWED_TRACK_URL,
+  positionUrl: RENEWED_POSITION_URL,
+};
 
 function createHost({
   subject = "user-1",
@@ -148,9 +160,16 @@ function createHost({
   const visibility = new Set<() => void>();
   /** The audiobooks the host fetched. */
   const fetched: string[] = [];
+  /** The listening positions written into the cached audiobooks, as `conversion unit+offset`. */
+  const cached: string[] = [];
   let account = initialAccount;
   const nativeServices = {
     now: () => clock.now,
+    cachePosition: (conversionId: string, position: PlaybackPosition) => {
+      cached.push(
+        `${conversionId} ${position.synchronizationUnitId}+${position.offsetMilliseconds}`,
+      );
+    },
     setInterval: (callback: () => void) => {
       ticks.add(callback);
       return () => ticks.delete(callback);
@@ -206,7 +225,19 @@ function createHost({
     }
   };
 
-  return { host, plugin, player, saved, fetched, clock, setAccount, tick, ticks, becomeVisible };
+  return {
+    host,
+    plugin,
+    player,
+    saved,
+    cached,
+    fetched,
+    clock,
+    setAccount,
+    tick,
+    ticks,
+    becomeVisible,
+  };
 }
 
 /** A state the plugin reports for the first audiobook, read at `positionReadAt`. */
@@ -223,6 +254,9 @@ function stateOf(state: Partial<NativePlaybackState> = {}): NativePlaybackState 
     error: null,
     closed: false,
     closedReason: null,
+    positionSave: "ok",
+    positionSaveRefusal: null,
+    positionSaveFailingSince: null,
     ...state,
   };
 }
@@ -243,8 +277,15 @@ test("loading the shown audiobook sets it in the plugin at its listening positio
         conversionId: "first",
         subject: "user-1",
         trackUrl: "https://example.com/First/narration-track.mp3?token=fixture",
+        positionUrl: "https://example.com/api/audiobooks/First/position?token=fixture",
         // The page received the URLs with the audiobook, when it showed it.
         urlsIssuedAt: 1_000_000,
+        // The plugin saves listening positions, which it converts with each unit's start.
+        timeline: [
+          { synchronizationUnitId: "unit-1", startMilliseconds: 0 },
+          { synchronizationUnitId: "unit-2", startMilliseconds: 4_000 },
+          { synchronizationUnitId: "unit-3", startMilliseconds: 10_000 },
+        ],
         title: "First",
         artworkUrl: "https://example.com/First/cover?token=fixture",
         durationMilliseconds: 15_000,
@@ -422,12 +463,86 @@ test("the page saves no position on Android, where the plugin owns the listening
   expect(saved).toEqual([]);
 });
 
+test("every state the plugin reports writes its listening position into the cached audiobook", () => {
+  const { host, plugin, cached } = createHost();
+  host.showConversion("first", FIRST);
+  host.playShown();
+
+  plugin.emit(stateOf({ isPlaying: true, positionMilliseconds: 6_000 }));
+  plugin.emit(stateOf({ positionMilliseconds: 11_500 }));
+  // The last position of a native stop too, which the next Play on this page saves.
+  plugin.emit(stateOf({ positionMilliseconds: 2_000, closed: true, closedReason: "taskRemoved" }));
+
+  expect(cached).toEqual(["first unit-2+2000", "first unit-3+1500", "first unit-1+2000"]);
+});
+
+test("saves that fail for a reason that can pass show plain words once they have failed for the retry delay", () => {
+  const { host, plugin, player, clock } = createHost();
+  host.showConversion("first", FIRST);
+  host.playShown();
+
+  plugin.emit(stateOf({ positionSave: "failing", positionSaveFailingSince: clock.now }));
+  expect(player().getSnapshot().error).toBeNull();
+
+  clock.now += SAVE_RETRY_DELAY_MILLISECONDS;
+  // The plugin reports again after its retry failed.
+  plugin.emit(stateOf({ positionSave: "failing", positionSaveFailingSince: clock.now - 15_000 }));
+  expect(player().getSnapshot().error).toBe(SAVE_RETRY_FAILURE_MESSAGE);
+
+  plugin.emit(stateOf({ positionSave: "ok" }));
+  expect(player().getSnapshot().error).toBeNull();
+});
+
+test("while saves keep failing during playback, the message shows once the retry delay passed", () => {
+  const { host, plugin, player, clock, tick } = createHost();
+  host.showConversion("first", FIRST);
+  host.playShown();
+  plugin.emit(
+    stateOf({
+      isPlaying: true,
+      positionSave: "failing",
+      positionSaveFailingSince: clock.now,
+    }),
+  );
+
+  clock.now += SAVE_RETRY_DELAY_MILLISECONDS;
+  tick();
+
+  expect(player().getSnapshot().error).toBe(SAVE_RETRY_FAILURE_MESSAGE);
+});
+
+test("a save the server refuses shows the server's words", () => {
+  const { host, plugin, player } = createHost();
+  host.showConversion("first", FIRST);
+  host.playShown();
+
+  plugin.emit(stateOf({ positionSave: "refused", positionSaveRefusal: "Audiobook not found." }));
+
+  expect(player().getSnapshot().error).toBe("Audiobook not found.");
+});
+
+test("a playback error shows before a failing save", () => {
+  const { host, plugin, player, clock } = createHost();
+  host.showConversion("first", FIRST);
+  host.playShown();
+
+  plugin.emit(
+    stateOf({
+      error: "playback",
+      positionSave: "failing",
+      positionSaveFailingSince: clock.now - SAVE_RETRY_DELAY_MILLISECONDS,
+    }),
+  );
+
+  expect(player().getSnapshot().error).toBe(MEDIA_ERROR_MESSAGE);
+});
+
 test("Play more than 12 hours after receiving the track URL renews it in the plugin, then plays", async () => {
   const { host, plugin, clock } = createHost({
     fetchAudiobook: () =>
       Promise.resolve({
         ...FIRST,
-        narrationTrack: { ...FIRST.narrationTrack, url: RENEWED_TRACK_URL },
+        narrationTrack: RENEWED_TRACK,
       }),
   });
   host.showConversion("first", FIRST);
@@ -440,7 +555,11 @@ test("Play more than 12 hours after receiving the track URL renews it in the plu
   expect(plugin.commands().slice(1)).toEqual([
     {
       method: "replaceUrls",
-      options: { trackUrl: RENEWED_TRACK_URL, urlsIssuedAt: clock.now },
+      options: {
+        trackUrl: RENEWED_TRACK_URL,
+        positionUrl: RENEWED_POSITION_URL,
+        urlsIssuedAt: clock.now,
+      },
     },
     { method: "play" },
   ]);
@@ -523,7 +642,7 @@ test("expired track URLs end the native session, and the next Play renews them, 
     fetchAudiobook: () =>
       Promise.resolve({
         ...FIRST,
-        narrationTrack: { ...FIRST.narrationTrack, url: RENEWED_TRACK_URL },
+        narrationTrack: RENEWED_TRACK,
       }),
   });
   host.showConversion("first", FIRST);
@@ -552,6 +671,7 @@ test("expired track URLs end the native session, and the next Play renews them, 
       method: "load",
       options: expect.objectContaining({
         trackUrl: RENEWED_TRACK_URL,
+        positionUrl: RENEWED_POSITION_URL,
         urlsIssuedAt: clock.now,
         startPositionMilliseconds: 7_000,
       }),
@@ -609,7 +729,7 @@ test("the first Play after taking a session over renews its URLs, whose age the 
     fetchAudiobook: () =>
       Promise.resolve({
         ...FIRST,
-        narrationTrack: { ...FIRST.narrationTrack, url: RENEWED_TRACK_URL },
+        narrationTrack: RENEWED_TRACK,
       }),
   });
   plugin.currentState = stateOf({ positionMilliseconds: 9_000 });
@@ -621,7 +741,11 @@ test("the first Play after taking a session over renews its URLs, whose age the 
   expect(plugin.commands()).toEqual([
     {
       method: "replaceUrls",
-      options: { trackUrl: RENEWED_TRACK_URL, urlsIssuedAt: clock.now },
+      options: {
+        trackUrl: RENEWED_TRACK_URL,
+        positionUrl: RENEWED_POSITION_URL,
+        urlsIssuedAt: clock.now,
+      },
     },
     { method: "play" },
   ]);

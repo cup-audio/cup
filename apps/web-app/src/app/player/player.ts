@@ -1,3 +1,5 @@
+import type { NarrationTrack } from "@cup/listener-api.routes";
+
 import type { PlaybackSession } from "#src/app/player/playback-session.ts";
 
 /** The loaded audiobook's playback, on the whole-audiobook timeline. */
@@ -36,10 +38,10 @@ export type Player = {
   /** Seeks by an amount from the current position, back when negative, such as −15 s and +15 s. */
   skipBy: (deltaMilliseconds: number) => void;
   /**
-   * Loads the same track from a newly signed URL, which the client received at `receivedAt`,
-   * keeping the position; plays nothing.
+   * Loads the same track from the newly signed URLs of a narration track, which the client received
+   * at `receivedAt`, keeping the position; plays nothing.
    */
-  replaceTrackUrl: (url: string, receivedAt: number) => void;
+  replaceUrls: (narrationTrack: NarrationTrack, receivedAt: number) => void;
   /** Shows a failure that happened outside the player, until the next Play. */
   showError: (message: string) => void;
   /**
