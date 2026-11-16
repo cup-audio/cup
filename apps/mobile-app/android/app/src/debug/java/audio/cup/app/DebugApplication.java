@@ -36,6 +36,7 @@ public class DebugApplication extends Application {
             TestSentryDsn.fromIntent(activity.getIntent());
             if (TestApiOrigin.fromIntent(activity.getIntent()) != null) {
                 ((BridgeActivity) activity).registerPlugin(TestApiOriginPlugin.class);
+                ((BridgeActivity) activity).registerPlugin(TestRendererCrashPlugin.class);
                 ((BridgeActivity) activity).registerPlugin(FocusProbePlugin.class);
                 TestPlaybackTimings.apply(activity.getIntent());
             }

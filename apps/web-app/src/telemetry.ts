@@ -7,6 +7,8 @@ import {
   createClientSentryOptions,
   followAccountSession,
   readWebRelease,
+  takeWebViewProcessLoss,
+  webViewProcessLossMessage,
   type ShellTelemetryContext,
 } from "@cup/telemetry.browser";
 
@@ -26,12 +28,15 @@ const TEST_SENTRY_DSN_GLOBAL = "cupTestSentryDsn";
  * `https://cup.audio`, a release shell only against it, and a debug shell only to the test DSN the
  * mobile E2E suite passed it. Call it once, right after the router exists and before the platform
  * listeners start, so their failures are captured. From then on, telemetry's user follows the
- * account session by the user rule of `@cup/telemetry.browser`.
+ * account session by the user rule of `@cup/telemetry.browser`. In a shell, it also reports, once,
+ * a WebView process loss that the native side recorded before it brought the page back.
  */
 export async function initializeTelemetry(
   router: ReturnType<typeof createAppRouter>,
 ): Promise<void> {
   const shell = await readShellContext();
+  // Taken even when telemetry stays off, so a loss is never reported in a later start.
+  const processLoss = shell === undefined ? undefined : await takeWebViewProcessLoss();
   const options = createClientSentryOptions({
     pageOrigin: window.location.origin,
     apiOrigin: apiOrigin(),
@@ -47,6 +52,12 @@ export async function initializeTelemetry(
   Sentry.init(options, (browserOptions) => {
     SentryReact.init(browserOptions);
     applyUserToNativeScope();
+    if (processLoss !== undefined) {
+      // The native side brought the page back after its WebView process died; this is the first
+      // moment the event can be sent, through the tunnel like every JS event.
+      const { message, context } = webViewProcessLossMessage(processLoss);
+      Sentry.captureMessage(message, context);
+    }
   });
   followAccountSession(
     {

@@ -211,6 +211,8 @@ In one test per platform, after signing in from the home link, it reads the acco
 - the second carries a different `contexts.device.id`, a 32-hex in-memory installation ID. The stub still sees it, since the organisation's scrubbing rule removes it only at ingest;
 - Cup's data directory, listed with `run-as`, holds no `INSTALLATION` file and no `.sentry-native` folder.
 
+In a second test, signed in, it crashes the WebView's renderer through the debug build's `CupTestRendererCrash` plugin, which loads `chrome://crash` once the WebView script has returned ([WebView process loss](../../apps/mobile-app/README.md#webview-process-loss)). It then checks that Cup is back on Recents in the foreground with the same process ID, which `AndroidAppDevice.processId()` reads with `pidof`, so Cup recreated its activity instead of Android ending the app. The stub receives one `error` event, a JS event, with the fingerprint `webview-renderer-gone`, the tags `cup.renderer.cause` `crash`, `cup.app.state` `foreground` and `rendererPriorityAtExit`, and the test Worker received a request to `/_/e`. The iOS side is a [manual check](../../apps/mobile-app/README.md#ios-webcontent-check), since nothing public ends the WebContent process.
+
 After each crash the test waits until Cup's process has exited before launching it again: Sentry's crash handler sends the crash, or stores it for the next launch, before Android ends the process, and a launch that force-stopped Cup sooner lost the crash in four of six runs (2026-11-16). The JS error also proves that the native scope has the user, because the web app applies the user to the native SDK in the same plugin queue that the crash call later goes through.
 
 [`test/ios/telemetry.test.ts`](test/ios/telemetry.test.ts) checks:

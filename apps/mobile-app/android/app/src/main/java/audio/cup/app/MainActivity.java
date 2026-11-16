@@ -15,8 +15,12 @@ public class MainActivity extends BridgeActivity {
         // writes or reads an installation ID file.
         InMemoryInstallation.use();
         registerPlugin(AndroidSharePlugin.class);
+        registerPlugin(WebViewProcessLossPlugin.class);
         registerPlugin(MediaPlaybackPlugin.class);
         super.onCreate(savedInstanceState);
+        if (getBridge() != null) {
+            getBridge().addWebViewListener(WebViewProcessLoss.recreateOnRendererGone(this));
+        }
     }
 
     @Override

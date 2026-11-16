@@ -562,6 +562,12 @@ export class AndroidAppDevice implements AppDevice {
     );
   }
 
+  /** The ID of Cup's running process, which tells a recreated activity from a restarted app. */
+  async processId(): Promise<string> {
+    const { stdout } = await this.adb(["shell", "pidof", APP_PACKAGE]);
+    return stdout.trim();
+  }
+
   /**
    * Every file and folder in Cup's private data directory, as paths relative to it, such as
    * `./files/INSTALLATION`. The debug build is debuggable, so `run-as` reads it.

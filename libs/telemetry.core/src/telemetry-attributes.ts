@@ -36,6 +36,15 @@ export const TELEMETRY_ATTRIBUTES = {
    * app version instead, so its JS and native events share one release.
    */
   WEB_RELEASE: "cup.web_release",
+  /** Why a shell's Android WebView lost its renderer process: `crash` or `system-kill`. */
+  RENDERER_CAUSE: "cup.renderer.cause",
+  /**
+   * The Android WebView renderer's priority when it ended: `waived`, `bound` or `important`. Named
+   * after Android's `RenderProcessGoneDetail.rendererPriorityAtExit()`, as the spec names the tag.
+   */
+  RENDERER_PRIORITY_AT_EXIT: "rendererPriorityAtExit",
+  /** Whether a shell was `foreground` or `background` when its WebView lost its page. */
+  APP_STATE: "cup.app.state",
   /** The wrapper types of a logged error, outermost to innermost. */
   EXCEPTION_CHAIN: "cup.exception.chain",
   /** A Cloudflare Workflow instance ID, such as a segment's; a preparation's is its conversion ID. */
