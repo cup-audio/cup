@@ -19,6 +19,9 @@ export function notifyError(
     type: "error",
     priority: "high",
     title: description.title,
-    description: description.detail,
+    description:
+      description.reference === undefined
+        ? description.detail
+        : [description.detail, `Reference: ${description.reference}`].filter(Boolean).join(" "),
   });
 }

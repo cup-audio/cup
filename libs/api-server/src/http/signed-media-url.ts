@@ -187,7 +187,7 @@ export async function requireSignedMediaUrl(
   requestUrl: string,
   conversionId: string,
   owner: ConversionOwner | undefined,
-  requestId: string,
+  traceId: string,
 ): Promise<Response | undefined> {
   const token = await verifyMediaUrlToken({
     requestUrl,
@@ -198,7 +198,7 @@ export async function requireSignedMediaUrl(
   });
   if (token.result !== "valid") {
     return jsonError(
-      requestId,
+      traceId,
       "media-url-invalid",
       "The media URL is invalid or expired. Reload the audiobook.",
       401,
@@ -207,7 +207,7 @@ export async function requireSignedMediaUrl(
   if (!owner) {
     return undefined;
   }
-  return requireSignedMediaAccess(env, owner, token.principal, requestId);
+  return requireSignedMediaAccess(env, owner, token.principal, traceId);
 }
 
 type SignedPositionUrlVerification =
@@ -269,22 +269,22 @@ async function requireSignedMediaAccess(
   env: ApiServerEnvironment,
   owner: ConversionOwner,
   principal: MediaUrlPrincipal,
-  requestId: string,
+  traceId: string,
 ): Promise<Response | undefined> {
   if (owner.kind === "account") {
     if (principal.kind !== "account" || principal.accountId !== owner.accountId) {
-      return jsonError(requestId, "audiobook-not-found", "Audiobook not found.", 404);
+      return jsonError(traceId, "audiobook-not-found", "Audiobook not found.", 404);
     }
     const account = env.ACCOUNTS.get(env.ACCOUNTS.idFromName(owner.accountId));
     if ((await account.inspect()).state !== "active") {
-      return accountAuthError("blocked", requestId);
+      return accountAuthError("blocked", traceId);
     }
     return undefined;
   }
 
   if (principal.kind !== "trial" || principal.grantId !== owner.grantId) {
     return jsonError(
-      requestId,
+      traceId,
       "grant-session-required",
       "Open the original trial link to access this audiobook.",
       401,
@@ -297,9 +297,9 @@ async function requireSignedMediaAccess(
     ).state;
   } catch (error) {
     captureException(error);
-    return jsonError(requestId, "operational-error", "The grant could not be loaded.", 500);
+    return jsonError(traceId, "operational-error", "The grant could not be loaded.", 500);
   }
-  return requireAccessibleGrantState(grantState, requestId);
+  return requireAccessibleGrantState(grantState, traceId);
 }
 
 type MediaUrlTokenVerification =

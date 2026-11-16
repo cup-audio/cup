@@ -16,7 +16,7 @@ const ERROR_OF_STATUS = {
   403: { code: "grant-revoked", message: "This trial was revoked." },
   404: { code: "not-found", message: "Not found." },
   500: { code: "operational-error", message: "The request could not be completed." },
-} as const satisfies Record<FailureStatus, Omit<ErrorResponse["error"], "requestId">>;
+} as const satisfies Record<FailureStatus, Omit<ErrorResponse["error"], "traceId">>;
 
 const holds = new Map<string, { promise: Promise<void>; release: () => void }>();
 const failures = new Map<string, FailureStatus>();
@@ -64,7 +64,7 @@ export function readFailedStoryResponse(name: string): HttpResponse<ErrorRespons
   return HttpResponse.json(
     {
       error: {
-        requestId: "09e6d824-d41d-43bb-9417-18f89232ba56",
+        traceId: "0af7651916cd43dd8448eb211c80319c",
         ...ERROR_OF_STATUS[status],
       },
     } satisfies ErrorResponse,

@@ -164,7 +164,7 @@ export const AudiobookNotFound = {
       HttpResponse.json(
         {
           error: {
-            requestId: "09e6d824-d41d-43bb-9417-18f89232ba56",
+            traceId: "0af7651916cd43dd8448eb211c80319c",
             code: "audiobook-not-found",
             message: "Track not found.",
           },
@@ -185,7 +185,7 @@ export const AudiobookLoadError = {
         HttpResponse.json(
           {
             error: {
-              requestId: "09e6d824-d41d-43bb-9417-18f89232ba56",
+              traceId: "0af7651916cd43dd8448eb211c80319c",
               code: "operational-error",
               message: "The audiobook could not be loaded.",
             },
@@ -563,7 +563,7 @@ function createDeletionStory(
           return HttpResponse.json(
             {
               error: {
-                requestId: "09e6d824-d41d-43bb-9417-18f89232ba56",
+                traceId: "0af7651916cd43dd8448eb211c80319c",
                 code: "operational-error",
                 message: "The track could not be deleted.",
               },
@@ -643,7 +643,7 @@ function trackNotFoundResponse() {
   return HttpResponse.json(
     {
       error: {
-        requestId: "09e6d824-d41d-43bb-9417-18f89232ba56",
+        traceId: "0af7651916cd43dd8448eb211c80319c",
         code: "audiobook-not-found",
         message: "Track not found.",
       },
@@ -670,7 +670,7 @@ export const RetryRefused = {
       HttpResponse.json(
         {
           error: {
-            requestId: "09e6d824-d41d-43bb-9417-18f89232ba56",
+            traceId: "0af7651916cd43dd8448eb211c80319c",
             code: "grant-expired",
             message: "This trial no longer permits new speech generation.",
           },
@@ -696,7 +696,7 @@ export const PollingInterrupted = {
           return HttpResponse.json(
             {
               error: {
-                requestId: "09e6d824-d41d-43bb-9417-18f89232ba56",
+                traceId: "0af7651916cd43dd8448eb211c80319c",
                 code: "operational-error",
                 message: "The audiobook could not be loaded.",
               },
@@ -750,7 +750,7 @@ function createAccessLostWhilePollingStory(failure: "not-found" | "access-denied
           : HttpResponse.json(
               {
                 error: {
-                  requestId: "09e6d824-d41d-43bb-9417-18f89232ba56",
+                  traceId: "0af7651916cd43dd8448eb211c80319c",
                   code: "grant-revoked",
                   message: "This trial was revoked.",
                 },

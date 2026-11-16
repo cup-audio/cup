@@ -92,7 +92,11 @@ test("invalid confirmation uses the shared validation error envelope", async () 
   const response = await request("", { challengeId: "invalid" });
   expect(response.status).toBe(400);
   expect(await response.json()).toEqual({
-    error: { code: "invalid-input", message: expect.any(String), requestId: expect.any(String) },
+    error: {
+      code: "invalid-input",
+      message: expect.any(String),
+      traceId: expect.stringMatching(/^[0-9a-f]{32}$/),
+    },
   });
   expect(account.scheduleDeletion).not.toHaveBeenCalled();
 });
@@ -107,7 +111,7 @@ test.each([
   const response = await request();
   expect(response.status).toBe(status);
   expect(await response.json()).toMatchObject({
-    error: { code: expect.any(String), requestId: expect.any(String) },
+    error: { code: expect.any(String), traceId: expect.stringMatching(/^[0-9a-f]{32}$/) },
   });
 });
 

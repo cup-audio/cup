@@ -9,6 +9,7 @@ import { LOCAL_OPERATOR_ACCESS_TOKEN } from "@cup/operator-api.routes";
 
 const GRANT_ID = "b4ad28a8-bbd7-46af-a17c-59527becd745";
 const REQUEST_ID = "2f94d6a9-68eb-49eb-b88e-753cf5fba041";
+const TRACE_ID = "0af7651916cd43dd8448eb211c80319c";
 const ACCOUNT_ID = "d1a52e64-3e4d-4a7f-a711-7fb11501e9af";
 const PROJECTED_ACCOUNT_ID = "e2b63f75-4f5e-4b8a-b822-8ac22612fab0";
 const SUBJECT = "6c1f9e4a-2b7d-4e8f-9a3c-5d6e7f8a9b0c";
@@ -205,13 +206,19 @@ describe("actual operator CLI process", () => {
     );
   });
 
-  test("reports API refusals with the API error code and message", async () => {
+  test("reports API refusals with the API error code, message and trace ID", async () => {
     const result = await runCli("--json", "account", "inspect", GRANT_ID);
     expect(result.status).toBe(1);
     expect(result.stdout).toBe("");
     expect(JSON.parse(result.stderr) as unknown).toEqual({
-      error: { code: "account-unavailable", message: "Account unavailable." },
+      error: { code: "account-unavailable", message: "Account unavailable.", traceId: TRACE_ID },
     });
+  });
+
+  test("shows an API refusal's trace ID in human output", async () => {
+    const result = await runCli("account", "inspect", GRANT_ID);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe(`Error: Account unavailable.\nTrace ID: ${TRACE_ID}\n`);
   });
 
   test("reports network failures as a generic operator error", async () => {
@@ -381,7 +388,7 @@ function handleAccountRead(url: URL, response: http.ServerResponse): boolean {
       error: {
         code: "account-unavailable",
         message: "Account unavailable.",
-        requestId: REQUEST_ID,
+        traceId: TRACE_ID,
       },
     });
   } else {
