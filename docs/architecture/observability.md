@@ -7,12 +7,16 @@ Cup reports production failures to Sentry through Sentry's own SDKs, and only fr
 Every Worker entry point is wrapped with `@sentry/cloudflare` in the [Worker entry](../../apps/cloudflare-worker/src/index.ts): the `fetch` handler, the account, conversion grant and registry Durable Objects, and the preparation and audio segment synthesis Workflows. Each sends to the `cup-worker` project:
 
 - **Errors**, captured once where Cup turns an error into a 500 response: Hono's `onError`, and each `catch` in the [API server](../../libs/api-server/src/api-server.ts) that answers `operational-error` with status 500. A 4xx response captures nothing. Each event carries the `cup.component` tag, which names the entry point that reported it.
-- **Traces**, every request at a sample rate of 1, streamed span by span. A request's trace includes its Durable Object RPC calls: Sentry appends the trace context to each RPC call on the Worker's own Durable Object bindings, and the wrapped receiver removes it again. Durable Object SQL and storage spans are dropped, because they would outnumber all others.
+- **Traces**, every request except the health checks ([sampling](#sampling)), streamed span by span. A request's trace includes its Durable Object RPC calls: Sentry appends the trace context to each RPC call on the Worker's own Durable Object bindings, and the wrapped receiver removes it again. Durable Object SQL and storage spans are dropped, because they would outnumber all others.
 - **The release**, the deployed Worker version from the `CF_VERSION_METADATA` binding, and the environment `production`.
 
 Sentry's projects, keys and privacy settings are managed in [Terraform](../../terraform/README.md#sentry); the two public DSNs are constants in `@cup/telemetry.core`. The `cup-app` project for the web app and the shells exists, and the [telemetry tunnel](#telemetry-tunnel) forwards to it, but no client sends yet.
 
-Planned by the spec and not built yet: Cup's own log records through `Sentry.logger`, the `cup.conversion.id` join key on every conversion-scoped record, `traceId` in error bodies, captures in the Durable Objects and Workflows, the stuck checks, alerts and monitors, client telemetry in the web app and the shells, `/api/health`, and source map upload.
+Planned by the spec and not built yet: Cup's own log records through `Sentry.logger`, the `cup.conversion.id` join key on every conversion-scoped record, `traceId` in error bodies, captures in the Durable Objects and Workflows, the stuck checks, alerts and monitors including the uptime monitor on `/api/health`, client telemetry in the web app and the shells, and source map upload.
+
+## Sampling
+
+The Worker traces every invocation, the web app's polls included, except `GET /api/health`. The `tracesSampler` in [`@cup/telemetry.cloudflare`](../../libs/telemetry.cloudflare/src/worker-sentry-options.ts) returns 0 for the request span whose `url.path` is `/api/health` and 1 for every other one. The health endpoint is a Listener API route that answers 200 while the Worker runs and calls no binding; Sentry's uptime monitor is to check it every minute, and its near-empty traces would take about 43k spans a month of the free plan's quota. If span volume grows, a later change lowers the trace rate where little is lost, starting with the polls.
 
 ## Telemetry libraries
 

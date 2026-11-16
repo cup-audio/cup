@@ -92,3 +92,22 @@ test("a foreign error arrives with its type but without its message", async ({
   ]);
   expect(event?.exception?.values?.[0]?.type).toBe("HTTPException");
 });
+
+test("GET /api/health answers 200 and sends no trace", async ({ expect, onTestFinished }) => {
+  const sentry = await useSentryStub({ onTestFinished });
+  const worker = await useWorker({ onTestFinished, sentryDsn: sentry.dsn("cup-worker") });
+
+  const response = await worker.fetch("https://cup.audio/api/health");
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ status: "ok" });
+  // An unsampled request sends nothing to wait for. A traced request made afterwards flushes after
+  // the health check's own flush would have, so its span marks the point to assert at.
+  await worker.fetch(`https://cup.audio${MEDIA_PATH}?token=v2.unknown`);
+  await waitForRequestSpan(sentry, MEDIA_PATH);
+  expect(
+    sentry
+      .spans("cup-worker")
+      .filter((span) => span.attributes["url.path"]?.value === "/api/health"),
+  ).toEqual([]);
+});

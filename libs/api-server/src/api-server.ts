@@ -201,6 +201,9 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
     }
     return context.json(toAccountSnapshotResponse(result.account), 200);
   },
+  health(context) {
+    return context.json({ status: "ok" as const }, 200);
+  },
   authConfig(context) {
     const testAccount = localTestAccount(context.env);
     return context.json(
