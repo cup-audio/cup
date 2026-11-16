@@ -4,11 +4,22 @@
   "main": "test/worker.ts",
   "compatibility_flags": ["nodejs_compat"],
   "compatibility_date": "2026-08-15",
-  /* Registry tests that send through a Resend stub pass its origin explicitly; nothing reaches Resend. */
-  "vars": { "CONVERSION_OWNER_LIMIT": "10", "RESEND_BASE_URL": "http://127.0.0.1:9" },
+  /*
+   * Registry tests that send through a Resend stub pass its origin explicitly; nothing reaches Resend.
+   * Only SENTRY_DELETION_TEST runs Sentry, which sends to the discard port unless a test points
+   * SENTRY_DSN at a Sentry stub.
+   */
+  "vars": {
+    "CONVERSION_OWNER_LIMIT": "10",
+    "RESEND_BASE_URL": "http://127.0.0.1:9",
+    "LOCAL_DEVELOPMENT": "false",
+    "SENTRY_DSN": "http://test@127.0.0.1:9/1",
+  },
+  "version_metadata": { "binding": "CF_VERSION_METADATA" },
   "durable_objects": {
     "bindings": [
       { "name": "DELETION_TEST", "class_name": "DeletionTestDurableObject" },
+      { "name": "SENTRY_DELETION_TEST", "class_name": "SentryDeletionTestDurableObject" },
       { "name": "ACCOUNT_DISPATCH_TEST", "class_name": "AccountDispatchTestDurableObject" },
       { "name": "ACCOUNTS", "class_name": "AccountDurableObject" },
       {
@@ -24,6 +35,7 @@
   "r2_buckets": [{ "binding": "AUDIO_BUCKET", "bucket_name": "account-test-artifacts" }],
   "migrations": [
     { "tag": "test-deletion", "new_sqlite_classes": ["DeletionTestDurableObject"] },
+    { "tag": "test-sentry-deletion", "new_sqlite_classes": ["SentryDeletionTestDurableObject"] },
     { "tag": "test-dispatch", "new_sqlite_classes": ["AccountDispatchTestDurableObject"] },
     {
       "tag": "v1",

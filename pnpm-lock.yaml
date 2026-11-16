@@ -1776,6 +1776,12 @@ importers:
       '@cup/rolling-limits':
         specifier: workspace:*
         version: link:../rolling-limits
+      '@cup/telemetry.core':
+        specifier: workspace:*
+        version: link:../telemetry.core
+      '@sentry/core':
+        specifier: catalog:sentry-server
+        version: 11.10.0
       drizzle-orm:
         specifier: ^0.45.4
         version: 0.45.4
@@ -1798,12 +1804,21 @@ importers:
       '@cup/resend-stub':
         specifier: workspace:*
         version: link:../../qa/resend-stub
+      '@cup/sentry-stub':
+        specifier: workspace:*
+        version: link:../../qa/sentry-stub
+      '@cup/telemetry.cloudflare':
+        specifier: workspace:*
+        version: link:../telemetry.cloudflare
       '@patricktree-stack/config-typescript':
         specifier: workspace:*
         version: link:../../.patricktree-stack/tooling/config-typescript
       '@patricktree-stack/config-vitest':
         specifier: workspace:*
         version: link:../../.patricktree-stack/tooling/config-vitest
+      '@sentry/cloudflare':
+        specifier: catalog:sentry-server
+        version: 11.10.0(vite@8.3.4(@types/node@26.6.5))(wrangler@4.144.0(@types/node@26.6.5))
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.5

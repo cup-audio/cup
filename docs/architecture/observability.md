@@ -12,11 +12,17 @@ Every Worker entry point is wrapped with `@sentry/cloudflare` in the [Worker ent
 
 Sentry's projects, keys and privacy settings are managed in [Terraform](../../terraform/README.md#sentry); the two public DSNs are constants in `@cup/telemetry.core`. The `cup-app` project for the web app and the shells exists, and the [telemetry tunnel](#telemetry-tunnel) forwards to it, but no client sends yet.
 
-Planned by the spec and not built yet: Cup's own log records through `Sentry.logger`, the `cup.conversion.id` join key on every conversion-scoped record, `traceId` in error bodies, captures in the Durable Objects and Workflows, the stuck checks, alerts and monitors including the uptime monitor on `/api/health`, client telemetry in the web app and the shells, and source map upload.
+Planned by the spec and not built yet: Cup's own log records through `Sentry.logger`, the `cup.conversion.id` join key on every conversion-scoped record, `traceId` in error bodies, captures in the Durable Objects and Workflows, the stuck-conversion and stuck-conversion-deletion checks, alerts and monitors including the uptime monitor on `/api/health`, client telemetry in the web app and the shells, and source map upload.
 
 ## Sampling
 
 The Worker traces every invocation, the web app's polls included, except `GET /api/health`. The `tracesSampler` in [`@cup/telemetry.cloudflare`](../../libs/telemetry.cloudflare/src/worker-sentry-options.ts) returns 0 for the request span whose `url.path` is `/api/health` and 1 for every other one. The health endpoint is a Listener API route that answers 200 while the Worker runs and calls no binding; Sentry's uptime monitor is to check it every minute, and its near-empty traces would take about 43k spans a month of the free plan's quota. If span volume grows, a later change lowers the trace rate where little is lost, starting with the polls.
+
+## Stuck checks
+
+A stuck check reports work that should have finished long ago as one Sentry error event per case, with a fixed fingerprint, so all cases land in one issue. A flag stored with the work keeps later passes from reporting the same case again.
+
+- **Account deletion stuck.** The registry's [deletion coordinator](account-deletion.md#fencing-and-cleanup) checks every unfinished deletion attempt on each of its alarm passes. An attempt still neither erased nor restored 1 h after its recovery deadline is overdue, which means the same as stuck. Its event has the fingerprint `["account-deletion-stuck"]` and the tags `cup.account.id`, `cup.account_deletion.attempt_id` and `cup.account_deletion.pending`. The last names what is pending: `identity`, `account` or `both`, where the account fence counts as `account`. The flag is the `stuckReported` field of the attempt's job JSON, so it needs no migration. Retries back off to at most 1 h, so the report arrives at most about 2 h after the deadline. The Operator CLI's `overdue` uses the same threshold. The event's message names the attempt ID, so Sentry's Dedupe integration does not drop the report of a second stuck attempt as a repeat of the first.
 
 ## Telemetry libraries
 
@@ -61,12 +67,13 @@ The Worker's `SENTRY_DSN` is a plain var, public by design. The options factory 
 | `"false"`           | set          | Sentry on  |
 | `"false"`           | empty        | throws     |
 
-| Configuration                                                                        | `LOCAL_DEVELOPMENT` | `SENTRY_DSN`                                                                                             |
-| ------------------------------------------------------------------------------------ | ------------------- | -------------------------------------------------------------------------------------------------------- |
-| Production ([`wrangler.jsonc`](../../apps/cloudflare-worker/wrangler.jsonc))         | `"false"`           | the `cup-worker` DSN                                                                                     |
-| `pnpm dev` after `pnpm dev:services`                                                 | `"true"`            | empty, written by the helper                                                                             |
-| [Test Worker](../../qa/test-worker/README.md)                                        | `"true"`            | empty                                                                                                    |
-| [Worker integration tests](../../apps/cloudflare-worker/AGENTS.md#integration-tests) | `"false"`           | `http://test@127.0.0.1:9/1`, a discard port, or the Sentry stub's DSN through `useWorker({ sentryDsn })` |
+| Configuration                                                                        | `LOCAL_DEVELOPMENT` | `SENTRY_DSN`                                                                                                    |
+| ------------------------------------------------------------------------------------ | ------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Production ([`wrangler.jsonc`](../../apps/cloudflare-worker/wrangler.jsonc))         | `"false"`           | the `cup-worker` DSN                                                                                            |
+| `pnpm dev` after `pnpm dev:services`                                                 | `"true"`            | empty, written by the helper                                                                                    |
+| [Test Worker](../../qa/test-worker/README.md)                                        | `"true"`            | empty                                                                                                           |
+| [Worker integration tests](../../apps/cloudflare-worker/AGENTS.md#integration-tests) | `"false"`           | `http://test@127.0.0.1:9/1`, a discard port, or the Sentry stub's DSN through `useWorker({ sentryDsn })`        |
+| [Registry tests](../../libs/registry/wrangler.test.jsonc)                            | `"false"`           | the same discard port, read only by the Sentry-wrapped deletion coordinator test object, or a Sentry stub's DSN |
 
 `SENTRY_TUNNEL_DSNS` is empty everywhere but production, so the tunnel forwards nothing; a test allowlists a Sentry stub DSN through `useWorker({ vars })`, and a suite running the test Worker through `--var`. The Worker's [config test](../../apps/cloudflare-worker/test/wrangler-config.test.ts) and the test Worker's config test pin these values. Tests that check what reaches Sentry start a [Sentry stub](../../qa/sentry-stub/README.md), which records envelopes and forwards nothing.
 
