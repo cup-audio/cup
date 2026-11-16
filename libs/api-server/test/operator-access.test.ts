@@ -15,6 +15,7 @@ import {
   listAccountsResponseSchema,
   type ListAccountDeletionsResponse,
 } from "@cup/operator-api.routes";
+import { logEvent } from "@cup/telemetry.cloudflare";
 
 import type { ApiServerEnvironment } from "#src/api-server-environment.ts";
 import { createApiServer } from "#src/api-server.ts";
@@ -27,6 +28,9 @@ vi.mock("@cup/conversion-grants", async () => ({
   createRootCredential: () => "",
   getGrantSessionCookie: () => undefined,
 }));
+// The helper itself is tested against the Sentry stub in @cup/telemetry.cloudflare; the Worker's
+// Sentry test shows that the operator-mutation record carries the request's trace ID.
+vi.mock(import("@cup/telemetry.cloudflare"), () => ({ logEvent: vi.fn<typeof logEvent>() }));
 
 const accountId = "d1a52e64-3e4d-4a7f-a711-7fb11501e9af";
 const conversionId = "f9cc2e59-46a3-4890-b923-bda04d03b4d0";
@@ -360,13 +364,11 @@ test("records account allowance adjustments and reports the resulting balance", 
   expect(adjustAllowance).toHaveBeenCalledWith(requestId, -60_000, "goodwill");
 });
 
-test("records an operator mutation by method, path, trace ID and status, without the operator's email", async ({
-  onTestFinished,
-}) => {
+test("records an operator mutation by method, path and status, without the operator's email", async () => {
   const { env } = fixture();
   const app = createApiServer({ validateOperatorAccess: async () => true });
-  const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
-  onTestFinished(() => info.mockRestore());
+  const log = vi.mocked(logEvent);
+  log.mockClear();
 
   const response = await app.request(
     adjustmentRequest({
@@ -379,15 +381,20 @@ test("records an operator mutation by method, path, trace ID and status, without
   );
 
   expect(response.status).toBe(200);
-  expect(info.mock.calls.map(([record]) => JSON.parse(String(record)) as unknown)).toEqual([
-    {
-      event: "operator-mutation",
-      method: "POST",
-      path: `/api/operator/accounts/${accountId}/allowance-adjustments`,
-      traceId: expect.stringMatching(/^[0-9a-f]{32}$/),
-      status: 200,
-    },
+  expect(log.mock.calls).toEqual([
+    [
+      "operator-mutation",
+      expect.any(String),
+      {
+        attributes: {
+          "http.request.method": "POST",
+          "url.path": `/api/operator/accounts/${accountId}/allowance-adjustments`,
+          "http.response.status_code": 200,
+        },
+      },
+    ],
   ]);
+  expect(JSON.stringify(log.mock.calls)).not.toContain("operator@example.test");
 });
 
 test("rejects account allowance adjustments for unknown accounts and invalid input", async () => {

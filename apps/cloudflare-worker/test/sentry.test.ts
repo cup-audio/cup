@@ -2,7 +2,7 @@ import { test } from "vitest";
 
 import { errorResponseSchema } from "@cup/listener-api.routes";
 import { LOCAL_OPERATOR_ACCESS_TOKEN } from "@cup/operator-api.routes";
-import { useSentryStub, type SentryStub } from "@cup/sentry-stub";
+import { useSentryStub, type SentryLog, type SentryStub } from "@cup/sentry-stub";
 
 import { useWorker } from "#test/use-worker.ts";
 
@@ -12,6 +12,10 @@ import { useWorker } from "#test/use-worker.ts";
  */
 const MEDIA_PATH = "/api/files/audiobooks/c1/cover-image";
 const MEDIA_URL = `https://cup.audio${MEDIA_PATH}?token=v1.eyJhIjoxfQ.AAAA`;
+
+function isOperatorMutation(log: SentryLog): boolean {
+  return log.attributes["event.name"]?.value === "operator-mutation";
+}
 
 /**
  * Waits for the request's `http.server` span. Sentry sends it in the flush at the end of the
@@ -113,4 +117,47 @@ test("a foreign error arrives with its type but without its message", async ({
     expect.not.objectContaining({ value: expect.anything() }),
   ]);
   expect(event?.exception?.values?.[0]?.type).toBe("HTTPException");
+});
+
+test("GET /api/health answers 200 and sends no trace", async ({ expect, onTestFinished }) => {
+  const sentry = await useSentryStub({ onTestFinished });
+  const worker = await useWorker({ onTestFinished, sentryDsn: sentry.dsn("cup-worker") });
+
+  const response = await worker.fetch("https://cup.audio/api/health");
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ status: "ok" });
+  // An unsampled request sends nothing to wait for. A traced request made afterwards flushes after
+  // the health check's own flush would have, so its span marks the point to assert at.
+  await worker.fetch(`https://cup.audio${MEDIA_PATH}?token=v2.unknown`);
+  await waitForRequestSpan(sentry, MEDIA_PATH);
+  expect(
+    sentry
+      .spans("cup-worker")
+      .filter((span) => span.attributes["url.path"]?.value === "/api/health"),
+  ).toEqual([]);
+});
+
+test("an operator mutation's log record carries its error body's trace ID, and no email", async ({
+  expect,
+  onTestFinished,
+}) => {
+  const sentry = await useSentryStub({ onTestFinished });
+  const worker = await useWorker({ onTestFinished, sentryDsn: sentry.dsn("cup-worker") });
+
+  // A grant without a label fails validation: a 400 whose body carries the request's trace ID.
+  const response = await worker.fetch("http://localhost/api/operator/grants", {
+    method: "POST",
+    headers: { "Cf-Access-Token": LOCAL_OPERATOR_ACCESS_TOKEN, "Content-Type": "application/json" },
+    body: JSON.stringify({ requestId: "4a0c2b4e-8f5d-4c39-9a51-0d7f3c2e6b18" }),
+  });
+
+  expect(response.status).toBe(400);
+  const body = errorResponseSchema.parse(await response.json());
+  await sentry.waitFor("the operator-mutation log record", () =>
+    sentry.logs("cup-worker").some(isOperatorMutation),
+  );
+  const record = sentry.logs("cup-worker").find(isOperatorMutation);
+  expect(record?.trace_id).toBe(body.error.traceId);
+  expect(JSON.stringify(record)).not.toContain("@");
 });

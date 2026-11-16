@@ -1,20 +1,7 @@
 import type { Breadcrumb, Contexts, ErrorEvent, EventHint, Exception } from "@sentry/core";
 
+import { findErrorChain, findErrorType, isCupError } from "@cup/errors";
 import { maskSpanUrls, maskUrl, type StreamedSpan } from "@cup/telemetry.core";
-
-/*
- * Cup throws plain `Error`s with messages it writes itself, so those messages are safe to send. A
- * foreign error's message is not: Drizzle's `DrizzleQueryError` embeds the SQL parameters, and
- * Sentry's linked-errors integration sends every `cause` in the chain with its message. These are
- * the subclasses Cup defines in Worker code; a class missing here only loses its message.
- */
-const CUP_ERROR_CLASS_NAMES = new Set([
-  "AccountLifecycleConflictError",
-  "ContentLimitError",
-  "PermanentNarrationSynthesisError",
-  "RateLimitedNarrationSynthesisError",
-  "UnknownSelectionElementIdsError",
-]);
 
 /** Headers that carry the listener's IP address. */
 const IP_HEADERS = new Set(["cf-connecting-ip", "true-client-ip", "x-forwarded-for", "x-real-ip"]);
@@ -104,20 +91,6 @@ function scrubContexts(contexts: Contexts, mainError: Error | undefined): Contex
   return { ...otherContexts, [extraDataKey]: ownData };
 }
 
-/** The captured error and its causes, outermost first, in the order Sentry numbers them. */
-function findErrorChain(error: unknown): Error[] {
-  const chain: Error[] = [];
-  for (let current = error; current instanceof Error && !chain.includes(current);) {
-    chain.push(current);
-    current = current.cause;
-  }
-  return chain;
-}
-
-function isCupError(error: Error): boolean {
-  return error.constructor === Error || CUP_ERROR_CLASS_NAMES.has(error.constructor.name);
-}
-
 function scrubException(exception: Exception, error: Error | undefined): Exception {
   if (error === undefined || isCupError(error)) {
     return exception.value === undefined
@@ -125,8 +98,7 @@ function scrubException(exception: Exception, error: Error | undefined): Excepti
       : { ...exception, value: maskUrl(exception.value) };
   }
   const { value: _value, ...withoutMessage } = exception;
-  // A class that does not set `name`, such as `DrizzleQueryError`, would otherwise read as `Error`.
-  return { ...withoutMessage, type: error.constructor.name };
+  return { ...withoutMessage, type: findErrorType(error) };
 }
 
 function maskBreadcrumb(breadcrumb: Breadcrumb): Breadcrumb {

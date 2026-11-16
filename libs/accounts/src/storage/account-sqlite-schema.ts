@@ -61,6 +61,12 @@ export const accountConversions = sqliteTable(
     deletingSinceMs: integer("deleting_since_ms"),
     // Set when the alarm takes a marked conversion's one attempt to terminate its workflows.
     workflowTerminationTriedAtMs: integer("workflow_termination_tried_at_ms"),
+    // When the conversion's current stage started, for the stuck-conversion check: preparation,
+    // accepted or retried, while pending; synthesis, whenever segments are reserved, once ready.
+    // The migration that added it set existing rows to their completion or creation time.
+    stageStartedAtMs: integer("stage_started_at_ms"),
+    // Set when the stuck-conversion check reported the current stage; a stage start clears it.
+    stuckReportedAtMs: integer("stuck_reported_at_ms"),
   },
   (table) => [
     check("account_conversion_status", sql`${table.status} IN ('pending', 'ready', 'failed')`),

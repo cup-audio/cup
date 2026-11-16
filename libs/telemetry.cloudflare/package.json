@@ -29,6 +29,7 @@
     "turbo:test": "pnpm run test"
   },
   "dependencies": {
+    "@cup/errors": "workspace:*",
     "@cup/telemetry.core": "workspace:*",
     "@sentry/cloudflare": "catalog:sentry-server",
     "@sentry/core": "catalog:sentry-server"

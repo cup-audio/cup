@@ -71,6 +71,26 @@ test("lists the streamed spans of a project", async ({ onTestFinished }) => {
   expect(stub.errorEvents("cup-worker")).toEqual([]);
 });
 
+test("lists the log records of a project", async ({ onTestFinished }) => {
+  const stub = await useSentryStub({ onTestFinished });
+  const log = {
+    timestamp: 1_800_000_000,
+    level: "warn",
+    body: "The cover image could not be stored.",
+    attributes: { "event.name": { value: "cover-image-unavailable", type: "string" } },
+  };
+  const body = [
+    JSON.stringify({}),
+    JSON.stringify({ type: "log", item_count: 1 }),
+    JSON.stringify({ items: [log] }),
+  ].join("\n");
+
+  await postEnvelope(stub.dsn("cup-worker"), body);
+
+  expect(stub.logs("cup-worker")).toEqual([log]);
+  expect(stub.logs("cup-app")).toEqual([]);
+});
+
 test("answers 404 to a project it does not know, and records nothing", async ({
   onTestFinished,
 }) => {

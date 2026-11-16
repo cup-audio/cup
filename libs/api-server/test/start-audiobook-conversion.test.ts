@@ -14,6 +14,7 @@ const CREATED_RESULT = {
     idempotencyKey: "idempotency-key",
     sourceUrl: "https://example.com/source",
     createdAtMs: 1_000,
+    stageStartedAtMs: 1_000,
     status: "pending",
     lastStartedPhase: "conversion-start",
   },

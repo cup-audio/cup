@@ -1,8 +1,11 @@
+import * as Sentry from "@sentry/cloudflare";
 import { DurableObject } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/durable-sqlite";
 
 import { AccountDurableObject as BaseAccountDurableObject } from "@cup/accounts";
 import type { DeletionAttempt } from "@cup/accounts/lifecycle";
+import { ConversionGrantDurableObject as BaseConversionGrantDurableObject } from "@cup/conversion-grants";
+import { createWorkerSentryOptions } from "@cup/telemetry.cloudflare";
 
 import { DeletionCoordinator } from "#src/account-deletion/deletion-coordinator.ts";
 import { RegistryDurableObject as BaseRegistryDurableObject } from "#src/index.ts";
@@ -190,6 +193,10 @@ export class AccountDurableObject extends BaseAccountDurableObject {
   reconcileForTest() {
     return super.alarm();
   }
+  /** Runs one alarm pass whose stuck-conversion check reads `nowMs` as the current time. */
+  reconcileAtForTest(nowMs: number) {
+    return super.reconcile(nowMs);
+  }
 }
 
 type RegistryControl = {
@@ -220,6 +227,55 @@ export class RegistryDurableObject extends BaseRegistryDurableObject {
 }
 
 export { ConversionGrantDurableObject } from "@cup/conversion-grants";
+
+/**
+ * A grant whose preparation and synthesis dispatch is accepted but never runs, and whose Workflow
+ * instances report no status, so the alarm treats them as unreachable and changes nothing. An alarm
+ * the platform fires does nothing: tests run the alarm with `reconcileAtForTest()`.
+ */
+export class ConversionGrantTestDurableObject extends BaseConversionGrantDurableObject {
+  constructor(
+    context: DurableObjectState,
+    env: {
+      CONVERSION_OWNER_LIMIT: string;
+      REGISTRY: DurableObjectNamespace<RegistryDurableObject>;
+      AUDIO_BUCKET: R2Bucket;
+    },
+  ) {
+    const unreachableInstance = {
+      status: async (): Promise<{ status: string }> => {
+        throw new Error("Workflows are controlled by the test");
+      },
+      restart: async () => {},
+    };
+    const acceptingWorkflow = {
+      create: async () => {},
+      get: async () => unreachableInstance,
+    };
+    super(context, {
+      ...env,
+      PREPARE_AUDIOBOOK_WORKFLOW: acceptingWorkflow,
+      SYNTHESIZE_AUDIO_SEGMENT_WORKFLOW: acceptingWorkflow,
+    });
+  }
+  override async alarm() {}
+  /** Runs one alarm pass whose stuck-conversion check reads `nowMs` as the current time. */
+  reconcileAtForTest(nowMs: number) {
+    return super.reconcile(nowMs);
+  }
+}
+
+/** The account test object wrapped with Sentry as the Worker wraps its Durable Objects. */
+export const SentryAccountDurableObject = Sentry.instrumentDurableObjectWithSentry(
+  (env: object) => createWorkerSentryOptions(env, "account-durable-object"),
+  AccountDurableObject,
+);
+
+/** The grant test object wrapped with Sentry as the Worker wraps its Durable Objects. */
+export const SentryConversionGrantDurableObject = Sentry.instrumentDurableObjectWithSentry(
+  (env: object) => createWorkerSentryOptions(env, "conversion-grant-durable-object"),
+  ConversionGrantTestDurableObject,
+);
 
 export default {
   fetch(): Response {
@@ -316,3 +372,12 @@ export class DeletionTestDurableObject extends DurableObject<{
     this.accountHold?.release();
   }
 }
+
+/**
+ * The deletion coordinator test object wrapped with Sentry as production wraps the registry, so a
+ * test that points SENTRY_DSN at a Sentry stub sees what an alarm pass reports.
+ */
+export const SentryDeletionTestDurableObject = Sentry.instrumentDurableObjectWithSentry(
+  (env) => createWorkerSentryOptions(env, "registry-durable-object"),
+  DeletionTestDurableObject,
+);

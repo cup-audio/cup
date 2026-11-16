@@ -78,6 +78,13 @@
       "when": 1794227166413,
       "tag": "0010_conversion_narration_language",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1794835497507,
+      "tag": "0011_conversion_stuck_check",
+      "breakpoints": true
     }
   ]
 }

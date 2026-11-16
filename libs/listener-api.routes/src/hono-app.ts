@@ -9,6 +9,7 @@ import {
   signedPositionUrlQuerySchema,
   playbackPositionSchema,
   authConfigResponseSchema,
+  healthResponseSchema,
   accountSnapshotSchema,
   accountHistorySchema,
   accountStartResponseSchema,
@@ -40,6 +41,22 @@ const routeBrowserMutationHeadersSchema = browserMutationHeadersSchema.omit({
 });
 const routeStartConversionHeadersSchema = startConversionHeadersSchema.omit({
   "content-type": true,
+});
+
+/**
+ * Sentry's uptime monitor checks this route. It answers while the Worker runs and calls no binding,
+ * so its checks cost nothing beyond the Worker itself.
+ */
+const healthRoute = createRoute({
+  method: "get",
+  path: "/api/health",
+  responses: {
+    200: {
+      description: "The Worker runs.",
+      content: { "application/json": { schema: healthResponseSchema } },
+    },
+    500: errorResponse("Operational error."),
+  },
 });
 
 const authConfigRoute = createRoute({
@@ -396,6 +413,7 @@ export type ListenerApiHandlers<Bindings extends object> = {
   deletionChallenge: ListenerApiRouteHandler<typeof deletionChallengeRoute, Bindings>;
   scheduleDeletion: ListenerApiRouteHandler<typeof scheduleDeletionRoute, Bindings>;
   restoreAccount: ListenerApiRouteHandler<typeof restoreAccountRoute, Bindings>;
+  health: ListenerApiRouteHandler<typeof healthRoute, Bindings>;
   authConfig: ListenerApiRouteHandler<typeof authConfigRoute, Bindings>;
   getHistory: ListenerApiRouteHandler<typeof historyRoute, Bindings>;
   getAccount: ListenerApiRouteHandler<typeof getAccountRoute, Bindings>;
@@ -421,6 +439,7 @@ export function createListenerApi<Bindings extends object>(
     .openapi(deletionChallengeRoute, handlers.deletionChallenge)
     .openapi(scheduleDeletionRoute, handlers.scheduleDeletion)
     .openapi(restoreAccountRoute, handlers.restoreAccount)
+    .openapi(healthRoute, handlers.health)
     .openapi(authConfigRoute, handlers.authConfig)
     .openapi(historyRoute, handlers.getHistory)
     .openapi(getAccountRoute, handlers.getAccount)
@@ -448,6 +467,7 @@ export function createListenerContractApp() {
     deletionChallenge: unavailable,
     scheduleDeletion: unavailable,
     restoreAccount: unavailable,
+    health: unavailable,
     authConfig: unavailable,
     getHistory: unavailable,
     getAccount: unavailable,

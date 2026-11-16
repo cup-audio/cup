@@ -11,7 +11,8 @@ import {
   createConversionArtifactPrefix,
   createSegmentWorkflowId,
 } from "@cup/conversion-contracts";
-import { findRootCauseMessage } from "@cup/errors";
+import { logEvent, reportStuckConversions } from "@cup/telemetry.cloudflare";
+import { TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
 
 import type {
   AccountConversionOutcome,
@@ -302,13 +303,16 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
       try {
         await (await workflow.get(id)).terminate();
       } catch (error) {
-        console.warn(
-          JSON.stringify({
-            event: "conversion-workflow-termination-failed",
-            conversionId,
-            workflowInstanceId: id,
-            error: findRootCauseMessage(error),
-          }),
+        logEvent(
+          "conversion-workflow-termination-failed",
+          "A deleted conversion's Workflow instance could not be terminated.",
+          {
+            attributes: {
+              [TELEMETRY_ATTRIBUTES.CONVERSION_ID]: conversionId,
+              [TELEMETRY_ATTRIBUTES.WORKFLOW_INSTANCE_ID]: id,
+            },
+            error,
+          },
         );
       }
     }
@@ -329,7 +333,7 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
       }
       const account = this.sqlite.snapshot();
       const workflow = this.env.PREPARE_AUDIOBOOK_WORKFLOW;
-      this.sqlite.retryPreparation(conversionId);
+      this.sqlite.retryPreparation(conversionId, Temporal.Now.instant().epochMilliseconds);
       try {
         try {
           await workflow.create({
@@ -359,6 +363,11 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
   }
 
   override async alarm() {
+    await this.reconcile(Temporal.Now.instant().epochMilliseconds);
+  }
+
+  /** One alarm pass; only the stuck-conversion check reads `nowMs`, so tests can choose it. */
+  protected async reconcile(nowMs: number) {
     if (this.sqlite.isErased()) {
       await this.ctx.storage.deleteAlarm();
       return;
@@ -376,6 +385,7 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
     await this.cleanUpDeletedConversions();
     await this.reconcileDispatch();
     await this.reconcileSynthesis();
+    this.reportStuckConversions(nowMs);
     await this.publishRegistryUsage();
     if (
       this.sqlite.snapshot().state === "active" &&
@@ -414,12 +424,10 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
         await this.cleanUpDeletedConversion(conversionId);
       } catch (error) {
         // The marked row stays, so the alarm stays armed and retries.
-        console.warn(
-          JSON.stringify({
-            event: "conversion-deletion-cleanup-failed",
-            conversionId,
-            error: findRootCauseMessage(error),
-          }),
+        logEvent(
+          "conversion-deletion-cleanup-failed",
+          "A pass of a deleted conversion's cleanup failed; the next alarm retries it.",
+          { attributes: { [TELEMETRY_ATTRIBUTES.CONVERSION_ID]: conversionId }, error },
         );
       }
     }
@@ -561,6 +569,19 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
       if (result === "stopped") {
         this.sqlite.releaseAudioSegment(segment.conversionId, segment.sequence);
       }
+    }
+  }
+
+  /** Sends one Sentry event per stuck conversion and stage; see docs/architecture/conversion.md. */
+  private reportStuckConversions(nowMs: number) {
+    const { accountId } = this.sqlite.snapshot();
+    const reported = reportStuckConversions(
+      this.sqlite.stuckConversionCandidates(),
+      { kind: "account", accountId },
+      nowMs,
+    );
+    for (const conversionId of reported) {
+      this.sqlite.markStuckReported(conversionId, nowMs);
     }
   }
 

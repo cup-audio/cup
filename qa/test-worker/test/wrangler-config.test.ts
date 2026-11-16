@@ -16,4 +16,5 @@ test("the test Worker runs as local development and sends nothing to Sentry", ()
 
   expect(vars["LOCAL_DEVELOPMENT"]).toBe("true");
   expect(vars["SENTRY_DSN"]).toBe("");
+  expect(vars["SENTRY_TUNNEL_DSNS"]).toBe("");
 });
