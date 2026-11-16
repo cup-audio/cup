@@ -24,7 +24,7 @@ diff --git a/dist/build/options.d.ts b/dist/build/options.d.ts
 index 5e234b52e78f2d1adf959b9da09cec1d7a99c9bd..a0cb0170209f01e0bdc844ecee8623568c01c950 100644
 --- a/dist/build/options.d.ts
 +++ b/dist/build/options.d.ts
-@@ -59,6 +59,30 @@ export interface BaseCapacitorOptions {
+@@ -59,6 +59,29 @@ export interface BaseCapacitorOptions {
       * @default 2
       */
      appHangTimeoutInterval?: number;
@@ -42,7 +42,6 @@ index 5e234b52e78f2d1adf959b9da09cec1d7a99c9bd..a0cb0170209f01e0bdc844ecee862356
 +        enableCoreDataTracing?: boolean;
 +        enableUserInteractionTracing?: boolean;
 +        enableNetworkBreadcrumbs?: boolean;
-+        enableUncaughtNSExceptionReporting?: boolean;
 +        enableMetricKit?: boolean;
 +        enableMetricKitRawPayload?: boolean;
 +        attachAllThreads?: boolean;
@@ -81,7 +80,7 @@ diff --git a/dist/esm/options.d.ts b/dist/esm/options.d.ts
 index 5e234b52e78f2d1adf959b9da09cec1d7a99c9bd..a0cb0170209f01e0bdc844ecee8623568c01c950 100644
 --- a/dist/esm/options.d.ts
 +++ b/dist/esm/options.d.ts
-@@ -59,6 +59,30 @@ export interface BaseCapacitorOptions {
+@@ -59,6 +59,29 @@ export interface BaseCapacitorOptions {
       * @default 2
       */
      appHangTimeoutInterval?: number;
@@ -99,7 +98,6 @@ index 5e234b52e78f2d1adf959b9da09cec1d7a99c9bd..a0cb0170209f01e0bdc844ecee862356
 +        enableCoreDataTracing?: boolean;
 +        enableUserInteractionTracing?: boolean;
 +        enableNetworkBreadcrumbs?: boolean;
-+        enableUncaughtNSExceptionReporting?: boolean;
 +        enableMetricKit?: boolean;
 +        enableMetricKitRawPayload?: boolean;
 +        attachAllThreads?: boolean;
@@ -116,7 +114,7 @@ diff --git a/ios/Sources/SentryCapacitorPlugin/SentryCapacitorPlugin.swift b/ios
 index 9649d044046d5eedad08fbd3733505f1b5e1c83f..197b2dba817ff8656eedfdab124c13362f068346 100644
 --- a/ios/Sources/SentryCapacitorPlugin/SentryCapacitorPlugin.swift
 +++ b/ios/Sources/SentryCapacitorPlugin/SentryCapacitorPlugin.swift
-@@ -194,9 +194,43 @@ public class SentryCapacitorPlugin: CAPPlugin, CAPBridgedPlugin {
+@@ -194,9 +194,42 @@ public class SentryCapacitorPlugin: CAPPlugin, CAPBridgedPlugin {
              options.sendDefaultPii = sendDefaultPii
          }
  
@@ -141,7 +139,6 @@ index 9649d044046d5eedad08fbd3733505f1b5e1c83f..197b2dba817ff8656eedfdab124c1336
 +            ("enableCoreDataTracing", { options.enableCoreDataTracing = $0 }),
 +            ("enableUserInteractionTracing", { options.enableUserInteractionTracing = $0 }),
 +            ("enableNetworkBreadcrumbs", { options.enableNetworkBreadcrumbs = $0 }),
-+            ("enableUncaughtNSExceptionReporting", { options.enableUncaughtNSExceptionReporting = $0 }),
 +            ("enableMetricKit", { options.enableMetricKit = $0 }),
 +            ("enableMetricKitRawPayload", { options.enableMetricKitRawPayload = $0 }),
 +            ("attachAllThreads", { options.attachAllThreads = $0 }),

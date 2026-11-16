@@ -274,7 +274,7 @@ catalogs:
 packageExtensionsChecksum: sha256-wm7Z6yYv4Ixokkzs7DiTig2uN8gDSvTustMipx0iYZs=
 
 patchedDependencies:
-  '@sentry/capacitor@4.5.0': 5a6baf0c0af04d3bf51affc1c82277c1e5cfd52bae73108673afa95e4b85198d
+  '@sentry/capacitor@4.5.0': e79bcf58a13c35f6cb9a50f5747b9d08777a22238b10cffcb7ca12b813b21d23
 
 importers:
 
@@ -645,7 +645,7 @@ importers:
         version: link:../web-app
       '@sentry/capacitor':
         specifier: catalog:sentry-client
-        version: 4.5.0(patch_hash=5a6baf0c0af04d3bf51affc1c82277c1e5cfd52bae73108673afa95e4b85198d)(@capacitor/core@8.5.3)
+        version: 4.5.0(patch_hash=e79bcf58a13c35f6cb9a50f5747b9d08777a22238b10cffcb7ca12b813b21d23)(@capacitor/core@8.5.3)
     devDependencies:
       '@capacitor/cli':
         specifier: ^8.5.3
@@ -773,7 +773,7 @@ importers:
         version: link:../../.patricktree-stack/libs/utils-ecma
       '@sentry/capacitor':
         specifier: catalog:sentry-client
-        version: 4.5.0(patch_hash=5a6baf0c0af04d3bf51affc1c82277c1e5cfd52bae73108673afa95e4b85198d)(@capacitor/core@8.5.3)(@sentry/react@10.76.2(react@19.3.0))
+        version: 4.5.0(patch_hash=e79bcf58a13c35f6cb9a50f5747b9d08777a22238b10cffcb7ca12b813b21d23)(@capacitor/core@8.5.3)(@sentry/react@10.76.2(react@19.3.0))
       '@sentry/react':
         specifier: catalog:sentry-client
         version: 10.76.2(react@19.3.0)
@@ -1952,7 +1952,7 @@ importers:
         version: link:../telemetry.core
       '@sentry/capacitor':
         specifier: catalog:sentry-client
-        version: 4.5.0(patch_hash=5a6baf0c0af04d3bf51affc1c82277c1e5cfd52bae73108673afa95e4b85198d)(@capacitor/core@8.5.3)(@sentry/react@10.76.2(react@19.3.0))
+        version: 4.5.0(patch_hash=e79bcf58a13c35f6cb9a50f5747b9d08777a22238b10cffcb7ca12b813b21d23)(@capacitor/core@8.5.3)(@sentry/react@10.76.2(react@19.3.0))
       '@sentry/react':
         specifier: catalog:sentry-client
         version: 10.76.2(react@19.3.0)
@@ -11093,14 +11093,14 @@ snapshots:
       '@sentry/replay': 10.76.2
       '@sentry/replay-canvas': 10.76.2
 
-  '@sentry/capacitor@4.5.0(patch_hash=5a6baf0c0af04d3bf51affc1c82277c1e5cfd52bae73108673afa95e4b85198d)(@capacitor/core@8.5.3)':
+  '@sentry/capacitor@4.5.0(patch_hash=e79bcf58a13c35f6cb9a50f5747b9d08777a22238b10cffcb7ca12b813b21d23)(@capacitor/core@8.5.3)':
     dependencies:
       '@capacitor/core': 8.5.3
       '@sentry/browser': 10.76.2
       '@sentry/core': 10.76.2
       '@sentry/types': 10.76.2
 
-  '@sentry/capacitor@4.5.0(patch_hash=5a6baf0c0af04d3bf51affc1c82277c1e5cfd52bae73108673afa95e4b85198d)(@capacitor/core@8.5.3)(@sentry/react@10.76.2(react@19.3.0))':
+  '@sentry/capacitor@4.5.0(patch_hash=e79bcf58a13c35f6cb9a50f5747b9d08777a22238b10cffcb7ca12b813b21d23)(@capacitor/core@8.5.3)(@sentry/react@10.76.2(react@19.3.0))':
     dependencies:
       '@capacitor/core': 8.5.3
       '@sentry/browser': 10.76.2

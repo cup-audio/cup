@@ -17,12 +17,6 @@ export type AndroidLaunchArguments = LaunchArguments & {
    */
   readonly realGoogleSignIn?: boolean;
   /**
-   * The Sentry stub's `cup-app` DSN, `http://<key>@127.0.0.1:<port>/<project>`: the debug build
-   * then reports to it, its JS events through the test Worker's telemetry tunnel. Without it, the
-   * debug build sends nothing to Sentry.
-   */
-  readonly testSentryDsn?: string;
-  /**
    * How long the native player treats signed URLs as valid; pass the test Worker's
    * `signedUrlLifetimeSeconds`.
    */

@@ -32,9 +32,6 @@ export async function initializeTelemetry(
   router: ReturnType<typeof createAppRouter>,
 ): Promise<void> {
   const shell = await readShellContext();
-  if (shell === null) {
-    return;
-  }
   const options = createClientSentryOptions({
     pageOrigin: window.location.origin,
     apiOrigin: apiOrigin(),
@@ -64,16 +61,12 @@ export async function initializeTelemetry(
 }
 
 /**
- * The shell's context, `undefined` in the browser, or `null` in a shell that sends nothing yet.
- * Only an explicit `false` from the native side's `Capacitor.DEBUG` counts as a release build.
+ * The shell's context, or `undefined` in the browser. Only an explicit `false` from the native
+ * side's `Capacitor.DEBUG` counts as a release build.
  */
-async function readShellContext(): Promise<ShellTelemetryContext | undefined | null> {
+async function readShellContext(): Promise<ShellTelemetryContext | undefined> {
   if (!Capacitor.isNativePlatform()) {
     return undefined;
-  }
-  // The iOS shell keeps its installation ID on the device until it moves it into memory too.
-  if (Capacitor.getPlatform() !== "android") {
-    return null;
   }
   const { version, build } = await App.getInfo();
   const testSentryDsn: unknown = Reflect.get(window, TEST_SENTRY_DSN_GLOBAL);

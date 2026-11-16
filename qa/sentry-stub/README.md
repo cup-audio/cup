@@ -6,7 +6,7 @@ Tests that exercise Sentry use this stub (`@cup/sentry-stub`): a local stand-in 
 - `envelopes` holds each accepted envelope with its project, public key, HTTP request headers, envelope header and parsed items. `errorEvents(project)`, `spans(project)` and `logs(project)` return the error events, streamed spans and log records of one project.
 - Sentry sends after the response, at the end of the invocation, so wait before asserting: `waitFor(description, condition)` resolves once `condition` holds and fails after 10 seconds. To assert that nothing was captured, wait for something the same flush sends, such as the request's `http.server` span.
 - A request for another project or path answers 404 and is not recorded.
-- It accepts gzip-compressed envelopes (`Content-Encoding: gzip`), as the native Android SDK sends them; the [mobile E2E suite](../mobile-e2e/README.md#telemetry-android) points the Android shell at it.
+- It accepts gzip-compressed envelopes (`Content-Encoding: gzip`), as the native Android SDK sends them; the [mobile E2E suite](../mobile-e2e/README.md#telemetry) points the Android and iOS shells at it.
 
 The stub models the envelope format of Sentry's developer docs as read on 2026-11-16; it does not check the DSN's key or rate-limit. Unlike the [Resend stub](../resend-stub/README.md), it has no live contract test.
 

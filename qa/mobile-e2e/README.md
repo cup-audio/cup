@@ -149,7 +149,7 @@ The suite launches the installed debug build with the test Worker's origin, alwa
 
 ## Cost and network boundary
 
-The [test Worker's cost and network boundary](../test-worker/README.md#cost-and-network-boundary) applies to this suite. The fake auth provider stands in for Google and Supabase sign-in, and a [Sentry stub](#telemetry-android) for Sentry; a debug build launched without a stub's DSN sends nothing to Sentry.
+The [test Worker's cost and network boundary](../test-worker/README.md#cost-and-network-boundary) applies to this suite. The fake auth provider stands in for Google and Supabase sign-in, and a [Sentry stub](#telemetry) for Sentry; a debug build launched without a stub's DSN sends nothing to Sentry.
 
 ## Sign-in
 
@@ -199,18 +199,27 @@ ExoPlayer's position advances on the emulator started with `-no-audio` (2026-11-
 
 [`test/native-networking.test.ts`](test/native-networking.test.ts), on both platforms, signs in, submits the Add dialog with the source URL the test Worker's fake source preparation accepts, and waits for Recents to list the new conversion. From the Worker's request log it checks that the conversion's `POST /api/account/conversions` arrived without an Origin header but with the `X-Create-Audiobook-From-URL-Request` header and the JSON content type, as only `CapacitorHttp`'s native requests send it, and that every account request since carried a bearer token the test's fake auth provider signed.
 
-## Telemetry (Android)
+## Telemetry
 
-The debug build reports to Sentry only when launched with a Sentry DSN ([mobile app guide](../../apps/mobile-app/README.md#debug-launch-arguments)), so every other test sends nothing. [`test/android/telemetry.test.ts`](test/android/telemetry.test.ts) uses `useMobileApp({ sentryStub: true })`: each test then starts its own [Sentry stub](../sentry-stub/README.md) on the host's `127.0.0.1`, exposes its port to the app with `adb reverse` like the Worker's, and starts the test Worker with the stub's `cup-app` DSN in `SENTRY_TUNNEL_DSNS` through `--var`. The test launches Cup with `testSentryDsn: app.testSentryDsn`, which the device passes as the intent extra `cupTestSentryDsn`.
+The debug build reports to Sentry only when launched with a Sentry DSN ([Android](../../apps/mobile-app/README.md#debug-launch-arguments), [iOS](../../apps/mobile-app/README.md#ios-debug-launch-arguments)), so every other test sends nothing. Each platform's `telemetry.test.ts` uses `useMobileApp({ sentryStub: true })`: each test then starts its own [Sentry stub](../sentry-stub/README.md) on the host's `127.0.0.1`, exposes its port to the app like the Worker's, and starts the test Worker with the stub's `cup-app` DSN in `SENTRY_TUNNEL_DSNS` through `--var`. The test launches Cup with `testSentryDsn: app.testSentryDsn`, which the device passes as the intent extra `cupTestSentryDsn` on Android and as the process arguments `-cupTestSentryDsn <dsn>` on iOS. [`src/telemetry-assertions.ts`](src/telemetry-assertions.ts) holds what both platforms check.
 
-In one test, after signing in from the home link, it reads the account ID from the test Worker with the app's bearer token and checks:
+In one test per platform, after signing in from the home link, it reads the account ID from the test Worker with the app's bearer token and checks that a JS error thrown in the WebView arrives at the stub with that account ID as its user, through the Worker's telemetry tunnel at `/_/e`, and without `CF-Connecting-IP`, `X-Forwarded-For`, `X-Real-IP` or `X-Sentry-Forwarded-For`. It then crashes Cup twice through the Sentry plugin's own `SentryCapacitor.crash()`, called after the WebView script has returned, and relaunches it after each crash. A native SDK can send a crash both while the process ends and again from disk on the next launch, so the test counts each event ID once.
 
-- a JS error thrown in the WebView arrives at the stub with that account ID as its user, through the Worker's telemetry tunnel at `/_/e`, and without `CF-Connecting-IP`, `X-Forwarded-For`, `X-Real-IP` or `X-Sentry-Forwarded-For`;
-- a native crash, which `SentryCapacitor.crash()` throws on the Capacitor plugin thread, arrives with the same user, as a fatal event of release `audio.cup.app@…`, without the native SDK's NDK integration;
-- a second native crash in a second launch carries a different `contexts.device.id`, a 32-hex in-memory installation ID. The stub still sees it, since the organisation's scrubbing rule removes it only at ingest;
+[`test/android/telemetry.test.ts`](test/android/telemetry.test.ts) checks:
+
+- the first native crash, which `crash()` throws on the Capacitor plugin thread, arrives with the same user, as a fatal event of release `audio.cup.app@…`, without the native SDK's NDK integration;
+- the second carries a different `contexts.device.id`, a 32-hex in-memory installation ID. The stub still sees it, since the organisation's scrubbing rule removes it only at ingest;
 - Cup's data directory, listed with `run-as`, holds no `INSTALLATION` file and no `.sentry-native` folder.
 
 After each crash the test waits until Cup's process has exited before launching it again: Sentry's crash handler sends the crash, or stores it for the next launch, before Android ends the process, and a launch that force-stopped Cup sooner lost the crash in four of six runs (2026-11-16). The JS error also proves that the native scope has the user, because the web app applies the user to the native SDK in the same plugin queue that the crash call later goes through.
+
+[`test/ios/telemetry.test.ts`](test/ios/telemetry.test.ts) checks:
+
+- both native crashes, a null-pointer access that the Cocoa SDK reports on the next launch, arrive as fatal events of release `audio.cup.app@…` with the account ID as their user, the second from a launch that started signed in, and without a `contexts.device.id`, which Cocoa does not send;
+- the Cocoa SDK's in-memory installation ID differs between two launches. Cocoa sends it only as the user of an event without one, so the test reads it from the running app: it unsets the native user through the plugin's `setUser` and reads the ID that `fetchNativeDeviceContexts` then reports in its place;
+- `Library/Caches/INSTALLATION` in Cup's data container, found with `xcrun simctl get_app_container`, is an empty directory, and no file in the container holds either installation ID.
+
+The simulator shares the Mac's loopback, so the native SDK reaches the stub at `127.0.0.1` directly. `IosAppDevice.waitForProcessExit()` waits until Appium reports Cup not running before the relaunch. When `crash()` ran inside the WebView script, Appium waited two minutes for the answer of the crashed page, so the script schedules it and returns first.
 
 ## Layout
 

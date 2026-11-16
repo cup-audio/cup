@@ -152,6 +152,7 @@ type SendTarget = Pick<
   | "enableAutoSessionTracking"
   | "enableWatchdogTerminationTracking"
   | "attachThreads"
+  | "cocoaOptions"
 >;
 
 function browserTarget(pageOrigin: string, release: string | undefined): SendTarget | undefined {
@@ -194,8 +195,34 @@ function shellTarget(
     enableAutoSessionTracking: false,
     enableWatchdogTerminationTracking: false,
     attachThreads: true,
+    cocoaOptions: COCOA_OPTIONS,
   };
 }
+
+/**
+ * What the iOS shell's Cocoa SDK records besides crashes, through the workspace's patch of
+ * `@sentry/capacitor`; Android sets the same in its manifest. App-hang tracking and network
+ * breadcrumbs keep Cocoa's defaults, both on.
+ */
+const COCOA_OPTIONS: NonNullable<CapacitorOptions["cocoaOptions"]> = {
+  // Native spans of view controllers, with frames tracking, which automatic performance tracing
+  // carries; no network, file, Core Data or user-interaction spans.
+  tracesSampleRate: 1.0,
+  enableAutoPerformanceTracing: true,
+  enableUIViewControllerTracing: true,
+  enableNetworkTracking: false,
+  enableFileIOTracing: false,
+  enableCoreDataTracing: false,
+  enableUserInteractionTracing: false,
+  // Cocoa's crash handler reports uncaught NSExceptions on iOS; its option of that name is macOS's.
+  enableMetricKit: true,
+  enableMetricKitRawPayload: false,
+  attachAllThreads: true,
+  enableSigtermReporting: false,
+  enableUnhandledCPPExceptionsV2: false,
+  attachScreenshot: false,
+  attachViewHierarchy: false,
+};
 
 function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

@@ -105,3 +105,44 @@ test("a debug shell with a test DSN sends only to it, through the test Worker's 
     release: "audio.cup.app@1.4.0+17",
   });
 });
+
+test("a shell gives the Cocoa SDK native tracing of view controllers and frames only, and its MetricKit reports", () => {
+  const options = createClientSentryOptions({
+    pageOrigin: "capacitor://localhost",
+    apiOrigin: "https://cup.audio",
+    release: "web@0123456789abcdef",
+    router: ROUTER,
+    shell: { debugBuild: false, testSentryDsn: undefined, app: APP_INFO },
+  });
+
+  expect(options?.cocoaOptions).toStrictEqual({
+    tracesSampleRate: 1.0,
+    enableAutoPerformanceTracing: true,
+    enableUIViewControllerTracing: true,
+    enableNetworkTracking: false,
+    enableFileIOTracing: false,
+    enableCoreDataTracing: false,
+    enableUserInteractionTracing: false,
+    enableMetricKit: true,
+    enableMetricKitRawPayload: false,
+    attachAllThreads: true,
+    enableSigtermReporting: false,
+    enableUnhandledCPPExceptionsV2: false,
+    attachScreenshot: false,
+    attachViewHierarchy: false,
+  });
+  // App-hang tracking stays at Cocoa's defaults.
+  expect(options).not.toHaveProperty("enableAppHangTracking");
+  expect(options).not.toHaveProperty("appHangTimeoutInterval");
+});
+
+test("the browser passes no Cocoa options", () => {
+  const options = createClientSentryOptions({
+    pageOrigin: "https://cup.audio",
+    apiOrigin: "https://cup.audio",
+    release: "web@0123456789abcdef",
+    router: ROUTER,
+  });
+
+  expect(options).not.toHaveProperty("cocoaOptions");
+});

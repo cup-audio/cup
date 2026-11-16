@@ -5,6 +5,14 @@ import type { SentryErrorEvent } from "@cup/sentry-stub";
 import { asAndroidAppDevice, type AndroidAppDevice } from "#src/android/android-app-device.ts";
 import { useMobileApp } from "#src/fixtures.ts";
 import { signInFromHomeLink } from "#src/journeys.ts";
+import {
+  crashNatively,
+  distinctEvents,
+  expectJsErrorThroughTunnel,
+  hasException,
+  readAccountId,
+  SENTRY_EVENT_TIMEOUT_MS,
+} from "#src/telemetry-assertions.ts";
 
 /**
  * The Android shell's telemetry against the test's Sentry stub: the debug build reports only
@@ -15,54 +23,17 @@ const app = useMobileApp({ sentryStub: true });
 
 /** What `SentryCapacitor.crash()` throws on the plugin's thread, which kills Cup. */
 const NATIVE_CRASH_MESSAGE = "TEST - Sentry Client Crash";
-/** The headers that would carry the device's IP address to Sentry. */
-const CLIENT_IP_HEADERS = [
-  "cf-connecting-ip",
-  "x-forwarded-for",
-  "x-real-ip",
-  "x-sentry-forwarded-for",
-];
-const NATIVE_EVENT_TIMEOUT_MS = 30_000;
-
-/** The part of the page's `window.Capacitor` the test calls. */
-type SentryCapacitorGlobal = { Plugins: { SentryCapacitor: { crash(): Promise<void> } } };
 
 test("a shell JS error and a native crash arrive with the account ID, and no installation ID outlives a launch", async () => {
   const device = asAndroidAppDevice(app.device);
   await device.launch({ apiOrigin: app.apiOrigin, testSentryDsn: app.testSentryDsn });
   let webView = await device.webView();
   await signInFromHomeLink(device, webView);
-  const accountId = await readAccountId();
+  const accountId = await readAccountId(app);
 
-  // A JS error once the user rule applied the account ID: it went through the tunnel, which
-  // strips the client's IP headers, and it tells that the native scope has the user too.
-  const jsErrorMessage = "mobile-e2e shell JS error";
-  await webView.execute((message) => {
-    setTimeout(() => {
-      throw new Error(message);
-    });
-  }, jsErrorMessage);
-  await app.sentryStub.waitFor(
-    "the shell's JS error with the account ID",
-    () =>
-      app.sentryStub
-        .errorEvents("cup-app")
-        .some((event) => hasException(event, jsErrorMessage) && event.user?.["id"] === accountId),
-    { timeoutMs: NATIVE_EVENT_TIMEOUT_MS },
-  );
-  const jsEvent = app.sentryStub
-    .errorEvents("cup-app")
-    .find((event) => hasException(event, jsErrorMessage));
-  const jsEnvelope = app.sentryStub.envelopes.find(
-    ({ header }) => header["event_id"] === jsEvent?.event_id,
-  );
-  expect(jsEnvelope).toBeDefined();
-  for (const header of CLIENT_IP_HEADERS) {
-    expect(jsEnvelope?.requestHeaders).not.toHaveProperty(header);
-  }
-  expect(app.worker.requests()).toContainEqual(
-    expect.objectContaining({ method: "POST", path: "/_/e" }),
-  );
+  // A JS error once the user rule applied the account ID; it also tells that the native scope has
+  // the user.
+  await expectJsErrorThroughTunnel(app, webView, accountId);
 
   const firstCrash = await crashAndRelaunch(device, webView, 1);
   expect(firstCrash.user?.["id"]).toBe(accountId);
@@ -95,17 +66,14 @@ async function crashAndRelaunch(
   webView: WebdriverIO.Browser,
   count: number,
 ): Promise<SentryErrorEvent> {
-  await webView.execute(() => {
-    // The SDK's own test hook: it throws on the plugin thread, where nothing catches it.
-    const capacitor: SentryCapacitorGlobal = Reflect.get(window, "Capacitor");
-    void capacitor.Plugins.SentryCapacitor.crash();
-  });
+  // The SDK's own test hook throws on the plugin thread, where nothing catches it.
+  await crashNatively(webView);
   // Sentry's crash handler sends the crash, or stores it, before Android ends the process; a launch
   // that force-stopped Cup sooner would cut that short.
   await device.waitForProcessExit();
   await device.launch({ apiOrigin: app.apiOrigin, testSentryDsn: app.testSentryDsn });
   await app.sentryStub.waitFor(`native crash ${count}`, () => nativeCrashes().length >= count, {
-    timeoutMs: NATIVE_EVENT_TIMEOUT_MS,
+    timeoutMs: SENTRY_EVENT_TIMEOUT_MS,
   });
   const crash = nativeCrashes()[count - 1];
   if (crash === undefined) {
@@ -115,35 +83,11 @@ async function crashAndRelaunch(
 }
 
 function nativeCrashes(): SentryErrorEvent[] {
-  return app.sentryStub
-    .errorEvents("cup-app")
-    .filter((event) => event["platform"] === "java" && hasException(event, NATIVE_CRASH_MESSAGE));
-}
-
-/** The account ID of the signed-in listener, read from the test Worker with the app's token. */
-async function readAccountId(): Promise<string> {
-  const authorization = app.worker
-    .requests()
-    .findLast(({ headers }) => headers["authorization"]?.startsWith("Bearer ") === true)?.headers[
-    "authorization"
-  ];
-  if (authorization === undefined) {
-    throw new Error("The app sent no request with a bearer token.");
-  }
-  const response = await fetch(`${app.worker.origin}/api/account`, {
-    headers: { authorization },
-  });
-  const body: unknown = await response.json();
-  const accountId: unknown =
-    typeof body === "object" && body !== null ? Reflect.get(body, "accountId") : undefined;
-  if (!response.ok || typeof accountId !== "string") {
-    throw new Error(`Reading the account failed with ${response.status}.`);
-  }
-  return accountId;
-}
-
-function hasException(event: SentryErrorEvent, message: string): boolean {
-  return (event.exception?.values ?? []).some(({ value }) => value?.includes(message) === true);
+  return distinctEvents(
+    app.sentryStub
+      .errorEvents("cup-app")
+      .filter((event) => event["platform"] === "java" && hasException(event, NATIVE_CRASH_MESSAGE)),
+  );
 }
 
 function sdkIntegrations(event: SentryErrorEvent): unknown {
