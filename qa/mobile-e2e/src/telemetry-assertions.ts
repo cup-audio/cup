@@ -131,14 +131,16 @@ export async function expectNoNativeEvents(
 
 /** The account ID of the signed-in listener, read from the test Worker with the app's token. */
 export async function readAccountId(app: MobileApp): Promise<string> {
-  const authorization = app.worker
-    .requests()
-    .findLast(({ headers }) => headers["authorization"]?.startsWith("Bearer ") === true)?.headers[
-    "authorization"
-  ];
-  if (authorization === undefined) {
-    throw new Error("The app sent no request with a bearer token.");
-  }
+  // Recents can show before the app's first request with the token has reached the Worker.
+  const authorization = await waitFor(
+    "a request of the app with a bearer token",
+    async () =>
+      app.worker
+        .requests()
+        .findLast(({ headers }) => headers["authorization"]?.startsWith("Bearer ") === true)
+        ?.headers["authorization"],
+    10_000,
+  );
   const response = await fetch(`${app.worker.origin}/api/account`, {
     headers: { authorization },
   });
