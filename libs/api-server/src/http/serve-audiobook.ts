@@ -7,6 +7,8 @@ import {
 } from "@cup/audiobook-production";
 import { findNarrationTrackDurations, layOutConsecutively } from "@cup/conversion-contracts";
 import type { RegistryDurableObject } from "@cup/registry";
+import { logEvent } from "@cup/telemetry.cloudflare";
+import { TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
 
 import { resolveConversionReader, type ConversionReader } from "#src/adapters/conversion-reader.ts";
 import type { ApiServerEnvironment } from "#src/api-server-environment.ts";
@@ -245,14 +247,17 @@ async function readTrackPart(
   }
 
   await object?.body.cancel();
-  console.error(
-    JSON.stringify({
-      event: "narration-track-segment-mismatch",
-      conversionId,
-      sequence: part.sequence,
-      expectedByteLength: part.segmentByteLength,
-      storedByteLength: object?.size ?? null,
-    }),
+  logEvent(
+    "narration-track-segment-mismatch",
+    "A stored audio segment is missing or its size differs from its settled duration.",
+    {
+      attributes: {
+        [TELEMETRY_ATTRIBUTES.CONVERSION_ID]: conversionId,
+        [TELEMETRY_ATTRIBUTES.AUDIO_SEGMENT_SEQUENCE]: part.sequence,
+        [TELEMETRY_ATTRIBUTES.AUDIO_SEGMENT_EXPECTED_BYTE_LENGTH]: part.segmentByteLength,
+        [TELEMETRY_ATTRIBUTES.AUDIO_SEGMENT_STORED_BYTE_LENGTH]: object?.size,
+      },
+    },
   );
   return undefined;
 }

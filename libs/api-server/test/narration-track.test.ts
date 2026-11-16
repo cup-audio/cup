@@ -8,6 +8,7 @@ import {
   type SegmentUsage,
 } from "@cup/conversion-contracts";
 import type { GrantState } from "@cup/conversion-grants/contracts";
+import { logEvent } from "@cup/telemetry.cloudflare";
 
 import type { ApiServerEnvironment } from "#src/api-server-environment.ts";
 import { createApiServer } from "#src/api-server.ts";
@@ -17,6 +18,8 @@ vi.mock("@cup/conversion-grants", async () => ({
   ...(await import("@cup/conversion-grants/contracts")),
   ...(await import("@cup/conversion-grants/session")),
 }));
+// The helper itself is tested against the Sentry stub in @cup/telemetry.cloudflare.
+vi.mock(import("@cup/telemetry.cloudflare"), () => ({ logEvent: vi.fn<typeof logEvent>() }));
 
 const SIGNING_KEY = "test-media-url-signing-key";
 const conversionId = "f9cc2e59-46a3-4890-b923-bda04d03b4d0";
@@ -30,6 +33,12 @@ const accountOwner: ConversionOwner = { kind: "account", accountId };
 const SETTLED_DURATIONS = [48, 72, 24];
 
 afterEach(() => vi.restoreAllMocks());
+
+function recordLogEvents() {
+  const log = vi.mocked(logEvent);
+  log.mockClear();
+  return log;
+}
 
 type SegmentRow = Pick<SegmentUsage, "sequence" | "state" | "actualMilliseconds">;
 
@@ -295,20 +304,19 @@ test("a first touched segment whose size differs from its settled duration fails
   const { app, env, storedSegments } = fixture();
   const [firstKey] = storedSegments.keys();
   storedSegments.set(firstKey!, new Uint8Array(770));
-  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  const log = recordLogEvents();
 
   const response = await app.request(await signTrackUrl(), {}, env);
 
   expect(response.status).toBe(500);
-  expect(log).toHaveBeenCalledWith(
-    JSON.stringify({
-      event: "narration-track-segment-mismatch",
-      conversionId,
-      sequence: 0,
-      expectedByteLength: 768,
-      storedByteLength: 770,
-    }),
-  );
+  expect(log).toHaveBeenCalledWith("narration-track-segment-mismatch", expect.any(String), {
+    attributes: {
+      "cup.conversion.id": conversionId,
+      "cup.audio_segment.sequence": 0,
+      "cup.audio_segment.expected_byte_length": 768,
+      "cup.audio_segment.stored_byte_length": 770,
+    },
+  });
 });
 
 test("a later segment whose size differs or which is missing errors the stream and is logged", async () => {
@@ -320,7 +328,7 @@ test("a later segment whose size differs or which is missing errors the stream a
     } else {
       storedSegments.delete(lastKey);
     }
-    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const log = recordLogEvents();
 
     const response = await app.request(await signTrackUrl(), {}, env);
 
@@ -328,16 +336,14 @@ test("a later segment whose size differs or which is missing errors the stream a
     await expect(response.arrayBuffer()).rejects.toThrow(
       "Narration track segment 2 could not be read",
     );
-    expect(log).toHaveBeenCalledWith(
-      JSON.stringify({
-        event: "narration-track-segment-mismatch",
-        conversionId,
-        sequence: 2,
-        expectedByteLength: 384,
-        storedByteLength: replace === "mismatch" ? 100 : null,
-      }),
-    );
-    log.mockRestore();
+    expect(log).toHaveBeenCalledWith("narration-track-segment-mismatch", expect.any(String), {
+      attributes: {
+        "cup.conversion.id": conversionId,
+        "cup.audio_segment.sequence": 2,
+        "cup.audio_segment.expected_byte_length": 384,
+        "cup.audio_segment.stored_byte_length": replace === "mismatch" ? 100 : undefined,
+      },
+    });
   }
 });
 

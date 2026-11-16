@@ -87,7 +87,7 @@ The libraries are code boundaries inside the deployed system, not separate netwo
 - [Duration ledger](../../libs/duration-ledger/README.md): the allowance, reservation, and charge storage that accounts and grants share.
 - [Conversion contracts](../../libs/conversion-contracts/README.md): runtime-independent shared schemas, types, and duration calculations; its [lint configuration](../../libs/conversion-contracts/oxlint.config.ts) refuses `cloudflare:` and `node:` imports, because the Worker, the workflows, and the browser load it.
 - [Rolling limits](../../libs/rolling-limits/README.md): the rolling-window rate limiter, whose table each of the three objects keeps in its own database.
-- [Errors](../../libs/errors/README.md): error helpers shared by server code, including the rule that server logs record only a caught error's root cause. It imports no Cup package, so the graph below leaves it out.
+- [Errors](../../libs/errors/README.md): error helpers shared by server code, including the exception chain: a caught error's root cause and wrapper types, with messages kept only for Cup's own errors. It imports no Cup package, so the graph below leaves it out.
 
 ```mermaid
 flowchart TD

@@ -1,2 +1,8 @@
 export { assertUnreachable } from "#src/assert-unreachable.ts";
-export { findRootCause, findRootCauseDescription, findRootCauseMessage } from "#src/root-cause.ts";
+export {
+  describeExceptionChain,
+  findErrorChain,
+  findErrorType,
+  isCupError,
+  type ExceptionChain,
+} from "#src/exception-chain.ts";

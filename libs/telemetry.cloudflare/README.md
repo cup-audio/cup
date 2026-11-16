@@ -8,10 +8,12 @@ Sentry's options and privacy hooks for the Worker, its Durable Objects and its W
 
 The on/off rule: Sentry is off when `LOCAL_DEVELOPMENT` is `"true"` and `SENTRY_DSN` is empty, on when `LOCAL_DEVELOPMENT` is anything else and `SENTRY_DSN` is set, and the callback throws on the two contradictions. Cup code captures with `captureException` from `@sentry/core` directly; this library wraps no Sentry API.
 
-The options include the server `beforeSend` and `beforeSendSpan` from [`server-before-send.ts`](src/server-before-send.ts). They null the IP address, drop IP headers and the time zone, mask URLs with `@cup/telemetry.core`, and keep error messages only for Cup's own errors: plain `Error`s and the subclasses listed in `CUP_ERROR_CLASS_NAMES`. Add a new Cup error subclass to that list, or its message is dropped.
+The options include the server `beforeSend` and `beforeSendSpan` from [`server-before-send.ts`](src/server-before-send.ts). They null the IP address, drop IP headers and the time zone, mask URLs with `@cup/telemetry.core`, and keep error messages only for Cup's own errors, by the rule of [`@cup/errors`](../errors/README.md). The options also set `beforeSendLog` from `@cup/telemetry.core`, which drops records below `info`.
+
+[`logEvent(event, message, { attributes, error })`](src/log-event.ts) writes one log record of the [catalogue](../telemetry.core/src/log-events.ts) through `Sentry.logger`, at the event's fixed severity, with the event name as `event.name`. Pass details as `attributes` under `TELEMETRY_ATTRIBUTES` keys or semantic-convention names, never an email address, and a caught error as `error`: the record then carries its root cause as `exception.*` and the wrapper types as `cup.exception.chain`. Without an active Sentry client, as in local development and tests, it writes nothing. Tests of code that logs mock `logEvent` with `vi.mock` and assert on its calls.
 
 ## Tests
 
-The unit tests cover the on/off table and the hooks. [`worker-sentry-pipeline.test.ts`](test/worker-sentry-pipeline.test.ts) runs the options through the real SDK against the [Sentry stub](../../qa/sentry-stub/README.md), for the wrapped foreign error that no Worker request path produces today.
+The unit tests cover the on/off table and the hooks. [`worker-sentry-pipeline.test.ts`](test/worker-sentry-pipeline.test.ts) runs the options through the real SDK against the [Sentry stub](../../qa/sentry-stub/README.md), for the wrapped foreign error that no Worker request path produces today; [`log-event.test.ts`](test/log-event.test.ts) does the same for a warning log with its root cause and exception chain.
 
 Only this library and packages that depend on it may depend on `@sentry/cloudflare` ([SDK family check](../../qa/workspace-checks/README.md#sentry-sdk-family-check)); take `@sentry/cloudflare` and `@sentry/core` from the `sentry-server` catalog.

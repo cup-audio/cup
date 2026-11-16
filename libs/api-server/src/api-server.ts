@@ -32,6 +32,7 @@ import {
   type OperatorApiHandlers,
 } from "@cup/operator-api.routes";
 import type { RegistryDurableObject } from "@cup/registry";
+import { logEvent } from "@cup/telemetry.cloudflare";
 
 import { resolveConversionDispatch } from "#src/adapters/conversion-dispatch.ts";
 import { resolveConversionReader } from "#src/adapters/conversion-reader.ts";
@@ -1374,16 +1375,15 @@ export function createApiServer(dependencies: ApiServerDependencies = production
     }
     await next();
     if (context.req.method !== "GET" && context.req.method !== "HEAD") {
-      console.info(
-        JSON.stringify({
-          event: "operator-mutation",
-          operatorEmail: context.env.OPERATOR_EMAIL,
-          method: context.req.method,
-          path: context.req.path,
-          requestId: context.get("requestId"),
-          status: context.res.status,
-        }),
-      );
+      // No operator email: no log record carries an email address.
+      logEvent("operator-mutation", "The operator changed something through the Operator API.", {
+        attributes: {
+          "http.request.method": context.req.method,
+          "url.path": context.req.path,
+          "http.response.status_code": context.res.status,
+          "cup.request.id": context.get("requestId"),
+        },
+      });
     }
     return context.res;
   });

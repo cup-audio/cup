@@ -17,7 +17,6 @@ import {
   conversionParamsSchema,
   type ConversionParams,
 } from "@cup/conversion-contracts";
-import { findRootCauseDescription } from "@cup/errors";
 import { createNarrationDocument } from "@cup/narration-document-creation";
 import type {
   NarrationContentSelectionResult,
@@ -31,6 +30,8 @@ import type {
   SourceMaterialPreparer,
   CoverImageLoader,
 } from "@cup/prepare-source-material";
+import { logEvent } from "@cup/telemetry.cloudflare";
+import { TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
 
 import { resolveConversionExecution } from "#src/conversion-execution.ts";
 import type { AudiobookWorkflowEnvironment } from "#src/workflow-environment.ts";
@@ -183,6 +184,17 @@ export async function runPrepareAudiobookWorkflow({
         synchronizationUnits.length > MAX_NARRATION_CHUNKS
       ) {
         stage = "content-limit";
+        logEvent(
+          "content-limit",
+          "The narration exceeds the conversion's content ceiling; the preparation fails.",
+          {
+            attributes: {
+              [TELEMETRY_ATTRIBUTES.CONVERSION_ID]: conversionId,
+              [TELEMETRY_ATTRIBUTES.NARRATION_TEXT_CHARACTERS]: narrationTextCharacters,
+              [TELEMETRY_ATTRIBUTES.NARRATION_CHUNKS]: synchronizationUnits.length,
+            },
+          },
+        );
         throw new ContentLimitError();
       }
 
@@ -340,9 +352,9 @@ async function storeDeclaredCoverImage({
       return outcome.coverImage;
     }
 
-    logMissingCoverImage(conversionId, outcome.reason);
+    logMissingCoverImage(conversionId, { reason: outcome.reason });
   } catch (error) {
-    logMissingCoverImage(conversionId, findRootCauseDescription(error));
+    logMissingCoverImage(conversionId, { error });
   }
 
   return undefined;
@@ -373,17 +385,19 @@ async function detectNarrationLanguage({
   });
 
   if (result.fallbackReason !== undefined) {
-    console.warn(
-      JSON.stringify({
-        event: "narration-language-fallback",
-        conversionId,
-        declaredLanguage: input.declaredLanguage,
-        narrationLanguage: result.narrationLanguage,
-        reason: result.fallbackReason,
-        ...(result.fallbackReason === "detector-error"
-          ? { error: findRootCauseDescription(result.detectorError) }
-          : {}),
-      }),
+    logEvent(
+      "narration-language-fallback",
+      "Narration language detection fell back to the declared language or to none.",
+      {
+        attributes: {
+          [TELEMETRY_ATTRIBUTES.CONVERSION_ID]: conversionId,
+          [TELEMETRY_ATTRIBUTES.DECLARED_HTML_LANG]: input.declaredLanguage?.htmlLang,
+          [TELEMETRY_ATTRIBUTES.DECLARED_OG_LOCALE]: input.declaredLanguage?.ogLocale,
+          [TELEMETRY_ATTRIBUTES.NARRATION_LANGUAGE]: result.narrationLanguage,
+          [TELEMETRY_ATTRIBUTES.NARRATION_LANGUAGE_FALLBACK_REASON]: result.fallbackReason,
+        },
+        ...(result.fallbackReason === "detector-error" ? { error: result.detectorError } : {}),
+      },
     );
   }
 
@@ -391,22 +405,39 @@ async function detectNarrationLanguage({
     result.narrationLanguage !== undefined &&
     getNarrationLanguageSupport(result.narrationLanguage, SPEECH_CONFIG) === "unspeakable"
   ) {
-    console.warn(
-      JSON.stringify({
-        event: "narration-language-unspeakable",
-        conversionId,
-        narrationLanguage: result.narrationLanguage,
-        provider: SPEECH_CONFIG.provider,
-        model: SPEECH_CONFIG.model,
-      }),
+    logEvent(
+      "narration-language-unspeakable",
+      "The narration language is one the speech model cannot speak.",
+      {
+        attributes: {
+          [TELEMETRY_ATTRIBUTES.CONVERSION_ID]: conversionId,
+          [TELEMETRY_ATTRIBUTES.NARRATION_LANGUAGE]: result.narrationLanguage,
+          "gen_ai.provider.name": SPEECH_CONFIG.provider,
+          "gen_ai.request.model": SPEECH_CONFIG.model,
+        },
+      },
     );
   }
 
   return result;
 }
 
-function logMissingCoverImage(conversionId: string, reason: string) {
-  console.warn(JSON.stringify({ event: "cover-image-unavailable", conversionId, reason }));
+/** Either the loader's refusal reason or the error that ended the cover image step. */
+function logMissingCoverImage(
+  conversionId: string,
+  cause: { reason: string; error?: never } | { reason?: never; error: unknown },
+) {
+  logEvent(
+    "cover-image-unavailable",
+    "The declared cover image could not be stored; the audiobook goes without one.",
+    {
+      attributes: {
+        [TELEMETRY_ATTRIBUTES.CONVERSION_ID]: conversionId,
+        [TELEMETRY_ATTRIBUTES.COVER_IMAGE_REFUSAL_REASON]: cause.reason,
+      },
+      error: cause.error,
+    },
+  );
 }
 
 class ContentLimitError extends Error {

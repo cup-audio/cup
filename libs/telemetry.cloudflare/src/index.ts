@@ -1,3 +1,4 @@
+export { logEvent, type LogAttributeValue, type LogEventDetails } from "#src/log-event.ts";
 export {
   createWorkerSentryOptions,
   type WorkerComponent,

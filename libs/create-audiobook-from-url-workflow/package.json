@@ -34,11 +34,12 @@
     "@cup/audiobook-production": "workspace:*",
     "@cup/conversion-contracts": "workspace:*",
     "@cup/conversion-grants": "workspace:*",
-    "@cup/errors": "workspace:*",
     "@cup/narration-document-creation": "workspace:*",
     "@cup/narration-source-analysis": "workspace:*",
     "@cup/prepare-source-material": "workspace:*",
     "@cup/registry": "workspace:*",
+    "@cup/telemetry.cloudflare": "workspace:*",
+    "@cup/telemetry.core": "workspace:*",
     "temporal-polyfill": "^1.0.5",
     "zod": "^4.6.5"
   },

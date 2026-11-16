@@ -1,7 +1,7 @@
 import type { CloudflareOptions } from "@sentry/cloudflare";
 import { extraErrorDataIntegration } from "@sentry/cloudflare";
 
-import { TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
+import { beforeSendLog, TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
 
 import { beforeSendServerEvent, beforeSendServerSpan } from "#src/server-before-send.ts";
 
@@ -89,6 +89,8 @@ export function createWorkerSentryOptions(
     integrations: [extraErrorDataIntegration()],
     beforeSend: beforeSendServerEvent,
     beforeSendSpan: beforeSendServerSpan,
+    // Logs are always on in SDK 11; only `logEvent` writes them, and this drops `debug`.
+    beforeSendLog,
     // Cup sends no metrics.
     beforeSendMetric: () => null,
   };

@@ -4,6 +4,8 @@ import { Temporal } from "temporal-polyfill";
 import { z } from "zod";
 
 import { deletionAttemptSchema, type DeletionAttempt } from "@cup/accounts/lifecycle";
+import { logEvent } from "@cup/telemetry.cloudflare";
+import { TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
 
 import type { ProviderRequest } from "#src/providers/provider-request.ts";
 import { sendResendEmail, type ResendEnvironment } from "#src/providers/resend-email.ts";
@@ -193,8 +195,13 @@ export class DeletionCoordinator {
             await deleteSupabaseIdentity(this.env, job.subject, this.provider);
             job.identityDone = true;
             this.save(job);
-          } catch {
-            /* Retry exact identity on the durable alarm. */
+          } catch (error) {
+            // The durable alarm retries the exact identity.
+            logEvent(
+              "account-deletion-identity-failed",
+              "An account deletion pass could not delete the Supabase identity; the alarm retries it.",
+              { attributes: deletionAttributes(job), error },
+            );
           }
         }
         if (!job.accountDone) {
@@ -202,8 +209,13 @@ export class DeletionCoordinator {
             await account.eraseAccount(job.attemptId);
             job.accountDone = true;
             this.save(job);
-          } catch {
-            /* Writers or storage outages remain pending. */
+          } catch (error) {
+            // Undrained writers or a storage outage leave the account pending; the alarm retries it.
+            logEvent(
+              "account-deletion-erasure-failed",
+              "An account deletion pass could not erase the account; the alarm retries it.",
+              { attributes: deletionAttributes(job), error },
+            );
           }
         }
         if (job.identityDone && job.accountDone) {
@@ -392,7 +404,7 @@ export class DeletionCoordinator {
 
   private async sendNotifications() {
     for (const row of this.database
-      .select({ json: deletionNotifications.json })
+      .select({ attemptId: deletionNotifications.attemptId, json: deletionNotifications.json })
       .from(deletionNotifications)
       .where(
         and(
@@ -420,6 +432,7 @@ export class DeletionCoordinator {
       ) {
         notification.state = "expired";
         this.saveNotification(notification);
+        logUndeliveredNotice(row.attemptId, notification);
         continue;
       }
       notification.firstAttemptMs ??= nowMs;
@@ -461,6 +474,9 @@ export class DeletionCoordinator {
         notification.firstAttemptMs + 23 * 3_600_000,
       );
       this.saveNotification(notification);
+      if (notification.state === "failed") {
+        logUndeliveredNotice(row.attemptId, notification);
+      }
     }
   }
 
@@ -505,4 +521,30 @@ export class DeletionCoordinator {
       this.database.delete(deletionJobs).where(eq(deletionJobs.attemptId, job.attemptId)).run();
     });
   }
+}
+
+/** The opaque IDs of a deletion's log records; never its subject or email address. */
+function deletionAttributes(job: DeletionJob) {
+  return {
+    [TELEMETRY_ATTRIBUTES.ACCOUNT_ID]: job.accountId,
+    [TELEMETRY_ATTRIBUTES.ACCOUNT_DELETION_ATTEMPT_ID]: job.attemptId,
+  };
+}
+
+/** A notice that ended `failed` or `expired`, by its type and attempt; never its address. */
+function logUndeliveredNotice(attemptId: string, notification: Notification) {
+  logEvent(
+    "account-deletion-notice-undelivered",
+    "An account deletion notice ended without being delivered.",
+    {
+      attributes: {
+        [TELEMETRY_ATTRIBUTES.ACCOUNT_DELETION_ATTEMPT_ID]: attemptId,
+        // The key is `<attemptId>:<type>`, as `enqueue` builds it.
+        [TELEMETRY_ATTRIBUTES.ACCOUNT_DELETION_NOTICE_TYPE]: notification.key.slice(
+          attemptId.length + 1,
+        ),
+        [TELEMETRY_ATTRIBUTES.ACCOUNT_DELETION_NOTICE_STATE]: notification.state,
+      },
+    },
+  );
 }

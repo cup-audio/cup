@@ -855,12 +855,15 @@ importers:
       '@cup/duration-ledger':
         specifier: workspace:*
         version: link:../duration-ledger
-      '@cup/errors':
-        specifier: workspace:*
-        version: link:../errors
       '@cup/rolling-limits':
         specifier: workspace:*
         version: link:../rolling-limits
+      '@cup/telemetry.cloudflare':
+        specifier: workspace:*
+        version: link:../telemetry.cloudflare
+      '@cup/telemetry.core':
+        specifier: workspace:*
+        version: link:../telemetry.core
       drizzle-orm:
         specifier: ^0.45.4
         version: 0.45.4
@@ -974,6 +977,12 @@ importers:
       '@cup/registry':
         specifier: workspace:*
         version: link:../registry
+      '@cup/telemetry.cloudflare':
+        specifier: workspace:*
+        version: link:../telemetry.cloudflare
+      '@cup/telemetry.core':
+        specifier: workspace:*
+        version: link:../telemetry.core
       '@sentry/core':
         specifier: catalog:sentry-server
         version: 11.10.0
@@ -1212,9 +1221,6 @@ importers:
       '@cup/conversion-grants':
         specifier: workspace:*
         version: link:../conversion-grants
-      '@cup/errors':
-        specifier: workspace:*
-        version: link:../errors
       '@cup/narration-document-creation':
         specifier: workspace:*
         version: link:../narration-document-creation
@@ -1227,6 +1233,12 @@ importers:
       '@cup/registry':
         specifier: workspace:*
         version: link:../registry
+      '@cup/telemetry.cloudflare':
+        specifier: workspace:*
+        version: link:../telemetry.cloudflare
+      '@cup/telemetry.core':
+        specifier: workspace:*
+        version: link:../telemetry.core
       temporal-polyfill:
         specifier: ^1.0.5
         version: 1.0.5
@@ -1773,6 +1785,12 @@ importers:
       '@cup/rolling-limits':
         specifier: workspace:*
         version: link:../rolling-limits
+      '@cup/telemetry.cloudflare':
+        specifier: workspace:*
+        version: link:../telemetry.cloudflare
+      '@cup/telemetry.core':
+        specifier: workspace:*
+        version: link:../telemetry.core
       drizzle-orm:
         specifier: ^0.45.4
         version: 0.45.4
@@ -1868,6 +1886,9 @@ importers:
 
   libs/telemetry.cloudflare:
     dependencies:
+      '@cup/errors':
+        specifier: workspace:*
+        version: link:../errors
       '@cup/telemetry.core':
         specifier: workspace:*
         version: link:../telemetry.core
