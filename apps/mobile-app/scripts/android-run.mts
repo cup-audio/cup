@@ -1,23 +1,22 @@
-/* oxlint-disable node/no-process-env -- The script reads the host's Android SDK location and the adb device selection. */
+/* oxlint-disable node/no-process-env -- The script passes the environment on to Gradle and reads the adb device selection. */
 /*
  * Builds the debug app, installs it on the one connected Android device or emulator, and launches
  * it. `.mts` because this package is CommonJS for `capacitor.config.ts`.
  */
 import childProcess from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import timers from "node:timers/promises";
+
+import { DEFAULT_SDK_ROOT, resolveAndroidSdkRoot } from "#scripts/android-sdk.mts";
 
 const APP_ID = "audio.cup.app";
 const MAIN_ACTIVITY = `${APP_ID}/.MainActivity`;
 const MOBILE_APP_ROOT = path.resolve(import.meta.dirname, "..");
 const ANDROID_PROJECT = path.join(MOBILE_APP_ROOT, "android");
-const DEFAULT_SDK_ROOT = path.join(os.homedir(), "Library", "Android", "sdk");
 const SECONDS_TO_SURVIVE_LAUNCH = 5;
 
-// The same lookup order as the mobile E2E suite's preflight (`qa/mobile-e2e/src/android/preflight.ts`).
-const sdkRoot = process.env["ANDROID_HOME"] ?? process.env["ANDROID_SDK_ROOT"] ?? DEFAULT_SDK_ROOT;
+const sdkRoot = resolveAndroidSdkRoot();
 const adb = path.join(sdkRoot, "platform-tools", "adb");
 if (!fs.existsSync(adb)) {
   fail(

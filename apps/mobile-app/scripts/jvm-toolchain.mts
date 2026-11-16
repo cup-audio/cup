@@ -1,4 +1,4 @@
-/* oxlint-disable node/no-process-env -- The check reads the host's Android SDK and Java locations. */
+/* oxlint-disable node/no-process-env -- The check reads the host's Java location. */
 /*
  * Checks the toolchain the JVM unit tests need, the Android SDK and Java 21, and prints every
  * problem with its fix. The review gate runs it as a prerequisite; `test-jvm.mts` runs it first.
@@ -6,17 +6,15 @@
  */
 import childProcess from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 
-const DEFAULT_SDK_ROOT = path.join(os.homedir(), "Library", "Android", "sdk");
+import { DEFAULT_SDK_ROOT, resolveAndroidSdkRoot } from "#scripts/android-sdk.mts";
+
 const ANDROID_STUDIO_JAVA_HOME = "/Applications/Android Studio.app/Contents/jbr/Contents/Home";
 
 /** Returns the Android SDK root Gradle gets as `ANDROID_HOME`, or exits with every problem. */
 export function requireJvmToolchain(): string {
-  // The same lookup order as the mobile E2E suite's preflight (`qa/mobile-e2e/src/android/preflight.ts`).
-  const sdkRoot =
-    process.env["ANDROID_HOME"] ?? process.env["ANDROID_SDK_ROOT"] ?? DEFAULT_SDK_ROOT;
+  const sdkRoot = resolveAndroidSdkRoot();
   const problems: string[] = [];
   if (!fs.existsSync(path.join(sdkRoot, "platforms"))) {
     problems.push(

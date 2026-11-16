@@ -4,6 +4,12 @@
   "imports": {
     "#scripts/*": "./scripts/*"
   },
+  "exports": {
+    "./android-sdk": {
+      "types": "./dist/types/android-sdk.d.mts",
+      "default": "./scripts/android-sdk.mts"
+    }
+  },
   "scripts": {
     "android:run": "node scripts/android-run.mts",
     "build": "turbo run turbo:build && pnpm run native:sync",
