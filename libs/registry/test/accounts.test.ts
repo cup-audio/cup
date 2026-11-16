@@ -852,6 +852,8 @@ test("due deletion and email work cannot be starved by 100 future or terminal re
   const storage = await worker.getDurableObjectStorage("DELETION_TEST", { name });
   const now = Temporal.Now.instant().epochMilliseconds;
   const accountId = crypto.randomUUID();
+  const jobs: string[] = [];
+  const notifications: string[] = [];
   for (let index = 0; index < 102; index++) {
     const attemptId = crypto.randomUUID();
     const due = index >= 100;
@@ -868,13 +870,8 @@ test("due deletion and email work cannot be starved by 100 future or terminal re
       failures: 0,
       nextAttemptMs: due ? now - 1 : now + 86400000,
     };
-    await storage.exec(
-      "INSERT INTO deletion_jobs VALUES (?, ?)",
-      attemptId,
-      JSON.stringify(payload),
-    );
-    await storage.exec(
-      "INSERT INTO deletion_notifications VALUES (?, ?, ?)",
+    jobs.push(attemptId, JSON.stringify(payload));
+    notifications.push(
       attemptId + ":scheduled",
       attemptId,
       JSON.stringify({
@@ -889,6 +886,10 @@ test("due deletion and email work cannot be starved by 100 future or terminal re
       }),
     );
   }
+  // Several rows per statement: 204 single-row inserts, each a round trip to the harness,
+  // outlasted the test timeout under a full parallel test run.
+  await insertRows(storage, "deletion_jobs", 2, jobs);
+  await insertRows(storage, "deletion_notifications", 3, notifications);
   const receipts = await testObject.reconcileForTest();
   expect(receipts).toHaveLength(2);
 });
@@ -1828,3 +1829,22 @@ test("conversion deletions list each marked conversion with its marker time", as
     keptConversionId,
   ]);
 });
+
+/**
+ * Inserts rows of `columns` values each, 30 rows per statement, which stays below the variable
+ * limit of a Durable Object's SQLite.
+ */
+async function insertRows(
+  storage: { exec(query: string, ...bindings: string[]): Promise<unknown> },
+  table: string,
+  columns: number,
+  values: readonly string[],
+) {
+  const rowsPerStatement = 30;
+  const row = `(${Array.from({ length: columns }, () => "?").join(", ")})`;
+  for (let start = 0; start < values.length; start += rowsPerStatement * columns) {
+    const chunk = values.slice(start, start + rowsPerStatement * columns);
+    const rows = Array.from({ length: chunk.length / columns }, () => row).join(", ");
+    await storage.exec(`INSERT INTO ${table} VALUES ${rows}`, ...chunk);
+  }
+}
