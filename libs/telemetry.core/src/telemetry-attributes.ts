@@ -19,8 +19,13 @@ export const TELEMETRY_ATTRIBUTES = {
   EXCEPTION_CHAIN: "cup.exception.chain",
   /** A Cloudflare Workflow instance ID, such as a segment's; a preparation's is its conversion ID. */
   WORKFLOW_INSTANCE_ID: "cup.workflow_instance.id",
-  /** An account deletion's attempt ID; the account goes in `ACCOUNT_ID`. */
+  /** The account deletion attempt, an opaque ID distinct from the account ID. */
   ACCOUNT_DELETION_ATTEMPT_ID: "cup.account_deletion.attempt_id",
+  /**
+   * What an unfinished account deletion still waits for: `identity` (the Supabase identity),
+   * `account` (the account's fence or erasure), or `both`.
+   */
+  ACCOUNT_DELETION_PENDING: "cup.account_deletion.pending",
   /** Which account deletion notice: `scheduled` or `completed`. */
   ACCOUNT_DELETION_NOTICE_TYPE: "cup.account_deletion.notice_type",
   /** How a notice ended undelivered: `failed` or `expired`. */

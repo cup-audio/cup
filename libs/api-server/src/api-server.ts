@@ -1,6 +1,7 @@
 import { captureException } from "@sentry/core";
 import { Hono, type Context, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
+import { cors } from "hono/cors";
 import { NONCE, secureHeaders } from "hono/secure-headers";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { Temporal } from "temporal-polyfill";
@@ -32,7 +33,7 @@ import {
   type OperatorApiHandlers,
 } from "@cup/operator-api.routes";
 import type { RegistryDurableObject } from "@cup/registry";
-import { logEvent } from "@cup/telemetry.cloudflare";
+import { handleTelemetryTunnelRequest, logEvent } from "@cup/telemetry.cloudflare";
 
 import { resolveConversionDispatch } from "#src/adapters/conversion-dispatch.ts";
 import { resolveConversionReader } from "#src/adapters/conversion-reader.ts";
@@ -72,6 +73,10 @@ import { startAudiobookConversion } from "#src/use-cases/start-audiobook-convers
 
 type GrantStub = DurableObjectStub<ConversionGrantDurableObject>;
 type RegistryStub = DurableObjectStub<RegistryDurableObject>;
+
+/** The telemetry tunnel's path, outside `/api/*`. */
+const TELEMETRY_TUNNEL_PATH = "/_/e";
+
 const accessKeySets = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
 type ApiServerDependencies = {
   validateOperatorAccess(request: Request, env: ApiServerEnvironment): Promise<boolean>;
@@ -195,6 +200,9 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
       );
     }
     return context.json(toAccountSnapshotResponse(result.account), 200);
+  },
+  health(context) {
+    return context.json({ status: "ok" as const }, 200);
   },
   authConfig(context) {
     const testAccount = localTestAccount(context.env);
@@ -1386,6 +1394,27 @@ export function createApiServer(dependencies: ApiServerDependencies = production
       });
     }
     return context.res;
+  });
+
+  // The telemetry tunnel: the client SDK posts its envelopes here, on Cup's own domain, past ad
+  // blockers. It is not part of the Listener API, and its path avoids "sentry" so filter lists miss it.
+  // Same-origin in the browser; the shells post from their own origins without credentials.
+  app.use(
+    TELEMETRY_TUNNEL_PATH,
+    cors({
+      origin: ["capacitor://localhost", "https://localhost"],
+      allowMethods: ["POST"],
+      // The client SDK reads its rate limits from these.
+      exposeHeaders: ["Retry-After", "X-Sentry-Rate-Limits"],
+    }),
+  );
+  app.post(TELEMETRY_TUNNEL_PATH, (context) => {
+    // `cf` is typed as incoming or outgoing request properties, which leaves `country` unknown.
+    const country = context.req.raw.cf?.country;
+    return handleTelemetryTunnelRequest(context.req.raw, {
+      tunnelDsns: context.env.SENTRY_TUNNEL_DSNS,
+      country: typeof country === "string" ? country : undefined,
+    });
   });
 
   app.notFound(async (context) => {

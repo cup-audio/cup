@@ -1,6 +1,7 @@
 /*
- * Deletion notices against a Resend stub (`@cup/resend-stub`) on an OS-assigned port, and a restore
- * that lands on the coordinator while it awaits the account, pinned with the holding ACCOUNTS double.
+ * Deletion notices against a Resend stub (`@cup/resend-stub`) on an OS-assigned port, a restore that
+ * lands on the coordinator while it awaits the account, pinned with the holding ACCOUNTS double, and
+ * the stuck-deletion report against a Sentry stub (`@cup/sentry-stub`).
  */
 
 import nodeUrl from "node:url";
@@ -11,6 +12,7 @@ import { createTestHarness } from "wrangler";
 import type { AccountDurableObject } from "@cup/accounts";
 import type { DeletionAttempt } from "@cup/accounts/lifecycle";
 import { resendError, useResendStub, type ResendStub } from "@cup/resend-stub";
+import { useSentryStub } from "@cup/sentry-stub";
 
 import type { DeletionTestDurableObject } from "#test/worker.ts";
 
@@ -24,6 +26,7 @@ const SHORT_TIMEOUT_MS = 300;
 /** Generous enough for a loaded machine, for tests whose requests get an answer. */
 const DEFAULT_TIMEOUT_MS = 5_000;
 const RECIPIENT = "listener@example.com";
+const MINUTE_MS = 60_000;
 
 const harness = createTestHarness({
   root: nodeUrl.fileURLToPath(new URL("..", import.meta.url)),
@@ -231,6 +234,137 @@ test("a restore accepted while the coordinator awaits the account fence supersed
   expect(stub.requests).toStrictEqual([]);
 });
 
+test.for([
+  { pending: "both", state: "scheduled", identityDone: false, accountDone: false },
+  { pending: "account", state: "deleting", identityDone: true, accountDone: false },
+  { pending: "identity", state: "deleting", identityDone: false, accountDone: true },
+])(
+  "an account deletion still not erased 1 h after its deadline is reported once, pending $pending",
+  // Longer than the stub's wait, so a missing report fails with the wait's description.
+  { timeout: 15_000 },
+  async ({ pending, ...progress }, { expect, onTestFinished }) => {
+    const sentry = await useSentryStub({ onTestFinished });
+    const coordinator = await sentryCoordinator({
+      onTestFinished,
+      sentryDsn: sentry.dsn("cup-worker"),
+    });
+    const nowMs = Temporal.Now.instant().epochMilliseconds;
+    // Two overdue attempts, so a repeated report is never an immediate repeat of the same event,
+    // which Sentry's Dedupe integration would drop and so hide.
+    const overdueFirst = await coordinator.accept(nowMs - 61 * MINUTE_MS, progress);
+    const overdueSecond = await coordinator.accept(nowMs - 62 * MINUTE_MS, progress);
+    const almostOverdue = await coordinator.accept(nowMs - 59 * MINUTE_MS, progress);
+
+    await coordinator.reconcile();
+
+    await sentry.waitFor("both stuck reports", () => sentry.errorEvents("cup-worker").length >= 2);
+    expect(sentry.errorEvents("cup-worker")).toStrictEqual(
+      expect.arrayContaining(
+        [overdueFirst, overdueSecond].map((attempt) =>
+          expect.objectContaining({
+            level: "error",
+            fingerprint: ["account-deletion-stuck"],
+            tags: expect.objectContaining({
+              "cup.component": "registry-durable-object",
+              "cup.account.id": attempt.accountId,
+              "cup.account_deletion.attempt_id": attempt.attemptId,
+              "cup.account_deletion.pending": pending,
+            }),
+          }),
+        ),
+      ),
+    );
+    expect(sentry.errorEvents("cup-worker")).toHaveLength(2);
+    expect(JSON.stringify(sentry.envelopes)).not.toContain(RECIPIENT);
+    expect(await coordinator.overdueByAttempt()).toStrictEqual({
+      [overdueFirst.attemptId]: true,
+      [overdueSecond.attemptId]: true,
+      [almostOverdue.attemptId]: false,
+    });
+
+    // A later pass reports nothing new; the third attempt, once overdue, marks its flush.
+    await coordinator.reconcile();
+    await coordinator.moveDeadline(almostOverdue.attemptId, nowMs - 61 * MINUTE_MS);
+    await coordinator.reconcile();
+
+    await sentry.waitFor("the third stuck report", () =>
+      sentry
+        .errorEvents("cup-worker")
+        .some(({ tags }) => tags?.["cup.account_deletion.attempt_id"] === almostOverdue.attemptId),
+    );
+    expect(sentry.errorEvents("cup-worker")).toHaveLength(3);
+  },
+);
+
+/**
+ * A deletion coordinator wrapped with Sentry as production wraps the registry, sending to
+ * `sentryDsn`, in a Worker of its own that closes when the test finishes. Its attempts never come
+ * due for cleanup, so its passes run only the checks over every unfinished attempt.
+ */
+async function sentryCoordinator({
+  onTestFinished,
+  sentryDsn,
+}: Pick<TestContext, "onTestFinished"> & { sentryDsn: string }) {
+  const sentryHarness = createTestHarness({
+    root: nodeUrl.fileURLToPath(new URL("..", import.meta.url)),
+    workers: [{ configPath: "./wrangler.test.jsonc", vars: { SENTRY_DSN: sentryDsn } }],
+  });
+  onTestFinished(() => sentryHarness.close());
+  await sentryHarness.listen();
+  const sentryWorker = sentryHarness.getWorker();
+  const environment: unknown = await sentryWorker.getEnv();
+  if (!isSentryTestEnvironment(environment)) {
+    throw new Error("Sentry deletion test binding unavailable");
+  }
+  const name = crypto.randomUUID();
+  const object = environment.SENTRY_DELETION_TEST.get(
+    environment.SENTRY_DELETION_TEST.idFromName(name),
+  );
+  const storage = await sentryWorker.getDurableObjectStorage("SENTRY_DELETION_TEST", { name });
+  return {
+    /** Accepts an attempt with the given deadline and cleanup progress. */
+    async accept(
+      deadlineMs: number,
+      progress: { state: string; identityDone: boolean; accountDone: boolean },
+    ) {
+      const attempt: DeletionAttempt = {
+        attemptId: crypto.randomUUID(),
+        accountId: crypto.randomUUID(),
+        subject: crypto.randomUUID(),
+        email: RECIPIENT,
+        scheduledAtMs: deadlineMs - 7 * 86_400_000,
+        deadlineMs,
+        state: "scheduled",
+      };
+      await object.acceptForTest(attempt);
+      await storage.exec(
+        `UPDATE deletion_jobs SET payload_json = json_set(payload_json, '$.state', ?,
+          '$.identityDone', json(?), '$.accountDone', json(?), '$.nextAttemptMs', ?)
+        WHERE attempt_id = ?`,
+        progress.state,
+        String(progress.identityDone),
+        String(progress.accountDone),
+        Number.MAX_SAFE_INTEGER,
+        attempt.attemptId,
+      );
+      return attempt;
+    },
+    async moveDeadline(attemptId: string, deadlineMs: number) {
+      await storage.exec(
+        "UPDATE deletion_jobs SET payload_json = json_set(payload_json, '$.deadlineMs', ?) WHERE attempt_id = ?",
+        deadlineMs,
+        attemptId,
+      );
+    },
+    reconcile: () => object.reconcileForTest(),
+    async overdueByAttempt() {
+      return Object.fromEntries(
+        (await object.statusForTest()).map(({ attemptId, overdue }) => [attemptId, overdue]),
+      );
+    },
+  };
+}
+
 /** A coordinator holding one scheduled attempt whose scheduling notice is due. */
 async function scheduledCoordinator() {
   const name = crypto.randomUUID();
@@ -327,6 +461,12 @@ async function expectRejection(operation: Promise<unknown>): Promise<void> {
     return;
   }
   throw new Error("Expected the Durable Object operation to reject");
+}
+
+function isSentryTestEnvironment(
+  value: unknown,
+): value is { SENTRY_DELETION_TEST: DurableObjectNamespace<DeletionTestDurableObject> } {
+  return typeof value === "object" && value !== null && "SENTRY_DELETION_TEST" in value;
 }
 
 function isTestEnvironment(value: unknown): value is TestEnvironment {

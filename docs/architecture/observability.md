@@ -7,13 +7,23 @@ Cup reports production failures to Sentry through Sentry's own SDKs, and only fr
 Every Worker entry point is wrapped with `@sentry/cloudflare` in the [Worker entry](../../apps/cloudflare-worker/src/index.ts): the `fetch` handler, the account, conversion grant and registry Durable Objects, and the preparation and audio segment synthesis Workflows. Each sends to the `cup-worker` project:
 
 - **Errors**, captured once where Cup turns an error into a 500 response: Hono's `onError`, and each `catch` in the [API server](../../libs/api-server/src/api-server.ts) that answers `operational-error` with status 500. A 4xx response captures nothing. Each event carries the `cup.component` tag, which names the entry point that reported it.
-- **Traces**, every request at a sample rate of 1, streamed span by span. A request's trace includes its Durable Object RPC calls: Sentry appends the trace context to each RPC call on the Worker's own Durable Object bindings, and the wrapped receiver removes it again. Durable Object SQL and storage spans are dropped, because they would outnumber all others.
+- **Traces**, every request except the health checks ([sampling](#sampling)), streamed span by span. A request's trace includes its Durable Object RPC calls: Sentry appends the trace context to each RPC call on the Worker's own Durable Object bindings, and the wrapped receiver removes it again. Durable Object SQL and storage spans are dropped, because they would outnumber all others.
 - **Logs**, only Cup's own [log records](#log-records), at `info` and above.
 - **The release**, the deployed Worker version from the `CF_VERSION_METADATA` binding, and the environment `production`.
 
-Sentry's projects, keys and privacy settings are managed in [Terraform](../../terraform/README.md#sentry); the two public DSNs are constants in `@cup/telemetry.core`. The `cup-app` project for the web app and the shells exists, but nothing sends to it yet.
+Sentry's projects, keys and privacy settings are managed in [Terraform](../../terraform/README.md#sentry); the two public DSNs are constants in `@cup/telemetry.core`. The `cup-app` project for the web app and the shells exists, and the [telemetry tunnel](#telemetry-tunnel) forwards to it, but no client sends yet.
 
-Planned by the spec and not built yet: the conversion outcome `info` events, the `cup.conversion.id` join key on every conversion-scoped record, `traceId` in error bodies, captures in the Durable Objects and Workflows, the stuck checks, alerts and monitors, the telemetry tunnel, client telemetry in the web app and the shells, `/api/health`, and source map upload.
+Planned by the spec and not built yet: the conversion outcome `info` events, the `cup.conversion.id` join key on every conversion-scoped record, `traceId` in error bodies, captures in the Durable Objects and Workflows, the stuck-conversion and stuck-conversion-deletion checks, alerts and monitors including the uptime monitor on `/api/health`, client telemetry in the web app and the shells, and source map upload.
+
+## Sampling
+
+The Worker traces every invocation, the web app's polls included, except `GET /api/health`. The `tracesSampler` in [`@cup/telemetry.cloudflare`](../../libs/telemetry.cloudflare/src/worker-sentry-options.ts) returns 0 for the request span whose `url.path` is `/api/health` and 1 for every other one. The health endpoint is a Listener API route that answers 200 while the Worker runs and calls no binding; Sentry's uptime monitor is to check it every minute, and its near-empty traces would take about 43k spans a month of the free plan's quota. If span volume grows, a later change lowers the trace rate where little is lost, starting with the polls.
+
+## Stuck checks
+
+A stuck check reports work that should have finished long ago as one Sentry error event per case, with a fixed fingerprint, so all cases land in one issue. A flag stored with the work keeps later passes from reporting the same case again.
+
+- **Account deletion stuck.** The registry's [deletion coordinator](account-deletion.md#fencing-and-cleanup) checks every unfinished deletion attempt on each of its alarm passes. An attempt still neither erased nor restored 1 h after its recovery deadline is overdue, which means the same as stuck. Its event has the fingerprint `["account-deletion-stuck"]` and the tags `cup.account.id`, `cup.account_deletion.attempt_id` and `cup.account_deletion.pending`. The last names what is pending: `identity`, `account` or `both`, where the account fence counts as `account`. The flag is the `stuckReported` field of the attempt's job JSON, so it needs no migration. Retries back off to at most 1 h, so the report arrives at most about 2 h after the deadline. The Operator CLI's `overdue` uses the same threshold. The event's message names the attempt ID, so Sentry's Dedupe integration does not drop the report of a second stuck attempt as a repeat of the first.
 
 ## Log records
 
@@ -42,9 +52,21 @@ Outside production, Sentry is off and `logEvent` writes nothing, also not to the
 | Library                                                                  | Runtime     | Holds                                                                                                                                                                                    |
 | ------------------------------------------------------------------------ | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`@cup/telemetry.core`](../../libs/telemetry.core/README.md)             | any, no SDK | The `cup.*` attribute keys, the log event catalogue and the `beforeSendLog` severity filter, URL masking and the masking `beforeSendSpan`, the signed-out user, and both production DSNs |
-| [`@cup/telemetry.cloudflare`](../../libs/telemetry.cloudflare/README.md) | Workers     | The Worker's Sentry options with the on/off rule, the server `beforeSend` and `beforeSendSpan`, and the typed log-event helper `logEvent`                                                |
+| [`@cup/telemetry.cloudflare`](../../libs/telemetry.cloudflare/README.md) | Workers     | The Worker's Sentry options with the on/off rule, the server `beforeSend` and `beforeSendSpan`, the typed log-event helper `logEvent`, and the telemetry tunnel                          |
 
 Cup code calls Sentry's API directly, such as `captureException` from `@sentry/core`; the libraries hold keys, options, privacy hooks and the log-event helper, not a wrapper around Sentry. The server and client SDK families move on different majors, so the `sentry-server` catalog in `pnpm-workspace.yaml` pins the server family, and the [workspace check](../../qa/workspace-checks/README.md#sentry-sdk-family-check) keeps the families out of each other's packages.
+
+## Telemetry tunnel
+
+Browser and shell JS telemetry reaches Sentry through Cup's own domain, so ad blockers that block Sentry's hosts don't drop it. The [API server](../../libs/api-server/src/api-server.ts) serves the tunnel at `POST /_/e`, outside `/api/*` and the Listener API contract, without authentication or validation middleware; its path avoids "sentry" so filter lists don't match it. It answers CORS for the shells' origins, `capacitor://localhost` and `https://localhost`, without credentials; the browser posts from the same origin.
+
+The handler in [`@cup/telemetry.cloudflare`](../../libs/telemetry.cloudflare/src/telemetry-tunnel.ts) rewrites each envelope before Sentry's `handleTunnelRequest` forwards it:
+
+- it forwards only envelopes whose DSN is on the Worker var `SENTRY_TUNNEL_DSNS` and answers any other with a 403, the Worker's own `cup-worker` DSN included, so the tunnel is no open proxy. Production's list is exactly the `cup-app` DSN;
+- it removes the headers that carry the listener's IP address, so Sentry receives no `X-Sentry-Forwarded-For`;
+- it sets `user.geo` to `{ country_code }` from `request.cf.country` on every `event` and `transaction` item, replacing any geo the client sent, with Cloudflare's `XX` (unknown) and `T1` (Tor) as reported, and rewrites those items' length headers. Every other item, `span` included, passes unchanged.
+
+The tunnel has no rate limit of its own: the DSN is public anyway, and Sentry's quota and spike protection cap abuse.
 
 ## Privacy
 
@@ -68,14 +90,15 @@ The Worker's `SENTRY_DSN` is a plain var, public by design. The options factory 
 | `"false"`           | set          | Sentry on  |
 | `"false"`           | empty        | throws     |
 
-| Configuration                                                                        | `LOCAL_DEVELOPMENT` | `SENTRY_DSN`                                                                                             |
-| ------------------------------------------------------------------------------------ | ------------------- | -------------------------------------------------------------------------------------------------------- |
-| Production ([`wrangler.jsonc`](../../apps/cloudflare-worker/wrangler.jsonc))         | `"false"`           | the `cup-worker` DSN                                                                                     |
-| `pnpm dev` after `pnpm dev:services`                                                 | `"true"`            | empty, written by the helper                                                                             |
-| [Test Worker](../../qa/test-worker/README.md)                                        | `"true"`            | empty                                                                                                    |
-| [Worker integration tests](../../apps/cloudflare-worker/AGENTS.md#integration-tests) | `"false"`           | `http://test@127.0.0.1:9/1`, a discard port, or the Sentry stub's DSN through `useWorker({ sentryDsn })` |
+| Configuration                                                                        | `LOCAL_DEVELOPMENT` | `SENTRY_DSN`                                                                                                    |
+| ------------------------------------------------------------------------------------ | ------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Production ([`wrangler.jsonc`](../../apps/cloudflare-worker/wrangler.jsonc))         | `"false"`           | the `cup-worker` DSN                                                                                            |
+| `pnpm dev` after `pnpm dev:services`                                                 | `"true"`            | empty, written by the helper                                                                                    |
+| [Test Worker](../../qa/test-worker/README.md)                                        | `"true"`            | empty                                                                                                           |
+| [Worker integration tests](../../apps/cloudflare-worker/AGENTS.md#integration-tests) | `"false"`           | `http://test@127.0.0.1:9/1`, a discard port, or the Sentry stub's DSN through `useWorker({ sentryDsn })`        |
+| [Registry tests](../../libs/registry/wrangler.test.jsonc)                            | `"false"`           | the same discard port, read only by the Sentry-wrapped deletion coordinator test object, or a Sentry stub's DSN |
 
-The Worker's [config test](../../apps/cloudflare-worker/test/wrangler-config.test.ts) and the test Worker's config test pin these values. Tests that check what reaches Sentry start a [Sentry stub](../../qa/sentry-stub/README.md), which records envelopes and forwards nothing.
+`SENTRY_TUNNEL_DSNS` is empty everywhere but production, so the tunnel forwards nothing; a test allowlists a Sentry stub DSN through `useWorker({ vars })`, and a suite running the test Worker through `--var`. The Worker's [config test](../../apps/cloudflare-worker/test/wrangler-config.test.ts) and the test Worker's config test pin these values. Tests that check what reaches Sentry start a [Sentry stub](../../qa/sentry-stub/README.md), which records envelopes and forwards nothing.
 
 ## Build
 

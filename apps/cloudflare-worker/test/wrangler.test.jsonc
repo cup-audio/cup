@@ -69,6 +69,8 @@
     // Sentry runs as in production, but sends to the discard port; `useWorker({ sentryDsn })`
     // points it at a Sentry stub instead.
     "SENTRY_DSN": "http://test@127.0.0.1:9/1",
+    // The telemetry tunnel forwards nothing; `useWorker({ vars })` allowlists a Sentry stub DSN.
+    "SENTRY_TUNNEL_DSNS": "",
     "SIGNUP_IP_LIMIT": "10",
     "CONVERSION_IP_LIMIT": "60",
     "CONVERSION_OWNER_LIMIT": "10",
