@@ -76,7 +76,11 @@ export function createWorkerSentryOptions(
     // Set explicitly: the SDK derives it from CF_VERSION_METADATA too, but not for Workflow events.
     release: env.CF_VERSION_METADATA.id,
     environment: "production",
-    initialScope: { tags: { [TELEMETRY_ATTRIBUTES.COMPONENT]: component } },
+    // A tag on errors; an attribute on logs and streamed spans, which take no tags.
+    initialScope: {
+      tags: { [TELEMETRY_ATTRIBUTES.COMPONENT]: component },
+      attributes: { [TELEMETRY_ATTRIBUTES.COMPONENT]: component },
+    },
     // Every key is set: an omitted key falls back to the SDK's permissive default.
     dataCollection: {
       userInfo: false,

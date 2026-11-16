@@ -4,7 +4,7 @@ Sentry's options and privacy hooks for the Worker, its Durable Objects and its W
 
 ## Use
 
-[`createWorkerSentryOptions(env, component)`](src/worker-sentry-options.ts) returns the options for one entry point; pass it as the options callback of Sentry's wrapper, as the [Worker entry](../../apps/cloudflare-worker/src/index.ts) does. `component` is a `WorkerComponent`, which becomes the event's `cup.component` tag. Sentry calls the callback on every invocation with the entry point's environment, which needs `LOCAL_DEVELOPMENT`, `SENTRY_DSN` and the `CF_VERSION_METADATA` binding.
+[`createWorkerSentryOptions(env, component)`](src/worker-sentry-options.ts) returns the options for one entry point; pass it as the options callback of Sentry's wrapper, as the [Worker entry](../../apps/cloudflare-worker/src/index.ts) does. `component` is a `WorkerComponent`, which becomes the `cup.component` tag of errors and attribute of logs and spans. Sentry calls the callback on every invocation with the entry point's environment, which needs `LOCAL_DEVELOPMENT`, `SENTRY_DSN` and the `CF_VERSION_METADATA` binding.
 
 The on/off rule: Sentry is off when `LOCAL_DEVELOPMENT` is `"true"` and `SENTRY_DSN` is empty, on when `LOCAL_DEVELOPMENT` is anything else and `SENTRY_DSN` is set, and the callback throws on the two contradictions. The options trace every invocation except `GET /api/health`, which Sentry's uptime monitor checks ([sampling](../../docs/architecture/observability.md#sampling)). Cup code captures with `captureException` from `@sentry/core` directly; apart from the stuck-conversion and stuck-conversion-deletion reports, this library wraps no Sentry API.
 

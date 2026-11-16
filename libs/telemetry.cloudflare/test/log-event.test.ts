@@ -73,6 +73,7 @@ test("a warning log arrives with its event name, root cause and exception chain"
   );
   expect(log?.attributes).toMatchObject({
     "event.name": { value: "conversion-deletion-cleanup-failed", type: "string" },
+    "cup.component": { value: "account-durable-object", type: "string" },
     "cup.conversion.id": { value: "c1", type: "string" },
     "exception.type": { value: "SqliteError", type: "string" },
     "cup.exception.chain": { value: ["CupError", "DrizzleQueryError"], type: "array" },
