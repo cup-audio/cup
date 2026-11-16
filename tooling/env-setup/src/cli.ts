@@ -12,6 +12,8 @@ const FILES = ["apps/cloudflare-worker/.env.local", EVALS_FILE];
  */
 const RELOCATIONS = [{ from: "libs/narration-content-selection/.env.evals", to: EVALS_FILE }];
 const KEYS = ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_KEY"] as const;
+/** Sentry's upload token stays out of every checkout (docs/production-configuration.md#deploy). */
+const SENTRY_AUTH_TOKEN = "SENTRY_AUTH_TOKEN";
 const HELP =
   "Run node tooling/env-setup/src/cli.ts setup --from /absolute/path/to/existing.env, or export both credentials and run node tooling/env-setup/src/cli.ts setup. Then retry pnpm install.";
 
@@ -70,7 +72,7 @@ export async function runCli(
       if (command === "setup" && values === null) {
         continue;
       }
-      problems.push(...validate(values, file));
+      problems.push(...validate(values, file), ...findSentryAuthToken(values, file));
     }
     const reference = source ?? files[0]!.values;
     for (const { file, values } of files) {
@@ -134,6 +136,15 @@ async function readEnv(file: string) {
     }
     throw new Error(`Cannot read environment file: ${file}`, { cause: error });
   }
+}
+
+function findSentryAuthToken(values: Record<string, string | undefined> | null, file: string) {
+  if (values?.[SENTRY_AUTH_TOKEN] === undefined) {
+    return [];
+  }
+  return [
+    `${file}: ${SENTRY_AUTH_TOKEN} does not belong in an environment file; remove it. \`sentry-cli login\` keeps the source map upload token in ~/.sentryclirc.`,
+  ];
 }
 
 function validate(values: Record<string, string | undefined> | null, label: string) {

@@ -21,6 +21,8 @@ allowBuilds:
   '@google/genai': true
   # Its postinstall only checks that the sibling SDK versions match, which the sentry-client catalog pins.
   '@sentry/capacitor': false
+  # Its postinstall downloads the binary only when the platform package (an optional dependency) is missing.
+  '@sentry/cli': false
   # The mobile E2E suite installs its Appium drivers on its first run, never at install time.
   appium: false
   # WebdriverIO pulls in desktop browser drivers (edgedriver, geckodriver) the mobile suite never uses.
@@ -82,6 +84,8 @@ catalogs:
     # @sentry/react; move the family only together with a @sentry/capacitor release.
     "@sentry/capacitor": 4.5.0
     "@sentry/react": 10.76.2
+    # A build tool, in neither SDK family: it injects debug IDs and uploads source maps.
+    "@sentry/cli": ^3.8.2
 
 packageExtensions:
   eslint-plugin-react-you-might-not-need-an-effect@1.0.2:

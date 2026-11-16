@@ -15,8 +15,15 @@
     "turbo:lint:fix": { "dependsOn": ["$TURBO_EXTENDS$", "turbo:cf-typegen"] },
     "turbo:test": {
       "dependsOn": ["$TURBO_EXTENDS$", "turbo:cf-typegen"],
-      /* wrangler-config.test.ts checks the Supabase site URL in this Terraform file, outside the package. */
-      "inputs": ["$TURBO_EXTENDS$", "$TURBO_ROOT$/terraform/production/supabase.tf"],
+      /*
+       * Files outside the package that tests read: wrangler-config.test.ts checks the Supabase site
+       * URL in the Terraform file, deploy.test.ts the repository's Sentry CLI config.
+       */
+      "inputs": [
+        "$TURBO_EXTENDS$",
+        "$TURBO_ROOT$/terraform/production/supabase.tf",
+        "$TURBO_ROOT$/.sentryclirc",
+      ],
     },
   },
 }

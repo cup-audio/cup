@@ -48,6 +48,7 @@ Start with the [glossary](GLOSSARY.md) for Cup's vocabulary and the [system over
 | [Validation gates](../tooling/validation-gates/README.md)                            | How the gate runner composes gates, runs them and prints the summary; the gates themselves are in AGENTS.md            |
 | [Toolchain key](../tooling/toolchain-key/README.md)                                  | Write the host toolchain versions an E2E suite runs on, for its cached Turbo task to hash                              |
 | [Brand assets](../tooling/brand-assets/README.md)                                    | Maintain generated application branding                                                                                |
+| [Source maps](../tooling/source-maps/README.md)                                      | Inject Sentry debug IDs into a build and move its source maps out of what is served                                    |
 | [Workspace checks](../qa/workspace-checks/README.md)                                 | Tests for invariants across all packages, such as the package export check                                             |
 | [Loading state recorder](../qa/loading-state-recorder/README.md)                     | Fail a Playwright test on a loading flash, however briefly it shows                                                    |
 | [Fidelity check](../qa/fidelity-check/README.md)                                     | Compare a rendered screen with the design's image                                                                      |

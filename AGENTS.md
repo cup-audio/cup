@@ -26,7 +26,7 @@ node tooling/env-setup/src/cli.ts setup --from /absolute/path/to/existing.env
 pnpm install
 ```
 
-Use an existing credentials file or another checkout’s env file as the source. Alternatively, export `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_KEY` and run setup without `--from`. Setup preserves existing files; both files are ignored by Git. Setup, which postinstall runs when needed, also moves an `.env.evals` left at the library's former path `libs/narration-content-selection/`. Use Node for this bootstrap step because pnpm can trigger installation before setup. `pnpm env:check` checks that both files are configured and match; postinstall and every validation gate also run it. This checks local configuration without making paid API calls.
+Use an existing credentials file or another checkout’s env file as the source. Alternatively, export `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_KEY` and run setup without `--from`. Setup preserves existing files; both files are ignored by Git. Setup, which postinstall runs when needed, also moves an `.env.evals` left at the library's former path `libs/narration-content-selection/`. Use Node for this bootstrap step because pnpm can trigger installation before setup. `pnpm env:check` checks that both files are configured, match, and hold no `SENTRY_AUTH_TOKEN` (the Sentry upload token lives only in `~/.sentryclirc`); postinstall and every validation gate also run it. This checks local configuration without making paid API calls.
 
 ## Validation
 
