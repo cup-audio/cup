@@ -11,6 +11,7 @@ import path from "node:path";
 import util from "node:util";
 import { Temporal } from "temporal-polyfill";
 
+import { findBundleViolations } from "#scripts/release/bundle-safety-check.mts";
 import { findFailedReleasePreconditions } from "#scripts/release/release-preconditions.mts";
 import type { ReleaseGit } from "#scripts/release/release-preconditions.mts";
 import { deriveReleaseVersion, formatReleaseName } from "#scripts/release/release-version.mts";
@@ -33,6 +34,17 @@ const BUNDLE = path.join(
   "bundle",
   "release",
   "app-release.aab",
+);
+// The manifest Gradle merges into the bundle, as plain XML; the bundle itself holds it as protobuf.
+const RELEASE_MANIFEST = path.join(
+  ANDROID_PROJECT,
+  "app",
+  "build",
+  "intermediates",
+  "bundle_manifest",
+  "release",
+  "processApplicationManifestReleaseForBundle",
+  "AndroidManifest.xml",
 );
 const DEFAULT_SDK_ROOT = path.join(os.homedir(), "Library", "Android", "sdk");
 const SETUP_DOCS = `${path.join(MOBILE_APP_ROOT, "README.md")}, section "Release builds"`;
@@ -86,8 +98,9 @@ const environment: NodeJS.ProcessEnv = {
 runVisible("pnpm", ["exec", "turbo", "run", "turbo:build"], MOBILE_APP_ROOT, environment);
 runVisible("pnpm", ["exec", "cap", "sync", "android"], MOBILE_APP_ROOT, environment);
 
-// A stale bundle must not pass for this build's if Gradle writes none.
+// A stale bundle or manifest must not pass for this build's if Gradle writes none.
 fs.rmSync(BUNDLE, { force: true });
+fs.rmSync(RELEASE_MANIFEST, { force: true });
 runVisible(
   "./gradlew",
   [
@@ -108,7 +121,20 @@ if (!fs.existsSync(BUNDLE)) {
   fail(`Gradle succeeded but wrote no bundle at ${BUNDLE}.`);
 }
 
-// TODO(#443): run the bundle safety check here, before any upload.
+if (!fs.existsSync(RELEASE_MANIFEST)) {
+  fail(`Gradle succeeded but wrote no merged release manifest at ${RELEASE_MANIFEST}.`);
+}
+
+console.log("Checking the bundle for debug hooks and native code.");
+const violations = findBundleViolations({
+  manifestXml: fs.readFileSync(RELEASE_MANIFEST, "utf8"),
+  bundle: fs.readFileSync(BUNDLE),
+});
+if (violations.length > 0) {
+  fail(
+    `Refusing the bundle ${BUNDLE}:\n${violations.map((violation) => `  - ${violation}`).join("\n")}\nThe bundle safety check is documented in ${SETUP_DOCS}.`,
+  );
+}
 
 console.log(`Built the release-signed bundle.
 

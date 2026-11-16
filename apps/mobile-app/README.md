@@ -100,7 +100,7 @@ On the operator's Mac, with `JAVA_HOME` set as for [Android locally](#android-lo
 pnpm --filter '@cup/mobile-app' android:release --skip-upload
 ```
 
-The command runs `env:check`, checks the release preconditions, builds the web app, syncs Capacitor for Android, and runs Gradle's `bundleRelease`. It prints the bundle's path, `android/app/build/outputs/bundle/release/app-release.aab`, and the release name. No [validation gate](../../AGENTS.md#validation-gates) runs; pick the one that fits the moment yourself. Uploading isn't implemented yet: without `--skip-upload` the command stops before doing anything, so upload the bundle in the Play Console.
+The command runs `env:check`, checks the release preconditions, builds the web app, syncs Capacitor for Android, runs Gradle's `bundleRelease`, and runs the [bundle safety check](#bundle-safety-check). It prints the bundle's path, `android/app/build/outputs/bundle/release/app-release.aab`, and the release name. No [validation gate](../../AGENTS.md#validation-gates) runs; pick the one that fits the moment yourself. Uploading isn't implemented yet: without `--skip-upload` the command stops before doing anything, so upload the bundle in the Play Console.
 
 Each build's version comes from its UTC build time ([ADR 0029](../../docs/adr/0029-derive-mobile-build-versions-from-the-utc-build-time.md)): `versionCode` is the whole minutes since `2026-01-01T00:00Z` and `versionName` the date as `YYYY.MM.DD`. The release name is `<versionName> (<7-character short SHA>)`, for example `2026.11.14 (8e5c815)`; use it as the Play release name, so that you can tell which commit a tester runs. Debug builds keep `versionCode 1` and `versionName "0.0.0"`.
 
@@ -114,6 +114,19 @@ Before Gradle starts, the command refuses, listing every failure at once and poi
 The command reads the password from the Keychain, where macOS may ask to allow access, and hands it and the keystore's path to Gradle as the environment variables `CUP_UPLOAD_KEYSTORE_PASSWORD` and `CUP_UPLOAD_KEYSTORE_PATH`, and the version as the Gradle properties `cupVersionCode` and `cupVersionName`. A release task run directly, such as `./gradlew bundleRelease`, fails without any of the four and points to `android:release`, so Gradle never produces an unsigned or unversioned release bundle. Debug tasks need none of them.
 
 Check that a bundle is signed with the upload key with `keytool -printcert -jarfile <bundle>`, whose certificate owner is `CN=Cup`, or `jarsigner -verify <bundle>`.
+
+### Bundle safety check
+
+After `bundleRelease`, before any upload, the command checks that the bundle carries none of the [debug launch arguments'](#debug-launch-arguments) hooks and no native code ([#438](https://github.com/patricktree/cup/issues/438)). It reads the merged release manifest Gradle writes as plain XML, `android/app/build/intermediates/bundle_manifest/release/processApplicationManifestReleaseForBundle/AndroidManifest.xml`, because the bundle holds the manifest as protobuf, and reads the bundle's zip entries in Node, with no extra tools. It refuses the bundle, listing every violation at once and pointing here, when:
+
+- the manifest's `<application>` sets `android:debuggable="true"`;
+- it sets any `android:networkSecurityConfig`, which the debug source set uses to allow plain HTTP to `localhost`;
+- it sets `android:usesCleartextTraffic="true"`;
+- its application class is `DebugApplication`;
+- any `.dex` entry contains the class descriptor of `FakeGoogleSignInPlugin`, `TestApiOrigin` or `TestApiOriginPlugin`, the debug source set's sign-in fake and test-origin classes; Capacitor's keep rules keep plugin class names, so the check also holds with R8 on;
+- the bundle contains any `.so` entry, so that a dependency bringing native code is noticed before Google Play's 16 KB page-size rule can block an update ([#436](https://github.com/patricktree/cup/issues/436)).
+
+A debug class name outside a `.dex` entry, such as in R8's mapping file, doesn't count. A refused bundle stays at its path for inspection, but the command uploads nothing.
 
 ## iOS
 
