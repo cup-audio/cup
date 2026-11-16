@@ -1,3 +1,4 @@
+import { captureException } from "@sentry/core";
 import type { WorkflowEvent, WorkflowStep, WorkflowStepConfig } from "cloudflare:workers";
 import { NonRetryableError } from "cloudflare:workflows";
 import { Temporal } from "temporal-polyfill";
@@ -30,7 +31,7 @@ import type {
   SourceMaterialPreparer,
   CoverImageLoader,
 } from "@cup/prepare-source-material";
-import { logEvent } from "@cup/telemetry.cloudflare";
+import { logEvent, setConversionScope } from "@cup/telemetry.cloudflare";
 import { TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
 
 import { resolveConversionExecution } from "#src/conversion-execution.ts";
@@ -115,6 +116,7 @@ export async function runPrepareAudiobookWorkflow({
   }
   const owner = "v" in params ? params.owner : { kind: "trial" as const, grantId: params.grantId };
   const conversionId = event.instanceId;
+  setConversionScope({ conversionId, owner });
   const execution = resolveConversionExecution(env, {
     conversionId,
     owner,
@@ -257,6 +259,16 @@ export async function runPrepareAudiobookWorkflow({
         "create failed conversion outcome",
         PROCESSING_STEP_CONFIG,
         async () => {
+          // A content limit is an expected outcome, which the `content-limit` warning records. Any
+          // other failure is captured first in this step, which never retries: a replay of the run
+          // reuses the recorded event ID, and an owner that cannot record the phase or the outcome
+          // still leaves the failure reported.
+          const diagnosticReference =
+            error instanceof ContentLimitError
+              ? undefined
+              : captureException(error, {
+                  tags: { [TELEMETRY_ATTRIBUTES.CONVERSION_FAILURE_CATEGORY]: stage },
+                });
           await execution.phaseStarted(ConversionPhase.FINALIZATION);
           return {
             failureCategory: stage,
@@ -264,7 +276,7 @@ export async function runPrepareAudiobookWorkflow({
               error instanceof ContentLimitError
                 ? "The source content exceeds the narration limit of 40,000 characters or 200 chunks."
                 : "Preparation failed. Retry to load this track.",
-            diagnosticReference: crypto.randomUUID(),
+            ...(diagnosticReference === undefined ? {} : { diagnosticReference }),
             cleanupState: "pending" as const,
             completedAtMs: Temporal.Now.instant().epochMilliseconds,
           };

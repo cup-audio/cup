@@ -15,7 +15,12 @@ import {
   type ConversionMeasurements,
 } from "@cup/conversion-contracts";
 import { RollingLimits } from "@cup/rolling-limits";
-import { reportStuckConversions, type StuckConversionCandidate } from "@cup/telemetry.cloudflare";
+import {
+  reportStuckConversions,
+  setConversionScope,
+  withConversionScope,
+  type StuckConversionCandidate,
+} from "@cup/telemetry.cloudflare";
 
 import type {
   GrantConversions,
@@ -254,6 +259,7 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
 
   /** Reserves the whole narration document before dispatching any segment; see ADR 0008. */
   async startSynthesis(conversionId: string, narrationTextCharactersBySegment: readonly number[]) {
+    setConversionScope({ conversionId });
     const reservation = await this.reserveMissingAudioSegments(
       conversionId,
       narrationTextCharactersBySegment,
@@ -331,6 +337,7 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
   }
 
   async releaseAudioSegment(conversionId: string, sequence: number) {
+    setConversionScope({ conversionId });
     await this.ctx.storage.transaction(async () => {
       const releasedCount = this.sqlite.duration.releaseReservations(
         conversionId,
@@ -350,6 +357,7 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
   }
 
   retryPreparation(conversionId: string) {
+    setConversionScope({ conversionId });
     return this.ctx.blockConcurrencyWhile(async () => {
       const previous = await this.getConversion(conversionId);
       if (previous?.status !== "failed") {
@@ -393,6 +401,7 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
   }
 
   async completeAudioSegment(conversionId: string, sequence: number, durationMilliseconds: number) {
+    setConversionScope({ conversionId });
     if (!Number.isFinite(durationMilliseconds) || durationMilliseconds <= 0) {
       throw new Error("Generated duration must be positive and finite");
     }
@@ -428,6 +437,7 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
     conversionId: string,
     nowMs = Temporal.Now.instant().epochMilliseconds,
   ): Promise<void> {
+    setConversionScope({ conversionId });
     await this.ctx.storage.transaction(async () => {
       const record = await this.sqlite.requireRecord();
       const conversion = record.conversions.find((item) => item.conversionId === conversionId);
@@ -440,6 +450,7 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
   }
 
   async recordPhaseStarted(conversionId: string, phase: ConversionPhase): Promise<void> {
+    setConversionScope({ conversionId });
     await this.ctx.storage.transaction(async () => {
       const record = await this.sqlite.requireRecord();
       const conversion = record.conversions.find((item) => item.conversionId === conversionId);
@@ -467,6 +478,7 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
     },
     narrationTextCharactersBySegment?: readonly number[],
   ): Promise<"recorded" | "replayed"> {
+    setConversionScope({ conversionId });
     return this.recordTerminal(
       conversionId,
       {
@@ -496,6 +508,7 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
       completedAtMs?: number;
     },
   ): Promise<"recorded" | "replayed"> {
+    setConversionScope({ conversionId });
     return this.recordTerminal(conversionId, {
       status: "failed",
       completedAtMs: input.completedAtMs ?? Temporal.Now.instant().epochMilliseconds,
@@ -681,6 +694,7 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
   /** One alarm pass; only the stuck-conversion check reads `nowMs`, so tests can choose it. */
   protected async reconcile(nowMs: number): Promise<void> {
     let record = await this.sqlite.requireRecord();
+    const { grantId } = record;
     for (const conversion of record.conversions) {
       if (
         conversion.status !== "pending" ||
@@ -690,21 +704,24 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
       ) {
         continue;
       }
-      try {
-        const instance = await this.env.PREPARE_AUDIOBOOK_WORKFLOW.get(conversion.conversionId);
-        await instance.status();
-        await this.markWorkflowStarted(conversion.conversionId);
-      } catch {
+      const { conversionId } = conversion;
+      await withConversionScope({ conversionId, owner: { kind: "trial", grantId } }, async () => {
         try {
-          await this.env.PREPARE_AUDIOBOOK_WORKFLOW.create({
-            id: conversion.conversionId,
-            params: { sourceUrl: conversion.sourceUrl, grantId: record.grantId },
-          });
-          await this.markWorkflowStarted(conversion.conversionId);
+          const instance = await this.env.PREPARE_AUDIOBOOK_WORKFLOW.get(conversionId);
+          await instance.status();
+          await this.markWorkflowStarted(conversionId);
         } catch {
-          // The same stable identity remains reserved when the platform result is ambiguous.
+          try {
+            await this.env.PREPARE_AUDIOBOOK_WORKFLOW.create({
+              id: conversionId,
+              params: { sourceUrl: conversion.sourceUrl, grantId },
+            });
+            await this.markWorkflowStarted(conversionId);
+          } catch {
+            // The same stable identity remains reserved when the platform result is ambiguous.
+          }
         }
-      }
+      });
     }
 
     record = await this.sqlite.requireRecord();
@@ -802,19 +819,23 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
       if (conversion.status !== "pending") {
         continue;
       }
-      try {
-        const instance = await this.env.PREPARE_AUDIOBOOK_WORKFLOW.get(conversion.conversionId);
-        const status = await instance.status();
-        if (status.status === "errored" || status.status === "terminated") {
-          await this.recordFailed(conversion.conversionId, {
-            failureCategory: "workflow-platform",
-            explanation: "Generation stopped. Unfinished segments did not consume allowance.",
-            cleanupState: "pending",
-          });
+      const { conversionId } = conversion;
+      const owner = { kind: "trial" as const, grantId: record.grantId };
+      await withConversionScope({ conversionId, owner }, async () => {
+        try {
+          const instance = await this.env.PREPARE_AUDIOBOOK_WORKFLOW.get(conversionId);
+          const status = await instance.status();
+          if (status.status === "errored" || status.status === "terminated") {
+            await this.recordFailed(conversionId, {
+              failureCategory: "workflow-platform",
+              explanation: "Generation stopped. Unfinished segments did not consume allowance.",
+              cleanupState: "pending",
+            });
+          }
+        } catch {
+          // An ambiguous platform result must not release reservations for work that might still be running.
         }
-      } catch {
-        // An ambiguous platform result must not release reservations for work that might still be running.
-      }
+      });
     }
   }
 
@@ -824,21 +845,19 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
       if (segment.state !== "reserved") {
         continue;
       }
-      const result = await reconcileSegmentWorkflow(
-        this.env.SYNTHESIZE_AUDIO_SEGMENT_WORKFLOW,
-        {
-          v: 3,
-          conversionId: segment.conversionId,
-          owner: { kind: "trial", grantId: record.grantId },
-          executionEpoch: 1,
-          sequence: segment.sequence,
-        },
-        // Reserved work may finish after expiry or revocation, so a grant can always resume it.
-        { canResume: true },
-      );
-      if (result === "stopped") {
-        await this.releaseAudioSegment(segment.conversionId, segment.sequence);
-      }
+      const { conversionId, sequence } = segment;
+      const owner = { kind: "trial" as const, grantId: record.grantId };
+      await withConversionScope({ conversionId, owner, sequence }, async () => {
+        const result = await reconcileSegmentWorkflow(
+          this.env.SYNTHESIZE_AUDIO_SEGMENT_WORKFLOW,
+          { v: 3, conversionId, owner, executionEpoch: 1, sequence },
+          // Reserved work may finish after expiry or revocation, so a grant can always resume it.
+          { canResume: true },
+        );
+        if (result === "stopped") {
+          await this.releaseAudioSegment(conversionId, sequence);
+        }
+      });
     }
   }
 

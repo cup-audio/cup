@@ -628,7 +628,7 @@ test("obsolete execution cannot settle after an account execution epoch change",
   await expectWorkerRpcRejection(
     account.settleConversion(
       started.conversion.conversionId,
-      { status: "failed", failureCategory: "obsolete", explanation: "Obsolete execution" },
+      { status: "failed", failureCategory: "internal", explanation: "Obsolete execution" },
       nowMs,
       1,
     ),

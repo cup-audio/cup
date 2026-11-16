@@ -544,12 +544,18 @@ importers:
       '@cloudflare/vite-plugin':
         specifier: catalog:web-app
         version: 1.62.2(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5))(wrangler@4.144.0(@types/node@26.6.5))
+      '@cup/audiobook-production':
+        specifier: workspace:*
+        version: link:../../libs/audiobook-production
       '@cup/config-oxlint':
         specifier: workspace:*
         version: link:../../tooling/config-oxlint
       '@cup/listener-api.routes':
         specifier: workspace:*
         version: link:../../libs/listener-api.routes
+      '@cup/narration-document-creation':
+        specifier: workspace:*
+        version: link:../../libs/narration-document-creation
       '@cup/operator-api.routes':
         specifier: workspace:*
         version: link:../../libs/operator-api.routes
@@ -583,6 +589,9 @@ importers:
       oxlint-tsgolint:
         specifier: 'catalog:'
         version: 7.0.2004
+      temporal-polyfill:
+        specifier: ^1.0.5
+        version: 1.0.5
       typescript:
         specifier: 'catalog:'
         version: '@typescript/typescript6@6.0.2'
@@ -1258,6 +1267,9 @@ importers:
       '@cup/telemetry.core':
         specifier: workspace:*
         version: link:../telemetry.core
+      '@sentry/core':
+        specifier: catalog:sentry-server
+        version: 11.10.0
       temporal-polyfill:
         specifier: ^1.0.5
         version: 1.0.5

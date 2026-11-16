@@ -30,7 +30,10 @@ vi.mock("@cup/conversion-grants", async () => ({
 }));
 // The helper itself is tested against the Sentry stub in @cup/telemetry.cloudflare; the Worker's
 // Sentry test shows that the operator-mutation record carries the request's trace ID.
-vi.mock(import("@cup/telemetry.cloudflare"), () => ({ logEvent: vi.fn<typeof logEvent>() }));
+vi.mock(import("@cup/telemetry.cloudflare"), async (importOriginal) => ({
+  ...(await importOriginal()),
+  logEvent: vi.fn<typeof logEvent>(),
+}));
 
 const accountId = "d1a52e64-3e4d-4a7f-a711-7fb11501e9af";
 const conversionId = "f9cc2e59-46a3-4890-b923-bda04d03b4d0";

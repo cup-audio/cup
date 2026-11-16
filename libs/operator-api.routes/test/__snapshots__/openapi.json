@@ -1045,7 +1045,16 @@
                                       },
                                       "failureCategory": {
                                         "type": "string",
-                                        "minLength": 1
+                                        "enum": [
+                                          "workflow-start",
+                                          "source-preparation",
+                                          "content-selection",
+                                          "content-limit",
+                                          "narration-synthesis",
+                                          "audiobook-assembly",
+                                          "workflow-platform",
+                                          "internal"
+                                        ]
                                       },
                                       "explanation": {
                                         "type": "string",

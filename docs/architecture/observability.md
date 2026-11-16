@@ -6,14 +6,14 @@ Cup reports production failures to Sentry through Sentry's own SDKs, and only fr
 
 Every Worker entry point is wrapped with `@sentry/cloudflare` in the [Worker entry](../../apps/cloudflare-worker/src/index.ts): the `fetch` handler, the account, conversion grant and registry Durable Objects, and the preparation and audio segment synthesis Workflows. Each sends to the `cup-worker` project:
 
-- **Errors**, captured once where Cup turns an error into a 500 response: Hono's `onError`, and each `catch` in the [API server](../../libs/api-server/src/api-server.ts) that answers `operational-error` with status 500. A 4xx response captures nothing. Each event carries the `cup.component` tag, which names the entry point that reported it.
+- **Errors**, captured once where they stop propagating, by the [capture rule](#capture-rule). Each event carries the `cup.component` tag, which names the entry point that reported it, and a conversion-scoped event also the [correlation keys](#correlation).
 - **Traces**, every request except the health checks ([sampling](#sampling)), streamed span by span. A request's trace includes its Durable Object RPC calls: Sentry appends the trace context to each RPC call on the Worker's own Durable Object bindings, and the wrapped receiver removes it again. Durable Object SQL and storage spans are dropped, because they would outnumber all others.
 - **Logs**, only Cup's own [log records](#log-records), at `info` and above.
 - **The release**, the deployed Worker version from the `CF_VERSION_METADATA` binding, and the environment `production`.
 
 Sentry's projects, keys and privacy settings are managed in [Terraform](../../terraform/README.md#sentry); the two public DSNs are constants in `@cup/telemetry.core`.
 
-Planned by the spec and not built yet: the conversion outcome `info` events, the `cup.conversion.id` join key on every conversion-scoped record, captures in the Durable Objects and Workflows, alerts and monitors including the uptime monitor on `/api/health`, client telemetry in the shells, and source map upload.
+Planned by the spec and not built yet: the conversion outcome `info` events, alerts and monitors including the uptime monitor on `/api/health`, client telemetry in the shells, and source map upload.
 
 ## What the web app sends
 
@@ -27,6 +27,39 @@ In the browser on `https://cup.audio`, the web app reports through `@sentry/capa
 - **The release** `web@<hash>`, the first 16 hex digits of the SHA-256 of the entry chunk, which imports every other chunk by its hashed name. A Vite plugin of `@cup/telemetry.browser` writes it into the built `index.html` at build time, so it changes exactly when the bundle's code does, and Turbo can replay E2E suites that ran an unchanged bundle.
 
 Sentry's Supabase integration adds spans and breadcrumbs of the auth client without query data; its auth-error events are dropped, because the web app handles those failures. Off: Zod errors, console capture, feedback, view hierarchy, profiling, CapacitorHttp tracing and replay.
+
+## Capture rule
+
+Cup calls `captureException` once, where it turns an error into a 500 response, a failed conversion outcome or a finally failed segment, and nowhere else. An error that recurs is captured each time it reaches a capture point; only the [stuck checks](#stuck-checks) report a case once.
+
+| Failure                                                                                                                                                                                                                              | Becomes                                                                                                                      |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| Any 5xx of the [API server](../../libs/api-server/src/api-server.ts): Hono's `onError`, and each `catch` that answers `operational-error` with status 500                                                                            | Issue                                                                                                                        |
+| A preparation failure in `source-preparation` or `content-selection`, captured in the [preparation runner](../../libs/create-audiobook-from-url-workflow/src/run-prepare-audiobook-workflow.ts) step that creates the failed outcome | Issue tagged `cup.conversion.failure_category` with the category; its event ID is the failed outcome's `diagnosticReference` |
+| A segment's final failure, `PermanentNarrationSynthesisError` included, captured in the [segment runner](../../libs/create-audiobook-from-url-workflow/src/run-audio-segment-workflow.ts) step that releases its reservation         | Issue tagged `cup.conversion.failure_category` `segment`                                                                     |
+| A stored audio segment that is missing or has the wrong size when the narration track is served                                                                                                                                      | Issue, beside the `narration-track-segment-mismatch` error log                                                               |
+| A stuck case                                                                                                                                                                                                                         | Issue, by the [stuck checks](#stuck-checks)                                                                                  |
+| Any 4xx, a preparation failure in `content-limit`, and the other expected outcomes                                                                                                                                                   | Nothing, or a warning [log record](#log-records)                                                                             |
+
+Conversion-failure issues keep Sentry's default grouping by the root cause's stack, so a new root cause in a known category is a new issue. Both captures run inside a Workflow step whose result the run records, so a replay of the run reuses the step's result instead of capturing again; the preparation's step captures before it asks the owner to record the finalization phase, so a failure is reported even when the owner cannot record it.
+
+Sentry's own wrappers capture on their own too, and the server `beforeSend` drops those events by their mechanism:
+
+- the Workflow wrapper captures a step's last failed attempt (`auto.faas.cloudflare.workflow`), though the run goes on: a retried attempt opens no issue, and only the instance's final failure, which Cup captures, does;
+- the Durable Object wrapper captures every error an RPC method or the alarm throws (`auto.faas.cloudflare.durable_object`): an RPC error is captured by its caller at its boundary, and a Durable Object captures only what it swallows itself.
+
+The [Worker integration tests](../../apps/cloudflare-worker/test/conversion-failures.test.ts) cover a failed preparation, a finally failed segment, a failed RPC and a retried step against the Sentry stub.
+
+## Correlation
+
+The conversion ID is the join key: Cup's errors, spans and logs of one conversion carry it as `cup.conversion.id`, so the operator can follow a conversion from the Listener API through Durable Object RPC and alarms into its Workflow steps. Each entry point puts it on Sentry's isolation scope once with `setConversionScope` from `@cup/telemetry.cloudflare`; Sentry sends it as a tag on errors and as an attribute on spans and logs:
+
+- a Listener API route, once it knows the conversion: the conversion routes' middleware, a conversion start, and a conversion deletion;
+- a Durable Object RPC method that acts on one conversion;
+- each iteration of a Durable Object alarm that works through conversions, in a fork of the scope (`withConversionScope`);
+- a Workflow run.
+
+Where the entry point knows the owner, the scope also carries `cup.owner.kind` (`account` or `grant`) and `cup.account.id` or `cup.conversion_grant.id`; a segment's synthesis and its alarm iteration carry `cup.audio_segment.sequence`. The Durable Object RPC methods set the conversion ID alone.
 
 ## Error references
 
@@ -70,11 +103,11 @@ Outside production, Sentry is off and `logEvent` writes nothing, also not to the
 
 ## Telemetry libraries
 
-| Library                                                                  | Runtime     | Holds                                                                                                                                                                                                                       |
-| ------------------------------------------------------------------------ | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`@cup/telemetry.core`](../../libs/telemetry.core/README.md)             | any, no SDK | The `cup.*` attribute keys, the log event catalogue and the `beforeSendLog` severity filter, URL masking and the masking `beforeSendSpan`, the signed-out user, and both production DSNs                                    |
-| [`@cup/telemetry.cloudflare`](../../libs/telemetry.cloudflare/README.md) | Workers     | The Worker's Sentry options with the on/off rule, the server `beforeSend` and `beforeSendSpan`, the typed log-event helper `logEvent`, the stuck-conversion and stuck-conversion-deletion reports, and the telemetry tunnel |
-| [`@cup/telemetry.browser`](../../libs/telemetry.browser/README.md)       | DOM         | The client's Sentry options with the on/off rule, the client `beforeSend` and `beforeBreadcrumb`, the user rule, and the web release                                                                                        |
+| Library                                                                  | Runtime     | Holds                                                                                                                                                                                                                                                     |
+| ------------------------------------------------------------------------ | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`@cup/telemetry.core`](../../libs/telemetry.core/README.md)             | any, no SDK | The `cup.*` attribute keys, the log event catalogue and the `beforeSendLog` severity filter, URL masking and the masking `beforeSendSpan`, the signed-out user, and both production DSNs                                                                  |
+| [`@cup/telemetry.cloudflare`](../../libs/telemetry.cloudflare/README.md) | Workers     | The Worker's Sentry options with the on/off rule, the server `beforeSend` and `beforeSendSpan`, the typed log-event helper `logEvent`, the stuck-conversion and stuck-conversion-deletion reports, the conversion scope helpers, and the telemetry tunnel |
+| [`@cup/telemetry.browser`](../../libs/telemetry.browser/README.md)       | DOM         | The client's Sentry options with the on/off rule, the client `beforeSend` and `beforeBreadcrumb`, the user rule, and the web release                                                                                                                      |
 
 Cup code calls Sentry's API directly, such as `captureException` from `@sentry/core` or `@sentry/react`; the libraries hold keys, options, privacy hooks and the log-event helper, not a wrapper around Sentry. The server and client SDK families move on different majors, so the `sentry-server` and `sentry-client` catalogs in `pnpm-workspace.yaml` pin each family, and the [workspace check](../../qa/workspace-checks/README.md#sentry-sdk-family-check) keeps the families out of each other's packages. The client family moves only with a `@sentry/capacitor` release, which pins its own `@sentry/browser` and peers on exactly one `@sentry/react`.
 

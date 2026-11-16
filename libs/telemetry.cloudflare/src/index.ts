@@ -1,3 +1,8 @@
+export {
+  setConversionScope,
+  withConversionScope,
+  type ConversionTelemetryContext,
+} from "#src/conversion-scope.ts";
 export { logEvent, type LogAttributeValue, type LogEventDetails } from "#src/log-event.ts";
 export {
   handleTelemetryTunnelRequest,

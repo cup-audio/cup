@@ -46,8 +46,10 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "catalog:web-app",
+    "@cup/audiobook-production": "workspace:*",
     "@cup/config-oxlint": "workspace:*",
     "@cup/listener-api.routes": "workspace:*",
+    "@cup/narration-document-creation": "workspace:*",
     "@cup/operator-api.routes": "workspace:*",
     "@cup/prepare-declaration-build": "workspace:*",
     "@cup/sentry-stub": "workspace:*",
@@ -59,6 +61,7 @@
     "@typescript/native": "catalog:",
     "oxlint": "catalog:",
     "oxlint-tsgolint": "catalog:",
+    "temporal-polyfill": "^1.0.5",
     "typescript": "catalog:",
     "vite": "catalog:web-app",
     "vitest": "catalog:",
