@@ -6,8 +6,9 @@ Run each root independently from the repository root.
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
 | [bootstrap](bootstrap/main.tf)   | Infrastructure project and state bucket                                                                                                     | bootstrap        |
 | [production](production/main.tf) | Existing cup-production GCP project and Terraform-created Supabase project; Cloudflare R2 bucket, DNS, Email Routing, Access and AI Gateway | production       |
+| [sentry](sentry/main.tf)         | Sentry team, projects, keys, inbound filters, spike protection and privacy settings                                                         | sentry           |
 
-Both roots use `cup-infrastructure-646301813623-tfstate` in Frankfurt (`europe-west3`).
+All roots use `cup-infrastructure-646301813623-tfstate` in Frankfurt (`europe-west3`).
 The bootstrap project uses Cup Billing (`01EF28-40C66E-325909`).
 Application teardown must never include the bootstrap root.
 
@@ -122,3 +123,42 @@ Google must allow the new Supabase callback shown above and JavaScript origin <h
 The Android OAuth client must be registered for package `audio.cup.app`.
 On 2026-10-26, after the allow-list apply, the operator signed in with Google on <https://cup.audio/app> and was returned to the starting page. Native Android sign-in remains unverified.
 The Supabase provider preserves masked OAuth secrets in state, so a no-change plan does not prove the secret works or detect an out-of-band secret change.
+
+## Sentry
+
+The [Sentry root](sentry/main.tf) manages Cup's Sentry production setup through the provider `jianyuan/sentry` 0.16.0 against `https://de.sentry.io/api/`, the API of Sentry's Germany region. It declares:
+
+- The team `cup` and the projects `cup-worker` (the Worker) and `cup-app` (the web app and both shells), created without Sentry's default key and default alert rule.
+- One key per project, with `prevent_destroy`, whose public DSNs are the outputs `cup_worker_dsn` and `cup_app_dsn`.
+- In both projects, the inbound filters for browser extensions, web crawlers, localhost and every legacy browser Sentry has not deprecated, and spike protection with one notification action, Sentry's own email, for when it starts dropping events.
+- The privacy settings the provider cannot set (see [Privacy settings](#privacy-settings)).
+
+Alert rules, monitors and personal notification settings are not managed yet. No apply has run yet.
+
+### Organisation
+
+The operator creates the organisation once in the Sentry UI: slug `cup-audio`, data storage location Germany, on the free Developer plan. The root reads it through the `sentry_organization` data source and never imports it, so no plan can change or delete it. If the slug differs, change `organization_slug` in [main.tf](sentry/main.tf).
+
+### Token
+
+The provider authenticates with a personal user auth token with the scopes `org:write`, `team:write`, `project:write` and `alerts:write`. Store it as `SENTRY_AUTH_TOKEN` in the ignored file `terraform/sentry/.env.local`. It is separate from the upload token that `sentry-cli` keeps in `~/.sentryclirc` for source maps and debug files. The drift checks also need it as the Terraform variable `sentry_auth_token`, which the command below sets from the same value. Plan and apply only from an up-to-date `main`:
+
+```sh
+terraform -chdir=terraform/sentry init
+node --env-file=terraform/sentry/.env.local --input-type=module -e 'import cp from "node:child_process"; process.exitCode = cp.spawnSync("terraform", ["-chdir=terraform/sentry", "plan"], {stdio: "inherit", env: {...process.env, TF_VAR_sentry_auth_token: process.env.SENTRY_AUTH_TOKEN}}).status;'
+```
+
+Replace `plan` with `apply` to apply. The apply also runs `curl` (see [Privacy settings](#privacy-settings)).
+
+### DSN handover
+
+Sentry creates a key's DSN when Terraform creates the key. Read both with `terraform -chdir=terraform/sentry output` and copy them once into the DSN constants of `@cup/telemetry.core`. A DSN is public by design: it lets a client send events and nothing else. A replaced key gets a new DSN and silences every release still built with the old one, so the keys carry `prevent_destroy`.
+
+### Privacy settings
+
+The privacy rules at ingest come from committed JSON in [sentry/privacy](sentry/privacy):
+
+- [organization-relay-pii-config.json](sentry/privacy/organization-relay-pii-config.json) holds the organisation's Advanced Data Scrubbing rules. They remove `$user.geo.city`, `$user.geo.subdivision` and `$user.geo.region`; remove `contexts.device.id` and `contexts.app.device_app_hash`; remove a `$user.id` that looks like a native installation ID (32 lowercase hex digits or an uppercase dashed UUID), so lowercase dashed account IDs pass; mask the values of the query parameters `token`, `key`, `sig`, `signature`, `auth`, `code` and `access_token` in breadcrumb URLs; and replace email addresses in every string as a backstop.
+- [cup-worker-relay-pii-config.json](sentry/privacy/cup-worker-relay-pii-config.json) holds the `cup-worker` project rule that removes `$user.geo.**`, so the Worker's own events carry no location.
+
+Two `terraform_data` resources in [privacy.tf](sentry/privacy.tf) send them with `curl`: the organisation's rules together with "Prevent storing IP addresses" (`scrubIPAddresses: true`) through `PUT /api/0/organizations/cup-audio/`, and the project rule through `PUT /api/0/projects/cup-audio/cup-worker/`. They run again whenever the hash of what they send changes. Each request replaces every rule of its scope, so edit the files rather than the Sentry UI. In every plan, two `check` blocks read both settings through an `http` data source and warn when the live values differ from the committed ones. To restore drifted values without changing the files, replace the resource, for example with `-replace=terraform_data.organization_privacy_settings`. The `http` data source sends the token in a request header, which Terraform writes to state; this is accepted.
