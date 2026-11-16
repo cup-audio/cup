@@ -52,6 +52,16 @@
 			</dict>
 		</array>
 		<key>NSPrivacyAccessedAPITypes</key>
-		<array />
+		<array>
+			<!-- The "Send crash reports" switch, which only Cup reads and writes. -->
+			<dict>
+				<key>NSPrivacyAccessedAPIType</key>
+				<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+				<key>NSPrivacyAccessedAPITypeReasons</key>
+				<array>
+					<string>CA92.1</string>
+				</array>
+			</dict>
+		</array>
 	</dict>
 </plist>

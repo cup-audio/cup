@@ -14,6 +14,7 @@ import type { createAppRouter } from "#src/app/global-providers.js";
 import { sessionSnapshot, subscribeAuthState } from "#src/auth/account-session.js";
 import { requestApi } from "#src/data-fetching/api-request.js";
 import { apiOrigin } from "#src/platform/api-origin.js";
+import { readCrashReportsEnabled } from "#src/platform/crash-reporting.js";
 
 /**
  * Set before the page loads only by the debug build of a native shell that the mobile E2E suite
@@ -62,17 +63,22 @@ export async function initializeTelemetry(
 
 /**
  * The shell's context, or `undefined` in the browser. Only an explicit `false` from the native
- * side's `Capacitor.DEBUG` counts as a release build.
+ * side's `Capacitor.DEBUG` counts as a release build. The "Send crash reports" switch is read here,
+ * before `Sentry.init`, so turning it off takes effect on the next start.
  */
 async function readShellContext(): Promise<ShellTelemetryContext | undefined> {
   if (!Capacitor.isNativePlatform()) {
     return undefined;
   }
-  const { version, build } = await App.getInfo();
+  const [{ version, build }, crashReports] = await Promise.all([
+    App.getInfo(),
+    readCrashReportsEnabled(),
+  ]);
   const testSentryDsn: unknown = Reflect.get(window, TEST_SENTRY_DSN_GLOBAL);
   return {
     debugBuild: Capacitor.DEBUG !== false,
     testSentryDsn: typeof testSentryDsn === "string" ? testSentryDsn : undefined,
+    crashReports,
     app: { version, build },
   };
 }

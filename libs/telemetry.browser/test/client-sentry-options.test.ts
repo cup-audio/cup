@@ -46,7 +46,7 @@ test("a release shell sends to cup-app through the tunnel when its API origin is
     apiOrigin: "https://cup.audio",
     release: "web@0123456789abcdef",
     router: ROUTER,
-    shell: { debugBuild: false, testSentryDsn: undefined, app: APP_INFO },
+    shell: { debugBuild: false, testSentryDsn: undefined, crashReports: true, app: APP_INFO },
   });
 
   expect(options).toMatchObject({
@@ -68,7 +68,7 @@ test.each(["http://localhost:8787", "https://www.cup.audio", "http://cup.audio"]
         apiOrigin,
         release: "web@0123456789abcdef",
         router: ROUTER,
-        shell: { debugBuild: false, testSentryDsn: undefined, app: APP_INFO },
+        shell: { debugBuild: false, testSentryDsn: undefined, crashReports: true, app: APP_INFO },
       }),
     ).toBeUndefined();
   },
@@ -83,7 +83,7 @@ test.each(["https://cup.audio", "http://localhost:8787"])(
         apiOrigin,
         release: "web@0123456789abcdef",
         router: ROUTER,
-        shell: { debugBuild: true, testSentryDsn: undefined, app: APP_INFO },
+        shell: { debugBuild: true, testSentryDsn: undefined, crashReports: true, app: APP_INFO },
       }),
     ).toBeUndefined();
   },
@@ -96,7 +96,7 @@ test("a debug shell with a test DSN sends only to it, through the test Worker's 
     apiOrigin: "http://localhost:8787",
     release: "web@0123456789abcdef",
     router: ROUTER,
-    shell: { debugBuild: true, testSentryDsn, app: APP_INFO },
+    shell: { debugBuild: true, testSentryDsn, crashReports: true, app: APP_INFO },
   });
 
   expect(options).toMatchObject({
@@ -106,13 +106,30 @@ test("a debug shell with a test DSN sends only to it, through the test Worker's 
   });
 });
 
+test("a shell whose listener turned crash reports off runs JS-only, still sending JS errors", () => {
+  const options = createClientSentryOptions({
+    pageOrigin: "https://localhost",
+    apiOrigin: "https://cup.audio",
+    release: "web@0123456789abcdef",
+    router: ROUTER,
+    shell: { debugBuild: false, testSentryDsn: undefined, crashReports: false, app: APP_INFO },
+  });
+
+  expect(options).toMatchObject({
+    dsn: CUP_APP_DSN,
+    tunnel: "https://cup.audio/_/e",
+    release: "audio.cup.app@1.4.0+17",
+    enableNative: false,
+  });
+});
+
 test("a shell gives the Cocoa SDK native tracing of view controllers and frames only, and its MetricKit reports", () => {
   const options = createClientSentryOptions({
     pageOrigin: "capacitor://localhost",
     apiOrigin: "https://cup.audio",
     release: "web@0123456789abcdef",
     router: ROUTER,
-    shell: { debugBuild: false, testSentryDsn: undefined, app: APP_INFO },
+    shell: { debugBuild: false, testSentryDsn: undefined, crashReports: true, app: APP_INFO },
   });
 
   expect(options?.cocoaOptions).toStrictEqual({

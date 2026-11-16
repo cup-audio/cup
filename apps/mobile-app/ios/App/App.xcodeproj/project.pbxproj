@@ -20,6 +20,7 @@
 		C0B000000000000000000002 /* MainViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000000000000000000001 /* MainViewController.swift */; };
 		C0B000000000000000000004 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000000000000000000003 /* SceneDelegate.swift */; };
 		C0B000000000000000000006 /* WebAuthenticationPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000000000000000000005 /* WebAuthenticationPlugin.swift */; };
+		C0B000000000000000419002 /* CrashReportingPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000000000000000419001 /* CrashReportingPlugin.swift */; };
 		C0B000000000000000000008 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = C0B000000000000000000007 /* PrivacyInfo.xcprivacy */; };
 /* End PBXBuildFile section */
 
@@ -64,6 +65,7 @@
 		C0B000000000000000000001 /* MainViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainViewController.swift; sourceTree = "<group>"; };
 		C0B000000000000000000003 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		C0B000000000000000000005 /* WebAuthenticationPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebAuthenticationPlugin.swift; sourceTree = "<group>"; };
+		C0B000000000000000419001 /* CrashReportingPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrashReportingPlugin.swift; sourceTree = "<group>"; };
 		C0B000000000000000000007 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -113,6 +115,7 @@
 				C0B000000000000000000001 /* MainViewController.swift */,
 				C0B000000000000000000003 /* SceneDelegate.swift */,
 				C0B000000000000000000005 /* WebAuthenticationPlugin.swift */,
+				C0B000000000000000419001 /* CrashReportingPlugin.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -238,6 +241,7 @@
 				C0B000000000000000000002 /* MainViewController.swift in Sources */,
 				C0B000000000000000000004 /* SceneDelegate.swift in Sources */,
 				C0B000000000000000000006 /* WebAuthenticationPlugin.swift in Sources */,
+				C0B000000000000000419002 /* CrashReportingPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

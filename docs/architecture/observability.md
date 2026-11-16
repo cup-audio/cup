@@ -13,7 +13,7 @@ Every Worker entry point is wrapped with `@sentry/cloudflare` in the [Worker ent
 
 Sentry's projects, keys and privacy settings are managed in [Terraform](../../terraform/README.md#sentry); the two public DSNs are constants in `@cup/telemetry.core`.
 
-Planned by the spec and not built yet: alerts and monitors including the uptime monitor on `/api/health`, the "Send crash reports" switch, the report of a lost WebView process, and the shells' native release step for dSYMs and the source maps of the bundle packed into each build.
+Planned by the spec and not built yet: alerts and monitors including the uptime monitor on `/api/health`, the report of a lost WebView process, and the shells' native release step for dSYMs and the source maps of the bundle packed into each build.
 
 ## What the web app sends
 
@@ -39,6 +39,8 @@ The Android and iOS shells run the same web app and the same `initializeTelemetr
 - **The user** follows the same rule, and is set again once the native SDK runs, since a user set before then never reaches the native scope. ANR and tombstone events, reported from a later process, carry no account ID.
 
 The native SDKs keep their installation ID in memory only. On Android, [`InMemoryInstallation`](../../apps/mobile-app/android/app/src/main/java/io/sentry/android/core/InMemoryInstallation.java) sets a random one per process before the page can start the SDK. On iOS, [`MainViewController`](../../apps/mobile-app/ios/App/App/MainViewController.swift) puts a directory where the Cocoa SDK would write its `INSTALLATION` file, so each process gets a new one; Cocoa sends it only as the user of an event that has none, and sends no device ID. Native session tracking is off on both, and Android's scope persistence and NDK and iOS's watchdog termination tracking too, so the SDKs keep no installation ID or session on the device, and release health for the shells is given up; a crash report waits on the device, with its scope, only until the next launch sends it. Screenshots, view hierarchies, feedback, replay and profiling are off. There is no native `beforeSend`: the organisation's scrubbing rule removes the device identifiers, including Cocoa's stable `contexts.app.device_app_hash`, and a `user.id` in an installation ID format at ingest. The [mobile app guide](../../apps/mobile-app/README.md#sentry) lists the native settings.
+
+A listener can turn native capture off with the shells' ["Send crash reports" switch](#crash-reports-switch).
 
 ## Capture rule
 
@@ -162,6 +164,10 @@ The client options set `sendDefaultPii: false` and leave `dataCollection` unset,
 - drop the auth errors of Sentry's Supabase integration.
 
 The masking `beforeSendSpan` and `beforeSendLog` of `@cup/telemetry.core` apply to the client too. Sentry's organisation settings scrub again at ingest; the [Terraform guide](../../terraform/README.md#sentry) describes them.
+
+### Crash reports switch
+
+The shells' account settings have a "Send crash reports" switch, on by default; the browser has none. It covers native capture only: the shell's JS errors, traces and logs still go through the tunnel. The shells' own `CrashReporting` plugin keeps it in SharedPreferences on Android and in UserDefaults on iOS, never in `localStorage`, and `initializeTelemetry` reads it before `Sentry.init` and passes it as `enableNative`. Turning it off deletes Sentry's files on the device: `cache/sentry/` on Android, and `io.sentry/`, `SentryCrash/` and `async.log` in `Library/Caches` on iOS. The native SDK of the running process keeps running until the app stops, so the switch takes full effect on the next start, which runs JS-only and deletes whatever that SDK wrote after the switch; there is no live re-init. Crashes of listeners who turned it off reach only the store consoles ([ADR 0030](../adr/0030-capture-native-crashes-in-the-shells-without-consent-keeping-no-installation-id-on-the-device.md)). The [mobile app guide](../../apps/mobile-app/README.md#crash-reports-switch) describes the plugin.
 
 ## Nothing is sent outside production
 

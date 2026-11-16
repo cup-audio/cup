@@ -219,6 +219,8 @@ After each crash the test waits until Cup's process has exited before launching 
 - the Cocoa SDK's in-memory installation ID differs between two launches. Cocoa sends it only as the user of an event without one, so the test reads it from the running app: it unsets the native user through the plugin's `setUser` and reads the ID that `fetchNativeDeviceContexts` then reports in its place;
 - `Library/Caches/INSTALLATION` in Cup's data container, found with `xcrun simctl get_app_container`, is an empty directory, and no file in the container holds either installation ID.
 
+A second test per platform covers the "Send crash reports" switch. Signed in, it waits until the native SDK has written its files, turns the switch off in the account dialog, and relaunches Cup, after which none of Sentry's files is left: `cache/sentry/` on Android, `io.sentry`, `SentryCrash` and `async.log` in `Library/Caches` on iOS. It then crashes Cup natively, launches it again, and checks that a JS error still arrives and that no event from a native SDK did, five seconds after that JS error. `expectJsErrorThroughTunnel` throws its error again, each time with its own message, until one arrives with the account ID: right after a launch, the user rule has not loaded the ID yet, and Sentry drops an error that repeats the one before it.
+
 The simulator shares the Mac's loopback, so the native SDK reaches the stub at `127.0.0.1` directly. `IosAppDevice.waitForProcessExit()` waits until Appium reports Cup not running before the relaunch. When `crash()` ran inside the WebView script, Appium waited two minutes for the answer of the crashed page, so the script schedules it and returns first.
 
 ## Layout

@@ -44,6 +44,12 @@ export type ShellTelemetryContext = {
    * argument, the Sentry stub's.
    */
   testSentryDsn: string | undefined;
+  /**
+   * The shell's "Send crash reports" switch, which the native `CrashReporting` plugin keeps. Off,
+   * the shell runs JS-only: its JS errors still go through the tunnel, but the native SDK stays
+   * off.
+   */
+  crashReports: boolean;
   /** The app's version and build number, from `App.getInfo()`. */
   app: { version: string; build: string };
 };
@@ -169,7 +175,7 @@ function browserTarget(pageOrigin: string, release: string | undefined): SendTar
 function shellTarget(
   apiOrigin: string,
   webRelease: string | undefined,
-  { debugBuild, testSentryDsn, app }: ShellTelemetryContext,
+  { debugBuild, testSentryDsn, crashReports, app }: ShellTelemetryContext,
 ): SendTarget | undefined {
   const dsn = debugBuild
     ? testSentryDsn
@@ -189,9 +195,10 @@ function shellTarget(
     ...(webRelease === undefined
       ? {}
       : { initialScope: { tags: { [TELEMETRY_ATTRIBUTES.WEB_RELEASE]: webRelease } } }),
-    // Native crashes, ANRs and app hangs, with the native installation ID kept in memory only. That
-    // gives up native release health, so native session tracking is off.
-    enableNative: true,
+    // Native crashes, ANRs and app hangs, with the native installation ID kept in memory only, unless
+    // the listener turned crash reports off. That gives up native release health, so native session
+    // tracking is off.
+    enableNative: crashReports,
     enableAutoSessionTracking: false,
     enableWatchdogTerminationTracking: false,
     attachThreads: true,

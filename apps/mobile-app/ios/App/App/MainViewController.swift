@@ -8,6 +8,7 @@ class MainViewController: CAPBridgeViewController {
     /// web app starts the native Sentry SDK.
     required init?(coder: NSCoder) {
         SentryInstallationFile.block()
+        CrashReportingSwitch.deleteSentryFilesIfDisabled()
         super.init(coder: coder)
     }
 
@@ -15,6 +16,7 @@ class MainViewController: CAPBridgeViewController {
         super.capacitorDidLoad()
         // The app's own plugins are not npm packages, so Capacitor does not find them by itself.
         bridge?.registerPluginInstance(WebAuthenticationPlugin())
+        bridge?.registerPluginInstance(CrashReportingPlugin())
         #if DEBUG
         applyTestLaunchArguments()
         #endif

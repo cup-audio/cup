@@ -11,8 +11,10 @@ import {
   crashNatively,
   distinctEvents,
   expectJsErrorThroughTunnel,
+  expectNoNativeEvents,
   readAccountId,
   SENTRY_EVENT_TIMEOUT_MS,
+  turnCrashReportsOff,
 } from "#src/telemetry-assertions.ts";
 
 /**
@@ -78,6 +80,45 @@ test("a shell JS error and a native crash arrive with the account ID, and no ins
     [],
   );
 });
+
+test("after turning crash reports off and restarting, a native crash sends nothing and Sentry's files are gone", async () => {
+  const device = asIosAppDevice(app.device);
+  await device.launch({ apiOrigin: app.apiOrigin, testSentryDsn: app.testSentryDsn });
+  let webView = await device.webView();
+  await signInFromHomeLink(device, webView);
+  const accountId = await readAccountId(app);
+  // The native SDK, on by default, has created its files.
+  await webView.waitUntil(async () => (await sentryPaths(device)).length > 0, {
+    timeout: SENTRY_EVENT_TIMEOUT_MS,
+    timeoutMsg: "The native Sentry SDK created no files.",
+  });
+
+  await turnCrashReportsOff(webView);
+  await device.relaunch();
+  webView = await device.webView();
+  // The relaunch deleted whatever the native SDK of the earlier process wrote after the switch.
+  expect(await sentryPaths(device)).toEqual([]);
+
+  const eventCountBeforeCrash = app.sentryStub.errorEvents("cup-app").length;
+  await expectJsErrorThroughTunnel(app, webView, accountId);
+  await crashNatively(webView);
+  await device.waitForProcessExit();
+  await device.launch({ apiOrigin: app.apiOrigin, testSentryDsn: app.testSentryDsn });
+  webView = await device.webView();
+
+  await expectNoNativeEvents(app, webView, accountId, eventCountBeforeCrash);
+  expect(await sentryPaths(device)).toEqual([]);
+});
+
+/**
+ * Which of the Cocoa SDK's files exist in `Library/Caches`: its envelopes and scope, its crash
+ * reports, and its crash handler's log.
+ */
+async function sentryPaths(device: IosAppDevice): Promise<string[]> {
+  const caches = path.join(await device.dataContainerPath(), "Library/Caches");
+  const names = await fs.readdir(caches);
+  return names.filter((name) => ["io.sentry", "SentryCrash", "async.log"].includes(name));
+}
 
 /**
  * Crashes Cup natively, waits until its process has ended, launches it again, which sends the crash

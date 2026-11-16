@@ -3,12 +3,14 @@ import React from "react";
 
 import { AccountLoadError, AccountLoading } from "#src/app/components/account-load-states.js";
 import { AccountSettings } from "#src/app/components/account-settings.js";
+import { CrashReportsSetting } from "#src/app/components/crash-reports-setting.js";
 import { PageTitle } from "#src/app/components/page-title.js";
 import { DSDialog } from "#src/app/design-system/dialog.js";
 import { useCloseRecentsDialog } from "#src/app/use-close-recents-dialog.js";
 import { useAccountSession } from "#src/auth/hooks.js";
 import { useIsAccountConfirmationPending } from "#src/data-fetching/account-confirmation.js";
 import { accountQuery } from "#src/data-fetching/account.js";
+import { hasCrashReportsSwitch } from "#src/platform/crash-reporting.js";
 
 /**
  * The account dialog over Recents. Unlike the Add dialog, no route mask hides its URL: confirming a
@@ -47,6 +49,7 @@ function AccountDialog(): React.ReactNode {
           purpose="settings"
         />
       )}
+      {hasCrashReportsSwitch() && <CrashReportsSetting />}
     </AccountDialogFrame>
   );
 }
