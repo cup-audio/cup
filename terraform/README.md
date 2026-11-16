@@ -132,8 +132,9 @@ The [Sentry root](sentry/main.tf) manages Cup's Sentry production setup through 
 - One key per project, with `prevent_destroy`, whose public DSNs are the outputs `cup_worker_dsn` and `cup_app_dsn`.
 - In both projects, the inbound filters for browser extensions, web crawlers, localhost and every legacy browser Sentry has not deprecated, and spike protection with one notification action per project, Sentry's own email, for when it starts dropping events.
 - The privacy settings the provider cannot set (see [Privacy settings](#privacy-settings)).
+- The alerts and monitors in [alerts.tf](sentry/alerts.tf) (see [Alerts and monitors](#alerts-and-monitors)).
 
-Alert rules, monitors and personal notification settings are not managed yet. The first apply ran on 2026-11-16, and the plan after it showed no changes.
+The first apply ran on 2026-11-16, and the plan after it showed no changes. The alerts and monitors were added later and are not applied yet.
 
 ### Organisation
 
@@ -162,3 +163,18 @@ The privacy rules at ingest come from committed JSON in [sentry/privacy](sentry/
 - [cup-worker-relay-pii-config.json](sentry/privacy/cup-worker-relay-pii-config.json) holds the `cup-worker` project rule that removes `$user.geo.**`, so the Worker's own events carry no location.
 
 Two `terraform_data` resources in [privacy.tf](sentry/privacy.tf) send them with `curl`: the organisation's rules together with "Prevent storing IP addresses" (`scrubIPAddresses: true`) and "Show Generative AI Features" turned off (`hideAiFeatures: true`, so no member can send issue data to Sentry's AI features) through `PUT /api/0/organizations/cupaudio/`, and the project rule through `PUT /api/0/projects/cupaudio/cup-worker/`. They run again whenever the hash of what they send changes. Each request replaces every rule of its scope, so edit the files rather than the Sentry UI. In every plan, two `check` blocks read both settings through an `http` data source and warn when the live values differ from the committed ones. To restore drifted values without changing the files, replace the resource, for example with `-replace=terraform_data.organization_privacy_settings`. The `http` data source sends the token in a request header, which Terraform writes to state; this is accepted.
+
+### Alerts and monitors
+
+[alerts.tf](sentry/alerts.tf) declares what emails the operator; the [observability page](../docs/architecture/observability.md#alerts-and-monitors) describes when each fires. It uses Sentry's current monitor and alert model (`sentry_alert`), not the deprecated `sentry_issue_alert`:
+
+- `sentry_alert.new_or_regressed_issue`, one per project, on the project's default issue stream monitor, which Sentry creates with the project and the `sentry_project_issue_stream_monitor` data source reads, and on the project's own metric monitors and, in `cup-worker`, the uptime monitor. It fires on a new issue and on a resolved issue that comes back.
+- `sentry_alert.conversion_failure_frequency`, on the default error monitor of `cup-worker`, for an issue tagged `cup.conversion.failure_category` that is seen more than 5 times in 1 h.
+- `sentry_uptime_monitor.health`, in `cup-worker`, which requests `GET https://cup.audio/api/health` every minute and opens an issue after 3 consecutive checks without a 200. The free plan includes one uptime monitor.
+- `sentry_metric_monitor.daily_errors` and `.daily_spans`, one each per project, which open an issue when a project takes more than 150 errors (error and message events) or 165,000 spans in a day, about a thirtieth of the free plan's monthly 5k errors and 5M spans.
+
+Every alert emails the team `cup` at most once an hour per issue (`frequency_minutes = 60`), so the operator must be a member of that team; a plan on 2026-11-16 found the token user, the operator, a member. Spike protection's notification is the separate `sentry_notification_action` above.
+
+### Personal notifications
+
+The alerts are meant to be the only source of Sentry email, so the operator turns Sentry's personal workflow notifications off once, in the Sentry UI under **User Settings → Notifications → Workflow**, set to send none (the API value `never`). Leave **Issue Alerts** on, which the alerts above need, and the quota and spike protection notifications too. Terraform cannot manage this: the personal notification endpoints accept no auth token whatever its scopes, only a signed-in session, and the provider has no resource for them.

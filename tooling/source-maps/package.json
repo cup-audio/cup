@@ -2,7 +2,8 @@
   "name": "@cup/source-maps",
   "private": true,
   "bin": {
-    "prepare-source-maps": "./src/cli.ts"
+    "prepare-source-maps": "./src/cli.ts",
+    "upload-shell-symbols": "./src/upload-shell-symbols-cli.ts"
   },
   "files": [
     "src/**"

@@ -1,6 +1,6 @@
 # Production configuration
 
-Use this guide to supply the production Worker's configuration and the provider settings that Terraform does not manage, to find those it does, and to deploy. The [authentication](architecture/authentication.md) and [account deletion](architecture/account-deletion.md) pages explain the behavior this configuration enables. The [Terraform guide](../terraform/README.md) covers infrastructure state, the Supabase project, Supabase's Google provider, the Resend domain's settings and DNS records, and the Cloudflare R2 bucket, DNS records, operator Access application and AI Gateway, and [Sentry](../terraform/README.md#sentry)'s projects, keys, inbound filters, spike protection and privacy settings. Apple sign-in and native iOS account support are deferred.
+Use this guide to supply the production Worker's configuration and the provider settings that Terraform does not manage, to find those it does, and to deploy. The [authentication](architecture/authentication.md) and [account deletion](architecture/account-deletion.md) pages explain the behavior this configuration enables. The [Terraform guide](../terraform/README.md) covers infrastructure state, the Supabase project, Supabase's Google provider, the Resend domain's settings and DNS records, and the Cloudflare R2 bucket, DNS records, operator Access application and AI Gateway, and [Sentry](../terraform/README.md#sentry)'s projects, keys, inbound filters, spike protection, privacy settings, alerts and monitors. Sentry's personal notification settings are the one Sentry setting set by hand ([personal notifications](../terraform/README.md#personal-notifications)). Apple sign-in and native iOS account support are deferred.
 
 ## Worker configuration
 
@@ -60,3 +60,32 @@ The [deploy script](../apps/cloudflare-worker/scripts/deploy.ts) runs these step
 4. `wrangler deploy` deploys the Worker with the [Worker configuration](../apps/cloudflare-worker/wrangler.jsonc), which sets `LOCAL_DEVELOPMENT` to `"false"`.
 
 The script makes no release API calls: Sentry creates a release from the first event that names it, and matches source maps by debug ID, not by release. Wrangler authenticates with the operator's own login (`wrangler login`). Keep the Cloudflare credentials from `apps/cloudflare-worker/.env.local` out of the deploying shell: that token covers development AI calls only, and Wrangler fails the asset upload with "No access to the specified resource" when it uses it. `wrangler deployments list`, run in `apps/cloudflare-worker`, shows the version now serving traffic.
+
+## Native release
+
+A release of the Android or iOS shell goes to the stores by hand. Before its store upload, upload the files Sentry needs to read the release's stack traces: the source maps of the web bundle packed into the build, and on iOS the archive's dSYMs ([release tracking](architecture/observability.md#release-tracking)). Sentry CLI needs the same login as the [deploy](#deploy).
+
+1. Build the shells from the commit being released, which builds the web app with its source maps and syncs the bundle into both native projects:
+
+   ```sh
+   pnpm --filter '@cup/mobile-app' build
+   ```
+
+2. Archive the release: in Xcode, **Product → Archive** with the Release configuration; in Android Studio, a signed release bundle.
+3. Upload its symbols, passing the archive's absolute path for iOS (Xcode's Organizer shows it under **Show in Finder**):
+
+   ```sh
+   pnpm --filter '@cup/mobile-app' symbols:upload ios "/absolute/path/to/Cup.xcarchive"
+   pnpm --filter '@cup/mobile-app' symbols:upload android
+   ```
+
+4. Upload the build to App Store Connect or the Play Console only if the step before succeeded.
+
+`symbols:upload` runs [`upload-shell-symbols`](../tooling/source-maps/README.md#upload-shell-symbols). It refuses source maps whose debug IDs are not all in the bundle packed into the build, which happens when the web app was rebuilt after the sync; it checks the Sentry token with `sentry-cli info`; on iOS it uploads every dSYM of the archive and waits until Sentry has processed them; and it uploads the source maps to `cup-app`. The first failing step stops it with a message saying not to upload the build to the store; fix the cause and run it again. There is no Xcode build phase that uploads, and the script makes no release API calls.
+
+**Store-side symbols.** The stores read crash reports themselves, which covers listeners who turned "Send crash reports" off. Keep "Include symbols for your app" on when uploading from Xcode's Organizer, so App Store Connect receives the dSYMs and Xcode Organizer's crash reports are symbolicated. Android stays unminified (`minifyEnabled false` in the app's `build.gradle`), so the Play Console's Android vitals read Java stack traces without a mapping file, and no R8 mapping exists to upload. Turning R8 on later makes uploading each release's mapping file to Sentry (`sentry-cli` or Sentry's Gradle plugin) and to the Play Console mandatory, and `symbols:upload` must then upload it.
+
+**Store privacy forms**, filled in by the operator at the first release with Sentry and checked at every release:
+
+- Apple's App Privacy labels in App Store Connect declare Diagnostics (crash data, performance data and other diagnostic data), linked to the user, not used for tracking, for app functionality. The app's [privacy manifest](../apps/mobile-app/ios/App/App/PrivacyInfo.xcprivacy) declares the same.
+- Google Play's Data safety form declares App info and performance (crash logs and diagnostics), collected, not shared, for app functionality.
