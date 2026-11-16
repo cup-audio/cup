@@ -1,9 +1,11 @@
+import { captureMessage } from "@sentry/core";
 import { and, asc, eq, inArray, lte, min, sql } from "drizzle-orm";
 import { drizzle, type DrizzleSqliteDODatabase } from "drizzle-orm/durable-sqlite";
 import { Temporal } from "temporal-polyfill";
 import { z } from "zod";
 
 import { deletionAttemptSchema, type DeletionAttempt } from "@cup/accounts/lifecycle";
+import { TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
 
 import type { ProviderRequest } from "#src/providers/provider-request.ts";
 import { sendResendEmail, type ResendEnvironment } from "#src/providers/resend-email.ts";
@@ -35,12 +37,19 @@ export type DeletionEnvironment = SupabaseAdminEnvironment &
 export type DeletionProviderOptions = Partial<ProviderRequest>;
 const PROVIDER_TIMEOUT_MS = 10_000;
 const DAY = 86_400_000;
+/**
+ * How long after its recovery deadline an unfinished deletion counts as overdue, which is the same
+ * as stuck: the alarm reports it to Sentry once, and the Operator CLI lists it as `overdue`.
+ */
+const OVERDUE_AFTER_DEADLINE_MS = 3_600_000;
 const jobSchema = deletionAttemptSchema.extend({
   googleRevocation: z.enum(["unavailable", "revoked", "failed"]).default("unavailable"),
   identityDone: z.boolean(),
   accountDone: z.boolean(),
   failures: z.number().int(),
   nextAttemptMs: z.number(),
+  /** Whether the alarm has reported this job as stuck; jobs stored before the check lack it. */
+  stuckReported: z.boolean().default(false),
 });
 type DeletionJob = z.infer<typeof jobSchema>;
 const notificationSchema = z.object({
@@ -124,6 +133,7 @@ export class DeletionCoordinator {
           accountDone: false,
           failures: 0,
           nextAttemptMs: attempt.deadlineMs,
+          stuckReported: false,
         });
         this.enqueue(
           attempt,
@@ -234,6 +244,7 @@ export class DeletionCoordinator {
       }
     }
     await this.sendNotifications();
+    this.reportStuckAttempts();
     for (const row of this.database.select({ json: deletionJobs.json }).from(deletionJobs).all()) {
       const job = jobSchema.parse(JSON.parse(row.json));
       if (job.state === "erased") {
@@ -307,7 +318,7 @@ export class DeletionCoordinator {
           identityDone: job.identityDone,
           accountDone: job.accountDone,
           failures: job.failures,
-          overdue: Temporal.Now.instant().epochMilliseconds >= job.deadlineMs + DAY,
+          overdue: isOverdue(job, Temporal.Now.instant().epochMilliseconds),
         };
       });
   }
@@ -329,6 +340,17 @@ export class DeletionCoordinator {
     this.save({ ...job, googleRevocation: outcome });
   }
 
+  /** Reports each overdue attempt once, whether or not this pass retried it. */
+  private reportStuckAttempts() {
+    const nowMs = Temporal.Now.instant().epochMilliseconds;
+    for (const row of this.database.select({ json: deletionJobs.json }).from(deletionJobs).all()) {
+      const job = jobSchema.parse(JSON.parse(row.json));
+      if (isOverdue(job, nowMs) && !job.stuckReported) {
+        reportStuck(job);
+        this.save({ ...job, stuckReported: true });
+      }
+    }
+  }
   private job(attemptId: string) {
     const row = this.database
       .select({ json: deletionJobs.json })
@@ -505,4 +527,33 @@ export class DeletionCoordinator {
       this.database.delete(deletionJobs).where(eq(deletionJobs.attemptId, job.attemptId)).run();
     });
   }
+}
+
+/** An attempt still not erased, nor restored, an hour after its recovery deadline. */
+function isOverdue(job: DeletionJob, nowMs: number) {
+  return (
+    (job.state === "scheduled" || job.state === "deleting") &&
+    nowMs >= job.deadlineMs + OVERDUE_AFTER_DEADLINE_MS
+  );
+}
+
+/** One error event per stuck attempt, grouped into one Sentry issue; never the email address. */
+function reportStuck(job: DeletionJob) {
+  // A scheduled job has not fenced the account yet, which counts as account cleanup.
+  const pending =
+    !job.identityDone && !job.accountDone ? "both" : job.identityDone ? "account" : "identity";
+  // The attempt ID keeps Sentry's Dedupe integration from dropping the report of a second stuck
+  // attempt as a repeat of the first; the fingerprint still groups them into one issue.
+  captureMessage(
+    `Account deletion attempt ${job.attemptId} is still not erased 1 h after its recovery deadline`,
+    {
+      level: "error",
+      fingerprint: ["account-deletion-stuck"],
+      tags: {
+        [TELEMETRY_ATTRIBUTES.ACCOUNT_ID]: job.accountId,
+        [TELEMETRY_ATTRIBUTES.ACCOUNT_DELETION_ATTEMPT_ID]: job.attemptId,
+        [TELEMETRY_ATTRIBUTES.ACCOUNT_DELETION_PENDING]: pending,
+      },
+    },
+  );
 }

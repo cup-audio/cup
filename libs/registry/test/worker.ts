@@ -1,8 +1,10 @@
+import * as Sentry from "@sentry/cloudflare";
 import { DurableObject } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/durable-sqlite";
 
 import { AccountDurableObject as BaseAccountDurableObject } from "@cup/accounts";
 import type { DeletionAttempt } from "@cup/accounts/lifecycle";
+import { createWorkerSentryOptions } from "@cup/telemetry.cloudflare";
 
 import { DeletionCoordinator } from "#src/account-deletion/deletion-coordinator.ts";
 import { RegistryDurableObject as BaseRegistryDurableObject } from "#src/index.ts";
@@ -316,3 +318,12 @@ export class DeletionTestDurableObject extends DurableObject<{
     this.accountHold?.release();
   }
 }
+
+/**
+ * The deletion coordinator test object wrapped with Sentry as production wraps the registry, so a
+ * test that points SENTRY_DSN at a Sentry stub sees what an alarm pass reports.
+ */
+export const SentryDeletionTestDurableObject = Sentry.instrumentDurableObjectWithSentry(
+  (env) => createWorkerSentryOptions(env, "registry-durable-object"),
+  DeletionTestDurableObject,
+);

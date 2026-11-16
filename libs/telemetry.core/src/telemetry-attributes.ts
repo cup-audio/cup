@@ -17,6 +17,13 @@ export const TELEMETRY_ATTRIBUTES = {
   CONVERSION_FAILURE_CATEGORY: "cup.conversion.failure_category",
   /** The wrapper types of a logged error, outermost to innermost. */
   EXCEPTION_CHAIN: "cup.exception.chain",
+  /** The account deletion attempt, an opaque ID distinct from the account ID. */
+  ACCOUNT_DELETION_ATTEMPT_ID: "cup.account_deletion.attempt_id",
+  /**
+   * What an unfinished account deletion still waits for: `identity` (the Supabase identity),
+   * `account` (the account's fence or erasure), or `both`.
+   */
+  ACCOUNT_DELETION_PENDING: "cup.account_deletion.pending",
 } as const;
 
 /**

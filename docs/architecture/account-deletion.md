@@ -36,7 +36,7 @@ Account erasure removes the account's R2 prefix, conversion-owner routes, and ac
 
 The coordinator awaits account and provider calls with its Durable Object input gate open, so a restore delivery or a Google revocation outcome can be accepted while it waits. It continues from the stored job after an awaited fence, and a failed attempt does not overwrite a restore accepted meanwhile ([`deletion-coordinator.test.ts`](../../libs/registry/test/deletion-coordinator.test.ts)).
 
-Failures retain durable progress and retry with backoff. Operators can inspect overdue cleanup with the [operator CLI](../../apps/operator/README.md#list-account-deletions); there is no force-complete action that discards uncertain writers.
+Failures retain durable progress and retry with backoff. An attempt still neither erased nor restored 1 h after its recovery deadline is overdue, which means the same as stuck. The coordinator's alarm pass then reports it to Sentry once, tagged with what is pending: the identity, the account (its fence or erasure), or both ([stuck checks](observability.md#stuck-checks)). Operators can inspect overdue cleanup with the [operator CLI](../../apps/operator/README.md#list-account-deletions); there is no force-complete action that discards uncertain writers.
 
 Sources: [account cleanup](../../libs/accounts/src/durable-object/account-durable-object.ts), [writer reconciliation](../../libs/accounts/src/storage/account-artifact-writers.ts), [registry alarms](../../libs/registry/src/durable-object/registry-durable-object.ts), [coordinator](../../libs/registry/src/account-deletion/deletion-coordinator.ts), and [Supabase identity deletion](../../libs/registry/src/providers/supabase-identity.ts).
 
