@@ -1,6 +1,10 @@
 import { z } from "zod";
 
-import { conversionPhaseSchema, type ConversionPhase } from "@cup/conversion-contracts";
+import {
+  conversionFailureCategorySchema,
+  conversionPhaseSchema,
+  type ConversionPhase,
+} from "@cup/conversion-contracts";
 
 export const accountIdentitySchema = z
   .object({
@@ -134,7 +138,12 @@ export const accountOutcomeSchema = z.discriminatedUnion("status", [
   z
     .object({
       status: z.literal("failed"),
-      failureCategory: z.string().min(1),
+      // The account alarm recorded a preparation Workflow that errored or was terminated as
+      // `execution-failed` until it took the conversion grant's category; stored outcomes keep it.
+      failureCategory: z.preprocess(
+        (category) => (category === "execution-failed" ? "workflow-platform" : category),
+        conversionFailureCategorySchema,
+      ),
       explanation: z.string().min(1),
     })
     .strict(),

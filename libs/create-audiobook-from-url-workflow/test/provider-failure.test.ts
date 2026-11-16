@@ -19,7 +19,10 @@ vi.mock("cloudflare:workflows", () => ({
   NonRetryableError: class NonRetryableError extends Error {},
 }));
 // The helper itself is tested against the Sentry stub in @cup/telemetry.cloudflare.
-vi.mock(import("@cup/telemetry.cloudflare"), () => ({ logEvent: vi.fn<typeof logEvent>() }));
+vi.mock(import("@cup/telemetry.cloudflare"), async (importOriginal) => ({
+  ...(await importOriginal()),
+  logEvent: vi.fn<typeof logEvent>(),
+}));
 
 import { NonRetryableError } from "cloudflare:workflows";
 

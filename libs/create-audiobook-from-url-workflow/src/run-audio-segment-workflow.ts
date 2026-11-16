@@ -1,3 +1,4 @@
+import { captureException } from "@sentry/core";
 import type { WorkflowEvent, WorkflowStep } from "cloudflare:workers";
 import { NonRetryableError } from "cloudflare:workflows";
 
@@ -9,6 +10,8 @@ import {
   type SpeechSynthesisAi,
 } from "@cup/audiobook-production";
 import { segmentWorkflowParamsSchema, type SegmentWorkflowParams } from "@cup/conversion-contracts";
+import { setConversionScope } from "@cup/telemetry.cloudflare";
+import { TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
 
 import { resolveConversionExecution } from "#src/conversion-execution.ts";
 import type { AudiobookWorkflowEnvironment } from "#src/workflow-environment.ts";
@@ -35,6 +38,7 @@ export async function runAudioSegmentWorkflow({
   if (event.instanceId !== `segment-${conversionId}-${sequence}`) {
     throw new NonRetryableError("Segment Workflow identity mismatch");
   }
+  setConversionScope({ conversionId, owner: params.owner, sequence });
 
   const execution = resolveConversionExecution(env, params);
   const { artifactPrefix: prefix, artifactBucket: bucket } = execution;
@@ -123,6 +127,11 @@ export async function runAudioSegmentWorkflow({
         }),
         { httpMetadata: { contentType: "application/json" } },
       );
+      // Last in the step, so only a step that released the reservation reports the final failure,
+      // and a replay of the run reuses the recorded step instead of capturing again.
+      captureException(error, {
+        tags: { [TELEMETRY_ATTRIBUTES.CONVERSION_FAILURE_CATEGORY]: "segment" },
+      });
     });
     throw error;
   }

@@ -13,11 +13,30 @@ const IP_HEADERS = new Set(["cf-connecting-ip", "true-client-ip", "x-forwarded-f
 const TIME_ZONE_ATTRIBUTE = "culture.timezone";
 
 /**
- * The Worker's `beforeSend`: no IP address, no IP headers, no time zone, masked URLs, and only
- * Cup's own error messages. A foreign error in the captured chain keeps its class name as its type,
- * loses its message, and loses the properties `extraErrorDataIntegration` copied from it.
+ * The mechanisms of the captures Sentry's wrappers make on their own, which Cup's capture rule
+ * leaves out. The Workflow wrapper captures a step's last failed attempt, though the run goes on
+ * and Cup captures only the instance's final failure. The Durable Object wrapper captures every
+ * error an RPC method or the alarm throws, though the caller captures an RPC error at its boundary
+ * and a Durable Object captures only what it swallows itself.
  */
-export function beforeSendServerEvent(event: ErrorEvent, hint: EventHint): ErrorEvent {
+const DROPPED_MECHANISMS = new Set([
+  "auto.faas.cloudflare.workflow",
+  "auto.faas.cloudflare.durable_object",
+]);
+
+/**
+ * The Worker's `beforeSend`: drops the wrappers' own captures, then sends no IP address, no IP
+ * headers, no time zone, masked URLs, and only Cup's own error messages. A foreign error in the
+ * captured chain keeps its class name as its type, loses its message, and loses the properties
+ * `extraErrorDataIntegration` copied from it.
+ */
+export function beforeSendServerEvent(event: ErrorEvent, hint: EventHint): ErrorEvent | null {
+  if (
+    event.exception?.values?.some((value) => DROPPED_MECHANISMS.has(value.mechanism?.type ?? ""))
+  ) {
+    return null;
+  }
+
   const chain = findErrorChain(hint.originalException);
   const sent: ErrorEvent = { ...event, user: { ...event.user, ip_address: null } };
 

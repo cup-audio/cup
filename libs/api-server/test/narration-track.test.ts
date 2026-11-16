@@ -1,3 +1,4 @@
+import { captureException } from "@sentry/core";
 import { Temporal } from "temporal-polyfill";
 import { afterEach, expect, test, vi } from "vitest";
 
@@ -19,7 +20,15 @@ vi.mock("@cup/conversion-grants", async () => ({
   ...(await import("@cup/conversion-grants/session")),
 }));
 // The helper itself is tested against the Sentry stub in @cup/telemetry.cloudflare.
-vi.mock(import("@cup/telemetry.cloudflare"), () => ({ logEvent: vi.fn<typeof logEvent>() }));
+vi.mock(import("@cup/telemetry.cloudflare"), async (importOriginal) => ({
+  ...(await importOriginal()),
+  logEvent: vi.fn<typeof logEvent>(),
+}));
+// Records the captures; the Worker integration tests check what reaches Sentry.
+vi.mock(import("@sentry/core"), async (importOriginal) => ({
+  ...(await importOriginal()),
+  captureException: vi.fn<typeof captureException>(),
+}));
 
 const SIGNING_KEY = "test-media-url-signing-key";
 const conversionId = "f9cc2e59-46a3-4890-b923-bda04d03b4d0";
@@ -300,15 +309,21 @@ test("If-Range serves the range when it matches and the whole track when it is s
   expect(new Uint8Array(await stale.arrayBuffer())).toEqual(trackBytes);
 });
 
-test("a first touched segment whose size differs from its settled duration fails with 500 and is logged", async () => {
+test("a first touched segment whose size differs from its settled duration fails with 500, is logged and captured", async () => {
   const { app, env, storedSegments } = fixture();
   const [firstKey] = storedSegments.keys();
   storedSegments.set(firstKey!, new Uint8Array(770));
   const log = recordLogEvents();
+  const capture = vi.mocked(captureException);
+  capture.mockClear();
 
   const response = await app.request(await signTrackUrl(), {}, env);
 
   expect(response.status).toBe(500);
+  expect(capture).toHaveBeenCalledTimes(1);
+  expect(capture).toHaveBeenCalledWith(expect.any(Error), {
+    tags: { "cup.audio_segment.sequence": "0" },
+  });
   expect(log).toHaveBeenCalledWith("narration-track-segment-mismatch", expect.any(String), {
     attributes: {
       "cup.conversion.id": conversionId,

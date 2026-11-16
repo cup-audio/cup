@@ -1,3 +1,5 @@
+import { captureException } from "@sentry/core";
+
 import {
   createAudioSegmentKey,
   createCoverImageKey,
@@ -247,6 +249,11 @@ async function readTrackPart(
   }
 
   await object?.body.cancel();
+  // A fault the operator must look at, so an issue as well as the error log record with its sizes.
+  captureException(
+    new Error("A stored audio segment is missing or its size differs from its settled duration."),
+    { tags: { [TELEMETRY_ATTRIBUTES.AUDIO_SEGMENT_SEQUENCE]: String(part.sequence) } },
+  );
   logEvent(
     "narration-track-segment-mismatch",
     "A stored audio segment is missing or its size differs from its settled duration.",

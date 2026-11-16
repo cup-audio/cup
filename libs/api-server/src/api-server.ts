@@ -33,7 +33,11 @@ import {
   type OperatorApiHandlers,
 } from "@cup/operator-api.routes";
 import type { RegistryDurableObject } from "@cup/registry";
-import { handleTelemetryTunnelRequest, logEvent } from "@cup/telemetry.cloudflare";
+import {
+  handleTelemetryTunnelRequest,
+  logEvent,
+  setConversionScope,
+} from "@cup/telemetry.cloudflare";
 
 import { resolveConversionDispatch } from "#src/adapters/conversion-dispatch.ts";
 import { resolveConversionReader } from "#src/adapters/conversion-reader.ts";
@@ -283,6 +287,10 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
           409,
         );
       }
+      setConversionScope({
+        conversionId: result.conversion.conversionId,
+        owner: { kind: "account", accountId: auth.snapshot.accountId },
+      });
       return context.json(
         { conversionId: result.conversion.conversionId },
         result.result === "created" ? 202 : 200,
@@ -309,7 +317,12 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
     if (auth.snapshot.state !== "active") {
       return accountAuthError("blocked", context.get("requestId"));
     }
-    const { result } = await auth.account.deleteConversion(context.req.valid("param").conversionId);
+    const { conversionId } = context.req.valid("param");
+    setConversionScope({
+      conversionId,
+      owner: { kind: "account", accountId: auth.snapshot.accountId },
+    });
+    const { result } = await auth.account.deleteConversion(conversionId);
     if (result === "marked" || result === "already-marked") {
       return context.body(null, 204);
     }
@@ -454,6 +467,7 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
         grant,
         registry: getRegistryStub(context.env),
         createWorkflow: async (conversionId, params) => {
+          setConversionScope({ conversionId, owner: { kind: "trial", grantId } });
           await context.env.PREPARE_AUDIOBOOK_WORKFLOW.create({ id: conversionId, params });
         },
       },
@@ -908,6 +922,7 @@ const operatorApiHandlers: OperatorApiHandlers<ApiServerEnvironment> = {
   async deleteConversion(context) {
     const { conversionId } = context.req.valid("param");
     const owner = await getRegistryStub(context.env).findConversionOwner(conversionId);
+    setConversionScope({ conversionId, ...(owner ? { owner } : {}) });
     if (owner === undefined) {
       return conversionNotFound(context.get("requestId"));
     }
@@ -1290,6 +1305,7 @@ export function createApiServer(dependencies: ApiServerDependencies = production
       return jsonError(context.get("requestId"), "invalid-input", "Invalid conversion ID.", 400);
     }
     const owner = await getRegistryStub(context.env).findConversionOwner(conversionId);
+    setConversionScope({ conversionId, ...(owner ? { owner } : {}) });
     if (owner?.kind === "trial") {
       const denied = await requireActiveTrialAudiobookSession(
         context.env,
@@ -1344,6 +1360,7 @@ export function createApiServer(dependencies: ApiServerDependencies = production
         return jsonError(context.get("requestId"), "invalid-input", "Invalid conversion ID.", 400);
       }
       const owner = await getRegistryStub(context.env).findConversionOwner(conversionId);
+      setConversionScope({ conversionId, ...(owner ? { owner } : {}) });
       const denied = await requireSignedMediaUrl(
         context.env,
         context.req.url,

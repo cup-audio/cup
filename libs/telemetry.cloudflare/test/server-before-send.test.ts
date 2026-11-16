@@ -83,7 +83,7 @@ test("drops the time zone, a location finer than the country, from events and sp
     },
   };
 
-  expect(beforeSendServerEvent(event, {}).contexts).toEqual({
+  expect(beforeSendServerEvent(event, {})?.contexts).toEqual({
     cloud_resource: { "cloud.provider": "cloudflare" },
   });
   expect(beforeSendServerSpan(span)).toEqual({ name: "GET", attributes: { "url.path": "/x" } });
@@ -107,7 +107,7 @@ test("keeps the messages of Cup's own errors and drops those of foreign errors i
 
   const sent = beforeSendServerEvent(event, { originalException: error });
 
-  expect(sent.exception?.values).toEqual([
+  expect(sent?.exception?.values).toEqual([
     { type: "SqliteError", mechanism: { type: "chained", exception_id: 2 } },
     { type: "DrizzleQueryError", mechanism: { type: "chained", exception_id: 1 } },
     {
@@ -117,7 +117,7 @@ test("keeps the messages of Cup's own errors and drops those of foreign errors i
     },
   ]);
   // extraErrorDataIntegration copies the cause's own properties, here the SQL parameters.
-  expect(sent.contexts).toEqual({ Error: {} });
+  expect(sent?.contexts).toEqual({ Error: {} });
 });
 
 test("drops the message and the extra data of a foreign error captured unwrapped", () => {
@@ -130,21 +130,50 @@ test("drops the message and the extra data of a foreign error captured unwrapped
 
   const sent = beforeSendServerEvent(event, { originalException: error });
 
-  expect(sent.exception?.values).toEqual([
+  expect(sent?.exception?.values).toEqual([
     { type: "DrizzleQueryError", mechanism: { type: "generic", exception_id: 0 } },
   ]);
-  expect(sent.contexts).toEqual({});
+  expect(sent?.contexts).toEqual({});
 });
 
 test("masks URLs in the messages of Cup's own errors", () => {
   const error = new Error("Could not read https://cup.audio/x?token=secret");
   const event: ErrorEvent = { type: undefined, exception: { values: exceptionValuesOf(error) } };
 
-  expect(beforeSendServerEvent(event, { originalException: error }).exception?.values).toEqual([
+  expect(beforeSendServerEvent(event, { originalException: error })?.exception?.values).toEqual([
     {
       type: "Error",
       value: "Could not read https://cup.audio/x?token=[Filtered]",
       mechanism: { type: "generic", exception_id: 0 },
     },
   ]);
+});
+
+test.each(["auto.faas.cloudflare.workflow", "auto.faas.cloudflare.durable_object"])(
+  "drops the capture a wrapper made itself (%s), which Cup's capture rule leaves to Cup",
+  (mechanism) => {
+    const error = new Error("Conversion grant is not initialized");
+    const event: ErrorEvent = {
+      type: undefined,
+      exception: {
+        values: [{ type: "Error", value: error.message, mechanism: { type: mechanism } }],
+      },
+    };
+
+    expect(beforeSendServerEvent(event, { originalException: error })).toBeNull();
+  },
+);
+
+test("keeps an event Cup captured itself", () => {
+  const error = new Error("Preparation failed");
+  const event: ErrorEvent = {
+    type: undefined,
+    exception: {
+      values: [{ type: "Error", value: error.message, mechanism: { type: "generic" } }],
+    },
+  };
+
+  expect(beforeSendServerEvent(event, { originalException: error })).toMatchObject({
+    exception: { values: [{ value: "Preparation failed" }] },
+  });
 });
