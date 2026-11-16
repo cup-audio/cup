@@ -1,7 +1,7 @@
 {
   "name": "@cup/sentry-stub",
   "private": true,
-  "description": "A node:http stand-in for Sentry's envelope endpoint that records what a test would have sent to Sentry",
+  "description": "A node:http stand-in for Sentry's envelope endpoint that records what a test would have sent to Sentry, and a Playwright fixture that fails a web E2E test whose page requests Sentry",
   "files": [
     "src/**"
   ],
@@ -14,6 +14,10 @@
     ".": {
       "types": "./dist/types/sentry-stub.d.ts",
       "default": "./src/sentry-stub.ts"
+    },
+    "./playwright": {
+      "types": "./dist/types/telemetry-request-guard.d.ts",
+      "default": "./src/telemetry-request-guard.ts"
     }
   },
   "scripts": {
@@ -33,6 +37,7 @@
     "@cup/prepare-declaration-build": "workspace:*",
     "@patricktree-stack/config-typescript": "workspace:*",
     "@patricktree-stack/config-vitest": "workspace:*",
+    "@playwright/test": "catalog:",
     "@types/node": "catalog:",
     "@typescript/native": "catalog:",
     "oxlint": "catalog:",
@@ -40,5 +45,8 @@
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "@playwright/test": "catalog:"
   }
 }

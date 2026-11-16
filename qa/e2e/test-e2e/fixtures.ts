@@ -8,6 +8,7 @@ import type {
 } from "@playwright/test";
 import fs from "node:fs/promises";
 
+import { telemetryRequestGuard } from "@cup/sentry-stub/playwright";
 import {
   startAuthProvider,
   startTestWorker,
@@ -39,7 +40,8 @@ type Fixtures = {
   workerEnvironment: WorkerEnvironment;
 };
 
-export const test = base.extend<Fixtures>({
+// Fails every test whose page requests Sentry or the telemetry tunnel.
+export const test = base.extend(telemetryRequestGuard).extend<Fixtures>({
   expectConsoleError: async ({ browserName: _browserName }, use) => {
     const expectedConsoleErrors: Array<string | RegExp> = [];
     await use(

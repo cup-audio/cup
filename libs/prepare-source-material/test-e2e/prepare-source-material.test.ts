@@ -1,8 +1,10 @@
-import { expect, test } from "@playwright/test";
+import { expect, test as base } from "@playwright/test";
 import type { APIRequestContext, Browser } from "@playwright/test";
 import { format } from "oxfmt";
 import { parseFragment, serializeOuter } from "parse5";
 import type { DefaultTreeAdapterMap } from "parse5";
+
+import { telemetryRequestGuard } from "@cup/sentry-stub/playwright";
 
 import { type CoverImageBrowser, loadCoverImage } from "#src/load-cover-image.ts";
 import {
@@ -12,6 +14,9 @@ import {
   prepareSourceMaterial,
   loadPublicSourcePage,
 } from "#src/prepare-source-material.ts";
+
+// Fails every test whose page requests Sentry or the telemetry tunnel.
+const test = base.extend(telemetryRequestGuard);
 
 type SourcePageFixture = {
   coverImage: { url: string; alternativeText?: string };
@@ -481,3 +486,19 @@ function escapeHtml(text: string): string {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
 }
+
+test("a test whose page requests Sentry fails", async ({ browser: playwrightBrowser }) => {
+  // The telemetry request guard fails this test in its teardown; the test proves that it does.
+  test.fail();
+  const page = await playwrightBrowser.newPage();
+  await page.route("https://publisher.example/**", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: '<img src="https://o1.ingest.de.sentry.io/api/1/envelope/">',
+    }),
+  );
+  // Answered locally: nothing reaches Sentry.
+  await page.route("https://o1.ingest.de.sentry.io/**", (route) => route.abort());
+  await page.goto("https://publisher.example/story");
+  await page.close();
+});

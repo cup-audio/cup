@@ -1,8 +1,10 @@
+import * as Sentry from "@sentry/react";
 import { createClient, type Session } from "@supabase/supabase-js";
 import { createActor, fromCallback, fromPromise, waitFor } from "xstate";
 
 import { parseOkResponse } from "@cup/listener-api.client";
 import { authConfigResponseSchema } from "@cup/listener-api.routes";
+import { clientSupabaseIntegration } from "@cup/telemetry.browser";
 
 import { createListenerApiClient } from "#src/api-client.js";
 import {
@@ -177,6 +179,8 @@ async function loadConnection(): Promise<AccountAuthConnection> {
       storage: platformStorage.storage,
     },
   });
+  // Without Sentry running, outside production, this adds nothing.
+  Sentry.addIntegration(clientSupabaseIntegration(client));
   const { storage } = platformStorage;
   const { testAccount } = config;
   const signInMethods: SignInMethod[] = [];
