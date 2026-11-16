@@ -25,6 +25,20 @@ export type StreamedSpan = {
   attributes?: Record<string, unknown>;
 };
 
+/** A request's query string as an event carries it: raw, as entries, or as a record. */
+type EventQueryString = string | [string, string][] | Record<string, string>;
+
+/** A breadcrumb as `beforeBreadcrumb` and `beforeSend` receive it. */
+export type MaskableBreadcrumb = { message?: string; data?: Record<string, unknown> };
+
+/** The parts of an error event that can hold URLs. */
+export type MaskableEvent = {
+  message?: string;
+  request?: { url?: string; query_string?: EventQueryString };
+  exception?: { values?: { value?: string }[] };
+  breadcrumbs?: MaskableBreadcrumb[];
+};
+
 /*
  * A parameter starts the text or follows `?`, `&` or `;`, so `monkey=` never matches `key=`. The
  * value ends at the next parameter, fragment, whitespace or quote.
@@ -68,4 +82,75 @@ function maskAttributeValue(value: unknown): unknown {
     return { ...value, value: maskAttributeValue(value.value) };
   }
   return value;
+}
+
+/**
+ * The URL masking of every runtime's `beforeSend`: masks URLs in the event's message, its request's
+ * URL and query string, its exception values and its breadcrumbs.
+ */
+export function maskEventUrls<Event extends MaskableEvent>(event: Event): Event {
+  const { message, request, exception, breadcrumbs } = event;
+  return {
+    ...event,
+    ...(message === undefined ? {} : { message: maskUrl(message) }),
+    ...(request === undefined
+      ? {}
+      : {
+          request: {
+            ...request,
+            ...(request.url === undefined ? {} : { url: maskUrl(request.url) }),
+            ...(request.query_string === undefined
+              ? {}
+              : { query_string: maskQueryString(request.query_string) }),
+          },
+        }),
+    ...(exception?.values === undefined
+      ? {}
+      : {
+          exception: {
+            ...exception,
+            values: exception.values.map((value) =>
+              value.value === undefined ? value : { ...value, value: maskUrl(value.value) },
+            ),
+          },
+        }),
+    ...(breadcrumbs === undefined ? {} : { breadcrumbs: breadcrumbs.map(maskBreadcrumbUrls) }),
+  };
+}
+
+/**
+ * The URL masking of every runtime's breadcrumbs: masks URLs in the message and in every string of
+ * the data, such as a request's `url` or a navigation's `from` and `to`.
+ */
+export function maskBreadcrumbUrls<Breadcrumb extends MaskableBreadcrumb>(
+  breadcrumb: Breadcrumb,
+): Breadcrumb {
+  const { message, data } = breadcrumb;
+  return {
+    ...breadcrumb,
+    ...(message === undefined ? {} : { message: maskUrl(message) }),
+    ...(data === undefined
+      ? {}
+      : {
+          data: Object.fromEntries(
+            Object.entries(data).map(([key, value]) => [
+              key,
+              typeof value === "string" ? maskUrl(value) : value,
+            ]),
+          ),
+        }),
+  };
+}
+
+function maskQueryString(queryString: EventQueryString): EventQueryString {
+  if (typeof queryString === "string") {
+    return maskUrl(queryString);
+  }
+  const entries = Array.isArray(queryString) ? queryString : Object.entries(queryString);
+  // Masking `name=value` keeps the rule that decides by the parameter's name in one place.
+  const masked = entries.map(([name, value]): [string, string] => [
+    name,
+    maskUrl(`${name}=${value}`).slice(name.length + 1),
+  ]);
+  return Array.isArray(queryString) ? masked : Object.fromEntries(masked);
 }

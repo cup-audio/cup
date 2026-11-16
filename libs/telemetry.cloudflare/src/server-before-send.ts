@@ -1,7 +1,7 @@
-import type { Breadcrumb, Contexts, ErrorEvent, EventHint, Exception } from "@sentry/core";
+import type { Contexts, ErrorEvent, EventHint, Exception } from "@sentry/core";
 
 import { findErrorChain, findErrorType, isCupError } from "@cup/errors";
-import { maskSpanUrls, maskUrl, type StreamedSpan } from "@cup/telemetry.core";
+import { maskEventUrls, maskSpanUrls, type StreamedSpan } from "@cup/telemetry.core";
 
 /** Headers that carry the listener's IP address. */
 const IP_HEADERS = new Set(["cf-connecting-ip", "true-client-ip", "x-forwarded-for", "x-real-ip"]);
@@ -38,32 +38,23 @@ export function beforeSendServerEvent(event: ErrorEvent, hint: EventHint): Error
   }
 
   const chain = findErrorChain(hint.originalException);
-  const sent: ErrorEvent = { ...event, user: { ...event.user, ip_address: null } };
+  const masked = maskEventUrls(event);
+  const sent: ErrorEvent = { ...masked, user: { ...event.user, ip_address: null } };
 
-  if (event.request !== undefined) {
-    const { url, query_string: queryString, headers } = event.request;
+  const headers = masked.request?.headers;
+  if (masked.request !== undefined && headers !== undefined) {
     sent.request = {
-      ...event.request,
-      ...(url === undefined ? {} : { url: maskUrl(url) }),
-      ...(queryString === undefined ? {} : { query_string: maskQueryString(queryString) }),
-      ...(headers === undefined
-        ? {}
-        : {
-            headers: Object.fromEntries(
-              Object.entries(headers).filter(([name]) => !IP_HEADERS.has(name.toLowerCase())),
-            ),
-          }),
+      ...masked.request,
+      headers: Object.fromEntries(
+        Object.entries(headers).filter(([name]) => !IP_HEADERS.has(name.toLowerCase())),
+      ),
     };
   }
 
-  if (event.breadcrumbs !== undefined) {
-    sent.breadcrumbs = event.breadcrumbs.map(maskBreadcrumb);
-  }
-
-  if (event.exception?.values !== undefined) {
-    const values = event.exception.values;
+  if (masked.exception?.values !== undefined) {
+    const values = masked.exception.values;
     sent.exception = {
-      ...event.exception,
+      ...masked.exception,
       values: values.map((value, index) =>
         scrubException(value, chain[value.mechanism?.exception_id ?? values.length - 1 - index]),
       ),
@@ -115,33 +106,8 @@ function scrubContexts(contexts: Contexts, mainError: Error | undefined): Contex
 
 function scrubException(exception: Exception, error: Error | undefined): Exception {
   if (error === undefined || isCupError(error)) {
-    return exception.value === undefined
-      ? exception
-      : { ...exception, value: maskUrl(exception.value) };
+    return exception;
   }
   const { value: _value, ...withoutMessage } = exception;
   return { ...withoutMessage, type: findErrorType(error) };
-}
-
-function maskBreadcrumb(breadcrumb: Breadcrumb): Breadcrumb {
-  const url = breadcrumb.data?.["url"];
-  return {
-    ...breadcrumb,
-    ...(breadcrumb.message === undefined ? {} : { message: maskUrl(breadcrumb.message) }),
-    ...(typeof url === "string" ? { data: { ...breadcrumb.data, url: maskUrl(url) } } : {}),
-  };
-}
-
-function maskQueryString(
-  queryString: NonNullable<NonNullable<ErrorEvent["request"]>["query_string"]>,
-): NonNullable<NonNullable<ErrorEvent["request"]>["query_string"]> {
-  if (typeof queryString === "string") {
-    return maskUrl(queryString);
-  }
-  const entries = Array.isArray(queryString) ? queryString : Object.entries(queryString);
-  const masked = entries.map(([name, value]): [string, string] => [
-    name,
-    maskUrl(`${name}=${value}`).slice(name.length + 1),
-  ]);
-  return Array.isArray(queryString) ? masked : Object.fromEntries(masked);
 }

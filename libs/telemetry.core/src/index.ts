@@ -12,7 +12,11 @@ export { SIGNED_OUT_USER, TELEMETRY_ATTRIBUTES } from "#src/telemetry-attributes
 export {
   MASKED_QUERY_PARAMETERS,
   MASKED_VALUE,
+  maskBreadcrumbUrls,
+  maskEventUrls,
   maskSpanUrls,
   maskUrl,
+  type MaskableBreadcrumb,
+  type MaskableEvent,
   type StreamedSpan,
 } from "#src/url-masking.ts";

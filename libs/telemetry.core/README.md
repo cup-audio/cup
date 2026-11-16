@@ -7,6 +7,7 @@ Cup's telemetry vocabulary and privacy helpers for every runtime, without a Sent
 - `beforeSendLog` drops log records below `info` and masks URLs in the message and string attributes.
 - [`maskUrl`](src/url-masking.ts) masks the values of the credential query parameters in `MASKED_QUERY_PARAMETERS` (`token`, `key`, `sig`, `signature`, `auth`, `code`, `access_token`) in a URL, a query string or text that contains URLs, and keeps the rest readable. Every privacy hook uses this one function.
 - `maskSpanUrls` is a `beforeSendSpan` for streamed spans: it masks the span name and every string attribute.
+- `maskEventUrls` is the URL masking that both the client and the server `beforeSend` apply to an error event: its message, its request's URL and query string in any of its three forms, its exception values and its breadcrumbs. `maskBreadcrumbUrls` masks a breadcrumb's message and every string of its data, and is the client's `beforeBreadcrumb`.
 - `SIGNED_OUT_USER` is the telemetry user of a listener who is not signed in. Clients set it instead of `setUser(null)`, which would let a native SDK fill in its installation ID.
 - [`CUP_WORKER_DSN` and `CUP_APP_DSN`](src/sentry-dsns.ts) are the public DSNs of the two Sentry projects, copied from the Terraform outputs of `terraform/sentry` ([DSN handover](../../terraform/README.md#dsn-handover)). Only production configuration uses them.
 

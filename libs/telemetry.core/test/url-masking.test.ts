@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 
-import { maskSpanUrls, maskUrl } from "#src/url-masking.ts";
+import { maskSpanUrls, maskUrl, maskEventUrls } from "#src/url-masking.ts";
 
 test("masks every credential query parameter of a URL and keeps the rest", () => {
   expect(
@@ -55,4 +55,56 @@ test("the span hook masks URLs in the span name and in string attributes", () =>
       "http.response.status_code": 200,
     },
   });
+});
+
+test("the event masking masks URLs in the message, the request, the exception values and the breadcrumbs", () => {
+  const masked = maskEventUrls({
+    message: "Could not read https://cup.audio/x?token=secret",
+    request: { url: "https://cup.audio/x?code=secret&size=2", query_string: "code=secret&size=2" },
+    exception: { values: [{ type: "Error", value: "Failed: /x?sig=secret" }, { type: "Error" }] },
+    breadcrumbs: [
+      {
+        message: "GET /x?key=secret",
+        data: { url: "/x?auth=secret", from: "/a?token=secret", to: "/b", status_code: 500 },
+      },
+    ],
+  });
+
+  expect(masked).toEqual({
+    message: "Could not read https://cup.audio/x?token=[Filtered]",
+    request: {
+      url: "https://cup.audio/x?code=[Filtered]&size=2",
+      query_string: "code=[Filtered]&size=2",
+    },
+    exception: {
+      values: [{ type: "Error", value: "Failed: /x?sig=[Filtered]" }, { type: "Error" }],
+    },
+    breadcrumbs: [
+      {
+        message: "GET /x?key=[Filtered]",
+        data: {
+          url: "/x?auth=[Filtered]",
+          from: "/a?token=[Filtered]",
+          to: "/b",
+          status_code: 500,
+        },
+      },
+    ],
+  });
+});
+
+test("the event masking masks a query string parsed into entries or a record", () => {
+  const entries: [string, string][] = [
+    ["token", "secret"],
+    ["size", "2"],
+  ];
+
+  expect(maskEventUrls({ request: { query_string: entries } }).request?.query_string).toEqual([
+    ["token", "[Filtered]"],
+    ["size", "2"],
+  ]);
+  expect(
+    maskEventUrls({ request: { query_string: { token: "secret", size: "2" } } }).request
+      ?.query_string,
+  ).toEqual({ token: "[Filtered]", size: "2" });
 });

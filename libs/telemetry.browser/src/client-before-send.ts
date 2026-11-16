@@ -1,6 +1,6 @@
 import type { Breadcrumb, Contexts, ErrorEvent, EventHint } from "@sentry/react";
 
-import { maskUrl } from "@cup/telemetry.core";
+import { maskBreadcrumbUrls, maskEventUrls } from "@cup/telemetry.core";
 
 /**
  * The mechanism of the errors that Sentry's Supabase integration captures from failed auth calls.
@@ -20,35 +20,9 @@ export function beforeSendClientEvent(event: ErrorEvent, _hint: EventHint): Erro
 
   const userId = event.user?.id;
   const sent: ErrorEvent = {
-    ...event,
+    ...maskEventUrls(event),
     user: { ...(userId === undefined ? {} : { id: userId }), ip_address: null },
   };
-
-  if (event.message !== undefined) {
-    sent.message = maskUrl(event.message);
-  }
-
-  if (event.request !== undefined) {
-    const { url, query_string: queryString } = event.request;
-    sent.request = {
-      ...event.request,
-      ...(url === undefined ? {} : { url: maskUrl(url) }),
-      ...(typeof queryString === "string" ? { query_string: maskUrl(queryString) } : {}),
-    };
-  }
-
-  if (event.exception?.values !== undefined) {
-    sent.exception = {
-      ...event.exception,
-      values: event.exception.values.map((value) =>
-        value.value === undefined ? value : { ...value, value: maskUrl(value.value) },
-      ),
-    };
-  }
-
-  if (event.breadcrumbs !== undefined) {
-    sent.breadcrumbs = event.breadcrumbs.map(beforeBreadcrumbClient);
-  }
 
   if (event.contexts !== undefined) {
     sent.contexts = withoutDeviceIdentifiers(event.contexts);
@@ -63,20 +37,7 @@ export function beforeSendClientEvent(event: ErrorEvent, _hint: EventHint): Erro
  * events, which no `beforeSend` of Cup's sees.
  */
 export function beforeBreadcrumbClient(breadcrumb: Breadcrumb): Breadcrumb {
-  return {
-    ...breadcrumb,
-    ...(breadcrumb.message === undefined ? {} : { message: maskUrl(breadcrumb.message) }),
-    ...(breadcrumb.data === undefined
-      ? {}
-      : {
-          data: Object.fromEntries(
-            Object.entries(breadcrumb.data).map(([key, value]) => [
-              key,
-              typeof value === "string" ? maskUrl(value) : value,
-            ]),
-          ),
-        }),
-  };
+  return maskBreadcrumbUrls(breadcrumb);
 }
 
 function isSupabaseAuthError(event: ErrorEvent): boolean {
