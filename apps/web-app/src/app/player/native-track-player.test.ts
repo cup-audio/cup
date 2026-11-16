@@ -34,6 +34,8 @@ class FakeMediaPlaybackPlugin implements MediaPlaybackPlugin {
   readonly calls: Array<{ method: string; options?: unknown }> = [];
   /** What `getState` answers, as the plugin's current state. */
   currentState: NativePlaybackState | null = null;
+  /** What removing the state listener rejects with, if anything. */
+  listenerRemovalError: Error | null = null;
   private stateListener: ((state: NativePlaybackState) => void) | null = null;
 
   load(options: unknown) {
@@ -73,6 +75,9 @@ class FakeMediaPlaybackPlugin implements MediaPlaybackPlugin {
     this.stateListener = listener;
     return Promise.resolve({
       remove: () => {
+        if (this.listenerRemovalError) {
+          return Promise.reject(this.listenerRemovalError);
+        }
         if (this.stateListener === listener) {
           this.stateListener = null;
         }
@@ -555,6 +560,25 @@ test("releasing an audiobook being deleted closes the native session without sav
   host.release("first");
 
   expect(plugin.commands().at(-1)).toEqual({ method: "close", options: { position: "discard" } });
+});
+
+test("a state listener the plugin fails to remove is reported, not left as an unhandled rejection", async () => {
+  const { host, plugin } = createHost();
+  host.showConversion("first", FIRST);
+  host.playShown();
+  const removalError = new Error("The bridge is gone.");
+  plugin.listenerRemovalError = removalError;
+  const reported: unknown[][] = [];
+  const consoleError = console.error;
+  console.error = (...args: unknown[]) => reported.push(args);
+  try {
+    host.unload();
+    await settle();
+  } finally {
+    console.error = consoleError;
+  }
+
+  expect(reported).toEqual([[expect.any(String), removalError]]);
 });
 
 test("loading another audiobook sets it in the running session without closing it", () => {

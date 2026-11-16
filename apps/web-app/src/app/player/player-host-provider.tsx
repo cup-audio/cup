@@ -44,7 +44,9 @@ export function PlayerHostProvider({ children }: { children: React.ReactNode }) 
 
   React.useEffect(
     function adoptWhatPlaysWhenThePageStarts() {
-      void host.adoptRunningPlayer();
+      host.adoptRunningPlayer().catch((error: unknown) => {
+        console.error("The player could not take over what played when the page started.", error);
+      });
     },
     [host],
   );

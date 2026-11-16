@@ -50,9 +50,7 @@ public class MediaPlaybackPlugin extends Plugin {
     public void load(PluginCall call) {
         String conversionId = call.getString("conversionId");
         String subject = call.getString("subject");
-        String trackUrl = call.getString("trackUrl");
-        String positionUrl = call.getString("positionUrl");
-        Long urlsIssuedAt = readMilliseconds(call, "urlsIssuedAt");
+        SignedUrls urls = readUrls(call);
         ListeningPositions positions = readTimeline(call);
         String title = call.getString("title");
         Long durationMilliseconds = readMilliseconds(call, "durationMilliseconds");
@@ -60,9 +58,7 @@ public class MediaPlaybackPlugin extends Plugin {
         if (
             conversionId == null ||
             subject == null ||
-            trackUrl == null ||
-            positionUrl == null ||
-            urlsIssuedAt == null ||
+            urls == null ||
             positions == null ||
             title == null ||
             durationMilliseconds == null ||
@@ -76,9 +72,7 @@ public class MediaPlaybackPlugin extends Plugin {
         PlaybackEngine.LoadRequest request = new PlaybackEngine.LoadRequest(
             conversionId,
             subject,
-            trackUrl,
-            positionUrl,
-            urlsIssuedAt,
+            urls,
             positions,
             title,
             call.getString("artworkUrl"),
@@ -124,14 +118,12 @@ public class MediaPlaybackPlugin extends Plugin {
 
     @PluginMethod
     public void replaceUrls(PluginCall call) {
-        String trackUrl = call.getString("trackUrl");
-        String positionUrl = call.getString("positionUrl");
-        Long urlsIssuedAt = readMilliseconds(call, "urlsIssuedAt");
-        if (trackUrl == null || positionUrl == null || urlsIssuedAt == null) {
+        SignedUrls urls = readUrls(call);
+        if (urls == null) {
             call.reject("Replacing the URLs needs a track and a position URL and when they were issued.");
             return;
         }
-        onLoadedEngine(call, engine -> engine.replaceUrls(trackUrl, positionUrl, urlsIssuedAt));
+        onLoadedEngine(call, engine -> engine.replaceUrls(urls));
     }
 
     /**
@@ -186,6 +178,18 @@ public class MediaPlaybackPlugin extends Plugin {
                     call.reject("No audiobook is loaded.");
                 }
             });
+    }
+
+    /** The `trackUrl`, `positionUrl` and `urlsIssuedAt` of a load or a replacement, or null without one. */
+    @Nullable
+    private static SignedUrls readUrls(PluginCall call) {
+        String trackUrl = call.getString("trackUrl");
+        String positionUrl = call.getString("positionUrl");
+        Long urlsIssuedAt = readMilliseconds(call, "urlsIssuedAt");
+        if (trackUrl == null || positionUrl == null || urlsIssuedAt == null) {
+            return null;
+        }
+        return new SignedUrls(trackUrl, positionUrl, urlsIssuedAt);
     }
 
     /**

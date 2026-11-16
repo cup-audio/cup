@@ -20,17 +20,24 @@ final class PositionSaves {
     /** How the saves fare, which the page words for the listener. */
     enum Status {
         /** The last save succeeded, or none failed yet. */
-        OK,
+        OK("ok"),
         /** Saves fail for a reason that can pass, such as a lost connection; the latest is retried. */
-        FAILING,
+        FAILING("failing"),
         /**
          * Saves still fail for a reason that can pass: a retry failed too, or saves have failed for
          * {@link #SAVE_RETRY_DELAY_MILLISECONDS}. The page then tells the listener, as the web player
          * does; it stays until a save succeeds or is refused.
          */
-        STILL_FAILING,
+        STILL_FAILING("stillFailing"),
         /** The server refused the last save for good, in the words of {@link #getRefusalDetail()}. */
-        REFUSED,
+        REFUSED("refused");
+
+        /** The status as the page's `NativePositionSave` names it. */
+        final String wireName;
+
+        Status(String wireName) {
+            this.wireName = wireName;
+        }
     }
 
     /** What the saves need from the platform; the plugin uses Android's, the tests their own. */

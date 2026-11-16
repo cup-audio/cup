@@ -111,8 +111,8 @@ export class PlayerHost {
   private snapshot: PlayerHostSnapshot = { loaded: null, shown: null, unavailable: null };
   /** When the client received the shown audiobook, whose track URL a load uses. */
   private shownAudiobookReceivedAt = 0;
-  /** When the client received the loaded track's URL. */
-  private trackUrlReceivedAt = 0;
+  /** When the client received the loaded audiobook's signed URLs. */
+  private urlsReceivedAt = 0;
   /** The renewal Play is waiting for; Pause and unloading cancel it. */
   private pendingRenewal: symbol | null = null;
   /** Stops reporting the loaded player's playback changes to the system's media controls. */
@@ -207,8 +207,8 @@ export class PlayerHost {
       position: this.readStoredPosition(conversionId, audiobook, subject),
       subject,
     });
-    // The session's URLs came from an earlier page, so the first Play renews them.
-    this.trackUrlReceivedAt = Number.NEGATIVE_INFINITY;
+    // The session's URLs came from an earlier page, so the adopted player asks for new ones
+    // (`needsNewTrackUrl`) and the first Play renews them.
     this.setLoaded({ conversionId, audiobook, subject, player: running.adopt(session) });
   };
 
@@ -271,7 +271,7 @@ export class PlayerHost {
       return;
     }
 
-    const trackUrlAge = this.services.now() - this.trackUrlReceivedAt;
+    const trackUrlAge = this.services.now() - this.urlsReceivedAt;
     if (
       loaded.player.getSnapshot().needsNewTrackUrl ||
       trackUrlAge > TRACK_URL_RENEWAL_AGE_MILLISECONDS
@@ -425,8 +425,8 @@ export class PlayerHost {
       position: this.readStoredPosition(conversionId, audiobook, subject),
       subject,
     });
-    this.trackUrlReceivedAt = this.shownAudiobookReceivedAt;
-    const player = this.services.createPlayer(session, this.trackUrlReceivedAt);
+    this.urlsReceivedAt = this.shownAudiobookReceivedAt;
+    const player = this.services.createPlayer(session, this.urlsReceivedAt);
     this.setLoaded({ conversionId, audiobook, subject, player });
   }
 
@@ -517,8 +517,8 @@ export class PlayerHost {
       return;
     }
 
-    this.trackUrlReceivedAt = this.services.now();
-    loaded.player.replaceUrls(audiobook.narrationTrack, this.trackUrlReceivedAt);
+    this.urlsReceivedAt = this.services.now();
+    loaded.player.replaceUrls(audiobook.narrationTrack, this.urlsReceivedAt);
     loaded.player.play();
   }
 

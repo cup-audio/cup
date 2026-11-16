@@ -338,6 +338,24 @@ test("a playing session survives a swipe from recents and keeps saving, reopenin
   await waitForSessionToEnd(device, 15_000);
 });
 
+test("a session a call pauses survives a swipe from recents and plays on after the call", async () => {
+  const device = asAndroidAppDevice(app.device);
+  await app.worker.restart("long-speech");
+  const { webView } = await openNewAudiobook(device);
+  await webView.$(`${PLAYER} button[aria-label="Play"]`).click();
+  await waitForCupMediaSession(device, "PLAYING");
+
+  // ExoPlayer still wants to play during the call; only the listener's pause ends a swiped session.
+  await device.emulatorConsole("gsm", "call", "5551234");
+  await waitForCupMediaSession(device, "PAUSED");
+  await device.removeFromRecents();
+  await timers.setTimeout(5_000);
+  expect(await cupMediaPlaybackService(device)).toBeDefined();
+
+  await device.emulatorConsole("gsm", "cancel", "5551234");
+  await waitForCupMediaSession(device, "PLAYING");
+});
+
 test("signing out saves the position one last time through the position URL and ends the session", async () => {
   const device = asAndroidAppDevice(app.device);
   await app.worker.restart("long-speech");
@@ -347,21 +365,14 @@ test("signing out saves the position one last time through the position URL and 
   await webView.$(`${PLAYER} button[aria-label="Play"]`).click();
   await waitForCupMediaSession(device, "PLAYING");
 
-  // Scheduling the account's deletion is how a listener signs out; it signs in afresh first.
-  await webView.$('a[aria-label="Back"]').click();
-  await waitForRecents(webView, 1);
-  await webView.$('a[aria-label="Account"]').click();
-  await webView.$("button=Delete account…").click();
-  await device.continueGoogleSignIn();
-  webView = await device.webView();
-  const scheduleDeletion = webView.$("button=Schedule deletion");
-  await scheduleDeletion.waitForEnabled({ timeout: 30_000 });
+  const signingOut = await startSigningOut(device, webView);
+  webView = signingOut.webView;
   // "Delete account…" signed in afresh, which pauses the player as every sign-in does, on the web
   // too: `signInAgain()` sends `SIGN_IN`, whose `stopPlayback` dispatches `cup:stop-playback`, which
   // `host.pause` handles. The paused session runs on until the sign-out closes it.
   expect(await cupMediaPlaybackService(device)).toBeDefined();
   const savesBeforeSignOut = positionSaves(conversionId).length;
-  await scheduleDeletion.click();
+  await signingOut.scheduleDeletion.click();
   await waitForLandingPage(webView);
 
   await waitForSessionToEnd(device, 15_000);
@@ -369,6 +380,51 @@ test("signing out saves the position one last time through the position URL and 
   // Worker refuses it, since a scheduled deletion blocks the account, but the save was sent.
   await waitForSaveAfter(conversionId, savesBeforeSignOut);
 });
+
+test(
+  "a position the native stop could not save is saved when the listener signs out",
+  { timeout: 360_000 },
+  async () => {
+    const device = asAndroidAppDevice(app.device);
+    await app.worker.restart("long-speech");
+    const opened = await openNewAudiobook(device, {
+      foregroundGraceSeconds: FOREGROUND_GRACE_SECONDS,
+    });
+    const { conversionId } = opened;
+    const { webView } = opened;
+    await webView.$(`${PLAYER} button[aria-label="Play"]`).click();
+    await waitForCupMediaSession(device, "PLAYING");
+    await expect.poll(() => readPosition(webView), { timeout: 15_000 }).toBeGreaterThan(3_000);
+
+    // Without a connection, the pause's save fails, and so does the native stop's final one.
+    const workerPort = Number(new URL(app.apiOrigin).port);
+    let savesBeforeSignOut: number;
+    await device.unexposeHostPort(workerPort);
+    try {
+      // Restarting the Worker ends the connections the plugin and ExoPlayer hold.
+      await app.worker.restart("long-speech");
+      savesBeforeSignOut = positionSaves(conversionId).length;
+      await device.pressMediaKey("KEYCODE_MEDIA_PAUSE");
+      await waitForPlayButton(webView, "Play");
+      await device.background();
+      await waitForServiceToLeaveTheForeground(device);
+      await device.hideMediaControls();
+      await waitForSessionToEnd(device, 15_000);
+    } finally {
+      await device.exposeHostPort(workerPort);
+    }
+    await timers.setTimeout(5_000);
+    // The ended session retries nothing on its own.
+    expect(positionSaves(conversionId)).toHaveLength(savesBeforeSignOut);
+
+    await device.bringToForeground();
+    const signingOut = await startSigningOut(device, await device.webView());
+    await signingOut.scheduleDeletion.click();
+    await waitForLandingPage(signingOut.webView);
+    // The Worker refuses it, since a scheduled deletion blocks the account, but the save was sent.
+    await waitForSaveAfter(conversionId, savesBeforeSignOut);
+  },
+);
 
 test(
   "after the foreground grace a paused session keeps its notification, whose Play works, and hiding it ends the session",
@@ -441,6 +497,22 @@ async function openNewAudiobook(
     throw new Error(`The audiobook's page has no conversion in its path: ${pathname}`);
   }
   return { webView, title, durationMilliseconds, conversionId };
+}
+
+/**
+ * Opens the account's deletion from the audiobook's page, up to its enabled "Schedule deletion"
+ * button. Scheduling the account's deletion is how a listener signs out; it signs in afresh first.
+ */
+async function startSigningOut(device: AndroidAppDevice, webView: WebdriverIO.Browser) {
+  await webView.$('a[aria-label="Back"]').click();
+  await waitForRecents(webView, 1);
+  await webView.$('a[aria-label="Account"]').click();
+  await webView.$("button=Delete account…").click();
+  await device.continueGoogleSignIn();
+  const signedInWebView = await device.webView();
+  const scheduleDeletion = signedInWebView.$("button=Schedule deletion");
+  await scheduleDeletion.waitForEnabled({ timeout: 30_000 });
+  return { webView: signedInWebView, scheduleDeletion };
 }
 
 /** How often the Worker answered a request for the audiobook, which renews its signed URLs. */

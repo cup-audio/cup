@@ -7,7 +7,7 @@ package audio.cup.app;
  */
 final class PlaybackTimings {
     /** How long a loaded audiobook's signed URLs stay valid after the page fetched them. */
-    static long signedUrlLifetimeMilliseconds = TrackUrlExpiry.SERVER_MINIMUM_VALIDITY_MILLISECONDS;
+    static long signedUrlLifetimeMilliseconds = SignedUrlExpiry.SERVER_MINIMUM_VALIDITY_MILLISECONDS;
 
     /**
      * How long the service stays in the foreground after a pause, Media3's grace: its default and

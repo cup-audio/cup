@@ -41,6 +41,11 @@
             </intent-filter>
         </service>
 
+        <!-- The native player's alarm for when a paused session's URLs expire. -->
+        <receiver
+            android:name=".ExpiryAlarmReceiver"
+            android:exported="false" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

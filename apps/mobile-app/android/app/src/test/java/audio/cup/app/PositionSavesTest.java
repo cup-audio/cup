@@ -5,7 +5,6 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
-import java.util.ArrayList;
 import java.util.List;
 import org.junit.Test;
 
@@ -20,79 +19,12 @@ public class PositionSavesTest {
         new long[] { 0, 20_000, 30_000, 33_000 }
     );
 
-    /** The services, which the tests drive in place of the network, the clock and the timer. */
-    private static final class FakeServices implements PositionSaves.Services {
-        long now = 1_000_000;
-        /** The writes sent and not answered yet, oldest first. */
-        final List<Write> pending = new ArrayList<>();
-        /** Every write sent, as `url position`. */
-        final List<String> sent = new ArrayList<>();
-        Runnable retryTimer;
-        long retryDelay;
-        int stateChanges;
-
-        @Override
-        public long now() {
-            return now;
-        }
-
-        @Override
-        public void write(String positionUrl, ListeningPosition position, PositionSaves.WriteCallback callback) {
-            sent.add(positionUrl + " " + position);
-            pending.add(new Write(position, callback));
-        }
-
-        @Override
-        public Runnable setRetryTimer(Runnable callback, long delayMilliseconds) {
-            retryTimer = callback;
-            retryDelay = delayMilliseconds;
-            return () -> {
-                if (retryTimer == callback) {
-                    retryTimer = null;
-                }
-            };
-        }
-
-        @Override
-        public void onSaveStateChanged() {
-            stateChanges += 1;
-        }
-
-        /** Answers the oldest pending write. */
-        void answer(PositionSaves.Outcome outcome) {
-            pending.remove(0).callback.onWritten(outcome);
-        }
-
-        /** Answers every pending write, and those they let through, with `outcome`. */
-        void answerAll(PositionSaves.Outcome outcome) {
-            while (!pending.isEmpty()) {
-                answer(outcome);
-            }
-        }
-
-        void fireRetryTimer() {
-            Runnable timer = retryTimer;
-            retryTimer = null;
-            timer.run();
-        }
-    }
-
-    private static final class Write {
-        final ListeningPosition position;
-        final PositionSaves.WriteCallback callback;
-
-        Write(ListeningPosition position, PositionSaves.WriteCallback callback) {
-            this.position = position;
-            this.callback = callback;
-        }
-    }
-
     private static final PositionSaves.Outcome SAVED = PositionSaves.Outcome.fromResponse(204, null);
     private static final PositionSaves.Outcome NOT_CONNECTED = PositionSaves.Outcome.notConnected();
 
     @Test
     public void savesAreWrittenInOrderThroughThePositionUrlAsListeningPositions() {
-        FakeServices services = new FakeServices();
+        FakeSaveServices services = new FakeSaveServices();
         PositionSaves saves = new PositionSaves(POSITIONS, POSITION_URL, services);
 
         saves.save(1_000);
@@ -107,7 +39,7 @@ public class PositionSavesTest {
 
     @Test
     public void savesDuringPlaybackWaitForTheSaveInterval() {
-        FakeServices services = new FakeServices();
+        FakeSaveServices services = new FakeSaveServices();
         PositionSaves saves = new PositionSaves(POSITIONS, POSITION_URL, services);
 
         saves.saveIfDue(1_000);
@@ -124,7 +56,7 @@ public class PositionSavesTest {
 
     @Test
     public void aSaveThatFailsForALostConnectionIsRetriedAfterTheRetryDelay() {
-        FakeServices services = new FakeServices();
+        FakeSaveServices services = new FakeSaveServices();
         PositionSaves saves = new PositionSaves(POSITIONS, POSITION_URL, services);
 
         saves.save(1_000);
@@ -142,7 +74,7 @@ public class PositionSavesTest {
 
     @Test
     public void aFailedSaveIsRetriedWhenTheConnectionMayBeBack() {
-        FakeServices services = new FakeServices();
+        FakeSaveServices services = new FakeSaveServices();
         PositionSaves saves = new PositionSaves(POSITIONS, POSITION_URL, services);
 
         saves.save(1_000);
@@ -159,7 +91,7 @@ public class PositionSavesTest {
 
     @Test
     public void aNewerSaveReplacesTheRetryOfAFailedOne() {
-        FakeServices services = new FakeServices();
+        FakeSaveServices services = new FakeSaveServices();
         PositionSaves saves = new PositionSaves(POSITIONS, POSITION_URL, services);
 
         saves.save(1_000);
@@ -175,7 +107,7 @@ public class PositionSavesTest {
 
     @Test
     public void onlyTheLatestSaveIsRetried() {
-        FakeServices services = new FakeServices();
+        FakeSaveServices services = new FakeSaveServices();
         PositionSaves saves = new PositionSaves(POSITIONS, POSITION_URL, services);
 
         saves.save(1_000);
@@ -192,7 +124,7 @@ public class PositionSavesTest {
 
     @Test
     public void aFailedRetryReportsThatSavesStillFailUntilASaveSucceeds() {
-        FakeServices services = new FakeServices();
+        FakeSaveServices services = new FakeSaveServices();
         PositionSaves saves = new PositionSaves(POSITIONS, POSITION_URL, services);
 
         saves.save(1_000);
@@ -214,7 +146,7 @@ public class PositionSavesTest {
 
     @Test
     public void aRetryOnReconnectThatFailsReportsThatSavesStillFailBeforeTheRetryDelay() {
-        FakeServices services = new FakeServices();
+        FakeSaveServices services = new FakeSaveServices();
         PositionSaves saves = new PositionSaves(POSITIONS, POSITION_URL, services);
 
         saves.save(1_000);
@@ -228,7 +160,7 @@ public class PositionSavesTest {
 
     @Test
     public void newSavesThatFailForTheRetryDelayReportThatSavesStillFail() {
-        FakeServices services = new FakeServices();
+        FakeSaveServices services = new FakeSaveServices();
         PositionSaves saves = new PositionSaves(POSITIONS, POSITION_URL, services);
 
         saves.save(1_000);
@@ -246,7 +178,7 @@ public class PositionSavesTest {
 
     @Test
     public void aNewSaveThatFailsKeepsReportingThatSavesStillFail() {
-        FakeServices services = new FakeServices();
+        FakeSaveServices services = new FakeSaveServices();
         PositionSaves saves = new PositionSaves(POSITIONS, POSITION_URL, services);
 
         saves.save(1_000);
@@ -262,7 +194,7 @@ public class PositionSavesTest {
 
     @Test
     public void theStateIsReportedOnlyWhenTheStatusChanges() {
-        FakeServices services = new FakeServices();
+        FakeSaveServices services = new FakeSaveServices();
         PositionSaves saves = new PositionSaves(POSITIONS, POSITION_URL, services);
 
         saves.save(1_000);
@@ -287,7 +219,7 @@ public class PositionSavesTest {
     @Test
     public void everyClientErrorButAnExpiredUrlOrTooManyRequestsRefusesTheSaveInTheServersWordsWithoutRetrying() {
         for (int status : new int[] { 400, 403, 404, 409, 422 }) {
-            FakeServices services = new FakeServices();
+            FakeSaveServices services = new FakeSaveServices();
             PositionSaves saves = new PositionSaves(POSITIONS, POSITION_URL, services);
 
             saves.save(1_000);
@@ -303,7 +235,7 @@ public class PositionSavesTest {
 
     @Test
     public void aRefusedSaveDoesNotHoldBackTheNextOne() {
-        FakeServices services = new FakeServices();
+        FakeSaveServices services = new FakeSaveServices();
         PositionSaves saves = new PositionSaves(POSITIONS, POSITION_URL, services);
 
         saves.save(1_000);
@@ -318,7 +250,7 @@ public class PositionSavesTest {
     @Test
     public void anExpiredUrlTooManyRequestsAndServerFailuresAreRetried() {
         for (int status : new int[] { 401, 429, 500, 503 }) {
-            FakeServices services = new FakeServices();
+            FakeSaveServices services = new FakeSaveServices();
             PositionSaves saves = new PositionSaves(POSITIONS, POSITION_URL, services);
 
             saves.save(1_000);
@@ -331,7 +263,7 @@ public class PositionSavesTest {
 
     @Test
     public void savesAndRetriesUseTheLatestPositionUrl() {
-        FakeServices services = new FakeServices();
+        FakeSaveServices services = new FakeSaveServices();
         PositionSaves saves = new PositionSaves(POSITIONS, POSITION_URL, services);
 
         saves.save(1_000);
@@ -345,7 +277,7 @@ public class PositionSavesTest {
 
     @Test
     public void closingStopsRetryingButWritesTheSavesQueuedBefore() {
-        FakeServices services = new FakeServices();
+        FakeSaveServices services = new FakeSaveServices();
         PositionSaves saves = new PositionSaves(POSITIONS, POSITION_URL, services);
 
         saves.save(1_000);
@@ -358,5 +290,13 @@ public class PositionSavesTest {
         assertNull(services.retryTimer);
         saves.reconnected();
         assertEquals(List.of(POSITION_URL + " unit-1+1000", POSITION_URL + " unit-2+1000"), services.sent);
+    }
+
+    @Test
+    public void eachStatusCarriesThePagesNameForIt() {
+        assertEquals("ok", PositionSaves.Status.OK.wireName);
+        assertEquals("failing", PositionSaves.Status.FAILING.wireName);
+        assertEquals("stillFailing", PositionSaves.Status.STILL_FAILING.wireName);
+        assertEquals("refused", PositionSaves.Status.REFUSED.wireName);
     }
 }

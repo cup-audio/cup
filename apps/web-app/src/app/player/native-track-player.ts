@@ -147,7 +147,7 @@ export function createNativePlayers(
   plugin: MediaPlaybackPlugin,
   services: NativePlayerServices,
 ): CreatePlayer {
-  return (session, trackUrlReceivedAt) => {
+  return (session, urlsReceivedAt) => {
     const { subject } = session;
     if (subject === null) {
       throw new Error(
@@ -157,28 +157,24 @@ export function createNativePlayers(
     return new NativeTrackPlayer(session, plugin, services, {
       kind: "load",
       subject,
-      urls: readNativeUrls(
-        session.conversionId,
-        session.audiobook.narrationTrack,
-        trackUrlReceivedAt,
-      ),
+      urls: readNativeUrls(session.conversionId, session.audiobook.narrationTrack, urlsReceivedAt),
     });
   };
 }
 
-/** The signed URLs of one audiobook response, which expire together. */
-type NativeUrls = { trackUrl: string; positionUrl: string; receivedAt: number };
+/** The signed URLs of one audiobook response, which expire together; `SignedUrls` in the plugin. */
+type NativeUrls = { trackUrl: string; positionUrl: string; urlsReceivedAt: number };
 
 /** The server issues the position URL to every account, and only accounts play in the app. */
 function readNativeUrls(
   conversionId: string,
   narrationTrack: NarrationTrack,
-  receivedAt: number,
+  urlsReceivedAt: number,
 ): NativeUrls {
   if (narrationTrack.positionUrl === undefined) {
     throw new Error(`Audiobook ${conversionId} has no position URL to save natively with.`);
   }
-  return { trackUrl: narrationTrack.url, positionUrl: narrationTrack.positionUrl, receivedAt };
+  return { trackUrl: narrationTrack.url, positionUrl: narrationTrack.positionUrl, urlsReceivedAt };
 }
 
 /**
@@ -353,15 +349,15 @@ class NativeTrackPlayer implements Player {
   };
 
   /** After a native stop the plugin has no item to replace, so the next load uses the URLs. */
-  replaceUrls = (narrationTrack: NarrationTrack, receivedAt: number) => {
-    const urls = readNativeUrls(this.session.conversionId, narrationTrack, receivedAt);
+  replaceUrls = (narrationTrack: NarrationTrack, urlsReceivedAt: number) => {
+    const urls = readNativeUrls(this.session.conversionId, narrationTrack, urlsReceivedAt);
     this.urls = urls;
     if (!this.isNativelyStopped()) {
       this.send(
         this.plugin.replaceUrls({
           trackUrl: urls.trackUrl,
           positionUrl: urls.positionUrl,
-          urlsIssuedAt: urls.receivedAt,
+          urlsIssuedAt: urls.urlsReceivedAt,
         }),
       );
     }
@@ -382,7 +378,11 @@ class NativeTrackPlayer implements Player {
     this.stopPositionUpdates?.();
     this.stopPositionUpdates = null;
     this.stopListeningForVisibility();
-    void this.stateListener.then((handle) => handle.remove());
+    this.stateListener
+      .then((handle) => handle.remove())
+      .catch((error: unknown) => {
+        console.error("The media playback plugin did not remove its state listener.", error);
+      });
     this.session.close();
     if (ending === "unload") {
       this.send(this.plugin.close({ position }));
@@ -405,7 +405,7 @@ class NativeTrackPlayer implements Player {
         subject: this.state.subject,
         trackUrl: this.urls.trackUrl,
         positionUrl: this.urls.positionUrl,
-        urlsIssuedAt: this.urls.receivedAt,
+        urlsIssuedAt: this.urls.urlsReceivedAt,
         timeline: audiobook.narrationDocument.synchronizationUnits.map((unit, index) => ({
           synchronizationUnitId: unit.id,
           startMilliseconds: timeline.startMilliseconds[index]!,

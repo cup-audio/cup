@@ -1,6 +1,9 @@
 package audio.cup.app;
 
+import android.app.AlarmManager;
+import android.app.PendingIntent;
 import android.content.Context;
+import android.content.Intent;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.Uri;
@@ -36,7 +39,12 @@ import com.getcapacitor.JSObject;
  * swipes the notification away, or the URLs can no longer play: they expired while paused, or the
  * server refused them. The engine then drops its media item and reports a state with the
  * {@link ClosedReason} and the last position, which it keeps for {@code getState} until the next
- * load.
+ * load. It keeps the ended session's saves too ({@link EndedSession}), so a close with a save or a
+ * load of another audiobook still saves a position the native stop could not.
+ *
+ * <p>Paused URLs expire by a delayed check while the process runs, and by an inexact alarm
+ * ({@link ExpiryAlarmReceiver}) while the device sleeps or Android freezes Cup; every command and
+ * every Play checks again.
  *
  * <p>Must be used on the main thread.
  */
@@ -116,13 +124,18 @@ final class PlaybackEngine {
     @Nullable
     private JSObject closedState;
 
+    /** The saves of the session the last native stop ended, until the next load or close. */
+    @Nullable
+    private EndedSession endedSession;
+
+    /** When the armed expiry alarm fires, in epoch milliseconds, or 0 without one. */
+    private long expiryAlarmAt;
+
     /** What the page loads. */
     static final class LoadRequest {
         final String conversionId;
         final String subject;
-        final String trackUrl;
-        final String positionUrl;
-        final long urlsIssuedAt;
+        final SignedUrls urls;
         final ListeningPositions positions;
         final String title;
         @Nullable
@@ -133,9 +146,7 @@ final class PlaybackEngine {
         LoadRequest(
             String conversionId,
             String subject,
-            String trackUrl,
-            String positionUrl,
-            long urlsIssuedAt,
+            SignedUrls urls,
             ListeningPositions positions,
             String title,
             @Nullable String artworkUrl,
@@ -144,9 +155,7 @@ final class PlaybackEngine {
         ) {
             this.conversionId = conversionId;
             this.subject = subject;
-            this.trackUrl = trackUrl;
-            this.positionUrl = positionUrl;
-            this.urlsIssuedAt = urlsIssuedAt;
+            this.urls = urls;
             this.positions = positions;
             this.title = title;
             this.artworkUrl = artworkUrl;
@@ -160,11 +169,11 @@ final class PlaybackEngine {
         final String conversionId;
         final String subject;
         final long durationMilliseconds;
-        TrackUrlExpiry expiry;
+        SignedUrlExpiry expiry;
         /** Set right after construction, since its reports name this audiobook. */
         PositionSaves saves;
 
-        Loaded(String conversionId, String subject, long durationMilliseconds, TrackUrlExpiry expiry) {
+        Loaded(String conversionId, String subject, long durationMilliseconds, SignedUrlExpiry expiry) {
             this.conversionId = conversionId;
             this.subject = subject;
             this.durationMilliseconds = durationMilliseconds;
@@ -211,7 +220,7 @@ final class PlaybackEngine {
     void load(LoadRequest request) {
         MediaItem item = new MediaItem.Builder()
             .setMediaId(request.conversionId)
-            .setUri(request.trackUrl)
+            .setUri(request.urls.trackUrl)
             .setMediaMetadata(
                 new MediaMetadata.Builder()
                     .setTitle(request.title)
@@ -227,16 +236,22 @@ final class PlaybackEngine {
             previous.saves.save(exoPlayer.getCurrentPosition());
             previous.saves.close();
         }
+        EndedSession ended = endedSession;
+        // Loading the ended audiobook again starts from where the page holds it, which Play saves.
+        if (ended != null && !ended.conversionId.equals(request.conversionId)) {
+            ended.saveIfUnsaved(System.currentTimeMillis());
+        }
         Loaded audiobook = new Loaded(
             request.conversionId,
             request.subject,
             request.durationMilliseconds,
-            new TrackUrlExpiry(request.urlsIssuedAt, PlaybackTimings.signedUrlLifetimeMilliseconds)
+            request.urls.expiry()
         );
-        audiobook.saves = new PositionSaves(request.positions, request.positionUrl, new SaveServices(audiobook));
+        audiobook.saves = new PositionSaves(request.positions, request.urls.positionUrl, new SaveServices(audiobook));
         loaded = audiobook;
         hasPlaybackError = false;
         closedState = null;
+        endedSession = null;
         // The pause below ends the previous audiobook's playback, whose position is saved already.
         wasPlaying = false;
         handler.removeCallbacks(saveCheck);
@@ -253,6 +268,10 @@ final class PlaybackEngine {
         if (exoPlayer == null || sessionPlayer == null) {
             return false;
         }
+        if (stopIfExpiredWhilePaused()) {
+            // The closed state tells the page, whose next Play renews the URLs.
+            return true;
+        }
         hasPlaybackError = false;
         if (exoPlayer.getPlaybackState() == Player.STATE_IDLE) {
             // The first Play, or Play after a failed load, which continues where it stopped.
@@ -268,6 +287,9 @@ final class PlaybackEngine {
         if (exoPlayer == null) {
             return false;
         }
+        if (stopIfExpiredWhilePaused()) {
+            return true;
+        }
         exoPlayer.pause();
         return true;
     }
@@ -276,6 +298,9 @@ final class PlaybackEngine {
         ExoPlayer exoPlayer = loadedPlayer();
         if (exoPlayer == null) {
             return false;
+        }
+        if (stopIfExpiredWhilePaused()) {
+            return true;
         }
         exoPlayer.seekTo(clampToTrack(positionMilliseconds));
         return true;
@@ -287,22 +312,25 @@ final class PlaybackEngine {
         if (exoPlayer == null) {
             return false;
         }
+        if (stopIfExpiredWhilePaused()) {
+            return true;
+        }
         exoPlayer.seekTo(clampToTrack(exoPlayer.getCurrentPosition() + deltaMilliseconds));
         return true;
     }
 
-    /** Replaces the URLs, which the page fetched at `urlsIssuedAt`, keeping the position. */
-    boolean replaceUrls(String trackUrl, String positionUrl, long urlsIssuedAt) {
+    /** Replaces the URLs, keeping the position. */
+    boolean replaceUrls(SignedUrls urls) {
         ExoPlayer exoPlayer = loadedPlayer();
         Loaded audiobook = loaded;
         if (exoPlayer == null || audiobook == null) {
             return false;
         }
-        audiobook.expiry = new TrackUrlExpiry(urlsIssuedAt, PlaybackTimings.signedUrlLifetimeMilliseconds);
-        audiobook.saves.replacePositionUrl(positionUrl);
+        audiobook.expiry = urls.expiry();
+        audiobook.saves.replacePositionUrl(urls.positionUrl);
         MediaItem current = exoPlayer.getCurrentMediaItem();
         if (current != null) {
-            exoPlayer.setMediaItem(current.buildUpon().setUri(trackUrl).build(), exoPlayer.getCurrentPosition());
+            exoPlayer.setMediaItem(current.buildUpon().setUri(urls.trackUrl).build(), exoPlayer.getCurrentPosition());
         }
         updateExpiryCheck();
         return true;
@@ -311,7 +339,8 @@ final class PlaybackEngine {
     /**
      * Ends the session for the page: on sign-out or a change of the signed-in user, which saves the
      * position one last time, or without saving when the loaded audiobook is deleted or a starting
-     * page cannot take the session over, since a save would race the deletion. Reports nothing.
+     * page cannot take the session over, since a save would race the deletion. After a native stop,
+     * the save is the ended session's, if its own failed. Reports nothing.
      */
     void close(PositionOnClose position) {
         ExoPlayer exoPlayer = player;
@@ -323,7 +352,11 @@ final class PlaybackEngine {
             }
             audiobook.saves.close();
         }
+        if (endedSession != null && position == PositionOnClose.SAVE) {
+            endedSession.saveIfUnsaved(System.currentTimeMillis());
+        }
         closedState = null;
+        endedSession = null;
         releasePlayer();
     }
 
@@ -348,17 +381,8 @@ final class PlaybackEngine {
         if (player == null || loaded == null) {
             return;
         }
-        finishSaves(player.getCurrentPosition());
-        JSObject state = readLiveState(false);
-        state.put("isPlaying", false);
-        state.put("isBuffering", false);
-        state.put("error", reason == ClosedReason.TRACK_URL_EXPIRED ? "trackUrlExpired" : JSObject.NULL);
-        state.put("closedReason", reason.wireName);
+        reportClosed(reason);
         releasePlayer();
-        closedState = state;
-        if (listener != null) {
-            listener.onState(state);
-        }
     }
 
     /**
@@ -369,32 +393,43 @@ final class PlaybackEngine {
         if (servicePlayer != sessionPlayer || loaded == null || player == null) {
             return;
         }
-        finishSaves(player.getCurrentPosition());
+        reportClosed(ClosedReason.SERVICE_STOPPED);
+        // The service released the player already.
+        forgetPlayer();
+    }
+
+    /** The expiry alarm fired: a paused session whose URLs expired ends. */
+    void onExpiryAlarm() {
+        expiryAlarmAt = 0;
+        stopIfExpiredWhilePaused();
+    }
+
+    /**
+     * Before a native stop, keeps the session's saves as the ended session, which tries one final
+     * save, and reports the closed state with the last position. If that save fails, the page's
+     * cached audiobook shows the position, and the page's close or next load tries again.
+     */
+    private void reportClosed(ClosedReason reason) {
+        ExoPlayer exoPlayer = player;
+        Loaded audiobook = loaded;
+        if (exoPlayer == null || audiobook == null) {
+            throw new IllegalStateException("The engine has no session to close.");
+        }
+        long positionMilliseconds = exoPlayer.getCurrentPosition();
         JSObject state = readLiveState(false);
         state.put("isPlaying", false);
         state.put("isBuffering", false);
-        state.put("closedReason", ClosedReason.SERVICE_STOPPED.wireName);
-        // The service released the player already.
-        forgetPlayer();
+        // Only expired URLs need the page to act: its next Play renews them.
+        state.put("error", reason == ClosedReason.TRACK_URL_EXPIRED ? reason.wireName : JSObject.NULL);
+        state.put("closedReason", reason.wireName);
+
+        EndedSession ended = new EndedSession(audiobook.conversionId, audiobook.saves, audiobook.expiry, positionMilliseconds);
+        ended.saveIfUnsaved(System.currentTimeMillis());
+        endedSession = ended;
         closedState = state;
         if (listener != null) {
             listener.onState(state);
         }
-    }
-
-    /**
-     * Before a native stop, tries one final save unless the last one succeeded or the URLs expired.
-     * If it fails, the position is lost here, but the closed state reports it to the page.
-     */
-    private void finishSaves(long positionMilliseconds) {
-        Loaded audiobook = loaded;
-        if (audiobook == null) {
-            return;
-        }
-        if (audiobook.saves.isFailing() && !audiobook.expiry.hasExpired(System.currentTimeMillis())) {
-            audiobook.saves.save(positionMilliseconds);
-        }
-        audiobook.saves.close();
     }
 
     private ExoPlayer ensurePlayer() {
@@ -440,6 +475,7 @@ final class PlaybackEngine {
         wasPlaying = false;
         handler.removeCallbacks(expiryCheck);
         handler.removeCallbacks(saveCheck);
+        cancelExpiryAlarm();
     }
 
     @Nullable
@@ -453,26 +489,59 @@ final class PlaybackEngine {
         return Math.max(0, Math.min(positionMilliseconds, duration - 1));
     }
 
-    /** While the player is paused, checks again when the URLs expire. */
+    /**
+     * While the player is paused, checks again when the URLs expire: by a delayed check, whose clock
+     * stops while the device sleeps, and by an inexact alarm, which Android delivers once the device
+     * is awake again, also to a frozen Cup.
+     */
     private void updateExpiryCheck() {
         handler.removeCallbacks(expiryCheck);
         Loaded audiobook = loaded;
         if (player == null || audiobook == null || player.getPlayWhenReady()) {
+            cancelExpiryAlarm();
             return;
         }
         handler.postDelayed(expiryCheck, audiobook.expiry.millisecondsUntilExpiry(System.currentTimeMillis()));
+        setExpiryAlarm(audiobook.expiry.expiresAt());
     }
 
-    private void stopIfExpiredWhilePaused() {
+    /** Ends a paused session whose URLs expired, and returns whether it did. */
+    private boolean stopIfExpiredWhilePaused() {
         Loaded audiobook = loaded;
         if (player == null || audiobook == null || player.getPlayWhenReady()) {
+            return false;
+        }
+        if (!audiobook.expiry.hasExpired(System.currentTimeMillis())) {
+            updateExpiryCheck();
+            return false;
+        }
+        stopNatively(ClosedReason.TRACK_URL_EXPIRED);
+        return true;
+    }
+
+    /**
+     * A non-wakeup alarm, inexact, so it needs no exact-alarm permission. Not set again for the same
+     * time, since the player's state changes often while paused.
+     */
+    private void setExpiryAlarm(long expiresAt) {
+        if (expiryAlarmAt == expiresAt) {
             return;
         }
-        if (audiobook.expiry.hasExpired(System.currentTimeMillis())) {
-            stopNatively(ClosedReason.TRACK_URL_EXPIRED);
-        } else {
-            updateExpiryCheck();
+        expiryAlarmAt = expiresAt;
+        context.getSystemService(AlarmManager.class).set(AlarmManager.RTC, expiresAt, expiryAlarmIntent());
+    }
+
+    private void cancelExpiryAlarm() {
+        if (expiryAlarmAt == 0) {
+            return;
         }
+        expiryAlarmAt = 0;
+        context.getSystemService(AlarmManager.class).cancel(expiryAlarmIntent());
+    }
+
+    private PendingIntent expiryAlarmIntent() {
+        Intent intent = new Intent(context, ExpiryAlarmReceiver.class);
+        return PendingIntent.getBroadcast(context, 0, intent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
     }
 
     private void saveIfDueWhilePlaying() {
@@ -535,20 +604,9 @@ final class PlaybackEngine {
     /** How the saves fare, as {@code NativePositionSave} on the page. */
     private static JSObject readPositionSave(PositionSaves saves) {
         JSObject positionSave = new JSObject();
-        switch (saves.getStatus()) {
-            case OK:
-                positionSave.put("status", "ok");
-                break;
-            case FAILING:
-                positionSave.put("status", "failing");
-                break;
-            case STILL_FAILING:
-                positionSave.put("status", "stillFailing");
-                break;
-            case REFUSED:
-                positionSave.put("status", "refused");
-                positionSave.put("refusal", saves.getRefusalDetail());
-                break;
+        positionSave.put("status", saves.getStatus().wireName);
+        if (saves.getStatus() == PositionSaves.Status.REFUSED) {
+            positionSave.put("refusal", saves.getRefusalDetail());
         }
         return positionSave;
     }
@@ -568,7 +626,7 @@ final class PlaybackEngine {
         for (Throwable cause = error; cause != null; cause = cause.getCause()) {
             if (
                 cause instanceof HttpDataSource.InvalidResponseCodeException &&
-                TrackUrlExpiry.isUrlRejection(((HttpDataSource.InvalidResponseCodeException) cause).responseCode)
+                SignedUrlExpiry.isUrlRejection(((HttpDataSource.InvalidResponseCodeException) cause).responseCode)
             ) {
                 return true;
             }
@@ -619,6 +677,22 @@ final class PlaybackEngine {
         }
     }
 
+    /** Stops natively for `reason` outside the player's own callback, which must not release it. */
+    private void stopSoon(ClosedReason reason) {
+        ExoPlayer exoPlayer = player;
+        if (exoPlayer == null) {
+            return;
+        }
+        isStopping = true;
+        exoPlayer.pause();
+        handler.post(() -> {
+            if (player == exoPlayer) {
+                isStopping = false;
+                stopNatively(reason);
+            }
+        });
+    }
+
     /** Reports every change of the player. */
     private final class StateReporter implements Player.Listener {
         @Override
@@ -639,6 +713,17 @@ final class PlaybackEngine {
                 eventPlayer.pause();
                 eventPlayer.seekTo(0);
                 sendState(true);
+                return;
+            }
+            if (
+                events.contains(Player.EVENT_PLAY_WHEN_READY_CHANGED) &&
+                eventPlayer.getPlayWhenReady() &&
+                loaded != null &&
+                loaded.expiry.hasExpired(System.currentTimeMillis())
+            ) {
+                // Play from the media session after the URLs expired while paused, before a check
+                // caught it.
+                stopSoon(ClosedReason.TRACK_URL_EXPIRED);
                 return;
             }
             followPlayback(isPlayingForListener(eventPlayer));
@@ -666,16 +751,8 @@ final class PlaybackEngine {
                 return;
             }
             if (isUrlRejection(error)) {
-                // Only a newly signed URL plays, which only the page fetches. Released outside the
-                // player's own callback.
-                isStopping = true;
-                exoPlayer.pause();
-                handler.post(() -> {
-                    if (player == exoPlayer) {
-                        isStopping = false;
-                        stopNatively(ClosedReason.TRACK_URL_EXPIRED);
-                    }
-                });
+                // Only a newly signed URL plays, which only the page fetches.
+                stopSoon(ClosedReason.TRACK_URL_EXPIRED);
                 return;
             }
             // ExoPlayer retried under its load-error policy and gave up, such as in a dead zone. The

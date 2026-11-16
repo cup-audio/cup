@@ -39,9 +39,9 @@ export type Player = {
   skipBy: (deltaMilliseconds: number) => void;
   /**
    * Loads the same track from the newly signed URLs of a narration track, which the client received
-   * at `receivedAt`, keeping the position; plays nothing.
+   * at `urlsReceivedAt`, keeping the position; plays nothing.
    */
-  replaceUrls: (narrationTrack: NarrationTrack, receivedAt: number) => void;
+  replaceUrls: (narrationTrack: NarrationTrack, urlsReceivedAt: number) => void;
   /** Shows a failure that happened outside the player, until the next Play. */
   showError: (message: string) => void;
   /**
@@ -60,9 +60,9 @@ export type PlayerEnding = "unload" | "replace";
 
 /**
  * Builds the player for a newly loaded audiobook, given its playback session and when the client
- * received the audiobook whose track URL it loads.
+ * received the audiobook whose signed URLs it loads.
  */
-export type CreatePlayer = (session: PlaybackSession, trackUrlReceivedAt: number) => Player;
+export type CreatePlayer = (session: PlaybackSession, urlsReceivedAt: number) => Player;
 
 /**
  * What already plays an audiobook when the page starts: the Android app's native session after a

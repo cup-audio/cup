@@ -53,15 +53,7 @@ export function createPlatformPlayers(): {
       const interval = setInterval(callback, intervalMilliseconds);
       return () => clearInterval(interval);
     },
-    onVisible: (callback) => {
-      const handleVisibilityChange = () => {
-        if (document.visibilityState === "visible") {
-          callback();
-        }
-      };
-      document.addEventListener("visibilitychange", handleVisibilityChange);
-      return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-    },
+    onVisible: listenForVisible,
     cachePosition: cachePlaybackPosition,
   };
   return {
@@ -76,15 +68,21 @@ export function createPlatformPlayers(): {
  * was in the background or the screen was locked can fail to resolve the API host (CUP-71).
  */
 function listenForReconnect(callback: () => void): () => void {
+  globalThis.addEventListener("online", callback);
+  const stopListeningForVisible = listenForVisible(callback);
+  return () => {
+    globalThis.removeEventListener("online", callback);
+    stopListeningForVisible();
+  };
+}
+
+/** Calls `callback` whenever the page becomes visible again, until the returned function. */
+function listenForVisible(callback: () => void): () => void {
   const handleVisibilityChange = () => {
     if (document.visibilityState === "visible") {
       callback();
     }
   };
-  globalThis.addEventListener("online", callback);
   document.addEventListener("visibilitychange", handleVisibilityChange);
-  return () => {
-    globalThis.removeEventListener("online", callback);
-    document.removeEventListener("visibilitychange", handleVisibilityChange);
-  };
+  return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
 }

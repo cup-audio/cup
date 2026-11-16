@@ -23,7 +23,7 @@ import com.google.common.collect.ImmutableList;
  * <p>The engine starts it on the first Play, always after a tap in Cup's visible UI. Media3 then
  * runs it in the foreground while the player plays, and for its grace after a pause or the end,
  * after which it leaves the foreground and keeps the notification. Swiping Cup from recents keeps a
- * playing session and ends a paused one, Media3's default; swiping the notification away, possible
+ * playing session and ends a paused one ({@link TaskRemoval}); swiping the notification away, possible
  * only after the grace, ends it too. The service releases the player when it stops.
  */
 @UnstableApi
@@ -68,6 +68,8 @@ public class MediaPlaybackService extends MediaSessionService {
             // Started, but not created yet: its onCreate finds no player and stops.
             return false;
         }
+        // Destroying the service is asynchronous; a Play before then starts a new one for its player.
+        running = null;
         service.pauseAllPlayersAndStopSelf();
         return true;
     }
@@ -98,11 +100,19 @@ public class MediaPlaybackService extends MediaSessionService {
         return session;
     }
 
-    /** Media3's default keeps a playing session in the foreground and stops the service otherwise. */
+    /**
+     * Media3's default keeps a session in the foreground and stops the service otherwise; its grace
+     * keeps a paused one in the foreground too. A playing session plays on, also while it buffers or a
+     * call pauses it, and every other one ends.
+     */
     @Override
     public void onTaskRemoved(@Nullable Intent rootIntent) {
         Player player = session == null ? null : session.getPlayer();
-        if (!isPlaybackOngoing() || player == null || !player.isPlaying()) {
+        if (
+            !isPlaybackOngoing() ||
+            player == null ||
+            !TaskRemoval.keepsSession(player.getPlayWhenReady(), player.getPlaybackState())
+        ) {
             PlaybackEngine.get(this).stopNatively(PlaybackEngine.ClosedReason.TASK_REMOVED);
         }
         super.onTaskRemoved(rootIntent);
