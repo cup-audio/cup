@@ -16,8 +16,8 @@ const TIME_ZONE_ATTRIBUTE = "culture.timezone";
  * The mechanisms of the captures Sentry's wrappers make on their own, which Cup's capture rule
  * leaves out. The Workflow wrapper captures a step's last failed attempt, though the run goes on
  * and Cup captures only the instance's final failure. The Durable Object wrapper captures every
- * error an RPC method or the alarm throws, though the caller captures an RPC error at its boundary
- * and a Durable Object captures only what it swallows itself.
+ * error an RPC method or the alarm throws, though the caller captures an RPC error at its boundary,
+ * and the alarm captures its own failure with `captureAlarmFailure`.
  */
 const DROPPED_MECHANISMS = new Set([
   "auto.faas.cloudflare.workflow",

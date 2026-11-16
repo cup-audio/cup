@@ -60,7 +60,7 @@ Conversion-failure issues keep Sentry's default grouping by the root cause's sta
 Sentry's own wrappers capture on their own too, and the server `beforeSend` drops those events by their mechanism:
 
 - the Workflow wrapper captures a step's last failed attempt (`auto.faas.cloudflare.workflow`), though the run goes on: a retried attempt opens no issue, and only the instance's final failure, which Cup captures, does;
-- the Durable Object wrapper captures every error an RPC method or the alarm throws (`auto.faas.cloudflare.durable_object`): an RPC error is captured by its caller at its boundary, and a Durable Object captures only what it swallows itself.
+- the Durable Object wrapper captures every error an RPC method or the alarm throws (`auto.faas.cloudflare.durable_object`): an RPC error is captured by its caller at its boundary, a Durable Object captures only what it swallows itself, and each alarm captures its own failure with `captureAlarmFailure` before rethrowing it for the platform's retry. The stuck checks of both conversion owners run even when an earlier step of the pass threw.
 
 The [Worker integration tests](../../apps/cloudflare-worker/test/conversion-failures.test.ts) cover a failed preparation, a finally failed segment, a failed RPC and a retried step against the Sentry stub.
 

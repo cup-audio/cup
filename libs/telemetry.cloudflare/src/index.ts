@@ -1,3 +1,4 @@
+export { captureAlarmFailure } from "#src/alarm-failure.ts";
 export {
   setConversionScope,
   withConversionScope,

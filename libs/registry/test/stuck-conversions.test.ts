@@ -283,6 +283,73 @@ test(
   TEST_TIMEOUT_MS,
 );
 
+test(
+  "an account alarm pass whose step throws sends the error once and still reports a stuck conversion",
+  async () => {
+    const { account, accountId } = await createAccount();
+    const conversionId = await startAccountConversion(account, T0_MS);
+    const executionPrefix = `accounts/${accountId}/conversions/${conversionId}/executions/1/`;
+    await account.prepareArtifactWrite(
+      crypto.randomUUID(),
+      1,
+      executionPrefix,
+      executionPrefix + "audiobook.mp3",
+    );
+    await account.failArtifactWriterReconciliationForTest();
+
+    expect(await account.failingReconcileAtForTest(T0_MS + 16 * MINUTE_MS)).toBe(
+      "Artifact writer reconciliation failed",
+    );
+
+    await waitForStuckEvents(conversionId, 1);
+    await waitForAlarmFailureEvent("Artifact writer reconciliation failed");
+    expect(alarmFailureEvents("Artifact writer reconciliation failed")).toEqual([
+      expect.objectContaining({
+        level: "error",
+        tags: expect.objectContaining({ "cup.component": "account-durable-object" }),
+      }),
+    ]);
+  },
+  TEST_TIMEOUT_MS,
+);
+
+test(
+  "a grant alarm pass whose step throws sends the error once and still reports a stuck conversion",
+  async () => {
+    const { grant } = await createGrant();
+    const conversionId = await startGrantConversion(grant, T0_MS);
+    await recordGrantConversionReady(grant, conversionId, T0_MS);
+    await grant.stopSegmentWorkflowsForTest();
+
+    expect(await grant.failingReconcileAtForTest(T0_MS + 61 * MINUTE_MS)).toBe(
+      "Segment release failed",
+    );
+
+    await waitForStuckEvents(conversionId, 1);
+    await waitForAlarmFailureEvent("Segment release failed");
+    expect(alarmFailureEvents("Segment release failed")).toEqual([
+      expect.objectContaining({
+        level: "error",
+        tags: expect.objectContaining({ "cup.component": "conversion-grant-durable-object" }),
+      }),
+    ]);
+  },
+  TEST_TIMEOUT_MS,
+);
+
+function waitForAlarmFailureEvent(message: string) {
+  return stub.waitFor(
+    `the alarm failure "${message}"`,
+    () => alarmFailureEvents(message).length > 0,
+  );
+}
+
+function alarmFailureEvents(message: string): SentryErrorEvent[] {
+  return stub
+    .errorEvents("cup-worker")
+    .filter((event) => event.exception?.values?.some((value) => value.value === message));
+}
+
 async function createAccount() {
   const accountId = crypto.randomUUID();
   const account = bindings.SENTRY_ACCOUNTS.get(bindings.SENTRY_ACCOUNTS.idFromName(accountId));

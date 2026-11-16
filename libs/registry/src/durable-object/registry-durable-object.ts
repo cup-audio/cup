@@ -19,6 +19,7 @@ import type {
 } from "@cup/conversion-grants";
 import { CupError } from "@cup/errors";
 import { RollingLimits } from "@cup/rolling-limits";
+import { captureAlarmFailure } from "@cup/telemetry.cloudflare";
 
 import {
   DeletionCoordinator,
@@ -179,7 +180,12 @@ export class RegistryDurableObject extends DurableObject<RegistryEnvironment> {
     return snapshot;
   }
 
+  /** A pass that throws captures the error and lets the platform retry the alarm. */
   override async alarm() {
+    await captureAlarmFailure(() => this.reconcilePass());
+  }
+
+  private async reconcilePass() {
     await this.ctx.storage.setAlarm(Temporal.Now.instant().epochMilliseconds + 60_000);
     const jobs = this.database
       .select({ subject: provisioningJobs.subject, attempts: provisioningJobs.attempts })

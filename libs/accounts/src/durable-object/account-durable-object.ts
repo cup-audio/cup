@@ -13,6 +13,7 @@ import {
 } from "@cup/conversion-contracts";
 import { CupError } from "@cup/errors";
 import {
+  captureAlarmFailure,
   logAudioSegmentSettled,
   logEvent,
   logPreparationSettled,
@@ -454,29 +455,42 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
     await this.reconcile(Temporal.Now.instant().epochMilliseconds);
   }
 
-  /** One alarm pass; only the stuck checks read `nowMs`, so tests can choose it. */
+  /**
+   * One alarm pass; only the stuck checks read `nowMs`, so tests can choose it. A step that throws
+   * fails the pass, which captures the error and lets the platform retry the alarm.
+   */
   protected async reconcile(nowMs: number) {
+    await captureAlarmFailure(() => this.reconcilePass(nowMs));
+  }
+
+  private async reconcilePass(nowMs: number) {
     if (this.sqlite.isErased()) {
       await this.ctx.storage.deleteAlarm();
       return;
     }
     // Re-arm before external calls: abrupt termination must not lose dispatch intent.
     await this.ctx.storage.setAlarm(Temporal.Now.instant().epochMilliseconds + 60_000);
-    // Ahead of cleanup, which deletes the segment rows this reads, and of every step that can throw.
-    await this.terminateWorkflowsOfDeletedConversions();
-    await this.reconcileArtifactWriters();
-    await this.reconcileLifecycle();
-    // Account erasure sweeps the whole account, so it subsumes any conversion cleanup still owed.
-    if (this.sqlite.snapshot().state === "deleting") {
-      return;
+    try {
+      // Ahead of cleanup, which deletes the segment rows this reads, and of every step that can
+      // throw.
+      await this.terminateWorkflowsOfDeletedConversions();
+      await this.reconcileArtifactWriters();
+      await this.reconcileLifecycle();
+      // Account erasure sweeps the whole account, so it subsumes any conversion cleanup still owed.
+      if (this.sqlite.snapshot().state === "deleting") {
+        return;
+      }
+      await this.cleanUpDeletedConversions();
+      await this.reconcileDispatch();
+      await this.reconcileSynthesis();
+    } finally {
+      // Also after a step that threw, so a failing step cannot hide a stuck case, and after the
+      // cleanup, so a deletion that finished in this pass is not reported.
+      if (this.sqlite.snapshot().state !== "deleting") {
+        this.reportStuckConversionDeletions(nowMs);
+        this.reportStuckConversions(nowMs);
+      }
     }
-    await this.cleanUpDeletedConversions();
-    // Right after the cleanup, so a deletion that finished in this pass is not reported, and ahead
-    // of the steps that can throw.
-    this.reportStuckConversionDeletions(nowMs);
-    await this.reconcileDispatch();
-    await this.reconcileSynthesis();
-    this.reportStuckConversions(nowMs);
     await this.publishRegistryUsage();
     if (
       this.sqlite.snapshot().state === "active" &&

@@ -5,6 +5,7 @@ import { drizzle } from "drizzle-orm/durable-sqlite";
 import { AccountDurableObject as BaseAccountDurableObject } from "@cup/accounts";
 import type { DeletionAttempt } from "@cup/accounts/lifecycle";
 import { ConversionGrantDurableObject as BaseConversionGrantDurableObject } from "@cup/conversion-grants";
+import { CupError } from "@cup/errors";
 import { createWorkerSentryOptions } from "@cup/telemetry.cloudflare";
 
 import { DeletionCoordinator } from "#src/account-deletion/deletion-coordinator.ts";
@@ -68,12 +69,14 @@ export class AccountDispatchTestDurableObject extends BaseAccountDurableObject {
  * termination attempt, which fails once a test asks for it. An alarm the platform fires is only
  * counted: tests run the alarm with `reconcileForTest()`, so a pass never races the test. The
  * registry passes through, except that removing a conversion owner fails once when a test asks for
+ * it. Reconciling an artifact writer, the alarm step that runs first, fails once a test asks for
  * it.
  */
 export class AccountDurableObject extends BaseAccountDurableObject {
   private readonly workflows: WorkflowControl;
   private readonly registryControl: RegistryControl;
   private firedAlarms = 0;
+  private shouldWriterReconciliationFail = false;
 
   constructor(
     context: DurableObjectState,
@@ -190,12 +193,33 @@ export class AccountDurableObject extends BaseAccountDurableObject {
   failTerminationsForTest() {
     this.workflows.shouldTerminationFail = true;
   }
+  failArtifactWriterReconciliationForTest() {
+    this.shouldWriterReconciliationFail = true;
+  }
+  override async reconcileArtifactWriter(writerId: string) {
+    if (this.shouldWriterReconciliationFail) {
+      throw new CupError("Artifact writer reconciliation failed");
+    }
+    return super.reconcileArtifactWriter(writerId);
+  }
   reconcileForTest() {
     return super.alarm();
   }
   /** Runs one alarm pass whose stuck-conversion check reads `nowMs` as the current time. */
   reconcileAtForTest(nowMs: number) {
     return super.reconcile(nowMs);
+  }
+  /**
+   * Runs one alarm pass like `reconcileAtForTest()` and returns the message of the error it threw:
+   * a rejection does not reach the test through the harness.
+   */
+  async failingReconcileAtForTest(nowMs: number) {
+    try {
+      await super.reconcile(nowMs);
+      return undefined;
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
   }
 }
 
@@ -230,10 +254,14 @@ export { ConversionGrantDurableObject } from "@cup/conversion-grants";
 
 /**
  * A grant whose preparation and synthesis dispatch is accepted but never runs, and whose Workflow
- * instances report no status, so the alarm treats them as unreachable and changes nothing. An alarm
- * the platform fires does nothing: tests run the alarm with `reconcileAtForTest()`.
+ * instances report no status, so the alarm treats them as unreachable and changes nothing. Once a
+ * test stops the segment Workflows, they report `terminated`, and the alarm's release of their
+ * segments fails. An alarm the platform fires does nothing: tests run the alarm with
+ * `reconcileAtForTest()`.
  */
 export class ConversionGrantTestDurableObject extends BaseConversionGrantDurableObject {
+  private readonly segmentWorkflows: { areStopped: boolean };
+
   constructor(
     context: DurableObjectState,
     env: {
@@ -252,16 +280,45 @@ export class ConversionGrantTestDurableObject extends BaseConversionGrantDurable
       create: async () => {},
       get: async () => unreachableInstance,
     };
+    const segmentWorkflows = { areStopped: false };
     super(context, {
       ...env,
       PREPARE_AUDIOBOOK_WORKFLOW: acceptingWorkflow,
-      SYNTHESIZE_AUDIO_SEGMENT_WORKFLOW: acceptingWorkflow,
+      SYNTHESIZE_AUDIO_SEGMENT_WORKFLOW: {
+        create: async () => {},
+        get: async () =>
+          segmentWorkflows.areStopped
+            ? { status: async () => ({ status: "terminated" }), restart: async () => {} }
+            : unreachableInstance,
+      },
     });
+    this.segmentWorkflows = segmentWorkflows;
   }
   override async alarm() {}
+  stopSegmentWorkflowsForTest() {
+    this.segmentWorkflows.areStopped = true;
+  }
+  override async releaseAudioSegment(conversionId: string, sequence: number, attempts?: number) {
+    if (this.segmentWorkflows.areStopped) {
+      throw new CupError("Segment release failed");
+    }
+    return super.releaseAudioSegment(conversionId, sequence, attempts);
+  }
   /** Runs one alarm pass whose stuck-conversion check reads `nowMs` as the current time. */
   reconcileAtForTest(nowMs: number) {
     return super.reconcile(nowMs);
+  }
+  /**
+   * Runs one alarm pass like `reconcileAtForTest()` and returns the message of the error it threw:
+   * a rejection does not reach the test through the harness.
+   */
+  async failingReconcileAtForTest(nowMs: number) {
+    try {
+      await super.reconcile(nowMs);
+      return undefined;
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
   }
 }
 

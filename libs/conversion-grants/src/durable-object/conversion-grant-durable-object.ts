@@ -17,6 +17,7 @@ import {
 import { CupError } from "@cup/errors";
 import { RollingLimits } from "@cup/rolling-limits";
 import {
+  captureAlarmFailure,
   logAudioSegmentSettled,
   logPreparationSettled,
   reportStuckConversions,
@@ -751,53 +752,65 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
     await this.reconcile(Temporal.Now.instant().epochMilliseconds);
   }
 
-  /** One alarm pass; only the stuck-conversion check reads `nowMs`, so tests can choose it. */
+  /**
+   * One alarm pass; only the stuck-conversion check reads `nowMs`, so tests can choose it. A step
+   * that throws fails the pass, which captures the error and lets the platform retry the alarm.
+   */
   protected async reconcile(nowMs: number): Promise<void> {
+    await captureAlarmFailure(() => this.reconcilePass(nowMs));
+  }
+
+  private async reconcilePass(nowMs: number): Promise<void> {
     let record = await this.sqlite.requireRecord();
     const { grantId } = record;
-    for (const conversion of record.conversions) {
-      if (
-        conversion.status !== "pending" ||
-        conversion.workflowStartedAtMs !== undefined ||
-        Temporal.Now.instant().epochMilliseconds - conversion.createdAtMs >=
-          RECONCILIATION_CUTOFF_MS
-      ) {
-        continue;
-      }
-      const { conversionId } = conversion;
-      await withConversionScope({ conversionId, owner: { kind: "trial", grantId } }, async () => {
-        try {
-          const instance = await this.env.PREPARE_AUDIOBOOK_WORKFLOW.get(conversionId);
-          await instance.status();
-          await this.markWorkflowStarted(conversionId);
-        } catch {
+    try {
+      for (const conversion of record.conversions) {
+        if (
+          conversion.status !== "pending" ||
+          conversion.workflowStartedAtMs !== undefined ||
+          Temporal.Now.instant().epochMilliseconds - conversion.createdAtMs >=
+            RECONCILIATION_CUTOFF_MS
+        ) {
+          continue;
+        }
+        const { conversionId } = conversion;
+        await withConversionScope({ conversionId, owner: { kind: "trial", grantId } }, async () => {
           try {
-            await this.env.PREPARE_AUDIOBOOK_WORKFLOW.create({
-              id: conversionId,
-              params: { sourceUrl: conversion.sourceUrl, grantId },
-            });
+            const instance = await this.env.PREPARE_AUDIOBOOK_WORKFLOW.get(conversionId);
+            await instance.status();
             await this.markWorkflowStarted(conversionId);
           } catch {
-            // The same stable identity remains reserved when the platform result is ambiguous.
+            try {
+              await this.env.PREPARE_AUDIOBOOK_WORKFLOW.create({
+                id: conversionId,
+                params: { sourceUrl: conversion.sourceUrl, grantId },
+              });
+              await this.markWorkflowStarted(conversionId);
+            } catch {
+              // The same stable identity remains reserved when the platform result is ambiguous.
+            }
           }
-        }
-      });
-    }
-
-    record = await this.sqlite.requireRecord();
-    if (record.registryConfirmedSnapshotRevision < record.registrySnapshotRevision) {
-      try {
-        const registry = this.env.REGISTRY.get(this.env.REGISTRY.idFromName("registry"));
-        await registry.applyGrantRegistrySnapshot(createGrantRegistrySnapshot(record));
-        await this.confirmRegistrySnapshot(record.registrySnapshotRevision);
-      } catch {
-        // The Registry snapshot is derived and safe to retry indefinitely.
+        });
       }
+
+      record = await this.sqlite.requireRecord();
+      if (record.registryConfirmedSnapshotRevision < record.registrySnapshotRevision) {
+        try {
+          const registry = this.env.REGISTRY.get(this.env.REGISTRY.idFromName("registry"));
+          await registry.applyGrantRegistrySnapshot(createGrantRegistrySnapshot(record));
+          await this.confirmRegistrySnapshot(record.registrySnapshotRevision);
+        } catch {
+          // The Registry snapshot is derived and safe to retry indefinitely.
+        }
+      }
+
+      await this.reconcileGeneration(record);
+      await this.reconcileSynthesis(record);
+    } finally {
+      // Also after a step that threw, so a failing step cannot hide a stuck conversion.
+      await this.reportStuckConversions(nowMs);
     }
 
-    await this.reconcileGeneration(record);
-    await this.reconcileSynthesis(record);
-    await this.reportStuckConversions(nowMs);
     record = await this.sqlite.requireRecord();
     await this.cleanupFailedArtifacts(record);
 
