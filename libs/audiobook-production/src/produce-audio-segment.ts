@@ -1,3 +1,4 @@
+import { CupError } from "@cup/errors";
 import { encodePcmAsMp3 } from "@cup/mp3-encoding";
 import { stretchPcm } from "@cup/time-stretching";
 
@@ -81,7 +82,7 @@ export async function produceAudioSegment({
   assertSynthesisAttempt(synthesisAttempt);
 
   if (narrationChunk.text.trim().length === 0) {
-    throw new Error("Cannot produce an audio segment from an empty narration chunk");
+    throw new CupError("Cannot produce an audio segment from an empty narration chunk");
   }
 
   const key = createAudioSegmentKey(conversionId, sequence, artifactPrefix);
@@ -143,7 +144,7 @@ export async function produceAudioSegment({
   const concurrentlyStoredAudioObject = await bucket.head(key);
 
   if (!concurrentlyStoredAudioObject) {
-    throw new Error(`Audio segment conditional write failed without an existing object: ${key}`);
+    throw new CupError(`Audio segment conditional write failed without an existing object: ${key}`);
   }
 
   return reuseAudioSegment(concurrentlyStoredAudioObject, conversionId, sequence, customMetadata);
@@ -162,16 +163,16 @@ function reuseAudioSegment(
 
 function assertAudioSegmentIdentity(conversionId: string, sequence: number): void {
   if (conversionId.trim().length === 0) {
-    throw new Error("Cannot produce an audio segment without a conversion ID");
+    throw new CupError("Cannot produce an audio segment without a conversion ID");
   }
 
   if (!Number.isSafeInteger(sequence) || sequence < 0) {
-    throw new Error(`Audio segment sequence must be a non-negative safe integer: ${sequence}`);
+    throw new CupError(`Audio segment sequence must be a non-negative safe integer: ${sequence}`);
   }
 }
 
 function assertSynthesisAttempt(synthesisAttempt: number): void {
   if (!Number.isSafeInteger(synthesisAttempt) || synthesisAttempt < 1) {
-    throw new Error(`Synthesis attempt must be a positive safe integer: ${synthesisAttempt}`);
+    throw new CupError(`Synthesis attempt must be a positive safe integer: ${synthesisAttempt}`);
   }
 }

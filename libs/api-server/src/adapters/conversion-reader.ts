@@ -5,6 +5,7 @@ import {
   type SegmentUsage,
 } from "@cup/conversion-contracts";
 import type { GrantConversion } from "@cup/conversion-grants";
+import { CupError } from "@cup/errors";
 
 import type { ApiServerEnvironment } from "#src/api-server-environment.ts";
 
@@ -42,7 +43,7 @@ export function resolveConversionReader(
           return undefined;
         }
         if (outcome.audiobookReference.key !== `${artifactPrefix}audiobook.json`) {
-          throw new Error("Private manifest ownership mismatch");
+          throw new CupError("Private manifest ownership mismatch");
         }
         return outcome.audiobookReference;
       },

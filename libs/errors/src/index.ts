@@ -1,4 +1,5 @@
 export { assertUnreachable } from "#src/assert-unreachable.ts";
+export { CupError } from "#src/cup-error.ts";
 export {
   describeExceptionChain,
   findErrorChain,

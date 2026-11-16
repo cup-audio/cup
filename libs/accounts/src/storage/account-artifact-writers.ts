@@ -3,6 +3,7 @@ import { drizzle, type DrizzleSqliteDODatabase } from "drizzle-orm/durable-sqlit
 import { Temporal } from "temporal-polyfill";
 
 import { getAccountConversionIdFromArtifactPrefix } from "@cup/conversion-contracts";
+import { CupError } from "@cup/errors";
 
 import type { AccountArtifactWriter, AccountSnapshot } from "#src/domain/account-contracts.ts";
 import { artifactWriters, accountConversions } from "#src/storage/account-sqlite-schema.ts";
@@ -20,7 +21,7 @@ export class AccountArtifactWriters {
 
   prepareWrite(writerId: string, executionEpoch: number, prefix: string, key: string) {
     if (!key.startsWith(prefix)) {
-      throw new Error("Artifact key is outside its prefix");
+      throw new CupError("Artifact key is outside its prefix");
     }
     this.database.transaction(() => {
       this.registerWriter(writerId, executionEpoch, prefix);
@@ -34,7 +35,7 @@ export class AccountArtifactWriters {
       !this.canWrite(account, executionEpoch) ||
       getAccountConversionIdFromArtifactPrefix(prefix, account.accountId) === undefined
     ) {
-      throw new Error("Artifact writer registration is fenced");
+      throw new CupError("Artifact writer registration is fenced");
     }
     this.assertWriterTarget(prefix);
     this.database
@@ -54,7 +55,7 @@ export class AccountArtifactWriters {
       existing.prefix !== prefix ||
       existing.state !== "running"
     ) {
-      throw new Error("Artifact writer identity conflict");
+      throw new CupError("Artifact writer identity conflict");
     }
   }
 
@@ -68,16 +69,16 @@ export class AccountArtifactWriters {
           .get(),
       );
       if (writer.state !== "running") {
-        throw new Error("Artifact writer is not running");
+        throw new CupError("Artifact writer is not running");
       }
       if (effect !== null) {
         this.assertWriterTarget(writer.prefix);
       }
       if (effect !== null && !this.canWrite(this.account(), writer.executionEpoch)) {
-        throw new Error("Artifact writer execution is fenced");
+        throw new CupError("Artifact writer execution is fenced");
       }
       if (effect !== null && writer.effect !== null) {
-        throw new Error("Artifact writer has an unresolved effect");
+        throw new CupError("Artifact writer has an unresolved effect");
       }
       this.database
         .update(artifactWriters)
@@ -91,7 +92,7 @@ export class AccountArtifactWriters {
     const account = this.account();
     const conversionId = getAccountConversionIdFromArtifactPrefix(prefix, account.accountId);
     if (conversionId === undefined) {
-      throw new Error("Artifact writer target is invalid");
+      throw new CupError("Artifact writer target is invalid");
     }
     const conversion = this.database
       .select({
@@ -106,7 +107,7 @@ export class AccountArtifactWriters {
       conversion.deletingSinceMs !== null ||
       !["pending", "ready"].includes(conversion.status)
     ) {
-      throw new Error("Artifact writer target is fenced");
+      throw new CupError("Artifact writer target is fenced");
     }
   }
 
@@ -180,7 +181,7 @@ export class AccountArtifactWriters {
         .get(),
     );
     if (writer.effect !== null) {
-      throw new Error("Artifact writer has an unresolved storage effect");
+      throw new CupError("Artifact writer has an unresolved storage effect");
     }
     this.database
       .update(artifactWriters)

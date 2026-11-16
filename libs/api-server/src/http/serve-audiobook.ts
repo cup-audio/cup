@@ -8,6 +8,7 @@ import {
   type Audiobook,
 } from "@cup/audiobook-production";
 import { findNarrationTrackDurations, layOutConsecutively } from "@cup/conversion-contracts";
+import { CupError } from "@cup/errors";
 import type { RegistryDurableObject } from "@cup/registry";
 import { logEvent } from "@cup/telemetry.cloudflare";
 import { TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
@@ -100,7 +101,7 @@ export async function serveNarrationTrack(
   const firstPart = parts[0];
   // A valid range lies within the track, and a narration track has at least one segment.
   if (firstPart === undefined) {
-    throw new Error(
+    throw new CupError(
       `Narration track byte range ${served.start}-${served.end} of ${totalByteLength} bytes selects no segment`,
     );
   }
@@ -251,7 +252,9 @@ async function readTrackPart(
   await object?.body.cancel();
   // A fault the operator must look at, so an issue as well as the error log record with its sizes.
   captureException(
-    new Error("A stored audio segment is missing or its size differs from its settled duration."),
+    new CupError(
+      "A stored audio segment is missing or its size differs from its settled duration.",
+    ),
     { tags: { [TELEMETRY_ATTRIBUTES.AUDIO_SEGMENT_SEQUENCE]: String(part.sequence) } },
   );
   logEvent(
@@ -301,7 +304,7 @@ function createTrackStream(
           const body = await readPart(nextPart);
           if (body === undefined) {
             current = undefined;
-            throw new Error(`Narration track segment ${nextPart.sequence} could not be read`);
+            throw new CupError(`Narration track segment ${nextPart.sequence} could not be read`);
           }
           current = body.getReader();
         }

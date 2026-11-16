@@ -11,6 +11,7 @@ import {
   derivePreparedConversionStatus,
 } from "@cup/conversion-contracts";
 import { DurationLedger } from "@cup/duration-ledger";
+import { CupError } from "@cup/errors";
 import { RollingLimits } from "@cup/rolling-limits";
 import type { StuckConversionCandidate } from "@cup/telemetry.cloudflare";
 
@@ -109,7 +110,7 @@ export class AccountSqlite {
             createdAtMs: existing.createdAtMs,
           })
         ) {
-          throw new Error("Account initialization conflicts with its existing identity");
+          throw new CupError("Account initialization conflicts with its existing identity");
         }
         return this.snapshot();
       }
@@ -137,7 +138,7 @@ export class AccountSqlite {
   snapshot(): AccountSnapshot {
     const identity = this.readIdentity();
     if (identity === undefined) {
-      throw new Error("Account is not initialized");
+      throw new CupError("Account is not initialized");
     }
     return { ...identity, balance: { unit: "audio-millisecond", ...this.duration.balance() } };
   }
@@ -203,7 +204,7 @@ export class AccountSqlite {
         .get();
       if (existing !== undefined) {
         if (existing.sourceUrl !== request.sourceUrl) {
-          throw new Error("Conversion idempotency conflict");
+          throw new CupError("Conversion idempotency conflict");
         }
         return { result: "replayed", conversion: existing };
       }
@@ -344,7 +345,7 @@ export class AccountSqlite {
   savePlaybackPosition(conversionId: string, position: PlaybackPosition) {
     this.requireActive();
     if (this.isMarkedForDeletion(conversionId)) {
-      throw new Error("Account conversion does not exist");
+      throw new CupError("Account conversion does not exist");
     }
     const parsed = playbackPositionSchema.parse(position);
     this.database
@@ -468,7 +469,7 @@ export class AccountSqlite {
     return this.database.transaction(() => {
       const account = this.snapshot();
       if (executionEpoch !== undefined && account.executionEpoch !== executionEpoch) {
-        throw new Error("Account execution epoch mismatch");
+        throw new CupError("Account execution epoch mismatch");
       }
       const deadline = requireRow(
         this.database
@@ -481,15 +482,15 @@ export class AccountSqlite {
         account.state === "deleting" ||
         (account.state === "deletion_scheduled" && (deadline === null || nowMs >= deadline))
       ) {
-        throw new Error("Account blocks conversion settlement");
+        throw new CupError("Account blocks conversion settlement");
       }
       const conversion = this.getConversion(conversionId);
       if (conversion === undefined) {
-        throw new Error("Account conversion does not exist");
+        throw new CupError("Account conversion does not exist");
       }
       if (conversion.status !== "pending") {
         if (canonicalJson(conversion.outcome) !== canonicalJson(parsed)) {
-          throw new Error("Conflicting conversion settlement");
+          throw new CupError("Conflicting conversion settlement");
         }
         return { result: "replayed" as const };
       }
@@ -502,7 +503,7 @@ export class AccountSqlite {
           }),
         )
       ) {
-        throw new Error("Private audiobook reference is outside its conversion prefix");
+        throw new CupError("Private audiobook reference is outside its conversion prefix");
       }
       this.database
         .update(accountConversions)
@@ -728,7 +729,7 @@ export class AccountSqlite {
           stageStartedAtMs,
         }): StuckConversionCandidate[] => {
           if (stageStartedAtMs === null) {
-            throw new Error(`Account conversion ${conversionId} has no stage start`);
+            throw new CupError(`Account conversion ${conversionId} has no stage start`);
           }
           if (status === "pending") {
             return [{ conversionId, stage: "preparation", stageStartedAtMs, lastStartedPhase }];
@@ -798,7 +799,7 @@ export class AccountSqlite {
   private requireActive(): AccountSnapshot {
     const account = this.snapshot();
     if (account.state !== "active") {
-      throw new Error("Account is not active");
+      throw new CupError("Account is not active");
     }
     return account;
   }

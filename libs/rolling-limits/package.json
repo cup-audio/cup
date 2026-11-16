@@ -27,6 +27,7 @@
     "turbo:lint:fix": "pnpm run turbo:lint --fix"
   },
   "dependencies": {
+    "@cup/errors": "workspace:*",
     "drizzle-orm": "^0.45.4",
     "zod": "^4.6.5"
   },

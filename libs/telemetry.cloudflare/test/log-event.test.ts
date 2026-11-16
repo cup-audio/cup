@@ -6,6 +6,7 @@
 import * as Sentry from "@sentry/cloudflare";
 import { expect, test } from "vitest";
 
+import { CupError } from "@cup/errors";
 import { useSentryStub } from "@cup/sentry-stub";
 import { TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
 
@@ -36,7 +37,7 @@ test("a warning log arrives with its event name, root cause and exception chain"
     (workerEnv: typeof env) => createWorkerSentryOptions(workerEnv, "account-durable-object"),
     {
       fetch: (_request: Request, _env: typeof env, _context: unknown) => {
-        const error = new Error("The conversion's artifacts could not be deleted.", {
+        const error = new CupError("The conversion's artifacts could not be deleted.", {
           cause: new DrizzleQueryError(
             "delete from conversions where label = ?",
             ["secret-label"],
@@ -74,7 +75,7 @@ test("a warning log arrives with its event name, root cause and exception chain"
     "event.name": { value: "conversion-deletion-cleanup-failed", type: "string" },
     "cup.conversion.id": { value: "c1", type: "string" },
     "exception.type": { value: "SqliteError", type: "string" },
-    "cup.exception.chain": { value: ["Error", "DrizzleQueryError"], type: "array" },
+    "cup.exception.chain": { value: ["CupError", "DrizzleQueryError"], type: "array" },
   });
   expect(log?.attributes["exception.message"]).toBeUndefined();
   expect(log?.attributes["exception.stacktrace"]?.value).toMatch(/^SqliteError\n\s+at /);

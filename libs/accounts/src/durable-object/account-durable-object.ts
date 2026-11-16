@@ -11,6 +11,7 @@ import {
   createConversionArtifactPrefix,
   createSegmentWorkflowId,
 } from "@cup/conversion-contracts";
+import { CupError } from "@cup/errors";
 import {
   logAudioSegmentSettled,
   logEvent,
@@ -79,7 +80,7 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
 
   initialize(identity: AccountIdentity) {
     if (this.sqlite.isErased()) {
-      throw new Error("Account was erased");
+      throw new CupError("Account was erased");
     }
     return this.sqlite.initialize(identity);
   }
@@ -223,7 +224,7 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
         (status) => status === this.sqlite.getConversion(conversionId)?.status,
       )
     ) {
-      throw new Error("Account execution is fenced");
+      throw new CupError("Account execution is fenced");
     }
   }
 
@@ -246,7 +247,7 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
     setConversionScope({ conversionId });
     this.assertExecution(conversionId, executionEpoch);
     if (this.sqlite.getConversion(conversionId)?.status !== "ready") {
-      throw new Error("Narration is not prepared");
+      throw new CupError("Narration is not prepared");
     }
 
     const reservation = this.sqlite.reserveMissingAudioSegments(
@@ -611,7 +612,7 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
           }
           const conversion = this.sqlite.getConversion(job.conversionId);
           if (!conversion) {
-            throw new Error("Missing conversion dispatch target");
+            throw new CupError("Missing conversion dispatch target");
           }
           const registryStub = registry.get(registry.idFromName("registry"));
           await registryStub.bindConversionOwner(job.conversionId, {
@@ -813,10 +814,10 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
     }
     const attempt = this.lifecycle.current();
     if (attempt?.attemptId !== attemptId || this.sqlite.snapshot().state !== "deleting") {
-      throw new Error("Account erasure is fenced");
+      throw new CupError("Account erasure is fenced");
     }
     if (this.artifactWriters.writers().length) {
-      throw new Error("Artifact writers have not drained");
+      throw new CupError("Artifact writers have not drained");
     }
     await this.deleteArtifactPrefix(createAccountArtifactPrefix(attempt.accountId));
     await this.env.REGISTRY.get(
@@ -839,6 +840,6 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
 
 function assertAttempts(attempts: number | undefined) {
   if (attempts !== undefined && (!Number.isSafeInteger(attempts) || attempts < 1)) {
-    throw new Error("Synthesis attempts must be a positive safe integer");
+    throw new CupError("Synthesis attempts must be a positive safe integer");
   }
 }

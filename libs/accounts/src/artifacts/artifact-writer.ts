@@ -1,3 +1,5 @@
+import { CupError } from "@cup/errors";
+
 import type { AccountDurableObject } from "#src/durable-object/account-durable-object.ts";
 
 /** Every write is registered before R2 receives it; only acknowledged writes can drain. */
@@ -15,7 +17,7 @@ export function accountArtifactBucket(
           try {
             const [key] = args;
             if (!key.startsWith(prefix)) {
-              throw new Error("Artifact write is outside its account prefix");
+              throw new CupError("Artifact write is outside its account prefix");
             }
             const digest = new Uint8Array(
               await crypto.subtle.digest(

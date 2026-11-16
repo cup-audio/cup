@@ -3,6 +3,8 @@ import { parseFragment, serialize, serializeOuter } from "parse5";
 import type { DefaultTreeAdapterMap } from "parse5";
 import { z } from "zod";
 
+import { CupError } from "@cup/errors";
+
 import type {
   Completion,
   CompletionOptions,
@@ -174,7 +176,7 @@ export async function runSelection({
   );
 
   if (!isSourceElementIds(selectedElementIds)) {
-    throw new Error("Expected at least one narration source element ID");
+    throw new CupError("Expected at least one narration source element ID");
   }
 
   const selectedAnnotatedSourceMaterialHtml = await filterSourceByElementIds({
@@ -274,12 +276,14 @@ function aggregateSelectionUsage(
   const firstResponse = responses[0];
 
   if (!firstResponse) {
-    throw new Error("Expected at least one narration content selection response");
+    throw new CupError("Expected at least one narration content selection response");
   }
 
   for (const response of responses) {
     if (response.provider !== firstResponse.provider || response.model !== firstResponse.model) {
-      throw new Error("Expected narration content selection responses from one provider and model");
+      throw new CupError(
+        "Expected narration content selection responses from one provider and model",
+      );
     }
   }
 
@@ -296,7 +300,7 @@ function aggregateSelectionUsage(
         JSON.stringify(response.usage.costEstimateBasis) !== JSON.stringify(costEstimateBasis),
     )
   ) {
-    throw new Error("Expected one pricing basis for narration content selection responses");
+    throw new CupError("Expected one pricing basis for narration content selection responses");
   }
 
   return {
@@ -455,7 +459,7 @@ function getElementId(element: DefaultTreeAdapterMap["element"]): string {
   )?.value;
 
   if (elementId === undefined) {
-    throw new Error(
+    throw new CupError(
       `Expected every HTML element to have a ${SOURCE_ELEMENT_ID_ATTRIBUTE} attribute`,
     );
   }
@@ -465,7 +469,7 @@ function getElementId(element: DefaultTreeAdapterMap["element"]): string {
 
 function asSourceElementIds(elementIds: string[]): SourceElementIds {
   if (!isSourceElementIds(elementIds)) {
-    throw new Error("Expected at least one source element ID per selection chunk");
+    throw new CupError("Expected at least one source element ID per selection chunk");
   }
 
   return elementIds;
@@ -477,11 +481,11 @@ function parseSourceElementIds(
   toolName: string,
 ): string[] {
   if (response.stopReason === "length") {
-    throw new Error("Narration content selection exceeded its output token budget");
+    throw new CupError("Narration content selection exceeded its output token budget");
   }
 
   if (response.stopReason === "error" || response.stopReason === "aborted") {
-    throw new Error(
+    throw new CupError(
       `The AI request ${response.stopReason}: ${response.errorMessage ?? "The provider did not provide an error message"}`,
     );
   }
@@ -489,7 +493,7 @@ function parseSourceElementIds(
   const selectionToolCalls = response.toolCalls.filter((toolCall) => toolCall.name === toolName);
 
   if (selectionToolCalls.length !== 1) {
-    throw new Error(
+    throw new CupError(
       `Expected exactly one ${toolName} call, received ${selectionToolCalls.length} (stop reason: ${response.stopReason})`,
     );
   }
@@ -498,7 +502,7 @@ function parseSourceElementIds(
   const parsedSelectionArguments = SELECTION_ARGS_SCHEMA.safeParse(rawSelectionArguments);
 
   if (!parsedSelectionArguments.success) {
-    throw new Error("The AI selection tool arguments were invalid");
+    throw new CupError("The AI selection tool arguments were invalid");
   }
 
   const selectionArguments = parsedSelectionArguments.data;
@@ -520,7 +524,7 @@ function parseSourceElementIds(
   );
 
   if (selectionArguments.element_ids.length > 0 && narrationSourceElementIds.length === 0) {
-    throw new Error("Expected at least one narration source element ID");
+    throw new CupError("Expected at least one narration source element ID");
   }
 
   return narrationSourceElementIds;
@@ -530,7 +534,7 @@ function isSourceElementIds(elementIds: readonly string[]): elementIds is Source
   return elementIds.length > 0;
 }
 
-class UnknownSelectionElementIdsError extends Error {}
+class UnknownSelectionElementIdsError extends CupError {}
 
 // Reduce formatting noise for selection without changing the source used to reconstruct narration.
 function prepareSelectionPromptHtml(html: string): string {

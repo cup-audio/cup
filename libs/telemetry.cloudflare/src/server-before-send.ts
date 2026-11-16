@@ -106,8 +106,11 @@ function scrubContexts(contexts: Contexts, mainError: Error | undefined): Contex
   if (!isCupError(mainError)) {
     return otherContexts;
   }
-  const { cause: _cause, ...ownData } = extraData;
-  return { ...otherContexts, [extraDataKey]: ownData };
+  // The brand of a Cup error says nothing about the failure.
+  const { cause: _cause, cupError: _cupError, ...ownData } = extraData;
+  return Object.keys(ownData).length === 0
+    ? otherContexts
+    : { ...otherContexts, [extraDataKey]: ownData };
 }
 
 function scrubException(exception: Exception, error: Error | undefined): Exception {

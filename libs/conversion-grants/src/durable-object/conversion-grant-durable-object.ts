@@ -14,6 +14,7 @@ import {
   type AudiobookReference,
   type ConversionMeasurements,
 } from "@cup/conversion-contracts";
+import { CupError } from "@cup/errors";
 import { RollingLimits } from "@cup/rolling-limits";
 import {
   logAudioSegmentSettled,
@@ -99,7 +100,9 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
           existing.createdAtMs !== createdAtMs ||
           existing.expiresAtMs !== expiresAtMs
         ) {
-          throw new Error("Conversion grant initialization conflicts with authoritative identity");
+          throw new CupError(
+            "Conversion grant initialization conflicts with authoritative identity",
+          );
         }
         return createGrantRegistrySnapshot(existing);
       }
@@ -220,7 +223,7 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
       const startLimit = Number(this.env.CONVERSION_OWNER_LIMIT);
 
       if (!Number.isSafeInteger(startLimit) || startLimit <= 0) {
-        throw new Error("Invalid conversion rate limit");
+        throw new CupError("Invalid conversion rate limit");
       }
 
       // Records the attempt before checking grant state, so starts on closed grants count too.
@@ -309,7 +312,7 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
       const record = await this.sqlite.requireRecord();
       const conversion = record.conversions.find((item) => item.conversionId === conversionId);
       if (conversion?.status !== "ready") {
-        throw new Error("Narration is not prepared");
+        throw new CupError("Narration is not prepared");
       }
 
       const reservation = this.reserveMissingSegments(
@@ -379,7 +382,7 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
           record.revokedAtMs !== undefined ||
           record.expiresAtMs <= Temporal.Now.instant().epochMilliseconds
         ) {
-          throw new Error("Trial preparation is blocked");
+          throw new CupError("Trial preparation is blocked");
         }
         const index = record.conversions.findIndex((item) => item.conversionId === conversionId);
         record.conversions[index] = {
@@ -420,11 +423,11 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
     setConversionScope({ conversionId });
     assertAttempts(attempts);
     if (!Number.isFinite(durationMilliseconds) || durationMilliseconds <= 0) {
-      throw new Error("Generated duration must be positive and finite");
+      throw new CupError("Generated duration must be positive and finite");
     }
     const actualMilliseconds = Math.ceil(durationMilliseconds);
     if (!Number.isSafeInteger(actualMilliseconds)) {
-      throw new Error("Generated duration exceeds supported precision");
+      throw new CupError("Generated duration exceeds supported precision");
     }
     const settledAtMs = Temporal.Now.instant().epochMilliseconds;
     const settlement = await this.ctx.storage.transaction(async () => {
@@ -488,7 +491,7 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
       const record = await this.sqlite.requireRecord();
       const conversion = record.conversions.find((item) => item.conversionId === conversionId);
       if (conversion === undefined) {
-        throw new Error("Conversion does not exist");
+        throw new CupError("Conversion does not exist");
       }
       conversion.workflowStartedAtMs ??= nowMs;
       await this.sqlite.save(record);
@@ -501,10 +504,10 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
       const record = await this.sqlite.requireRecord();
       const conversion = record.conversions.find((item) => item.conversionId === conversionId);
       if (conversion === undefined) {
-        throw new Error("Conversion does not exist");
+        throw new CupError("Conversion does not exist");
       }
       if (conversion.status !== "pending") {
-        throw new Error("Only a pending conversion can start a phase");
+        throw new CupError("Only a pending conversion can start a phase");
       }
       conversion.lastStartedPhase = phase;
       await this.sqlite.save(record);
@@ -573,7 +576,7 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
     nowMs = Temporal.Now.instant().epochMilliseconds,
   ) {
     if (!Number.isSafeInteger(allowanceMilliseconds) || allowanceMilliseconds < 1) {
-      throw new Error("Duration allowance must be a positive safe integer");
+      throw new CupError("Duration allowance must be a positive safe integer");
     }
     return this.ctx.storage.transaction(async () => {
       let record = await this.sqlite.requireRecord();
@@ -676,7 +679,7 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
       const index = record.conversions.findIndex((item) => item.conversionId === conversionId);
       const existing = record.conversions[index];
       if (existing === undefined) {
-        throw new Error("Conversion does not exist");
+        throw new CupError("Conversion does not exist");
       }
       if (existing.status !== "pending") {
         const candidate = { ...existing, ...terminal };
@@ -685,7 +688,7 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
         }
         const isRecoveredWorkflow = existing.status === "failed" && terminal.status === "ready";
         if (!isRecoveredWorkflow) {
-          throw new Error("A terminal conversion outcome cannot be changed");
+          throw new CupError("A terminal conversion outcome cannot be changed");
         }
       }
       const identity = {
@@ -966,7 +969,7 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
         (candidate) => candidate.conversionId === conversionId,
       );
       if (conversion?.status !== "failed") {
-        throw new Error("Failed conversion cleanup state is unavailable");
+        throw new CupError("Failed conversion cleanup state is unavailable");
       }
       conversion.cleanupState = cleanupState;
       await this.sqlite.save(record);
@@ -997,6 +1000,6 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
 
 function assertAttempts(attempts: number | undefined) {
   if (attempts !== undefined && (!Number.isSafeInteger(attempts) || attempts < 1)) {
-    throw new Error("Synthesis attempts must be a positive safe integer");
+    throw new CupError("Synthesis attempts must be a positive safe integer");
   }
 }

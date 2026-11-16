@@ -2,6 +2,8 @@ import { sql } from "drizzle-orm";
 import type { DrizzleSqliteDODatabase } from "drizzle-orm/durable-sqlite";
 import { migrate } from "drizzle-orm/durable-sqlite/migrator";
 
+import { CupError } from "@cup/errors";
+
 import registryMigrations from "#src/migrations/registry.ts";
 
 export function migrateRegistry<T extends Record<string, unknown>>(
@@ -48,12 +50,14 @@ function migrateWithLegacyReset<T extends Record<string, unknown>>(
     sql`SELECT MAX(version) AS version FROM _schema_migrations`,
   );
   if (version?.version !== legacyVersion) {
-    throw new Error(`Expected legacy registry schema version ${legacyVersion}; refusing to reset`);
+    throw new CupError(
+      `Expected legacy registry schema version ${legacyVersion}; refusing to reset`,
+    );
   }
   const drizzleJournal = database.get(sql`SELECT name FROM sqlite_master
     WHERE type = 'table' AND name = '__drizzle_migrations'`);
   if (drizzleJournal !== undefined) {
-    throw new Error("Both legacy and Drizzle migration histories exist; refusing to reset");
+    throw new CupError("Both legacy and Drizzle migration histories exist; refusing to reset");
   }
 
   // Drizzle executes the reset, baseline, preserved rows, and journal write in one transaction.

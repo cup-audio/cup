@@ -3,6 +3,8 @@ import { drizzle, type DrizzleSqliteDODatabase } from "drizzle-orm/durable-sqlit
 import { Temporal } from "temporal-polyfill";
 import { z } from "zod";
 
+import { CupError } from "@cup/errors";
+
 import type { AccountSnapshot } from "#src/domain/account-contracts.ts";
 import {
   accounts,
@@ -23,7 +25,7 @@ export type DeletionAttempt = {
 /** Stored attempts never reach `erased`: account erasure deletes their rows. */
 type StoredDeletionAttemptState = (typeof deletionAttempts.$inferSelect)["state"];
 
-export class AccountLifecycleConflictError extends Error {
+export class AccountLifecycleConflictError extends CupError {
   constructor(message: string) {
     super(message);
     this.name = "AccountLifecycleConflictError";
@@ -42,7 +44,7 @@ export class AccountLifecycle {
   challenge(nowMs = Temporal.Now.instant().epochMilliseconds) {
     const account = this.snapshot();
     if (account.state === "deleting") {
-      throw new Error("Account deletion has started");
+      throw new CupError("Account deletion has started");
     }
     const challengeId = crypto.randomUUID();
     this.database
@@ -120,7 +122,7 @@ export class AccountLifecycle {
       }
       const attempt = this.current();
       if (!attempt) {
-        throw new Error("Deletion attempt missing");
+        throw new CupError("Deletion attempt missing");
       }
       this.database
         .update(deletionAttempts)
@@ -178,10 +180,10 @@ export class AccountLifecycle {
     this.database.transaction(() => {
       const attempt = this.current();
       if (!attempt || attempt.attemptId !== attemptId || attempt.state === "restored") {
-        throw new Error("Deletion attempt was superseded");
+        throw new CupError("Deletion attempt was superseded");
       }
       if (nowMs < attempt.deadlineMs) {
-        throw new Error("Recovery period has not ended");
+        throw new CupError("Recovery period has not ended");
       }
       this.database
         .update(accounts)

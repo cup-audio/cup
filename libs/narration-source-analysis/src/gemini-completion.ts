@@ -1,5 +1,7 @@
 import { OpenAI } from "openai";
 
+import { CupError } from "@cup/errors";
+
 import type { Completion, CompletionResponse } from "#src/completion.ts";
 
 export const completeWithGemini: Completion = async (request, options = {}) => {
@@ -7,7 +9,7 @@ export const completeWithGemini: Completion = async (request, options = {}) => {
   const accountId = environment["CLOUDFLARE_ACCOUNT_ID"];
   const apiKey = options.apiKey ?? environment["CLOUDFLARE_API_KEY"];
   if (!accountId || !apiKey) {
-    throw new Error("Gemini completion requires Cloudflare account ID and API key");
+    throw new CupError("Gemini completion requires Cloudflare account ID and API key");
   }
   const client = new OpenAI({
     apiKey,
@@ -46,13 +48,13 @@ function parseGeminiResponse(response: OpenAI.Chat.Completions.ChatCompletion): 
   const candidate = response.choices[0];
   const usage = response.usage;
   if (!candidate || !usage) {
-    throw new Error("Gemini response is missing a candidate or token usage");
+    throw new CupError("Gemini response is missing a candidate or token usage");
   }
   const toolCalls = (
     candidate.finish_reason === "tool_calls" ? (candidate.message.tool_calls ?? []) : []
   ).map((toolCall) => {
     if (toolCall.type !== "function") {
-      throw new Error("Gemini returned an unsupported tool call");
+      throw new CupError("Gemini returned an unsupported tool call");
     }
     return {
       id: toolCall.id,

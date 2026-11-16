@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { CupError } from "@cup/errors";
 import type { SourcePageCookie } from "@cup/prepare-source-material";
 
 const SOURCE_PAGE_COOKIES_SCHEMA = z.array(
@@ -23,12 +24,12 @@ export function parseSourcePageCookies(configuration: string | undefined): Sourc
   try {
     parsed = JSON.parse(configuration);
   } catch {
-    throw new Error("SOURCE_PAGE_COOKIES_JSON must contain valid JSON");
+    throw new CupError("SOURCE_PAGE_COOKIES_JSON must contain valid JSON");
   }
 
   const result = SOURCE_PAGE_COOKIES_SCHEMA.safeParse(parsed);
   if (!result.success) {
-    throw new Error(
+    throw new CupError(
       "SOURCE_PAGE_COOKIES_JSON must be an array of cookies with a non-empty name, string value, hostname domain, and absolute path",
     );
   }

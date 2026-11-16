@@ -1,6 +1,7 @@
 import type { CloudflareOptions } from "@sentry/cloudflare";
 import { extraErrorDataIntegration } from "@sentry/cloudflare";
 
+import { CupError } from "@cup/errors";
 import { beforeSendLog, TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
 
 import { beforeSendServerEvent, beforeSendServerSpan } from "#src/server-before-send.ts";
@@ -56,12 +57,12 @@ export function createWorkerSentryOptions(
   assertWorkerSentryEnvironment(env);
   const isLocalDevelopment = env.LOCAL_DEVELOPMENT === "true";
   if (isLocalDevelopment && env.SENTRY_DSN !== "") {
-    throw new Error(
+    throw new CupError(
       'SENTRY_DSN must be empty when LOCAL_DEVELOPMENT is "true": local development never sends to Sentry.',
     );
   }
   if (!isLocalDevelopment && env.SENTRY_DSN === "") {
-    throw new Error(
+    throw new CupError(
       'SENTRY_DSN must be set when LOCAL_DEVELOPMENT is not "true": production always reports to Sentry.',
     );
   }
@@ -119,7 +120,7 @@ function assertWorkerSentryEnvironment(env: object): asserts env is WorkerSentry
     "id" in env.CF_VERSION_METADATA &&
     typeof env.CF_VERSION_METADATA.id === "string";
   if (!isValid) {
-    throw new Error(
+    throw new CupError(
       "The Worker environment needs the LOCAL_DEVELOPMENT and SENTRY_DSN vars and the CF_VERSION_METADATA binding.",
     );
   }

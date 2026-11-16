@@ -1,6 +1,8 @@
 import type { ErrorEvent, Exception } from "@sentry/core";
 import { expect, test } from "vitest";
 
+import { CupError } from "@cup/errors";
+
 import { beforeSendServerEvent, beforeSendServerSpan } from "#src/server-before-send.ts";
 
 class DrizzleQueryError extends Error {
@@ -96,7 +98,7 @@ test("keeps the messages of Cup's own errors and drops those of foreign errors i
     ["secret"],
     sqliteError,
   );
-  const error = new Error("The grant could not be stored.", { cause: drizzleError });
+  const error = new CupError("The grant could not be stored.", { cause: drizzleError });
   const event: ErrorEvent = {
     type: undefined,
     exception: { values: exceptionValuesOf(error) },
@@ -116,8 +118,9 @@ test("keeps the messages of Cup's own errors and drops those of foreign errors i
       mechanism: { type: "generic", exception_id: 0 },
     },
   ]);
-  // extraErrorDataIntegration copies the cause's own properties, here the SQL parameters.
-  expect(sent?.contexts).toEqual({ Error: {} });
+  // extraErrorDataIntegration copies the cause's own properties, here the SQL parameters; with
+  // the cause dropped, nothing of the error's own data is left.
+  expect(sent?.contexts).toEqual({});
 });
 
 test("drops the message and the extra data of a foreign error captured unwrapped", () => {
@@ -137,7 +140,7 @@ test("drops the message and the extra data of a foreign error captured unwrapped
 });
 
 test("masks URLs in the messages of Cup's own errors", () => {
-  const error = new Error("Could not read https://cup.audio/x?token=secret");
+  const error = new CupError("Could not read https://cup.audio/x?token=secret");
   const event: ErrorEvent = { type: undefined, exception: { values: exceptionValuesOf(error) } };
 
   expect(beforeSendServerEvent(event, { originalException: error })?.exception?.values).toEqual([
@@ -152,7 +155,7 @@ test("masks URLs in the messages of Cup's own errors", () => {
 test.each(["auto.faas.cloudflare.workflow", "auto.faas.cloudflare.durable_object"])(
   "drops the capture a wrapper made itself (%s), which Cup's capture rule leaves to Cup",
   (mechanism) => {
-    const error = new Error("Conversion grant is not initialized");
+    const error = new CupError("Conversion grant is not initialized");
     const event: ErrorEvent = {
       type: undefined,
       exception: {
@@ -165,7 +168,7 @@ test.each(["auto.faas.cloudflare.workflow", "auto.faas.cloudflare.durable_object
 );
 
 test("keeps an event Cup captured itself", () => {
-  const error = new Error("Preparation failed");
+  const error = new CupError("Preparation failed");
   const event: ErrorEvent = {
     type: undefined,
     exception: {

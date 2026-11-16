@@ -5,6 +5,7 @@ import { Temporal } from "temporal-polyfill";
 import { z } from "zod";
 
 import { deletionAttemptSchema, type DeletionAttempt } from "@cup/accounts/lifecycle";
+import { CupError } from "@cup/errors";
 import { logEvent } from "@cup/telemetry.cloudflare";
 import { TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
 
@@ -105,11 +106,11 @@ export class DeletionCoordinator {
           existing.subject !== attempt.subject ||
           existing.deadlineMs !== attempt.deadlineMs)
       ) {
-        throw new Error("Deletion attempt identity conflict");
+        throw new CupError("Deletion attempt identity conflict");
       }
       if (attempt.state === "restored") {
         if (existing?.state === "deleting") {
-          throw new Error("Deletion cleanup has started");
+          throw new CupError("Deletion cleanup has started");
         }
         this.database
           .insert(canceledDeletionAttempts)
@@ -238,7 +239,7 @@ export class DeletionCoordinator {
             "Your Cup account and its private conversions have been deleted. Original trial conversions remain separate. You can create a new Cup account at https://cup.audio/app.",
           );
         } else {
-          throw new Error("Deletion dependencies are pending");
+          throw new CupError("Deletion dependencies are pending");
         }
       } catch {
         // A restore accepted while the failed call was pending supersedes this attempt.

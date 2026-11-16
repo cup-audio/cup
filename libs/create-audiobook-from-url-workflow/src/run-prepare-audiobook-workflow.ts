@@ -18,6 +18,7 @@ import {
   conversionParamsSchema,
   type ConversionParams,
 } from "@cup/conversion-contracts";
+import { CupError } from "@cup/errors";
 import { createNarrationDocument } from "@cup/narration-document-creation";
 import type {
   NarrationContentSelectionResult,
@@ -489,7 +490,7 @@ function logMissingCoverImage(
   );
 }
 
-class ContentLimitError extends Error {
+class ContentLimitError extends CupError {
   constructor() {
     super("Narration exceeds the conversion content ceiling");
     this.name = "ContentLimitError";

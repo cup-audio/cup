@@ -274,8 +274,13 @@ test("a failed Durable Object RPC is captured once, by its caller", async ({
       "cup.conversion.id": conversionId,
       "cup.conversion.failure_category": "source-preparation",
     },
-    exception: { values: [{ value: "Conversion grant is not initialized" }] },
   });
+  // A Workflow step rebuilds the error it rethrows as a plain `Error` without the brand of Cup's
+  // errors, so the error arrives as foreign: with its type and stack, without its message.
+  expect(events[0]?.exception?.values).toEqual([
+    expect.objectContaining({ type: "Error", stacktrace: expect.anything() }),
+  ]);
+  expect(events[0]?.exception?.values?.[0]).not.toHaveProperty("value");
 });
 
 test("a retried Workflow step that then succeeds sends no error event", async ({

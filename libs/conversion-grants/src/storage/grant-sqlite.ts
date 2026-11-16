@@ -4,6 +4,7 @@ import { Temporal } from "temporal-polyfill";
 
 import { conversionPhaseSchema } from "@cup/conversion-contracts";
 import { DurationLedger } from "@cup/duration-ledger";
+import { CupError } from "@cup/errors";
 
 import type { GrantConversion, GrantRecord } from "#src/domain/grant-model.ts";
 import {
@@ -67,7 +68,7 @@ export class ConversionGrantSqlite {
       conversions,
     };
     if (!isGrantRecord(parsed)) {
-      throw new Error("Conversion grant storage is corrupt");
+      throw new CupError("Conversion grant storage is corrupt");
     }
     return parsed;
   }
@@ -75,7 +76,7 @@ export class ConversionGrantSqlite {
   async requireRecord(): Promise<GrantRecord> {
     const record = await this.load();
     if (record === undefined) {
-      throw new Error("Conversion grant is not initialized");
+      throw new CupError("Conversion grant is not initialized");
     }
     return record;
   }

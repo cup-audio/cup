@@ -8,6 +8,7 @@
 import * as Sentry from "@sentry/cloudflare";
 import { expect, test } from "vitest";
 
+import { CupError } from "@cup/errors";
 import { useSentryStub } from "@cup/sentry-stub";
 
 import { createWorkerSentryOptions } from "#src/worker-sentry-options.ts";
@@ -39,7 +40,7 @@ test("a wrapped foreign error arrives with its linked exception's type but witho
           ["secret-label"],
           undefined,
         );
-        throw new Error("The grant could not be loaded.", { cause: drizzleError });
+        throw new CupError("The grant could not be loaded.", { cause: drizzleError });
       },
     },
   );

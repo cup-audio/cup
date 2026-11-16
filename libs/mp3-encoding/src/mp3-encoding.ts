@@ -1,3 +1,5 @@
+import { CupError } from "@cup/errors";
+
 const PCM_SAMPLE_BYTE_LENGTH = 2;
 // Must match the capacity compiled into the narrow LAME bridge.
 const CHUNK_SAMPLE_COUNT = 4_608;
@@ -27,7 +29,7 @@ export async function encodePcmAsMp3(pcm: Uint8Array, options: EncodeOptions): P
   assertPositiveInteger(options.bitrateKilobitsPerSecond, "MP3 bitrate");
 
   if (pcm.byteLength === 0 || pcm.byteLength % PCM_SAMPLE_BYTE_LENGTH !== 0) {
-    throw new Error(
+    throw new CupError(
       `PCM audio byte length must contain complete signed 16-bit samples: ${pcm.byteLength}`,
     );
   }
@@ -36,7 +38,7 @@ export async function encodePcmAsMp3(pcm: Uint8Array, options: EncodeOptions): P
   const encoder = wasm.encoder_create(options.sampleRate, options.bitrateKilobitsPerSecond);
 
   if (encoder === 0) {
-    throw new Error("LAME MP3 encoder initialization failed");
+    throw new CupError("LAME MP3 encoder initialization failed");
   }
 
   try {
@@ -57,7 +59,7 @@ async function instantiateEncoder(): Promise<EncoderExports> {
       fd_seek: denyFileDescriptorOperation,
       fd_write: denyFileDescriptorOperation,
       proc_exit(exitCode: number) {
-        throw new Error(`LAME MP3 encoder exited unexpectedly with status ${exitCode}`);
+        throw new CupError(`LAME MP3 encoder exited unexpectedly with status ${exitCode}`);
       },
     },
   });
@@ -65,7 +67,7 @@ async function instantiateEncoder(): Promise<EncoderExports> {
   const { memory } = exports;
 
   if (!(memory instanceof WebAssembly.Memory)) {
-    throw new Error("LAME MP3 encoder does not export WebAssembly memory");
+    throw new CupError("LAME MP3 encoder does not export WebAssembly memory");
   }
 
   const wasm = {
@@ -114,7 +116,7 @@ function encodePcm(wasm: EncoderExports, encoder: number, pcm: Uint8Array): Uint
     const inputPointer = wasm.encoder_get_pcm(encoder);
 
     if (inputPointer === 0) {
-      throw new Error("LAME MP3 encoder did not provide an input buffer");
+      throw new CupError("LAME MP3 encoder did not provide an input buffer");
     }
 
     new Uint8Array(wasm.memory.buffer, inputPointer, chunk.byteLength).set(chunk);
@@ -151,11 +153,11 @@ function appendEncodedChunk(
   encodedByteLength: number,
 ): number {
   if (encodedByteLength < 0) {
-    throw new Error(`LAME MP3 encoding failed with status ${encodedByteLength}`);
+    throw new CupError(`LAME MP3 encoding failed with status ${encodedByteLength}`);
   }
 
   if (encodedByteLength > MAX_CHUNK_BYTE_LENGTH) {
-    throw new Error(`LAME MP3 encoder returned an oversized chunk: ${encodedByteLength} bytes`);
+    throw new CupError(`LAME MP3 encoder returned an oversized chunk: ${encodedByteLength} bytes`);
   }
 
   if (encodedByteLength === 0) {
@@ -165,7 +167,7 @@ function appendEncodedChunk(
   const outputPointer = wasm.encoder_get_mp3(encoder);
 
   if (outputPointer === 0) {
-    throw new Error("LAME MP3 encoder did not provide an output buffer");
+    throw new CupError("LAME MP3 encoder did not provide an output buffer");
   }
 
   chunks.push(new Uint8Array(wasm.memory.buffer, outputPointer, encodedByteLength).slice());
@@ -175,7 +177,7 @@ function appendEncodedChunk(
 
 function assertPositiveInteger(value: number, name: string): void {
   if (!Number.isInteger(value) || value <= 0) {
-    throw new Error(`${name} must be a positive integer: ${value}`);
+    throw new CupError(`${name} must be a positive integer: ${value}`);
   }
 }
 
@@ -191,13 +193,13 @@ function callNumberExport(
   const exportedFunction = exports[name];
 
   if (typeof exportedFunction !== "function") {
-    throw new Error(`LAME MP3 encoder does not export function ${name}`);
+    throw new CupError(`LAME MP3 encoder does not export function ${name}`);
   }
 
   const result: unknown = exportedFunction(...parameters);
 
   if (typeof result !== "number") {
-    throw new Error(`LAME MP3 encoder function ${name} did not return a number`);
+    throw new CupError(`LAME MP3 encoder function ${name} did not return a number`);
   }
 
   return result;
@@ -207,7 +209,7 @@ function callVoidExport(exports: WebAssembly.Exports, name: string, ...parameter
   const exportedFunction = exports[name];
 
   if (typeof exportedFunction !== "function") {
-    throw new Error(`LAME MP3 encoder does not export function ${name}`);
+    throw new CupError(`LAME MP3 encoder does not export function ${name}`);
   }
 
   exportedFunction(...parameters);

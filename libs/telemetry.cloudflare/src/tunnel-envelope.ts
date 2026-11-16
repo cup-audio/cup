@@ -1,3 +1,5 @@
+import { CupError } from "@cup/errors";
+
 /*
  * The telemetry tunnel's envelope rewrite. The envelope format follows Sentry's developer docs as
  * read on 2026-11-16 (https://develop.sentry.dev/sdk/data-model/envelopes/): a JSON header line,
@@ -17,7 +19,7 @@ type EnvelopeItem = {
 };
 
 /** Thrown for a request body that is no Sentry envelope; the tunnel answers it with a 400. */
-export class InvalidTunnelEnvelopeError extends Error {
+export class InvalidTunnelEnvelopeError extends CupError {
   override name = "InvalidTunnelEnvelopeError";
 }
 

@@ -2,6 +2,8 @@ import { parseFragment } from "parse5";
 import type { DefaultTreeAdapterMap } from "parse5";
 import { z } from "zod";
 
+import { CupError } from "@cup/errors";
+
 import { createNarrationChunks } from "#src/narration-chunking.ts";
 
 const EXCLUDED_TAG_NAMES = new Set([
@@ -121,14 +123,14 @@ export function createNarrationDocument({
   const comparableSourceTitle = normalizeComparableNarrationText(sourceTitle);
 
   if (normalizedSourceTitle.length === 0) {
-    throw new Error("Expected the source title to contain narration text");
+    throw new CupError("Expected the source title to contain narration text");
   }
 
   const normalizedSourceSubtitle =
     sourceSubtitle === undefined ? undefined : normalizeNarrationText(sourceSubtitle);
 
   if (normalizedSourceSubtitle?.length === 0) {
-    throw new Error("Expected the source subtitle to contain narration text");
+    throw new CupError("Expected the source subtitle to contain narration text");
   }
 
   const safeNodes = sanitizeChildren(parseFragment(sourceMaterialHtml), {
@@ -189,7 +191,7 @@ export function createNarrationDocument({
       const chunkStart = combinedNarrationText.indexOf(chunkText, chunkSearchStart);
 
       if (chunkStart < 0) {
-        throw new Error("Expected every narration chunk to occur in its source block");
+        throw new CupError("Expected every narration chunk to occur in its source block");
       }
 
       const chunkEnd = chunkStart + chunkText.length;

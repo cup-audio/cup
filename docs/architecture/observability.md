@@ -185,7 +185,7 @@ The Worker's options set every key of Sentry's `dataCollection`, so no user info
 - set the user's IP address to null and drop the IP headers;
 - drop the time zone that the SDK copies from `request.cf`, a location finer than the country;
 - mask the values of credential query parameters (`token`, `key`, `sig`, `signature`, `auth`, `code`, `access_token`) in URLs, span names and attributes, breadcrumbs and error messages, with the one masking function of `@cup/telemetry.core`;
-- keep the messages only of Cup's own errors. A foreign error anywhere in the captured `cause` chain, such as a Drizzle query error that embeds SQL parameters, keeps its class name as its type and loses its message and the properties `extraErrorDataIntegration` copied from it. Cup's own errors are plain `Error`s and the few subclasses that [`libs/errors`](../../libs/errors/README.md) lists.
+- keep the messages only of Cup's own errors. A foreign error anywhere in the captured `cause` chain, such as a Drizzle query error that embeds SQL parameters, keeps its class name as its type and loses its message and the properties `extraErrorDataIntegration` copied from it. Cup's own errors are those derived from `CupError` of [`libs/errors`](../../libs/errors/README.md); a plain `Error` is foreign, since a dependency can throw one.
 
 The client options set `sendDefaultPii: false` and leave `dataCollection` unset, since setting any of its keys makes the others permissive. The client `beforeSend` and `beforeBreadcrumb` in `@cup/telemetry.browser` then:
 

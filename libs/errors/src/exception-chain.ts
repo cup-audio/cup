@@ -19,20 +19,12 @@ export type ExceptionChain = {
 };
 
 /**
- * The subclasses of `Error` that Cup defines in Worker code; their messages, like those of plain
- * `Error`s, are Cup's own. A class missing here only loses its message.
+ * Whether an error is Cup's own: a `CupError`, or an error a Durable Object RPC call rebuilt from
+ * one, which keeps the brand as an own property. Every other error, a plain `Error` included, is
+ * foreign.
  */
-const CUP_ERROR_CLASS_NAMES: ReadonlySet<string> = new Set([
-  "AccountLifecycleConflictError",
-  "ContentLimitError",
-  "PermanentNarrationSynthesisError",
-  "RateLimitedNarrationSynthesisError",
-  "UnknownSelectionElementIdsError",
-]);
-
-/** Whether an error is Cup's own: a plain `Error` or one of the subclasses Cup defines. */
 export function isCupError(error: Error): boolean {
-  return error.constructor === Error || CUP_ERROR_CLASS_NAMES.has(error.constructor.name);
+  return "cupError" in error && error.cupError === true;
 }
 
 /**

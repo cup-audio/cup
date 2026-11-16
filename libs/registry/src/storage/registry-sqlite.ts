@@ -2,6 +2,7 @@ import { and, asc, eq, getTableColumns } from "drizzle-orm";
 import { drizzle, type DrizzleSqliteDODatabase } from "drizzle-orm/durable-sqlite";
 
 import type { ConversionOwner } from "@cup/conversion-contracts";
+import { CupError } from "@cup/errors";
 
 import type { RegistryEntry, RegistryRecord } from "#src/domain/registry-model.ts";
 import {
@@ -101,7 +102,7 @@ export class RegistrySqlite {
       }));
     const parsed: unknown = { grants };
     if (!isRegistryRecord(parsed)) {
-      throw new Error("Registry storage is corrupt");
+      throw new CupError("Registry storage is corrupt");
     }
     return parsed;
   }

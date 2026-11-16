@@ -901,6 +901,9 @@ importers:
       '@cup/duration-ledger':
         specifier: workspace:*
         version: link:../duration-ledger
+      '@cup/errors':
+        specifier: workspace:*
+        version: link:../errors
       '@cup/rolling-limits':
         specifier: workspace:*
         version: link:../rolling-limits
@@ -1087,6 +1090,9 @@ importers:
       '@cup/conversion-contracts':
         specifier: workspace:*
         version: link:../conversion-contracts
+      '@cup/errors':
+        specifier: workspace:*
+        version: link:../errors
       '@cup/mp3-encoding':
         specifier: workspace:*
         version: link:../mp3-encoding
@@ -1142,6 +1148,9 @@ importers:
 
   libs/conversion-contracts:
     dependencies:
+      '@cup/errors':
+        specifier: workspace:*
+        version: link:../errors
       p-map:
         specifier: ^7.1.0
         version: 7.1.0
@@ -1270,6 +1279,9 @@ importers:
       '@cup/conversion-grants':
         specifier: workspace:*
         version: link:../conversion-grants
+      '@cup/errors':
+        specifier: workspace:*
+        version: link:../errors
       '@cup/narration-document-creation':
         specifier: workspace:*
         version: link:../narration-document-creation
@@ -1343,6 +1355,9 @@ importers:
       '@cup/conversion-contracts':
         specifier: workspace:*
         version: link:../conversion-contracts
+      '@cup/errors':
+        specifier: workspace:*
+        version: link:../errors
       drizzle-orm:
         specifier: ^0.45.4
         version: 0.45.4
@@ -1525,6 +1540,10 @@ importers:
         version: 4.1.11(@types/node@26.6.5)(@vitest/coverage-v8@4.1.11)(vite@8.3.4(@types/node@26.6.5))
 
   libs/mp3-encoding:
+    dependencies:
+      '@cup/errors':
+        specifier: workspace:*
+        version: link:../errors
     devDependencies:
       '@cup/config-oxlint':
         specifier: workspace:*
@@ -1565,6 +1584,9 @@ importers:
 
   libs/narration-document-creation:
     dependencies:
+      '@cup/errors':
+        specifier: workspace:*
+        version: link:../errors
       parse5:
         specifier: ^8.0.1
         version: 8.0.1
@@ -1611,6 +1633,9 @@ importers:
 
   libs/narration-source-analysis:
     dependencies:
+      '@cup/errors':
+        specifier: workspace:*
+        version: link:../errors
       '@cup/prepare-source-material':
         specifier: workspace:*
         version: link:../prepare-source-material
@@ -1770,6 +1795,9 @@ importers:
 
   libs/prepare-source-material:
     dependencies:
+      '@cup/errors':
+        specifier: workspace:*
+        version: link:../errors
       parse5:
         specifier: ^8.0.1
         version: 8.0.1
@@ -1837,6 +1865,9 @@ importers:
       '@cup/conversion-grants':
         specifier: workspace:*
         version: link:../conversion-grants
+      '@cup/errors':
+        specifier: workspace:*
+        version: link:../errors
       '@cup/rolling-limits':
         specifier: workspace:*
         version: link:../rolling-limits
@@ -1913,6 +1944,9 @@ importers:
 
   libs/rolling-limits:
     dependencies:
+      '@cup/errors':
+        specifier: workspace:*
+        version: link:../errors
       drizzle-orm:
         specifier: ^0.45.4
         version: 0.45.4
@@ -2089,6 +2123,10 @@ importers:
         version: 4.1.11(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5))
 
   libs/time-stretching:
+    dependencies:
+      '@cup/errors':
+        specifier: workspace:*
+        version: link:../errors
     devDependencies:
       '@cup/config-oxlint':
         specifier: workspace:*

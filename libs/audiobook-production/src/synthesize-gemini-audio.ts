@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { CupError } from "@cup/errors";
+
 import { AUDIO_FORMAT } from "#src/audio-format.ts";
 import { toLanguageSubtag } from "#src/language-tag.ts";
 import { getNarrationLanguageSupport } from "#src/narration-language-speakability.ts";
@@ -211,12 +213,12 @@ export async function synthesizeGeminiAudio({
       throw new PermanentNarrationSynthesisError(message);
     }
 
-    throw new Error(message);
+    throw new CupError(message);
   }
 
   if (response.headers.get("content-type")?.includes("text/event-stream")) {
     if (!response.body) {
-      throw new Error("Google AI Studio narration synthesis response did not contain a body");
+      throw new CupError("Google AI Studio narration synthesis response did not contain a body");
     }
 
     return readAudioStream(createAudioStreamFromEvents(response.body));
@@ -250,7 +252,7 @@ function selectSpokenLanguage(
     toLanguageSubtag(narrationLanguage),
   );
   if (englishName === undefined) {
-    throw new Error(`No English name for the narration language ${narrationLanguage}`);
+    throw new CupError(`No English name for the narration language ${narrationLanguage}`);
   }
 
   return {
@@ -279,7 +281,7 @@ function parseAudioResponse(response: unknown): Uint8Array {
       throw new PermanentNarrationSynthesisError(message);
     }
 
-    throw new Error(message);
+    throw new CupError(message);
   }
 
   return decodeBase64(audio.data);
@@ -362,7 +364,7 @@ function createAudioStreamFromEvents(body: ReadableStream<Uint8Array>): Readable
                 throw new PermanentNarrationSynthesisError(message);
               }
 
-              throw new Error(message);
+              throw new CupError(message);
             }
 
             controller.close();
@@ -434,7 +436,7 @@ function parseAudioStreamEvent(
       throw new PermanentNarrationSynthesisError(error);
     }
 
-    throw new Error(error);
+    throw new CupError(error);
   }
 
   const parsedEvent = AUDIO_STREAM_EVENT_SCHEMA.safeParse(parsedJson);

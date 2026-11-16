@@ -36,6 +36,7 @@
   },
   "dependencies": {
     "@cup/conversion-contracts": "workspace:*",
+    "@cup/errors": "workspace:*",
     "@cup/mp3-encoding": "workspace:*",
     "@cup/narration-document-creation": "workspace:*",
     "@cup/time-stretching": "workspace:*",

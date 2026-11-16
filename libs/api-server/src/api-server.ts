@@ -16,7 +16,7 @@ import {
   toGrantConversionSnapshot,
   type ConversionGrantDurableObject,
 } from "@cup/conversion-grants";
-import { assertUnreachable } from "@cup/errors";
+import { CupError, assertUnreachable } from "@cup/errors";
 import {
   createListenerApi,
   type Audiobook,
@@ -1463,7 +1463,7 @@ export function createApiServer(dependencies: ApiServerDependencies = production
 
     const nonce = context.get("secureHeadersNonce");
     if (nonce === undefined) {
-      throw new Error("Expected the secure headers middleware to set a nonce.");
+      throw new CupError("Expected the secure headers middleware to set a nonce.");
     }
     return applyWebAppCspNonce(response, nonce);
   });

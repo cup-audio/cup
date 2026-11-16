@@ -2,6 +2,8 @@ import { parseFragment, serialize } from "parse5";
 import type { DefaultTreeAdapterMap } from "parse5";
 import type { Tagged } from "type-fest";
 
+import { CupError } from "@cup/errors";
+
 /** Attribute used to assign stable identifiers to source-material elements. */
 export const SOURCE_ELEMENT_ID_ATTRIBUTE = "data-createaudiobookfromurl-element-id";
 
@@ -154,7 +156,7 @@ function getElementId(element: DefaultTreeAdapterMap["element"]): string {
   )?.value;
 
   if (elementId === undefined) {
-    throw new Error(
+    throw new CupError(
       `Expected every HTML element to have a ${SOURCE_ELEMENT_ID_ATTRIBUTE} attribute`,
     );
   }

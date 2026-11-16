@@ -38,6 +38,7 @@
     "turbo:test": "pnpm run test"
   },
   "dependencies": {
+    "@cup/errors": "workspace:*",
     "parse5": "^8.0.1"
   },
   "devDependencies": {

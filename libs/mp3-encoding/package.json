@@ -36,6 +36,9 @@
     "turbo:lint:fix": "pnpm run turbo:lint --fix",
     "turbo:test": "pnpm run test"
   },
+  "dependencies": {
+    "@cup/errors": "workspace:*"
+  },
   "devDependencies": {
     "@cup/config-oxlint": "workspace:*",
     "@cup/prepare-declaration-build": "workspace:*",

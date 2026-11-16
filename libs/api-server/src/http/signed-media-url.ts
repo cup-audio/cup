@@ -3,6 +3,7 @@ import { Temporal } from "temporal-polyfill";
 
 import { conversionOwnerSchema, type ConversionOwner } from "@cup/conversion-contracts";
 import type { GrantState } from "@cup/conversion-grants";
+import { CupError } from "@cup/errors";
 
 import type { ApiServerEnvironment } from "#src/api-server-environment.ts";
 import { accountAuthError, jsonError, requireAccessibleGrantState } from "#src/http/http-errors.ts";
@@ -376,7 +377,7 @@ async function verifyMediaUrlToken({
 
 function importSigningKey(signingKey: string): Promise<CryptoKey> {
   if (signingKey === "") {
-    throw new Error("MEDIA_URL_SIGNING_KEY must not be empty.");
+    throw new CupError("MEDIA_URL_SIGNING_KEY must not be empty.");
   }
   return crypto.subtle.importKey(
     "raw",
@@ -397,7 +398,7 @@ function encodeBase64Url(bytes: Uint8Array): string {
 /** Throws for input that is not base64url. */
 function decodeBase64Url(value: string): Uint8Array<ArrayBuffer> {
   if (!/^[A-Za-z0-9_-]*$/.test(value)) {
-    throw new Error("Invalid base64url value");
+    throw new CupError("Invalid base64url value");
   }
   const binary = atob(value.replaceAll("-", "+").replaceAll("_", "/"));
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));
