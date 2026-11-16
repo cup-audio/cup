@@ -44,9 +44,9 @@ export type TestWorker = {
   createGrant(label?: string): Promise<CreatedGrant>;
   /**
    * Restarts Wrangler with another scenario, keeping the port and persisted storage. The signed URL
-   * lifetime stays unless `options` sets another.
+   * lifetime and the track speed stay unless `options` sets others.
    */
-  restart(scenario: TestWorkerScenario, options?: SignedUrlOptions): Promise<void>;
+  restart(scenario: TestWorkerScenario, options?: RestartOptions): Promise<void>;
   /** Stops Wrangler and removes the persistence directory unless it is retained. */
   stop(options?: { retainPersistenceDirectory?: boolean }): Promise<void>;
 };
@@ -59,7 +59,15 @@ type SignedUrlOptions = {
   signedUrlLifetimeSeconds?: number;
 };
 
-type StartTestWorkerOptions = SignedUrlOptions & {
+type RestartOptions = SignedUrlOptions & {
+  /**
+   * Sends narration tracks at this many bytes per second instead of at loopback speed, so a player
+   * buffers only part of the track and a lost connection fails a request while it plays.
+   */
+  trackBytesPerSecond?: number;
+};
+
+type StartTestWorkerOptions = RestartOptions & {
   scenario?: TestWorkerScenario;
   /** The fake auth provider the Worker verifies tokens against, if the test signs in. */
   authProviderOrigin?: string;
@@ -94,7 +102,7 @@ export async function startTestWorker(options: StartTestWorkerOptions = {}): Pro
   const persistenceDirectory = await fs.mkdtemp(path.join(os.tmpdir(), "cup-test-worker-"));
   const logs: string[] = [];
   let workerProcess: childProcess.ChildProcess | undefined;
-  let { signedUrlLifetimeSeconds } = options;
+  let { signedUrlLifetimeSeconds, trackBytesPerSecond } = options;
 
   const start = async (scenario: TestWorkerScenario): Promise<void> => {
     const environment = { ...process.env };
@@ -148,6 +156,9 @@ export async function startTestWorker(options: StartTestWorkerOptions = {}): Pro
         ...(signedUrlLifetimeSeconds === undefined
           ? []
           : ["--var", `LOCAL_SIGNED_URL_LIFETIME_SECONDS:${signedUrlLifetimeSeconds}`]),
+        ...(trackBytesPerSecond === undefined
+          ? []
+          : ["--var", `QA_TRACK_BYTES_PER_SECOND:${trackBytesPerSecond}`]),
       ],
       { cwd: PACKAGE_ROOT, detached: true, env: environment, stdio: ["ignore", "pipe", "pipe"] },
     );
@@ -166,6 +177,7 @@ export async function startTestWorker(options: StartTestWorkerOptions = {}): Pro
     async restart(scenario, restartOptions = {}) {
       signedUrlLifetimeSeconds =
         restartOptions.signedUrlLifetimeSeconds ?? signedUrlLifetimeSeconds;
+      trackBytesPerSecond = restartOptions.trackBytesPerSecond ?? trackBytesPerSecond;
       await stopProcess(workerProcess);
       workerProcess = undefined;
       await start(scenario);

@@ -32,6 +32,10 @@ const LOCKED_CHECK_INTERVAL_MILLISECONDS = 20_000;
  * fetch of the audiobook and Play.
  */
 const SHORT_URL_LIFETIME_SECONDS = 30;
+/** Twice the narration track's 128 kbit/s, so ExoPlayer keeps loading while it plays. */
+const TRACK_BYTES_PER_SECOND = 32_000;
+/** The page's message for a failed load. */
+const MEDIA_ERROR_MESSAGE = "Audio could not be played. Press Play to try again.";
 /** Media3's shortened foreground grace after a pause, instead of 10 minutes. */
 const FOREGROUND_GRACE_SECONDS = 10;
 
@@ -224,6 +228,25 @@ test("a track URL the server refuses ends the playing session, and the next Play
   expect(audiobookFetches(conversionId)).toBeGreaterThan(fetchesBefore);
 });
 
+test("a lost connection pauses the player with an error, and Play from the notification or the page continues where it stopped", async () => {
+  const device = asAndroidAppDevice(app.device);
+  await app.worker.restart("long-speech", { trackBytesPerSecond: TRACK_BYTES_PER_SECOND });
+  let { webView } = await openNewAudiobook(device);
+  await webView.$(`${PLAYER} button[aria-label="Play"]`).click();
+  await waitForCupMediaSession(device, "PLAYING");
+  await expect.poll(() => readPosition(webView), { timeout: 15_000 }).toBeGreaterThan(2_000);
+
+  // The media session prepares the failed player itself, without the page.
+  let failedAt = await loseConnectionUntilPlaybackFails(device, webView);
+  await device.tapMediaControl("Play");
+  webView = await device.webView();
+  await expectToPlayOnFrom(device, webView, failedAt);
+
+  failedAt = await loseConnectionUntilPlaybackFails(device, webView);
+  await webView.$(`${PLAYER} button[aria-label="Play"]`).click();
+  await expectToPlayOnFrom(device, webView, failedAt);
+});
+
 test("a playing session survives a swipe from recents, reopening Cup takes it over, and a swipe while paused ends it", async () => {
   const device = asAndroidAppDevice(app.device);
   await app.worker.restart("long-speech");
@@ -367,12 +390,61 @@ async function waitForServiceToLeaveTheForeground(device: AndroidAppDevice) {
   expect(await cupMediaPlaybackService(device)).toBeDefined();
 }
 
+/**
+ * Cuts the connection to the test Worker while the player plays, waits until the page reports the
+ * failure, and returns the position where it stopped; the Worker is reachable again afterwards.
+ */
+async function loseConnectionUntilPlaybackFails(
+  device: AndroidAppDevice,
+  webView: WebdriverIO.Browser,
+): Promise<number> {
+  const workerPort = Number(new URL(app.apiOrigin).port);
+  const cutAt = await readPosition(webView);
+  await device.unexposeHostPort(workerPort);
+  try {
+    // `adb reverse --remove` refuses new connections only; restarting the Worker ends the ones
+    // ExoPlayer holds, the track's response and idle keep-alive connections alike.
+    await app.worker.restart("long-speech");
+    await expect
+      .poll(() => readPageText(webView), { timeout: 60_000 })
+      .toContain(MEDIA_ERROR_MESSAGE);
+    await waitForPlayButton(webView, "Play");
+    // Media3 reports the failed player to the system as an error, whose notification offers Play.
+    expect(await cupMediaSession(device)).toMatch(/\bstate=PlaybackState \{state=ERROR\(7\)/u);
+    // The cut response is a failed load, not the end of the track, which would start over.
+    const failedAt = await readPosition(webView);
+    expect(failedAt).toBeGreaterThan(cutAt);
+    return failedAt;
+  } finally {
+    await device.exposeHostPort(workerPort);
+  }
+}
+
+/** Waits until the player plays on from `position`, with the error gone. */
+async function expectToPlayOnFrom(
+  device: AndroidAppDevice,
+  webView: WebdriverIO.Browser,
+  position: number,
+) {
+  await waitForPlayButton(webView, "Pause");
+  await waitForCupMediaSession(device, "PLAYING");
+  expect(await readPageText(webView)).not.toContain(MEDIA_ERROR_MESSAGE);
+  await expect
+    .poll(() => readPosition(webView), { timeout: 15_000 })
+    .toBeGreaterThan(position + 2_000);
+  expect(await readPosition(webView)).toBeLessThan(position + 30_000);
+}
+
 /** The position the player sheet's scrubber shows. */
 async function readPosition(
   webView: WebdriverIO.Browser | Promise<WebdriverIO.Browser>,
 ): Promise<number> {
   const session = await webView;
   return Number(await session.$(`${PLAYER} input[type="range"]`).getValue());
+}
+
+async function readPageText(webView: WebdriverIO.Browser): Promise<string> {
+  return webView.execute(() => document.body.textContent);
 }
 
 async function readDuration(webView: WebdriverIO.Browser): Promise<number> {

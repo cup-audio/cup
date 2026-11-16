@@ -70,7 +70,10 @@ final class PlaybackEngine {
     @Nullable
     private Loaded loaded;
 
-    /** The last load failed, and ExoPlayer paused; the next Play prepares the item again. */
+    /**
+     * The last load failed, and ExoPlayer paused; the next Play prepares the item again. Cleared once
+     * ExoPlayer has no error, whoever prepared it.
+     */
     private boolean hasPlaybackError;
 
     /** A native stop is on its way, so the states until then report nothing. */
@@ -442,6 +445,11 @@ final class PlaybackEngine {
         public void onEvents(@NonNull Player eventPlayer, @NonNull Player.Events events) {
             if (eventPlayer != player) {
                 return;
+            }
+            if (eventPlayer.getPlayerError() == null) {
+                // Prepared again: by the page's Play, or by the media session, which prepares an idle
+                // player itself for Play from the notification, a media key or a headset.
+                hasPlaybackError = false;
             }
             if (eventPlayer.getPlaybackState() == Player.STATE_ENDED) {
                 // A finished audiobook starts over the next time, as in Cup's player. The seek and the

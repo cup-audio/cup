@@ -88,13 +88,86 @@ const apiServer = createApiServer({
     Promise.resolve(request.headers.get("Cf-Access-Token") === "local-access-token"),
 });
 
+const NARRATION_TRACK_PATH = /^\/api\/files\/audiobooks\/[^/]+\/narration-track\.mp3$/u;
+/** How often a throttled narration track sends its next chunk. */
+const THROTTLE_INTERVAL_MILLISECONDS = 100;
+
+type QaEnvironment = Env & {
+  /** Set by the harness's `trackBytesPerSecond` option; unset, the track goes out at full speed. */
+  QA_TRACK_BYTES_PER_SECOND?: string;
+};
+
 export default {
-  async fetch(request, env, context) {
+  async fetch(request, env: QaEnvironment, context) {
     await logRequest(request);
     const control = await handleSpeechControl(request, env.AUDIO_BUCKET);
-    return control ?? apiServer.fetch(request, env, context);
+    const response = control ?? (await apiServer.fetch(request, env, context));
+    const trackBytesPerSecond = parseTrackBytesPerSecond(env.QA_TRACK_BYTES_PER_SECOND);
+    if (
+      trackBytesPerSecond === undefined ||
+      !NARRATION_TRACK_PATH.test(new URL(request.url).pathname)
+    ) {
+      return response;
+    }
+    return throttle(response, trackBytesPerSecond);
   },
-} satisfies ExportedHandler<Env>;
+} satisfies ExportedHandler<QaEnvironment>;
+
+function parseTrackBytesPerSecond(value: string | undefined): number | undefined {
+  if (value === undefined || value === "") {
+    return undefined;
+  }
+  const bytesPerSecond = Number(value);
+  if (!Number.isInteger(bytesPerSecond) || bytesPerSecond <= 0) {
+    throw new Error(`Invalid QA_TRACK_BYTES_PER_SECOND: ${value}`);
+  }
+  return bytesPerSecond;
+}
+
+/**
+ * Sends the body at `bytesPerSecond`, keeping status and headers. A client then buffers only part
+ * of the track and keeps loading while it plays, so a lost connection fails a request, as it does
+ * over a mobile network; at loopback speed the client holds the whole track within a second.
+ */
+function throttle(response: Response, bytesPerSecond: number): Response {
+  const contentLength = response.headers.get("Content-Length");
+  if (response.body === null || contentLength === null) {
+    return response;
+  }
+  const chunkBytes = Math.max(
+    1,
+    Math.round((bytesPerSecond * THROTTLE_INTERVAL_MILLISECONDS) / 1_000),
+  );
+  const reader = response.body.getReader();
+  let pending = new Uint8Array(0);
+  const throttled = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      while (pending.byteLength < chunkBytes) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+        const joined = new Uint8Array(pending.byteLength + value.byteLength);
+        joined.set(pending);
+        joined.set(value, pending.byteLength);
+        pending = joined;
+      }
+      if (pending.byteLength === 0) {
+        controller.close();
+        return;
+      }
+      await scheduler.wait(THROTTLE_INTERVAL_MILLISECONDS);
+      controller.enqueue(pending.slice(0, chunkBytes));
+      pending = pending.slice(chunkBytes);
+    },
+    cancel(reason) {
+      return reader.cancel(reason);
+    },
+  });
+  // The client must still know the track's length, as it does from the API server.
+  const body = throttled.pipeThrough(new FixedLengthStream(Number(contentLength)));
+  return new Response(body, response);
+}
 
 /**
  * Writes one line per request to Wrangler's output, which the harness reads back as the request
