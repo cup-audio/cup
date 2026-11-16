@@ -12,6 +12,7 @@
   },
   "scripts": {
     "android:run": "node scripts/android-run.mts",
+    "android:upload-key:create": "node scripts/android-upload-key-create.mts",
     "build": "turbo run turbo:build && pnpm run native:sync",
     "jvm:check": "node scripts/jvm-toolchain.mts",
     "lint": "turbo run turbo:lint",

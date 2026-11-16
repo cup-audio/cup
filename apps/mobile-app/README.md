@@ -74,6 +74,24 @@ adb shell am start -n audio.cup.app/.MainActivity --es cupTestApiOrigin http://l
 
 JS events go through the test Worker's telemetry tunnel, which must allowlist the DSN in `SENTRY_TUNNEL_DSNS`; native events go straight to the DSN, so its port needs `adb reverse` too.
 
+## Release builds
+
+Android test builds for Google Play are signed with Cup's upload key; Play re-signs them with its app signing key before testers install them. Only the operator needs the upload key, and only to release: installs, `env:check` and the [validation gates](../../AGENTS.md#validation-gates) succeed without it.
+
+### Create the upload key
+
+Run this once, on the operator's Mac, with `JAVA_HOME` set as for [Android locally](#android-locally):
+
+```sh
+pnpm --filter '@cup/mobile-app' android:upload-key:create
+```
+
+It generates a random password, stores it in the macOS Keychain as the generic-password item with service `cup-android-upload-key` and the macOS user as account, and creates the PKCS12 keystore `apps/mobile-app/android/upload-keystore.jks` with the key `upload` (RSA 4096, valid for 10,000 days, `CN=Cup`), which uses that one password for the store and the key. It never prints the password. It prints the certificate's SHA-1 and SHA-256 fingerprints, and names the keystore file and the Keychain item. It refuses, naming what exists and changing nothing, when the keystore or the Keychain item already exists.
+
+Right after creating the key, store the keystore file and its password as one entry in your password manager; `security find-generic-password -s cup-android-upload-key -a "$(id -un)" -w` prints the password. Losing both means asking Google for an upload key reset.
+
+Git ignores the keystore (`*.jks` in `android/.gitignore`). In a linked worktree, `pnpm install` copies it from the main checkout when the main checkout has one and the worktree doesn't, as it does for `.env.local`; the Keychain item is shared by every checkout on the Mac.
+
 ## iOS
 
 After building, open `apps/mobile-app/ios/App/App.xcodeproj` in Xcode and choose a simulator or a device. The project uses Swift Package Manager, matching Content Relay. Both targets, `App` and `CupShare`, sign automatically with the Apple Developer team `4GQ2V3WJW8`, which owns both bundle identifiers; signing for a device or the App Store needs an Xcode account in that team.
