@@ -6,7 +6,7 @@ Run each root independently from the repository root.
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
 | [bootstrap](bootstrap/main.tf)   | Infrastructure project and state bucket                                                                                                     | bootstrap        |
 | [production](production/main.tf) | Existing cup-production GCP project and Terraform-created Supabase project; Cloudflare R2 bucket, DNS, Email Routing, Access and AI Gateway | production       |
-| [sentry](sentry/main.tf)         | Sentry team, projects, keys, inbound filters, spike protection and privacy settings                                                         | sentry           |
+| [sentry](sentry/main.tf)         | Sentry team, projects, keys, inbound filters, spike protection, privacy settings, alerts and monitors                                       | sentry           |
 
 All roots use `cup-infrastructure-646301813623-tfstate` in Frankfurt (`europe-west3`).
 The bootstrap project uses Cup Billing (`01EF28-40C66E-325909`).
