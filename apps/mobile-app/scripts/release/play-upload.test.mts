@@ -9,7 +9,7 @@ const VERSION_CODE = 457_310;
 const RELEASE_NAME = "2026.11.14 (8e5c815)";
 const EDIT_ID = "edit-1";
 
-type PublisherStep = "insertEdit" | "uploadBundle" | "updateTrack" | "commitEdit";
+type PublisherStep = "insertEdit" | "uploadBundle" | "updateInternalTestingTrack" | "commitEdit";
 
 function fakePublisher({
   failingStep,
@@ -37,8 +37,8 @@ function fakePublisher({
       record("uploadBundle", editId, bundlePath);
       return { versionCode: uploadedVersionCode };
     },
-    updateTrack: async (editId, track, release) => {
-      record("updateTrack", editId, track, release);
+    updateInternalTestingTrack: async (editId, release) => {
+      record("updateInternalTestingTrack", editId, release);
     },
     commitEdit: async (editId) => {
       record("commitEdit", editId);
@@ -69,9 +69,8 @@ test("one edit uploads the bundle and rolls it out to the internal testing track
     ["insertEdit"],
     ["uploadBundle", EDIT_ID, BUNDLE_PATH],
     [
-      "updateTrack",
+      "updateInternalTestingTrack",
       EDIT_ID,
-      "internal",
       { name: RELEASE_NAME, versionCodes: ["457310"], status: "completed" },
     ],
     ["commitEdit", EDIT_ID],
@@ -99,14 +98,14 @@ test("a failed bundle upload surfaces the error and abandons the edit without co
 });
 
 test("a failed track update surfaces the error and abandons the edit without committing", async () => {
-  const { publisher, calls, error } = fakePublisher({ failingStep: "updateTrack" });
+  const { publisher, calls, error } = fakePublisher({ failingStep: "updateInternalTestingTrack" });
 
   await expect(upload(publisher)).rejects.toBe(error);
 
   expect(calls.map(([step]) => step)).toEqual([
     "insertEdit",
     "uploadBundle",
-    "updateTrack",
+    "updateInternalTestingTrack",
     "deleteEdit",
   ]);
 });

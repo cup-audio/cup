@@ -9,10 +9,10 @@ import path from "node:path";
 import timers from "node:timers/promises";
 
 import { DEFAULT_SDK_ROOT, resolveAndroidSdkRoot } from "#scripts/android-sdk.mts";
+import { fail, MOBILE_APP_ROOT, runCaptured, runVisible } from "#scripts/script-process.mts";
 
 const APP_ID = "audio.cup.app";
 const MAIN_ACTIVITY = `${APP_ID}/.MainActivity`;
-const MOBILE_APP_ROOT = path.resolve(import.meta.dirname, "..");
 const ANDROID_PROJECT = path.join(MOBILE_APP_ROOT, "android");
 const SECONDS_TO_SURVIVE_LAUNCH = 5;
 
@@ -34,9 +34,15 @@ const environment: NodeJS.ProcessEnv = {
   ANDROID_SERIAL: serial,
 };
 
-runVisible("pnpm", ["exec", "turbo", "run", "turbo:build"], MOBILE_APP_ROOT, environment);
-runVisible("pnpm", ["exec", "cap", "sync", "android"], MOBILE_APP_ROOT, environment);
-runVisible("./gradlew", ["installDebug", "--console=plain"], ANDROID_PROJECT, environment);
+runVisible("pnpm", ["exec", "turbo", "run", "turbo:build"], {
+  cwd: MOBILE_APP_ROOT,
+  env: environment,
+});
+runVisible("pnpm", ["exec", "cap", "sync", "android"], { cwd: MOBILE_APP_ROOT, env: environment });
+runVisible("./gradlew", ["installDebug", "--console=plain"], {
+  cwd: ANDROID_PROJECT,
+  env: environment,
+});
 
 const launchOutput = runCaptured(adb, [
   "-s",
@@ -98,31 +104,4 @@ function selectDevice(): string {
     );
   }
   return only;
-}
-
-function runVisible(
-  command: string,
-  args: readonly string[],
-  cwd: string,
-  env: NodeJS.ProcessEnv,
-): void {
-  const result = childProcess.spawnSync(command, args, { cwd, env, stdio: "inherit" });
-  if (result.status !== 0) {
-    fail(`\`${[command, ...args].join(" ")}\` exited with ${String(result.status)}.`);
-  }
-}
-
-function runCaptured(command: string, args: readonly string[]): string {
-  const result = childProcess.spawnSync(command, args, { encoding: "utf8" });
-  if (result.status !== 0) {
-    fail(
-      `\`${[command, ...args].join(" ")}\` exited with ${String(result.status)}.\n${result.stdout}${result.stderr}`,
-    );
-  }
-  return result.stdout;
-}
-
-function fail(message: string): never {
-  console.error(message);
-  process.exit(1);
 }

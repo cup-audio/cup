@@ -13,7 +13,8 @@ const FILES = ["apps/cloudflare-worker/.env.local", EVALS_FILE];
 const RELOCATIONS = [{ from: "libs/narration-content-selection/.env.evals", to: EVALS_FILE }];
 /**
  * The Android upload key, created once with `android:upload-key:create` in `@cup/mobile-app`. Only
- * `android:release` needs it, so it is optional here: `check` never looks for it.
+ * `android:release` needs it, so it is optional here: `check` never looks for it. Keep the path in
+ * step with `KEYSTORE_PATH` in `apps/mobile-app/scripts/release/upload-key.mts`.
  */
 const UPLOAD_KEYSTORE = "apps/mobile-app/android/upload-keystore.jks";
 const KEYS = ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_KEY"] as const;

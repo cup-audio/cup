@@ -85,6 +85,22 @@ test("a missing Keychain item fails, naming the item", () => {
   expect(failures[0]).toContain('the Keychain item "cup-android-upload-key"');
 });
 
+test("a failed Keychain lookup is reported with the other failed preconditions", () => {
+  const uploadKey: UploadKeyStore = {
+    ...fakeUploadKey({ hasKeystore: false }),
+    hasKeychainItem: () => {
+      throw new Error("security exited with 51: User interaction is not allowed.");
+    },
+  };
+
+  const failures = findFailedReleasePreconditions({ git: fakeGit(), uploadKey });
+
+  expect(failures).toHaveLength(2);
+  expect(failures[0]).toContain(KEYSTORE_PATH);
+  expect(failures[1]).toContain('the Keychain item "cup-android-upload-key"');
+  expect(failures[1]).toContain("User interaction is not allowed.");
+});
+
 test("every failed precondition is reported at once", () => {
   const failures = findFailedReleasePreconditions({
     git: fakeGit({ hasTrackedChanges: true, remoteBranchesContainingHead: [] }),

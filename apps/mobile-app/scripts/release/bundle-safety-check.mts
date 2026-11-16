@@ -12,6 +12,12 @@ const DEBUG_CLASS_DESCRIPTORS = [
   "Laudio/cup/app/TestApiOriginPlugin;",
 ];
 const DEBUG_APPLICATION_CLASS = "DebugApplication";
+/**
+ * R8's mapping file, which AGP embeds in the bundle. R8 may rename a debug class that no keep rule
+ * covers, such as `TestApiOrigin`, so its dex descriptor changes; the mapping still lists it under
+ * its original name.
+ */
+const R8_MAPPING_ENTRY = "BUNDLE-METADATA/com.android.tools.build.obfuscation/proguard.map";
 
 const END_OF_CENTRAL_DIRECTORY_SIGNATURE = 0x06_05_4b_50;
 const END_OF_CENTRAL_DIRECTORY_LENGTH = 22;
@@ -24,8 +30,8 @@ const DEFLATED = 8;
 
 /**
  * Returns a message for every violation: debug networking or the debug application class in the
- * manifest, a debug hook's class in any dex, and any native library. Empty when the bundle is
- * safe.
+ * manifest, a debug hook's class in any dex or as an original class in R8's mapping file, and any
+ * native library. Empty when the bundle is safe.
  */
 export function findBundleViolations({
   manifestXml,
@@ -43,6 +49,16 @@ export function findBundleViolations({
         if (dex.includes(descriptor)) {
           violations.push(
             `The debug class ${classNameOf(descriptor)} is in ${entry.name}; debug hooks must stay in the debug source set.`,
+          );
+        }
+      }
+    }
+    if (entry.name === R8_MAPPING_ENTRY) {
+      const mappedClassNames = readOriginalClassNames(entry.read().toString("utf8"));
+      for (const descriptor of DEBUG_CLASS_DESCRIPTORS) {
+        if (mappedClassNames.has(classNameOf(descriptor))) {
+          violations.push(
+            `The debug class ${classNameOf(descriptor)} is in R8's mapping file ${entry.name}, so the bundle's code contains it, possibly renamed; debug hooks must stay in the debug source set.`,
           );
         }
       }
@@ -100,6 +116,18 @@ function readApplicationAttributes(manifestXml: string): Map<string, string> {
     attributes.set(match[1] ?? "", match[2] ?? match[3] ?? "");
   }
   return attributes;
+}
+
+/**
+ * Reads the original class names from an R8 mapping file, whose class lines read `original.Name ->
+ * obfuscated.Name:` and whose member lines are indented.
+ */
+function readOriginalClassNames(mapping: string): Set<string> {
+  const classNames = new Set<string>();
+  for (const match of mapping.matchAll(/^([^\s#][^\s]*) -> [^\s]+:$/gm)) {
+    classNames.add(match[1] ?? "");
+  }
+  return classNames;
 }
 
 /** `Laudio/cup/app/TestApiOrigin;` becomes `audio.cup.app.TestApiOrigin`. */

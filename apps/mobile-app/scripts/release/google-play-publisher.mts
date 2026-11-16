@@ -13,6 +13,7 @@ import type { PlayPublisher } from "#scripts/release/play-upload.mts";
 
 // Matches `appId` in `capacitor.config.ts` and `applicationId` in `android/app/build.gradle`.
 const PACKAGE_NAME = "audio.cup.app";
+const INTERNAL_TESTING_TRACK = "internal";
 export const UPLOADER_SERVICE_ACCOUNT = "play-publisher@cup-production.iam.gserviceaccount.com";
 
 // Minting a token for another account needs the source credentials' cloud-platform scope.
@@ -55,12 +56,15 @@ export async function createGooglePlayPublisher(): Promise<PlayPublisher> {
       }
       return { versionCode };
     },
-    updateTrack: async (editId, track, release) => {
+    updateInternalTestingTrack: async (editId, release) => {
       await edits.tracks.update({
         packageName: PACKAGE_NAME,
         editId,
-        track,
-        requestBody: { track, releases: [{ ...release, versionCodes: [...release.versionCodes] }] },
+        track: INTERNAL_TESTING_TRACK,
+        requestBody: {
+          track: INTERNAL_TESTING_TRACK,
+          releases: [{ ...release, versionCodes: [...release.versionCodes] }],
+        },
       });
     },
     commitEdit: async (editId) => {

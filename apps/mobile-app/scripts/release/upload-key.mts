@@ -9,11 +9,10 @@ import os from "node:os";
 import path from "node:path";
 
 import type { UploadKeyStore } from "#scripts/release/release-preconditions.mts";
+import { MOBILE_APP_ROOT } from "#scripts/script-process.mts";
 
-const MOBILE_APP_ROOT = path.resolve(import.meta.dirname, "..", "..");
-
-// `tooling/env-setup` copies this file into linked worktrees, and `android/.gitignore` keeps it out of Git.
-export const KEYSTORE = path.join(MOBILE_APP_ROOT, "android", "upload-keystore.jks");
+// `tooling/env-setup` copies this file into linked worktrees (its `UPLOAD_KEYSTORE`), and `android/.gitignore` keeps it out of Git.
+export const KEYSTORE_PATH = path.join(MOBILE_APP_ROOT, "android", "upload-keystore.jks");
 export const KEYCHAIN_SERVICE = "cup-android-upload-key";
 export const KEYCHAIN_ACCOUNT = os.userInfo().username;
 export const KEYCHAIN_ITEM_DESCRIPTION = `the Keychain generic-password item with service "${KEYCHAIN_SERVICE}" and account "${KEYCHAIN_ACCOUNT}"`;
@@ -30,12 +29,13 @@ export const KEYSTORE_PATH_VARIABLE = "CUP_UPLOAD_KEYSTORE_PATH";
 const SECURITY_ITEM_NOT_FOUND = 44;
 
 export const UPLOAD_KEY_STORE: UploadKeyStore = {
-  keystorePath: KEYSTORE,
+  keystorePath: KEYSTORE_PATH,
   keychainItemDescription: KEYCHAIN_ITEM_DESCRIPTION,
-  hasKeystore: () => fs.existsSync(KEYSTORE),
+  hasKeystore: () => fs.existsSync(KEYSTORE_PATH),
   hasKeychainItem,
 };
 
+/** Throws when `security` fails for a reason other than a missing item, such as a locked Keychain. */
 export function hasKeychainItem(): boolean {
   // Without `-w` or `-g`, `security` prints the item's attributes but never its password.
   const result = childProcess.spawnSync(
@@ -50,7 +50,7 @@ export function hasKeychainItem(): boolean {
     return false;
   }
   throw new Error(
-    `Looking up ${KEYCHAIN_ITEM_DESCRIPTION} failed with exit status ${String(result.status)}:\n${result.stderr}`,
+    `\`security find-generic-password\` exited with ${String(result.status)}: ${result.stderr.trim()}`,
   );
 }
 

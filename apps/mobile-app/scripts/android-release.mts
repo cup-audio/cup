@@ -4,7 +4,6 @@
  * testing track. See the README's "Release builds". `.mts` because this package is CommonJS for
  * `capacitor.config.ts`.
  */
-import childProcess from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -22,14 +21,14 @@ import { findFailedReleasePreconditions } from "#scripts/release/release-precond
 import type { ReleaseGit } from "#scripts/release/release-preconditions.mts";
 import { deriveReleaseVersion, formatReleaseName } from "#scripts/release/release-version.mts";
 import {
-  KEYSTORE,
+  KEYSTORE_PATH,
   KEYSTORE_PATH_VARIABLE,
   PASSWORD_VARIABLE,
   readKeystorePassword,
   UPLOAD_KEY_STORE,
 } from "#scripts/release/upload-key.mts";
+import { fail, MOBILE_APP_ROOT, runCaptured, runVisible } from "#scripts/script-process.mts";
 
-const MOBILE_APP_ROOT = path.resolve(import.meta.dirname, "..");
 const REPOSITORY_ROOT = path.resolve(MOBILE_APP_ROOT, "..", "..");
 const ANDROID_PROJECT = path.join(MOBILE_APP_ROOT, "android");
 const BUNDLE = path.join(
@@ -55,7 +54,7 @@ const RELEASE_MANIFEST = path.join(
 const DEFAULT_SDK_ROOT = path.join(os.homedir(), "Library", "Android", "sdk");
 const SETUP_DOCS = `${path.join(MOBILE_APP_ROOT, "README.md")}, section "Release builds"`;
 
-const GIT: ReleaseGit = {
+const GIT_COMMAND_LINE_ADAPTER: ReleaseGit = {
   hasTrackedChanges: () =>
     runCaptured("git", ["status", "--porcelain", "--untracked-files=no"]).trim() !== "",
   remoteBranchesContainingHead: () =>
@@ -73,9 +72,12 @@ if (process.platform !== "darwin") {
 }
 
 console.log("Checking the environment.");
-runVisible("pnpm", ["env:check"], REPOSITORY_ROOT, process.env);
+runVisible("pnpm", ["env:check"], { cwd: REPOSITORY_ROOT, env: process.env });
 
-const failures = findFailedReleasePreconditions({ git: GIT, uploadKey: UPLOAD_KEY_STORE });
+const failures = findFailedReleasePreconditions({
+  git: GIT_COMMAND_LINE_ADAPTER,
+  uploadKey: UPLOAD_KEY_STORE,
+});
 if (failures.length > 0) {
   fail(
     `Refusing to release:\n${failures.map((failure) => `  - ${failure}`).join("\n")}\nSetup is documented in ${SETUP_DOCS}.`,
@@ -98,8 +100,11 @@ const environment: NodeJS.ProcessEnv = {
   // Gradle reads the SDK from ANDROID_HOME, so no `local.properties` is needed; the lookup order matches `android-run.mts`.
   ANDROID_HOME: process.env["ANDROID_HOME"] ?? process.env["ANDROID_SDK_ROOT"] ?? DEFAULT_SDK_ROOT,
 };
-runVisible("pnpm", ["exec", "turbo", "run", "turbo:build"], MOBILE_APP_ROOT, environment);
-runVisible("pnpm", ["exec", "cap", "sync", "android"], MOBILE_APP_ROOT, environment);
+runVisible("pnpm", ["exec", "turbo", "run", "turbo:build"], {
+  cwd: MOBILE_APP_ROOT,
+  env: environment,
+});
+runVisible("pnpm", ["exec", "cap", "sync", "android"], { cwd: MOBILE_APP_ROOT, env: environment });
 
 // A stale bundle or manifest must not pass for this build's if Gradle writes none.
 fs.rmSync(BUNDLE, { force: true });
@@ -112,14 +117,17 @@ runVisible(
     `-PcupVersionCode=${String(version.versionCode)}`,
     `-PcupVersionName=${version.versionName}`,
   ],
-  ANDROID_PROJECT,
-  // The upload key goes in the environment, never in arguments that the process list shows (`android/app/build.gradle`).
   {
-    ...environment,
-    [KEYSTORE_PATH_VARIABLE]: KEYSTORE,
-    [PASSWORD_VARIABLE]: readKeystorePassword(),
+    cwd: ANDROID_PROJECT,
+    // The upload key goes in the environment, never in arguments that the process list shows (`android/app/build.gradle`).
+    env: {
+      ...environment,
+      [KEYSTORE_PATH_VARIABLE]: KEYSTORE_PATH,
+      [PASSWORD_VARIABLE]: readKeystorePassword(),
+    },
   },
 );
+
 if (!fs.existsSync(BUNDLE)) {
   fail(`Gradle succeeded but wrote no bundle at ${BUNDLE}.`);
 }
@@ -133,6 +141,7 @@ const violations = findBundleViolations({
   manifestXml: fs.readFileSync(RELEASE_MANIFEST, "utf8"),
   bundle: fs.readFileSync(BUNDLE),
 });
+
 if (violations.length > 0) {
   fail(
     `Refusing the bundle ${BUNDLE}:\n${violations.map((violation) => `  - ${violation}`).join("\n")}\nThe bundle safety check is documented in ${SETUP_DOCS}.`,
@@ -140,29 +149,27 @@ if (violations.length > 0) {
 }
 
 if (publisher === undefined) {
-  console.log(`Built the release-signed bundle and skipped the upload.
+  console.log("Built the release-signed bundle and skipped the upload.");
+} else {
+  console.log(`Uploading ${releaseName} to Google Play's internal testing track.`);
 
-Bundle:       ${BUNDLE}
-Release name: ${releaseName}`);
-  process.exit(0);
+  try {
+    await uploadToInternalTesting({
+      publisher,
+      bundlePath: BUNDLE,
+      versionCode: version.versionCode,
+      releaseName,
+    });
+  } catch (error) {
+    fail(
+      `Uploading to Google Play failed; Play applies nothing from an edit whose commit didn't succeed:\n${util.inspect(error)}\nThe bundle stays at ${BUNDLE}. Uploads are documented in ${SETUP_DOCS}.`,
+    );
+  }
+
+  console.log("Rolled out the release to every tester of the internal testing track.");
 }
 
-console.log(`Uploading ${releaseName} to Google Play's internal testing track.`);
-try {
-  await uploadToInternalTesting({
-    publisher,
-    bundlePath: BUNDLE,
-    versionCode: version.versionCode,
-    releaseName,
-  });
-} catch (error) {
-  fail(
-    `Uploading to Google Play failed; Play applies nothing from an edit whose commit didn't succeed:\n${util.inspect(error)}\nThe bundle stays at ${BUNDLE}. Uploads are documented in ${SETUP_DOCS}.`,
-  );
-}
-
-console.log(`Rolled out the release to every tester of the internal testing track.
-
+console.log(`
 Bundle:       ${BUNDLE}
 Release name: ${releaseName}`);
 
@@ -174,31 +181,4 @@ async function createPublisher(): Promise<PlayPublisher> {
       `Reading your Google application-default credentials failed:\n${util.inspect(error)}\nSign in with \`gcloud auth application-default login\`; uploads impersonate ${UPLOADER_SERVICE_ACCOUNT} through them. Setup is documented in ${SETUP_DOCS}.`,
     );
   }
-}
-
-function runVisible(
-  command: string,
-  args: readonly string[],
-  cwd: string,
-  env: NodeJS.ProcessEnv,
-): void {
-  const result = childProcess.spawnSync(command, args, { cwd, env, stdio: "inherit" });
-  if (result.status !== 0) {
-    fail(`\`${[command, ...args].join(" ")}\` exited with ${String(result.status)}.`);
-  }
-}
-
-function runCaptured(command: string, args: readonly string[]): string {
-  const result = childProcess.spawnSync(command, args, { cwd: MOBILE_APP_ROOT, encoding: "utf8" });
-  if (result.status !== 0) {
-    fail(
-      `\`${[command, ...args].join(" ")}\` exited with ${String(result.status)}.\n${result.stdout}${result.stderr}`,
-    );
-  }
-  return result.stdout;
-}
-
-function fail(message: string): never {
-  console.error(message);
-  process.exit(1);
 }

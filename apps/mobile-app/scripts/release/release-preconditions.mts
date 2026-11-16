@@ -21,6 +21,7 @@ export type UploadKeyStore = {
    */
   keychainItemDescription: string;
   hasKeystore(): boolean;
+  /** Throws when the lookup itself fails, such as on a locked Keychain. */
   hasKeychainItem(): boolean;
 };
 
@@ -47,8 +48,14 @@ export function findFailedReleasePreconditions({
   if (!uploadKey.hasKeystore()) {
     failures.push(`The upload keystore ${uploadKey.keystorePath} is missing.`);
   }
-  if (!uploadKey.hasKeychainItem()) {
-    failures.push(`The upload key's password, ${uploadKey.keychainItemDescription}, is missing.`);
+  try {
+    if (!uploadKey.hasKeychainItem()) {
+      failures.push(`The upload key's password, ${uploadKey.keychainItemDescription}, is missing.`);
+    }
+  } catch (error) {
+    failures.push(
+      `Looking up the upload key's password, ${uploadKey.keychainItemDescription}, failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 
   return failures;

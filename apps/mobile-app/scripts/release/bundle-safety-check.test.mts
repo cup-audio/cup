@@ -17,6 +17,8 @@ const CLEAN_MANIFEST = `<?xml version="1.0" encoding="utf-8"?>
 </manifest>
 `;
 
+const R8_MAPPING_ENTRY = "BUNDLE-METADATA/com.android.tools.build.obfuscation/proguard.map";
+
 const CLEAN_DEX = dexContaining([
   "Laudio/cup/app/MainActivity;",
   "Laudio/cup/app/AndroidSharePlugin;",
@@ -133,16 +135,50 @@ test("a native library is reported", () => {
   expect(violations[0]).toContain("base/lib/arm64-v8a/libnative.so");
 });
 
-test("a debug class name in a non-dex entry is ignored", () => {
+test.each(["FakeGoogleSignInPlugin", "TestApiOrigin", "TestApiOriginPlugin"])(
+  "R8's mapping file naming %s as an original class is reported",
+  (className) => {
+    const bundle = createZip([
+      ...CLEAN_ENTRIES,
+      {
+        name: R8_MAPPING_ENTRY,
+        data: Buffer.from(
+          `# compiler: R8\naudio.cup.app.MainActivity -> audio.cup.app.MainActivity:\naudio.cup.app.${className} -> a.b:\n    void <init>() -> <init>\n`,
+        ),
+      },
+    ]);
+
+    const violations = findBundleViolations({ manifestXml: CLEAN_MANIFEST, bundle });
+
+    expect(violations).toHaveLength(1);
+    // The trailing space tells `TestApiOrigin` apart from `TestApiOriginPlugin`.
+    expect(violations[0]).toContain(`audio.cup.app.${className} `);
+    expect(violations[0]).toContain(R8_MAPPING_ENTRY);
+  },
+);
+
+test("R8's mapping file naming no debug class passes", () => {
+  const bundle = createZip([
+    ...CLEAN_ENTRIES,
+    {
+      name: R8_MAPPING_ENTRY,
+      data: Buffer.from(
+        "# compiler: R8\naudio.cup.app.MainActivity -> audio.cup.app.MainActivity:\n    audio.cup.app.TestApiOrigin origin -> a\n",
+      ),
+    },
+  ]);
+
+  expect(findBundleViolations({ manifestXml: CLEAN_MANIFEST, bundle })).toEqual([]);
+});
+
+test("a debug class name in an entry that is neither dex nor R8's mapping file is ignored", () => {
   const bundle = createZip([
     ...CLEAN_ENTRIES,
     {
       name: "base/assets/public/notes.txt",
-      data: Buffer.from("Laudio/cup/app/FakeGoogleSignInPlugin; Laudio/cup/app/TestApiOrigin;"),
-    },
-    {
-      name: "BUNDLE-METADATA/com.android.tools.build.obfuscation/proguard.map",
-      data: Buffer.from("audio.cup.app.TestApiOriginPlugin -> a.b:"),
+      data: Buffer.from(
+        "Laudio/cup/app/FakeGoogleSignInPlugin; audio.cup.app.TestApiOriginPlugin -> a.b:",
+      ),
     },
   ]);
 
@@ -163,11 +199,12 @@ test("every violation is reported at once", () => {
         "Laudio/cup/app/TestApiOriginPlugin;",
       ]),
     },
+    { name: R8_MAPPING_ENTRY, data: Buffer.from("audio.cup.app.TestApiOrigin -> a.b:\n") },
     { name: "base/lib/x86_64/libone.so", data: Buffer.from("ELF") },
     { name: "base/lib/arm64-v8a/libtwo.so", data: Buffer.from("ELF") },
   ]);
 
-  expect(findBundleViolations({ manifestXml, bundle })).toHaveLength(9);
+  expect(findBundleViolations({ manifestXml, bundle })).toHaveLength(10);
 });
 
 test("a manifest without an application element fails", () => {

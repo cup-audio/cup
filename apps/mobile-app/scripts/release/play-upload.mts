@@ -20,14 +20,12 @@ export type PlayPublisher = {
    * it.
    */
   uploadBundle(editId: string, bundlePath: string): Promise<{ versionCode: number }>;
-  /** Replaces the track's releases with `release`. */
-  updateTrack(editId: string, track: string, release: PlayTrackRelease): Promise<void>;
+  /** Replaces the internal testing track's releases with `release`. */
+  updateInternalTestingTrack(editId: string, release: PlayTrackRelease): Promise<void>;
   commitEdit(editId: string): Promise<void>;
   /** Abandons the edit, discarding everything it holds. */
   deleteEdit(editId: string): Promise<void>;
 };
-
-const INTERNAL_TESTING_TRACK = "internal";
 
 /**
  * Uploads the bundle and rolls it out to every tester of the internal testing track as release
@@ -55,7 +53,7 @@ export async function uploadToInternalTesting({
       );
     }
 
-    await publisher.updateTrack(editId, INTERNAL_TESTING_TRACK, {
+    await publisher.updateInternalTestingTrack(editId, {
       name: releaseName,
       versionCodes: [String(versionCode)],
       status: "completed",

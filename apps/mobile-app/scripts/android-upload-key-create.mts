@@ -15,9 +15,12 @@ import {
   KEYCHAIN_ACCOUNT,
   KEYCHAIN_ITEM_DESCRIPTION,
   KEYCHAIN_SERVICE,
-  KEYSTORE,
+  KEYSTORE_PATH,
   PASSWORD_VARIABLE,
 } from "#scripts/release/upload-key.mts";
+import { fail, runCaptured } from "#scripts/script-process.mts";
+
+const KEYTOOL_HINT = "keytool comes from JAVA_HOME, or from PATH when JAVA_HOME is unset.";
 
 if (process.platform !== "darwin") {
   fail("The upload key's password lives in the macOS Keychain, so create the key on a Mac.");
@@ -28,13 +31,13 @@ const keytool =
     ? "keytool"
     : path.join(process.env["JAVA_HOME"], "bin", "keytool");
 
-const existing = [
-  ...(fs.existsSync(KEYSTORE) ? [`the keystore ${KEYSTORE}`] : []),
-  ...(hasKeychainItem() ? [KEYCHAIN_ITEM_DESCRIPTION] : []),
+const existingUploadKeyParts = [
+  ...(fs.existsSync(KEYSTORE_PATH) ? [`the keystore ${KEYSTORE_PATH}`] : []),
+  ...(checkKeychainItem() ? [KEYCHAIN_ITEM_DESCRIPTION] : []),
 ];
-if (existing.length > 0) {
+if (existingUploadKeyParts.length > 0) {
   fail(
-    `Refusing to create the upload key, because ${existing.join(" and ")} already ${existing.length > 1 ? "exist" : "exists"}. Nothing was changed. To replace a lost upload key, follow the upload key reset in docs/production-configuration.md.`,
+    `Refusing to create the upload key, because ${existingUploadKeyParts.join(" and ")} already ${existingUploadKeyParts.length > 1 ? "exist" : "exists"}. Nothing was changed. To replace a lost upload key, follow the upload key reset in docs/production-configuration.md#upload-key-reset.`,
   );
 }
 
@@ -43,12 +46,12 @@ const password = crypto.randomBytes(32).toString("hex");
 const keytoolEnvironment: NodeJS.ProcessEnv = { ...process.env, [PASSWORD_VARIABLE]: password };
 
 // The keystore first: if storing the password fails, deleting the new file undoes the run, so a retry passes the check above.
-run(
+runCaptured(
   keytool,
   [
     "-genkeypair",
     "-keystore",
-    KEYSTORE,
+    KEYSTORE_PATH,
     "-storetype",
     "PKCS12",
     // PKCS12 uses one password for the store and the key.
@@ -68,23 +71,25 @@ run(
     "CN=Cup",
     "-noprompt",
   ],
-  keytoolEnvironment,
+  { env: keytoolEnvironment, failureHint: KEYTOOL_HINT },
 );
-fs.chmodSync(KEYSTORE, 0o600);
+fs.chmodSync(KEYSTORE_PATH, 0o600);
 
 // `security -i` reads the command from stdin, so the password never appears in a process list.
-const added = childProcess.spawnSync("security", ["-i"], {
+const keychainAddResult = childProcess.spawnSync("security", ["-i"], {
   input: `add-generic-password -s "${KEYCHAIN_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -l "Cup Android upload key" -w ${password}\n`,
   encoding: "utf8",
 });
-if (added.status !== 0 || !hasKeychainItem()) {
-  fs.rmSync(KEYSTORE);
+const passwordStoreFailure = findPasswordStoreFailure(keychainAddResult);
+
+if (passwordStoreFailure !== undefined) {
+  fs.rmSync(KEYSTORE_PATH);
   fail(
-    `Storing the password in ${KEYCHAIN_ITEM_DESCRIPTION} failed, so the new keystore was deleted again:\n${added.stderr}`,
+    `Storing the password in ${KEYCHAIN_ITEM_DESCRIPTION} failed, so the new keystore was deleted again:\n${passwordStoreFailure}`,
   );
 }
 
-const certificate = run(
+const certificate = runCaptured(
   keytool,
   [
     // The fingerprint labels are localized; English keeps them parseable.
@@ -92,19 +97,20 @@ const certificate = run(
     "-list",
     "-v",
     "-keystore",
-    KEYSTORE,
+    KEYSTORE_PATH,
     "-storepass:env",
     PASSWORD_VARIABLE,
     "-alias",
     KEY_ALIAS,
   ],
-  keytoolEnvironment,
+  { env: keytoolEnvironment, failureHint: KEYTOOL_HINT },
 );
 const sha1 = /^\s*SHA1:\s*(\S+)/m.exec(certificate)?.[1];
 const sha256 = /^\s*SHA256:\s*(\S+)/m.exec(certificate)?.[1];
+
 if (sha1 === undefined || sha256 === undefined) {
   fail(
-    `Created the upload key, but found no SHA-1 and SHA-256 fingerprints in keytool's output. Print them with \`${keytool} -list -v -keystore ${KEYSTORE} -alias ${KEY_ALIAS}\`.`,
+    `Created the upload key, but found no SHA-1 and SHA-256 fingerprints in keytool's output. Print them with \`${keytool} -list -v -keystore ${KEYSTORE_PATH} -alias ${KEY_ALIAS}\`.`,
   );
 }
 
@@ -115,21 +121,36 @@ Certificate fingerprints:
   SHA-256: ${sha256}
 
 Back up both as one entry in your password manager:
-  - the keystore file ${KEYSTORE}
+  - the keystore file ${KEYSTORE_PATH}
   - its password, in ${KEYCHAIN_ITEM_DESCRIPTION}
     (show it with \`security find-generic-password -s ${KEYCHAIN_SERVICE} -a ${KEYCHAIN_ACCOUNT} -w\`)`);
 
-function run(command: string, args: readonly string[], env: NodeJS.ProcessEnv): string {
-  const result = childProcess.spawnSync(command, args, { env, encoding: "utf8" });
-  if (result.error !== undefined || result.status !== 0) {
-    fail(
-      `\`${[command, ...args].join(" ")}\` failed${result.error === undefined ? ` with exit status ${String(result.status)}` : `: ${result.error.message}`}. keytool comes from JAVA_HOME, or from PATH when JAVA_HOME is unset.\n${result.stdout}${result.stderr}`,
+/** Whether the Keychain item exists; a failed lookup, such as on a locked Keychain, ends the script. */
+function checkKeychainItem(): boolean {
+  try {
+    return hasKeychainItem();
+  } catch (error) {
+    return fail(
+      `Looking up ${KEYCHAIN_ITEM_DESCRIPTION} failed, so nothing was changed: ${describeError(error)}`,
     );
   }
-  return result.stdout;
 }
 
-function fail(message: string): never {
-  console.error(message);
-  process.exit(1);
+/** Returns why storing the password failed, or `undefined` when the Keychain item now exists. */
+function findPasswordStoreFailure(
+  securityAddResult: childProcess.SpawnSyncReturns<string>,
+): string | undefined {
+  if (securityAddResult.status !== 0) {
+    return securityAddResult.stderr;
+  }
+
+  try {
+    return hasKeychainItem() ? undefined : "`security` succeeded, but the item is missing.";
+  } catch (error) {
+    return `Looking up the stored item failed: ${describeError(error)}`;
+  }
+}
+
+function describeError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

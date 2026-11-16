@@ -22,13 +22,44 @@ The Worker's Resend key is sending-only; Terraform uses a separate management ke
 
 Use Supabase project `evwjipxgacwotgbmqtla` exclusively. Terraform configures its Google provider, JWT lifetime, and redirect settings in the [Supabase configuration](../terraform/production/supabase.tf); see the [Google sign-in configuration](../terraform/README.md#google-sign-in-configuration). Configure ES256 JWT signing, which Terraform does not manage. Keep Google client secrets in Supabase and Terraform.
 
-Register the Android OAuth client for package `audio.cup.app` and its signing certificate; a client registered for the former package `com.cup_audio.app` does not match.
+### Android OAuth clients
+
+Native Google sign-in on Android needs an Android OAuth client for package `audio.cup.app` and the SHA-1 of the certificate that signed the installed app; a client registered for the former package `com.cup_audio.app` does not match. A client takes one SHA-1, so each certificate gets its own client, all in `cup-production` next to the web client ([#357](https://github.com/patricktree/cup/issues/357)). The app passes only the web client's ID, so the Worker, Supabase and Terraform never see the Android clients' IDs. Terraform cannot manage OAuth clients ([#357](https://github.com/patricktree/cup/issues/357)), so create, rename and delete them in the Google Cloud console. Fingerprints are not secret.
+
+| Display name                                              | Certificate                                    | SHA-1                                                         |
+| --------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------- |
+| `Android audio.cup.app – debug keystore (operator's Mac)` | The operator Mac's `~/.android/debug.keystore` | `A3:38:65:6D:37:74:87:30:B2:1F:17:29:F5:F4:27:08:91:BE:4B:90` |
+
+The debug-keystore client was created as `cup` and gets its display name in [#447](https://github.com/patricktree/cup/issues/447); renaming keeps its client ID and fingerprint. Builds installed from Google Play carry Play's app signing certificate, not the upload key's. The app signing clients are added after the [first manual upload](../apps/mobile-app/README.md#first-upload-by-hand) fixes Play App Signing's keys ([#447](https://github.com/patricktree/cup/issues/447)): one client per app signing SHA-1 that the Play app signing page lists, up to three with hybrid signing, each named `Android audio.cup.app – <certificate>` and added to the table. Cup keeps no client for the upload key, because sign-in is checked on Play-installed builds ([#366](https://github.com/patricktree/cup/issues/366)).
+
+- **Adding a client.** To let a build signed with another certificate sign in, such as a locally installed release build or a debug build from another machine, create an Android client for `audio.cup.app` with that certificate's SHA-1 and add a row here. `pnpm --filter '@cup/mobile-app' android:upload-key:create` printed the upload key's SHA-1, which `keytool -list -v -keystore apps/mobile-app/android/upload-keystore.jks -alias upload` prints again and the Play app signing page also lists. `keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android` prints a machine's debug keystore SHA-1.
+- **Unused clients.** Google deletes an OAuth client unused for six months, emailing 30 days before; a deleted client can be restored for 30 days. A client for a certificate that never signs an installed app, such as an app signing key that no device matches, may lapse this way, which is harmless.
+- **Delay.** A new or changed client can take minutes to hours to apply.
+- **Diagnosis.** When no client matches the installed certificate, the account picker opens but sign-in fails once an account is picked: Cup shows "Google sign-in could not be completed. Try again." and logcat shows `[16] Account reauth failed`. Add the missing fingerprint.
 
 ## Email
 
 Deletion notices go to the Resend API at the `RESEND_BASE_URL` variable, `https://api.resend.com`, from the Resend domain described in the [Terraform guide](../terraform/README.md#resend-domain). Inspect notification outcomes with the [operator CLI](../apps/operator/README.md#list-account-deletions); provider acceptance is not proof of inbox delivery.
 
 `support@cup.audio`, the Google Play developer email, and `github@cup.audio`, the contact email of the `cup-audio` GitHub organization, are received by Cloudflare Email Routing and forwarded to the operator's private address, as the [Terraform guide](../terraform/README.md#support-mail) describes. No other `cup.audio` address receives mail.
+
+## Google Play developer account and app record
+
+Cup's Android app is distributed through the Google Play developer account `Cup Audio`, a personal account owned by the Google account behind Cup's Google Cloud project, with `support@cup.audio` as its developer email. As of 2026-11-16 the account exists and its identity verification is pending ([#364](https://github.com/patricktree/cup/issues/364)). The Play Console allows creating an app only once verification completes, so the app record for `audio.cup.app`, named Cup, with the internal testing track's tester list and opt-in link, is still to be created ([#365](https://github.com/patricktree/cup/issues/365)). The package name becomes fixed with the first upload. Test builds reach testers through the internal testing track only; the store listing and a production release belong to [CUP-46](https://linear.app/cup-audio/issue/CUP-46/publish-the-android-app-to-google-play).
+
+## Upload key
+
+Google Play accepts only bundles signed with the app's upload key, and re-signs them with the app signing key that Google generates and keeps when the [first manual upload](../apps/mobile-app/README.md#first-upload-by-hand) enrolls the app in Play App Signing. The upload key is a keystore on the operator's Mac, `apps/mobile-app/android/upload-keystore.jks`, whose password is in the macOS Keychain, with a backup of both in the operator's password manager; the mobile app README describes [creating it](../apps/mobile-app/README.md#create-the-upload-key).
+
+### Upload key reset
+
+When the upload key is lost or compromised, Google can replace it; the app signing key, and with it every installed app, stays the same. Configuring Play App Signing needs admin permission in the Play Console, and Google states no turnaround for a reset.
+
+1. Remove what is left of the old key, because the create command refuses while either part exists: the keystore file, and the Keychain item, with `security delete-generic-password -s cup-android-upload-key -a "$(id -un)"`.
+2. Create a new key with `pnpm --filter '@cup/mobile-app' android:upload-key:create`, and back it up as the command says.
+3. Export its certificate with `keytool -export -rfc -keystore apps/mobile-app/android/upload-keystore.jks -alias upload -file upload_certificate.pem`, entering the password that `security find-generic-password -s cup-android-upload-key -a "$(id -un)" -w` prints.
+4. On the Play app signing page (**Protected with Play** → **Play Store protection** → **Manage Play app signing**), choose **Request upload key reset**, give the reason, and upload `upload_certificate.pem`.
+5. Re-register any [Android OAuth client](#android-oauth-clients) made for the old upload certificate with the new certificate's SHA-1. Cup keeps none by default.
 
 ## Google Play uploads
 
