@@ -2,11 +2,11 @@
 
 Run each root independently from the repository root.
 
-| Root                             | Managed resources                                                                                                                           | GCS state prefix |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
-| [bootstrap](bootstrap/main.tf)   | Infrastructure project and state bucket                                                                                                     | bootstrap        |
-| [production](production/main.tf) | Existing cup-production GCP project and Terraform-created Supabase project; Cloudflare R2 bucket, DNS, Email Routing, Access and AI Gateway | production       |
-| [sentry](sentry/main.tf)         | Sentry team, projects, keys, inbound filters, spike protection, privacy settings, alerts and monitors                                       | sentry           |
+| Root                             | Managed resources                                                                                                                                                                               | GCS state prefix |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
+| [bootstrap](bootstrap/main.tf)   | Infrastructure project and state bucket                                                                                                                                                         | bootstrap        |
+| [production](production/main.tf) | Existing cup-production GCP project, its APIs and the Google Play uploader service account; Terraform-created Supabase project; Cloudflare R2 bucket, DNS, Email Routing, Access and AI Gateway | production       |
+| [sentry](sentry/main.tf)         | Sentry team, projects, keys, inbound filters, spike protection, privacy settings, alerts and monitors                                                                                           | sentry           |
 
 All roots use `cup-infrastructure-646301813623-tfstate` in Frankfurt (`europe-west3`).
 The bootstrap project uses Cup Billing (`01EF28-40C66E-325909`).
@@ -111,6 +111,16 @@ Enabling Email Routing fails while the zone has an MX record that is not Cloudfl
 ```sh
 node --env-file=terraform/.env.local --input-type=module -e 'import cp from "node:child_process"; process.exitCode = cp.spawnSync("terraform", ["-chdir=terraform/production", "apply", "-target=cloudflare_dns_record.cup_audio_null_mx", "-target=cloudflare_dns_record.cup_audio_spf"], {stdio: "inherit"}).status;'
 node --env-file=terraform/.env.local --input-type=module -e 'import cp from "node:child_process"; process.exitCode = cp.spawnSync("terraform", ["-chdir=terraform/production", "apply"], {stdio: "inherit"}).status;'
+```
+
+## Google Play uploader
+
+The [Google Play configuration](production/google-play.tf) lets the Android release command upload to Google Play without a service account key. It enables the Android Publisher API in cup-production, together with the IAM API and the IAM Service Account Credentials API, which creating the service account and minting its tokens need; none of the three was enabled before. It creates the uploader service account `play-publisher@cup-production.iam.gserviceaccount.com`, which has no keys, and grants the operator's Google account `roles/iam.serviceAccountTokenCreator` on it, so the operator's application-default credentials can impersonate it. The output `play_publisher_service_account_email` names the account. Inviting it in the Play Console is manual; see [production configuration](../docs/production-configuration.md#google-play-uploads).
+
+After apply, check that the operator can mint a token for the account; the grant can take a few minutes to take effect:
+
+```sh
+gcloud auth print-access-token --impersonate-service-account=play-publisher@cup-production.iam.gserviceaccount.com
 ```
 
 ## Google sign-in configuration

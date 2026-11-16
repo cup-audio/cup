@@ -1,6 +1,6 @@
 # Production configuration
 
-Use this guide to supply the production Worker's configuration and the provider settings that Terraform does not manage, to find those it does, and to deploy. The [authentication](architecture/authentication.md) and [account deletion](architecture/account-deletion.md) pages explain the behavior this configuration enables. The [Terraform guide](../terraform/README.md) covers infrastructure state, the Supabase project, Supabase's Google provider, the Resend domain's settings and DNS records, and the Cloudflare R2 bucket, DNS records, operator Access application and AI Gateway, and [Sentry](../terraform/README.md#sentry)'s projects, keys, inbound filters, spike protection, privacy settings, alerts and monitors. Sentry's personal notification settings are the one Sentry setting set by hand ([personal notifications](../terraform/README.md#personal-notifications)). Apple sign-in and native iOS account support are deferred.
+Use this guide to supply the production Worker's configuration and the provider settings that Terraform does not manage, to find those it does, and to deploy. The [authentication](architecture/authentication.md) and [account deletion](architecture/account-deletion.md) pages explain the behavior this configuration enables. The [Terraform guide](../terraform/README.md) covers infrastructure state, the Supabase project, Supabase's Google provider, the Resend domain's settings and DNS records, and the Cloudflare R2 bucket, DNS records, operator Access application and AI Gateway, the Google Play uploader service account, and [Sentry](../terraform/README.md#sentry)'s projects, keys, inbound filters, spike protection, privacy settings, alerts and monitors. Sentry's personal notification settings are the one Sentry setting set by hand ([personal notifications](../terraform/README.md#personal-notifications)). Apple sign-in and native iOS account support are deferred.
 
 ## Worker configuration
 
@@ -29,6 +29,12 @@ Register the Android OAuth client for package `audio.cup.app` and its signing ce
 Deletion notices go to the Resend API at the `RESEND_BASE_URL` variable, `https://api.resend.com`, from the Resend domain described in the [Terraform guide](../terraform/README.md#resend-domain). Inspect notification outcomes with the [operator CLI](../apps/operator/README.md#list-account-deletions); provider acceptance is not proof of inbox delivery.
 
 `support@cup.audio`, the Google Play developer email, and `github@cup.audio`, the contact email of the `cup-audio` GitHub organization, are received by Cloudflare Email Routing and forwarded to the operator's private address, as the [Terraform guide](../terraform/README.md#support-mail) describes. No other `cup.audio` address receives mail.
+
+## Google Play uploads
+
+Scripted uploads of Android test builds authenticate as the uploader service account `play-publisher@cup-production.iam.gserviceaccount.com`, which Terraform creates without keys, as the [Terraform guide](../terraform/README.md#google-play-uploader) describes. The release command impersonates it through the operator's application-default credentials (`gcloud auth application-default login`); no JSON key exists to store, back up or rotate.
+
+Google Play grants the account nothing until it is invited, which Terraform cannot do. Once the account exists, invite it in the Play Console under **Users and permissions** → **Invite new users**, with the service account's email as the address. Grant it **View app information and download bulk reports (read-only)** and **Release apps to testing tracks**, either for the `audio.cup.app` app or account-wide, and send the invitation; a service account needs no acceptance. Grant nothing more: the account must not release to production or change the store listing.
 
 ## Deploy
 
