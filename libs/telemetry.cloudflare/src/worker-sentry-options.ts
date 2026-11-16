@@ -101,8 +101,17 @@ export function createWorkerSentryOptions(
     propagateTraceparent: false,
     strictTraceContinuation: true,
     rpcTracePropagationBindings: DURABLE_OBJECT_BINDINGS,
-    // The default integrations stay; Zod, Supabase and console capture are not among them.
-    integrations: [extraErrorDataIntegration()],
+    // The default integrations stay, except Dedupe; Zod, Supabase and console capture are not
+    // among them. Dedupe drops an event equal to the one the client processed before it, and that
+    // one can be a capture of Sentry's own wrappers that `beforeSend` drops later: the Durable
+    // Object wrapper's capture of the error an RPC caller then captures, or the Workflow wrapper's
+    // capture of a failed step. Every Durable Object and Workflow of an isolate shares one cached
+    // client, so Dedupe would drop the caller's capture, the one Cup sends. Cup captures each
+    // failure once anyway.
+    integrations: (defaultIntegrations) => [
+      ...defaultIntegrations.filter((integration) => integration.name !== "Dedupe"),
+      extraErrorDataIntegration(),
+    ],
     beforeSend: beforeSendServerEvent,
     beforeSendSpan: beforeSendServerSpan,
     // Logs are always on in SDK 11; only `logEvent` writes them, and this drops `debug`.

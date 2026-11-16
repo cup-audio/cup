@@ -36,6 +36,7 @@ import { logEvent, setConversionScope } from "@cup/telemetry.cloudflare";
 import { TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
 
 import { resolveConversionExecution } from "#src/conversion-execution.ts";
+import { keepStepErrors } from "#src/keep-step-errors.ts";
 import { phaseStepName } from "#src/phase-step-name.ts";
 import type { AudiobookWorkflowEnvironment } from "#src/workflow-environment.ts";
 
@@ -103,7 +104,7 @@ export type PrepareAudiobookWorkflowServices = {
 export async function runPrepareAudiobookWorkflow({
   env,
   event,
-  step,
+  step: workflowStep,
   services,
 }: {
   env: AudiobookWorkflowEnvironment;
@@ -111,6 +112,8 @@ export async function runPrepareAudiobookWorkflow({
   step: WorkflowStep;
   services: PrepareAudiobookWorkflowServices;
 }) {
+  // Cup's own errors keep their messages in telemetry after failing a step.
+  const step = keepStepErrors(workflowStep);
   const params = conversionParamsSchema.parse(event.payload);
   const { sourceUrl } = params;
   if ("v" in params && params.conversionId !== event.instanceId) {

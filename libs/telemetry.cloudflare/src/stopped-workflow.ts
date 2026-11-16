@@ -20,8 +20,7 @@ class StoppedWorkflowError extends CupError {
  * scope, which supplies the conversion and owner tags.
  */
 export function captureStoppedWorkflow(workflow: StoppedWorkflow): string {
-  // The conversion ID and sequence keep Sentry's Dedupe integration from dropping the next stopped
-  // instance's event as a repeat of this one.
+  // The message names the conversion and sequence, so each stopped instance's event says which.
   const error =
     workflow.kind === "preparation"
       ? new StoppedWorkflowError(

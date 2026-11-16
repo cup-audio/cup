@@ -51,3 +51,20 @@ test("production without a DSN throws instead of staying quiet", () => {
     'SENTRY_DSN must be set when LOCAL_DEVELOPMENT is not "true": production always reports to Sentry.',
   );
 });
+
+test("production keeps Sentry's default integrations except Dedupe, and adds extra error data", () => {
+  const options = createWorkerSentryOptions(
+    { LOCAL_DEVELOPMENT: "false", SENTRY_DSN: DSN, CF_VERSION_METADATA: VERSION_METADATA },
+    "prepare-audiobook-workflow",
+  );
+
+  expect(typeof options.integrations).toBe("function");
+  const integrations =
+    typeof options.integrations === "function"
+      ? options.integrations([{ name: "Dedupe" }, { name: "LinkedErrors" }])
+      : [];
+  expect(integrations.map((integration) => integration.name)).toEqual([
+    "LinkedErrors",
+    "ExtraErrorData",
+  ]);
+});

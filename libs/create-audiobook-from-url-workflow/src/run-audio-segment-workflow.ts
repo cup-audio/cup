@@ -18,6 +18,7 @@ import { setConversionScope } from "@cup/telemetry.cloudflare";
 import { TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
 
 import { resolveConversionExecution } from "#src/conversion-execution.ts";
+import { keepStepErrors } from "#src/keep-step-errors.ts";
 import { phaseStepName } from "#src/phase-step-name.ts";
 import type { AudiobookWorkflowEnvironment } from "#src/workflow-environment.ts";
 
@@ -30,7 +31,7 @@ const MAX_RATE_LIMIT_WAITS = 4;
 export async function runAudioSegmentWorkflow({
   env,
   event,
-  step,
+  step: workflowStep,
   ai,
 }: {
   env: AudiobookWorkflowEnvironment;
@@ -38,6 +39,8 @@ export async function runAudioSegmentWorkflow({
   step: WorkflowStep;
   ai: SpeechSynthesisAi;
 }) {
+  // Cup's own errors keep their messages in telemetry after failing a step.
+  const step = keepStepErrors(workflowStep);
   const params = segmentWorkflowParamsSchema.parse(event.payload);
   const { conversionId, sequence } = params;
   if (event.instanceId !== `segment-${conversionId}-${sequence}`) {

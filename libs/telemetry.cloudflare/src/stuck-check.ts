@@ -9,9 +9,8 @@ export type StuckCheck<Case> = {
   /** Whether a case of this age is stuck, by the check's threshold. */
   isStuck(stuckCase: Case, ageMs: number): boolean;
   /**
-   * The Sentry error event of a stuck case. Its message names the case, so that Sentry's Dedupe
-   * integration does not drop the next case's event as a repeat; its fixed fingerprint groups the
-   * cases into one issue.
+   * The Sentry error event of a stuck case. Its message names the case, and its fixed fingerprint
+   * groups the cases into one issue.
    */
   toEvent(stuckCase: Case, ageMs: number): Event;
 };

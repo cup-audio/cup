@@ -310,10 +310,43 @@ test("a failed Durable Object RPC is captured once, by its caller", async ({
       "cup.conversion.failure_category": "source-preparation",
     },
   });
-  // A Workflow step rebuilds the error it rethrows as a plain `Error` without the brand of Cup's
-  // errors, so the error arrives as foreign: with its type and stack, without its message.
+  // The grant's `CupError` crossed the RPC call, which keeps its brand, and the Workflow step,
+  // which rebuilds it without the brand; the run captures the error its step threw, so the message
+  // stays.
   expect(events[0]?.exception?.values).toEqual([
-    expect.objectContaining({ type: "Error", stacktrace: expect.anything() }),
+    expect.objectContaining({
+      type: "Error",
+      value: "Conversion grant is not initialized",
+      stacktrace: expect.anything(),
+    }),
+  ]);
+});
+
+test("a foreign error that failed a preparation step keeps its type and loses its message", async ({
+  expect,
+  onTestFinished,
+}) => {
+  const sentry = await useSentryStub({ onTestFinished });
+  const worker = await useWorker({ onTestFinished, sentryDsn: sentry.dsn("cup-worker") });
+  const workflows = await worker.introspectWorkflow("PREPARE_AUDIOBOOK_WORKFLOW");
+  onTestFinished(() => workflows.dispose());
+  await workflows.modifyAll(async (modifier) => {
+    await modifier.disableRetryDelays();
+  });
+  const { env, grantId, conversionId } = await createTrialConversion(worker);
+
+  // The test config binds no `BROWSER`, so launching the browser for source preparation throws a
+  // `TypeError`, which is not Cup's own.
+  await env.PREPARE_AUDIOBOOK_WORKFLOW.create({
+    id: conversionId,
+    params: { sourceUrl: SOURCE_URL, grantId },
+  });
+
+  await waitForStepSpan(sentry, "finalization: record conversion failure");
+  const events = sentry.errorEvents("cup-worker");
+  expect(events).toHaveLength(1);
+  expect(events[0]?.exception?.values).toEqual([
+    expect.objectContaining({ type: "TypeError", stacktrace: expect.anything() }),
   ]);
   expect(events[0]?.exception?.values?.[0]).not.toHaveProperty("value");
 });
