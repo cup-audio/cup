@@ -13,7 +13,7 @@ Every Worker entry point is wrapped with `@sentry/cloudflare` in the [Worker ent
 
 Sentry's projects, keys and privacy settings are managed in [Terraform](../../terraform/README.md#sentry); the two public DSNs are constants in `@cup/telemetry.core`.
 
-Planned by the spec and not built yet: alerts and monitors including the uptime monitor on `/api/health`, the report of a lost WebView process, and the shells' native release step for dSYMs and the source maps of the bundle packed into each build.
+Planned by the spec and not built yet: alerts and monitors including the uptime monitor on `/api/health`, and the shells' native release step for dSYMs and the source maps of the bundle packed into each build.
 
 ## What the web app sends
 
