@@ -304,6 +304,18 @@ test("a position token for another account, or for a trial's audiobook, answers 
   }
 });
 
+test("the bearer path answers 404 for another account's audiobook", async () => {
+  const { app, env, savedPositions } = fixture({
+    kind: "account",
+    accountId: crypto.randomUUID(),
+  });
+  const response = await putPosition(app, env, origin + positionPath, {
+    Authorization: `Bearer ${await createAccessToken()}`,
+  });
+  await expectErrorCode(response, 404, "audiobook-not-found");
+  expect(savedPositions).toEqual([]);
+});
+
 test("the bearer path saves a trial's audiobook position to the signed-in listener's account when the request's grant covers it", async () => {
   const { app, env, savedPositions } = fixture(trialOwner);
   const response = await putPosition(app, env, origin + positionPath, {
