@@ -101,20 +101,17 @@ public class MediaPlaybackService extends MediaSessionService {
     }
 
     /**
-     * Media3's default keeps a session in the foreground and stops the service otherwise; its grace
-     * keeps a paused one in the foreground too. A playing session plays on, also while it buffers or a
-     * call pauses it, and every other one ends.
+     * A playing session plays on, also while it buffers or a call pauses it, and every other one
+     * ends. Media3's default decides by the foreground instead, which a call ends and its grace keeps
+     * for a paused session, so it runs only for a session that ends.
      */
     @Override
     public void onTaskRemoved(@Nullable Intent rootIntent) {
         Player player = session == null ? null : session.getPlayer();
-        if (
-            !isPlaybackOngoing() ||
-            player == null ||
-            !TaskRemoval.keepsSession(player.getPlayWhenReady(), player.getPlaybackState())
-        ) {
-            PlaybackEngine.get(this).stopNatively(PlaybackEngine.ClosedReason.TASK_REMOVED);
+        if (player != null && TaskRemoval.keepsSession(player.getPlayWhenReady(), player.getPlaybackState())) {
+            return;
         }
+        PlaybackEngine.get(this).stopNatively(PlaybackEngine.ClosedReason.TASK_REMOVED);
         super.onTaskRemoved(rootIntent);
     }
 

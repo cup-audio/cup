@@ -193,7 +193,7 @@ One Android test launches with the real plugin (`realGoogleSignIn: true`) on the
 
 Two debug-only seams, passed like the test origin, keep these cases short: the test Worker's `signedUrlLifetimeSeconds` (`startTestWorker` or `restart`) issues signed URLs that expire that many seconds after it hands them out, and the launch arguments `signedUrlLifetimeSeconds` and `foregroundGraceSeconds` (`cupTestSignedUrlLifetimeSeconds` and `cupTestForegroundGraceSeconds` intent extras) shorten the plugin's URL lifetime and Media3's foreground grace, which Media3 exposes as `setForegroundServiceTimeoutMs`.
 
-ExoPlayer's position advances on the emulator started with `-no-audio` (2026-11-16, case 1 and the locked listen), so the suite keeps that flag. Loopback is exempt from Android's background network cut, so the locked listen shows the unfrozen process that keeps network access, not the network access itself. The test Worker logs a `PUT`'s body, as it does a `POST`'s. The cases add about ten minutes to the Android run, two of them the locked listen and six the failure and lifecycle cases.
+ExoPlayer's position advances on the emulator started with `-no-audio` (2026-11-16, case 1 and the locked listen), so the suite keeps that flag. Loopback is exempt from Android's background network cut, so the locked listen shows the unfrozen process that keeps network access, not the network access itself. The test Worker logs a `PUT`'s body, as it does a `POST`'s. The cases add about nine minutes to the Android run, two of them the locked listen and five the failure and lifecycle cases.
 
 ## Native networking
 

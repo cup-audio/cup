@@ -347,12 +347,15 @@ test("a session a call pauses survives a swipe from recents and plays on after t
 
   // ExoPlayer still wants to play during the call; only the listener's pause ends a swiped session.
   await device.emulatorConsole("gsm", "call", "5551234");
-  await waitForCupMediaSession(device, "PAUSED");
-  await device.removeFromRecents();
-  await timers.setTimeout(5_000);
-  expect(await cupMediaPlaybackService(device)).toBeDefined();
-
-  await device.emulatorConsole("gsm", "cancel", "5551234");
+  try {
+    await waitForCupMediaSession(device, "PAUSED");
+    await device.removeFromRecents();
+    await timers.setTimeout(5_000);
+    expect(await cupMediaPlaybackService(device)).toBeDefined();
+  } finally {
+    // A call left ringing would pause every later test's player.
+    await device.emulatorConsole("gsm", "cancel", "5551234");
+  }
   await waitForCupMediaSession(device, "PLAYING");
 });
 
