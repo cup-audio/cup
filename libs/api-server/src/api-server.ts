@@ -2,6 +2,7 @@ import { captureException, getActiveSpan, getCurrentScope } from "@sentry/core";
 import { Hono, type Context, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
+import { HTTPException } from "hono/http-exception";
 import { NONCE, secureHeaders } from "hono/secure-headers";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { Temporal } from "temporal-polyfill";
@@ -372,6 +373,7 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
           401,
         );
       }
+      captureException(error);
       return jsonError(
         context.get("traceId"),
         "dependency-unavailable",
@@ -1469,6 +1471,13 @@ export function createApiServer(dependencies: ApiServerDependencies = production
   });
 
   app.onError((error, context) => {
+    // Hono's own 4xx, such as the validator's answer to a malformed JSON body, is the client's
+    // fault: it keeps its status and opens no issue.
+    if (error instanceof HTTPException && error.status < 500) {
+      return error.status === 400
+        ? jsonError(context.get("traceId"), "invalid-input", "The request could not be read.", 400)
+        : error.getResponse();
+    }
     // Hono hands the error here instead of rethrowing it, so Sentry's handler wrapper never sees it.
     captureException(error);
     return jsonError(

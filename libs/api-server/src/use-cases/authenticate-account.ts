@@ -1,3 +1,5 @@
+import { captureException } from "@sentry/core";
+
 import type { AccountSnapshot } from "@cup/accounts";
 
 export type AuthenticateAccountDependencies<Account> = {
@@ -51,7 +53,9 @@ export async function authenticateAccount<Account extends { inspect(): Promise<A
     const account = dependencies.getAccount(mapping.accountId);
     const snapshot = await account.inspect();
     return { result: "authenticated", snapshot, account } as const;
-  } catch {
+  } catch (error) {
+    // Every caller answers this result with a 503.
+    captureException(error);
     return { result: "unavailable" } as const;
   }
 }

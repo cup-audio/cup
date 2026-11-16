@@ -95,28 +95,24 @@ test("a 4xx sends no error event", async ({ expect, onTestFinished }) => {
   expect(sentry.errorEvents("cup-worker")).toEqual([]);
 });
 
-test("a foreign error arrives with its type but without its message", async ({
+test("a malformed JSON body answers 400 and sends no error event", async ({
   expect,
   onTestFinished,
 }) => {
   const sentry = await useSentryStub({ onTestFinished });
   const worker = await useWorker({ onTestFinished, sentryDsn: sentry.dsn("cup-worker") });
 
-  // Hono's JSON validator throws its own HTTPException: a foreign error class, whose message Cup
-  // did not write. (The Listener API answers it with a 500 today rather than a 400.)
+  // Hono's JSON validator throws its own 400 HTTPException, which the API answers as it is.
   const response = await worker.fetch("http://localhost/api/operator/grants", {
     method: "POST",
     headers: { "Cf-Access-Token": LOCAL_OPERATOR_ACCESS_TOKEN, "Content-Type": "application/json" },
     body: "{not json",
   });
 
-  expect(response.status).toBe(500);
-  await sentry.waitFor("an error event", () => sentry.errorEvents("cup-worker").length > 0);
-  const [event] = sentry.errorEvents("cup-worker");
-  expect(event?.exception?.values).toEqual([
-    expect.not.objectContaining({ value: expect.anything() }),
-  ]);
-  expect(event?.exception?.values?.[0]?.type).toBe("HTTPException");
+  expect(response.status).toBe(400);
+  expect(errorResponseSchema.parse(await response.json()).error.code).toBe("invalid-input");
+  await waitForRequestSpan(sentry, "/api/operator/grants");
+  expect(sentry.errorEvents("cup-worker")).toEqual([]);
 });
 
 test("GET /api/health answers 200 and sends no trace", async ({ expect, onTestFinished }) => {
