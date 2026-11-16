@@ -304,12 +304,28 @@ test("a position token for another account, or for a trial's audiobook, answers 
   }
 });
 
-test("the bearer path answers 404 for a trial's audiobook instead of saving it to the account", async () => {
+test("the bearer path saves a trial's audiobook position to the signed-in listener's account when the request's grant covers it", async () => {
   const { app, env, savedPositions } = fixture(trialOwner);
   const response = await putPosition(app, env, origin + positionPath, {
     Authorization: `Bearer ${await createAccessToken()}`,
     Cookie: grantCookie,
   });
+  expect(response.status).toBe(204);
+  expect(savedPositions).toEqual([{ accountId, conversionId, position }]);
+});
+
+test("the bearer path refuses a trial's audiobook without the grant's session", async () => {
+  const { app, env, savedPositions } = fixture(trialOwner);
+  const response = await putPosition(app, env, origin + positionPath, {
+    Authorization: `Bearer ${await createAccessToken()}`,
+  });
+  await expectErrorCode(response, 401, "grant-session-required");
+  expect(savedPositions).toEqual([]);
+});
+
+test("a position token answers 404 for a trial's audiobook even when the request's grant covers it", async () => {
+  const { app, env, savedPositions } = fixture(trialOwner);
+  const response = await putPosition(app, env, await signPositionUrl(), { Cookie: grantCookie });
   await expectErrorCode(response, 404, "audiobook-not-found");
   expect(savedPositions).toEqual([]);
 });

@@ -1479,8 +1479,9 @@ type PositionSaveAuthorization =
 
 /**
  * Authorizes a listening-position save by exactly one credential: the listener's bearer token or a
- * signed position URL's `token`. Either way, an active account must own the audiobook. Sign-out
- * does not revoke a position URL; it stays valid until it expires.
+ * signed position URL's `token`. Either way, the save goes to an active account, which must own the
+ * audiobook; with the bearer token, a trial audiobook that the request's grant session covers
+ * counts too. Sign-out does not revoke a position URL; it stays valid until it expires.
  */
 async function authorizePositionSave(
   env: ApiServerEnvironment,
@@ -1527,7 +1528,21 @@ async function authorizePositionSave(
   if (auth.snapshot.state !== "active") {
     return { result: "denied", response: accountAuthError("blocked", requestId) };
   }
-  if (owner?.kind !== "account" || owner.accountId !== auth.snapshot.accountId) {
+  if (owner?.kind === "trial") {
+    // A signed-in listener saves a trial audiobook's position to their account when the request's
+    // grant session covers the audiobook. A position URL never authorizes such a save.
+    const denied = await requireActiveTrialAudiobookSession(
+      env,
+      owner.grantId,
+      request.headers.get("Cookie") ?? undefined,
+      requestId,
+    );
+    if (denied) {
+      return { result: "denied", response: denied };
+    }
+    return { result: "authorized", account: auth.account };
+  }
+  if (owner?.accountId !== auth.snapshot.accountId) {
     return {
       result: "denied",
       response: jsonError(requestId, "audiobook-not-found", "Audiobook not found.", 404),
