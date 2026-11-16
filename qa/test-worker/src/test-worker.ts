@@ -79,6 +79,11 @@ type StartTestWorkerOptions = RestartOptions & {
   /** Writes Wrangler's output to stderr while it runs. */
   streamLogs?: boolean;
   /**
+   * The DSNs the telemetry tunnel at `/_/e` forwards to, comma-separated, such as a Sentry stub's
+   * `cup-app` DSN; by default it forwards nothing.
+   */
+  sentryTunnelDsns?: string;
+  /**
    * Serves HTTPS with this PEM key and certificate instead of HTTP. The caller's own requests, such
    * as the readiness check and grant creation, must trust the certificate, for example through
    * `NODE_EXTRA_CA_CERTS`.
@@ -144,6 +149,9 @@ export async function startTestWorker(options: StartTestWorkerOptions = {}): Pro
         ...(options.authProviderOrigin === undefined
           ? []
           : ["--var", `SUPABASE_URL:${options.authProviderOrigin}`]),
+        ...(options.sentryTunnelDsns === undefined
+          ? []
+          : ["--var", `SENTRY_TUNNEL_DSNS:${options.sentryTunnelDsns}`]),
         ...(options.offersTestAccount === true
           ? [
               "--var",

@@ -37,3 +37,71 @@ test.each([
     }),
   ).toBeUndefined();
 });
+
+const APP_INFO = { version: "1.4.0", build: "17" };
+
+test("a release shell sends to cup-app through the tunnel when its API origin is https://cup.audio, as its app version", () => {
+  const options = createClientSentryOptions({
+    pageOrigin: "https://localhost",
+    apiOrigin: "https://cup.audio",
+    release: "web@0123456789abcdef",
+    router: ROUTER,
+    shell: { debugBuild: false, testSentryDsn: undefined, app: APP_INFO },
+  });
+
+  expect(options).toMatchObject({
+    dsn: CUP_APP_DSN,
+    tunnel: "https://cup.audio/_/e",
+    release: "audio.cup.app@1.4.0+17",
+    dist: "17",
+    enableNative: true,
+    initialScope: { tags: { "cup.web_release": "web@0123456789abcdef" } },
+  });
+});
+
+test.each(["http://localhost:8787", "https://www.cup.audio", "http://cup.audio"])(
+  "a release shell sends nothing against the API origin %s",
+  (apiOrigin) => {
+    expect(
+      createClientSentryOptions({
+        pageOrigin: "https://localhost",
+        apiOrigin,
+        release: "web@0123456789abcdef",
+        router: ROUTER,
+        shell: { debugBuild: false, testSentryDsn: undefined, app: APP_INFO },
+      }),
+    ).toBeUndefined();
+  },
+);
+
+test.each(["https://cup.audio", "http://localhost:8787"])(
+  "a debug shell without a test DSN sends nothing against %s",
+  (apiOrigin) => {
+    expect(
+      createClientSentryOptions({
+        pageOrigin: "https://localhost",
+        apiOrigin,
+        release: "web@0123456789abcdef",
+        router: ROUTER,
+        shell: { debugBuild: true, testSentryDsn: undefined, app: APP_INFO },
+      }),
+    ).toBeUndefined();
+  },
+);
+
+test("a debug shell with a test DSN sends only to it, through the test Worker's tunnel", () => {
+  const testSentryDsn = "http://public@127.0.0.1:51234/2";
+  const options = createClientSentryOptions({
+    pageOrigin: "https://localhost",
+    apiOrigin: "http://localhost:8787",
+    release: "web@0123456789abcdef",
+    router: ROUTER,
+    shell: { debugBuild: true, testSentryDsn, app: APP_INFO },
+  });
+
+  expect(options).toMatchObject({
+    dsn: testSentryDsn,
+    tunnel: "http://localhost:8787/_/e",
+    release: "audio.cup.app@1.4.0+17",
+  });
+});

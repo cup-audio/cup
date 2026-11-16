@@ -9,7 +9,12 @@ import {
   withStreamedSpan,
 } from "@sentry/react";
 
-import { beforeSendLog, CUP_APP_DSN, maskSpanUrls } from "@cup/telemetry.core";
+import {
+  beforeSendLog,
+  CUP_APP_DSN,
+  maskSpanUrls,
+  TELEMETRY_ATTRIBUTES,
+} from "@cup/telemetry.core";
 
 import { beforeBreadcrumbClient, beforeSendClientEvent } from "#src/client-before-send.ts";
 
@@ -23,10 +28,34 @@ export type ClientTelemetryContext = {
   release: string | undefined;
   /** The app's TanStack Router, which names page-load and navigation spans after its routes. */
   router: object;
+  /** Set only in a native shell, whose on/off rule and release differ from the browser's. */
+  shell?: ShellTelemetryContext;
 };
 
-/** The only origin the browser sends from: every E2E suite runs the production bundle elsewhere. */
+/** What a native shell tells the web app about itself before Sentry starts. */
+export type ShellTelemetryContext = {
+  /**
+   * Whether the shell is a debug build, as its native side says. Callers count only an explicit
+   * "release" as one, so a shell that says nothing is a debug build and sends nothing.
+   */
+  debugBuild: boolean;
+  /**
+   * Debug builds only: the DSN the mobile E2E suite passed as the `cupTestSentryDsn` launch
+   * argument, the Sentry stub's.
+   */
+  testSentryDsn: string | undefined;
+  /** The app's version and build number, from `App.getInfo()`. */
+  app: { version: string; build: string };
+};
+
+/**
+ * The only origin the browser sends from, and the only API origin a release shell sends against:
+ * every E2E suite runs the production bundle elsewhere.
+ */
 const PRODUCTION_ORIGIN = "https://cup.audio";
+
+/** The shells' application ID, which names their release. */
+const SHELL_APP_ID = "audio.cup.app";
 
 /** The telemetry tunnel on the Worker, at the API origin. */
 const TUNNEL_PATH = "/_/e";
@@ -47,24 +76,30 @@ const IGNORED_ERRORS = [
 ];
 
 /**
- * Sentry's options for the web app, or `undefined` when it must send nothing. By the on/off rule,
- * the browser sends only from `https://cup.audio`; every other origin, the shells' included, sends
- * nothing.
+ * Sentry's options for the web app, or `undefined` when it must send nothing. By the on/off rule:
+ *
+ * - The browser sends only from `https://cup.audio`;
+ * - A release shell sends only when its API origin is `https://cup.audio`;
+ * - A debug shell sends nothing, unless the mobile E2E suite passed it a test DSN, and then only to
+ *   that DSN.
  */
 export function createClientSentryOptions({
   pageOrigin,
   apiOrigin,
   release,
   router,
+  shell,
 }: ClientTelemetryContext): CapacitorOptions | undefined {
-  if (pageOrigin !== PRODUCTION_ORIGIN) {
+  const target =
+    shell === undefined
+      ? browserTarget(pageOrigin, release)
+      : shellTarget(apiOrigin, release, shell);
+  if (target === undefined) {
     return undefined;
   }
 
   return {
-    dsn: CUP_APP_DSN,
-    ...(release === undefined ? {} : { release }),
-    environment: "production",
+    ...target,
     // Through Cup's own domain, so ad blockers that block Sentry's hosts don't drop it.
     transport: makeFetchTransport,
     tunnel: `${apiOrigin}${TUNNEL_PATH}`,
@@ -102,6 +137,63 @@ export function createClientSentryOptions({
     beforeSend: beforeSendClientEvent,
     beforeSendSpan: withStreamedSpan(maskSpanUrls),
     beforeBreadcrumb: beforeBreadcrumbClient,
+  };
+}
+
+/** Where and as what the client sends: the options that differ between the browser and a shell. */
+type SendTarget = Pick<
+  CapacitorOptions,
+  | "dsn"
+  | "release"
+  | "dist"
+  | "environment"
+  | "initialScope"
+  | "enableNative"
+  | "enableAutoSessionTracking"
+  | "enableWatchdogTerminationTracking"
+  | "attachThreads"
+>;
+
+function browserTarget(pageOrigin: string, release: string | undefined): SendTarget | undefined {
+  if (pageOrigin !== PRODUCTION_ORIGIN) {
+    return undefined;
+  }
+  return {
+    dsn: CUP_APP_DSN,
+    ...(release === undefined ? {} : { release }),
+    environment: "production",
+  };
+}
+
+function shellTarget(
+  apiOrigin: string,
+  webRelease: string | undefined,
+  { debugBuild, testSentryDsn, app }: ShellTelemetryContext,
+): SendTarget | undefined {
+  const dsn = debugBuild
+    ? testSentryDsn
+    : apiOrigin === PRODUCTION_ORIGIN
+      ? CUP_APP_DSN
+      : undefined;
+  if (dsn === undefined) {
+    return undefined;
+  }
+
+  return {
+    dsn,
+    // The native SDK gets the same release, so a native crash and the JS error before it line up.
+    release: `${SHELL_APP_ID}@${app.version}+${app.build}`,
+    dist: app.build,
+    environment: debugBuild ? "debug" : "production",
+    ...(webRelease === undefined
+      ? {}
+      : { initialScope: { tags: { [TELEMETRY_ATTRIBUTES.WEB_RELEASE]: webRelease } } }),
+    // Native crashes, ANRs and app hangs, with the native installation ID kept in memory only. That
+    // gives up native release health, so native session tracking is off.
+    enableNative: true,
+    enableAutoSessionTracking: false,
+    enableWatchdogTerminationTracking: false,
+    attachThreads: true,
   };
 }
 

@@ -69,15 +69,16 @@ test("a package that uses the server SDK without the server telemetry library is
   ]);
 });
 
-test("a package other than the browser telemetry library and the web app that uses the client SDK is reported", () => {
+test("a package other than the browser telemetry library, the web app and the mobile app that uses the client SDK is reported", () => {
   const packages = [
     createPackage("@cup/telemetry.browser", { "@sentry/capacitor": "catalog:sentry-client" }),
     createPackage("@cup/web-app", { "@sentry/react": "catalog:sentry-client" }),
     createPackage("@cup/mobile-app", { "@sentry/capacitor": "catalog:sentry-client" }),
+    createPackage("@cup/e2e", { "@sentry/browser": "catalog:sentry-client" }),
   ];
 
   expect(findSentrySdkFamilyProblems(packages)).toEqual([
-    "`@cup/mobile-app` depends on `@sentry/capacitor`; only `@cup/telemetry.browser` and `@cup/web-app` may depend on the client SDK family.",
+    "`@cup/e2e` depends on `@sentry/browser`; only `@cup/telemetry.browser`, `@cup/web-app` and `@cup/mobile-app` may depend on the client SDK family.",
   ]);
 });
 

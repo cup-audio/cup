@@ -13,7 +13,7 @@ Every Worker entry point is wrapped with `@sentry/cloudflare` in the [Worker ent
 
 Sentry's projects, keys and privacy settings are managed in [Terraform](../../terraform/README.md#sentry); the two public DSNs are constants in `@cup/telemetry.core`.
 
-Planned by the spec and not built yet: alerts and monitors including the uptime monitor on `/api/health`, client telemetry in the shells, and source map upload.
+Planned by the spec and not built yet: alerts and monitors including the uptime monitor on `/api/health`, the iOS shell's telemetry, the "Send crash reports" switch, the report of a lost WebView process, and source map upload.
 
 ## What the web app sends
 
@@ -28,7 +28,17 @@ In the browser on `https://cup.audio`, the web app reports through `@sentry/capa
 
 Sentry's Supabase integration adds spans and breadcrumbs of the auth client without query data; its auth-error events are dropped, because the web app handles those failures. Off: Zod errors, console capture, feedback, view hierarchy, profiling, CapacitorHttp tracing and replay.
 
-> > > > > > > worktree-agent-a2011e2fdb45a738e
+## What the shells send
+
+The Android shell runs the same web app and the same `initializeTelemetry`, which there also starts Sentry's native Android SDK through `@sentry/capacitor`, so one `cup-app` project receives both ([ADR 0030](../adr/0030-capture-native-crashes-in-the-shells-without-consent-keeping-no-installation-id-on-the-device.md)). The iOS shell sends nothing yet: its native SDK still keeps an installation ID on the device.
+
+- **JS errors, traces and logs** as in the browser, through the telemetry tunnel at the API origin with `makeFetchTransport`, which bypasses `CapacitorHttp`.
+- **Native crashes, ANRs with thread dumps, and memory-limiter kills** go straight from the native SDK to Sentry. Native crashes in C code arrive as Android's tombstones, reported on the next launch; the NDK integration is off, because sentry-native stores an ID file of its own. Earlier crashes and ANRs from before the app's first launch with Sentry are not reported.
+- **Native traces**: the activity span with frames, which carries the app start. User-interaction tracing is off.
+- **The release** `audio.cup.app@<version>+<build>` with `dist` the build number, read through `App.getInfo()` before `Sentry.init`, so JS and native events share it. The web bundle's release is the tag `cup.web_release`.
+- **The user** follows the same rule, and is set again once the native SDK runs, since a user set before then never reaches the native scope. ANR and tombstone events, reported from a later process, carry no account ID.
+
+The native SDK keeps its installation ID in memory only: [`InMemoryInstallation`](../../apps/mobile-app/android/app/src/main/java/io/sentry/android/core/InMemoryInstallation.java) sets a random one per process before the page can start the SDK. Native session tracking, scope persistence and the NDK are off, so the SDK writes no ID, session or scope to the device, and release health for the shells is given up. Screenshots, view hierarchies, feedback, replay and profiling are off. There is no native `beforeSend`: the organisation's scrubbing rule removes the device identifiers and a `user.id` in an installation ID format at ingest. The [mobile app guide](../../apps/mobile-app/README.md#sentry) lists the native settings.
 
 ## Capture rule
 
@@ -119,7 +129,7 @@ Sentry's Workflow wrapper makes every step a span named after the step, and each
 | ------------------------------------------------------------------------ | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`@cup/telemetry.core`](../../libs/telemetry.core/README.md)             | any, no SDK | The `cup.*` attribute keys, the log event catalogue and the `beforeSendLog` severity filter, URL masking and the masking `beforeSendSpan`, the signed-out user, and both production DSNs                                                                                                     |
 | [`@cup/telemetry.cloudflare`](../../libs/telemetry.cloudflare/README.md) | Workers     | The Worker's Sentry options with the on/off rule, the server `beforeSend` and `beforeSendSpan`, the typed log-event helper `logEvent` and the conversion outcome records, the stuck-conversion and stuck-conversion-deletion reports, the conversion scope helpers, and the telemetry tunnel |
-| [`@cup/telemetry.browser`](../../libs/telemetry.browser/README.md)       | DOM         | The client's Sentry options with the on/off rule, the client `beforeSend` and `beforeBreadcrumb`, the user rule, and the web release                                                                                                                                                         |
+| [`@cup/telemetry.browser`](../../libs/telemetry.browser/README.md)       | DOM         | The client's Sentry options with the on/off rules of the browser and the shells and the shells' release, the client `beforeSend` and `beforeBreadcrumb`, the user rule, and the web release                                                                                                  |
 
 Cup code calls Sentry's API directly, such as `captureException` from `@sentry/core` or `@sentry/react`; the libraries hold keys, options, privacy hooks and the log-event helper, not a wrapper around Sentry. The server and client SDK families move on different majors, so the `sentry-server` and `sentry-client` catalogs in `pnpm-workspace.yaml` pin each family, and the [workspace check](../../qa/workspace-checks/README.md#sentry-sdk-family-check) keeps the families out of each other's packages. The client family moves only with a `@sentry/capacitor` release, which pins its own `@sentry/browser` and peers on exactly one `@sentry/react`.
 
@@ -174,7 +184,7 @@ The Worker's `SENTRY_DSN` is a plain var, public by design. The options factory 
 
 `SENTRY_TUNNEL_DSNS` is empty everywhere but production, so the tunnel forwards nothing; a test allowlists a Sentry stub DSN through `useWorker({ vars })`, and a suite running the test Worker through `--var`. The Worker's [config test](../../apps/cloudflare-worker/test/wrangler-config.test.ts) and the test Worker's config test pin these values. Tests that check what reaches Sentry start a [Sentry stub](../../qa/sentry-stub/README.md), which records envelopes and forwards nothing.
 
-The web app decides at runtime, because every web E2E suite runs the production bundle: the browser sends only when the page's origin is exactly `https://cup.audio`, so local development, the component tests and the E2E suites start no Sentry at all. A shared [Playwright fixture](../../qa/sentry-stub/README.md#telemetry-request-guard) in the app and source-material E2E suites fails any test whose page requests a `*.sentry.io` host or `/_/e`, so a regression of that rule fails the suites.
+The web app decides at runtime, because every web E2E suite runs the production bundle: the browser sends only when the page's origin is exactly `https://cup.audio`, so local development, the component tests and the E2E suites start no Sentry at all. A release shell sends only when its API origin is `https://cup.audio`. A debug shell, which the web app recognises by the `Capacitor.DEBUG` flag the native side sets, sends nothing unless the [mobile E2E suite](../../qa/mobile-e2e/README.md#telemetry-android) launches it with a Sentry stub's DSN as `cupTestSentryDsn`, and then sends only to that DSN; a shell that does not say it is a release build counts as a debug build. A shared [Playwright fixture](../../qa/sentry-stub/README.md#telemetry-request-guard) in the app and source-material E2E suites fails any test whose page requests a `*.sentry.io` host or `/_/e`, so a regression of that rule fails the suites.
 
 ## Build
 

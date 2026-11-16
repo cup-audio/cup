@@ -10,3 +10,6 @@ project(':capacitor-app').projectDir = new File('../../../node_modules/.pnpm/@ca
 
 include ':capawesome-capacitor-google-sign-in'
 project(':capawesome-capacitor-google-sign-in').projectDir = new File('../../../node_modules/.pnpm/@capawesome+capacitor-google-sign-in@0.1.4_@capacitor+core@8.5.3/node_modules/@capawesome/capacitor-google-sign-in/android')
+
+include ':sentry-capacitor'
+project(':sentry-capacitor').projectDir = new File('../../../node_modules/.pnpm/@sentry+capacitor@4.5.0_patch_hash=5a6baf0c0af04d3bf51affc1c82277c1e5cfd52bae73108673af_0d1be181c00aa3962ea13eb9bdc7a197/node_modules/@sentry/capacitor/android')

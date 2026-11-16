@@ -4,7 +4,13 @@ Sentry's options, privacy hooks and user rule for the web app, which the Capacit
 
 ## Use
 
-[`createClientSentryOptions({ pageOrigin, apiOrigin, release, router })`](src/client-sentry-options.ts) returns the options for one `Sentry.init(options, SentryReact.init)`, or `undefined` when the client must send nothing; the web app's [`initializeTelemetry`](../../apps/web-app/src/telemetry.ts) calls it. The on/off rule: the browser sends only when `pageOrigin` is exactly `https://cup.audio`. The shells' origins never are, so the shells send nothing yet. The options send through the telemetry tunnel at `apiOrigin` plus `/_/e`, propagate traces only to `apiOrigin`, and trace through the passed TanStack Router.
+[`createClientSentryOptions({ pageOrigin, apiOrigin, release, router, shell })`](src/client-sentry-options.ts) returns the options for one `Sentry.init(options, SentryReact.init)`, or `undefined` when the client must send nothing; the web app's [`initializeTelemetry`](../../apps/web-app/src/telemetry.ts) calls it. The options send through the telemetry tunnel at `apiOrigin` plus `/_/e`, propagate traces only to `apiOrigin`, and trace through the passed TanStack Router.
+
+The on/off rule:
+
+- In the browser, without `shell`, the client sends only when `pageOrigin` is exactly `https://cup.audio`, as release `release`.
+- In a native shell, `shell` says whether it is a debug build, the test DSN it was launched with, and its app version and build. A release shell sends only when `apiOrigin` is exactly `https://cup.audio`, to the `cup-app` DSN. A debug shell sends only with a test DSN, and then only to it. The caller counts a shell that does not say it is a release build as a debug build.
+- A shell sends as release `audio.cup.app@<version>+<build>` with `dist` the build, which its native SDK shares, and tags the web release as `cup.web_release`. It turns the native SDK on, with native session tracking and watchdog termination tracking off and threads attached to native events ([ADR 0030](../../docs/adr/0030-capture-native-crashes-in-the-shells-without-consent-keeping-no-installation-id-on-the-device.md)).
 
 The options include the client `beforeSend` and `beforeBreadcrumb` from [`client-before-send.ts`](src/client-before-send.ts). They keep only the user's ID and null the IP address, remove the device identifiers a native SDK copies onto JS events, mask URLs with `@cup/telemetry.core`, and drop the auth errors of Sentry's Supabase integration. The options also set the masking `beforeSendSpan` and `beforeSendLog` of `@cup/telemetry.core`.
 
@@ -18,4 +24,4 @@ The browser's release is `web@<content hash of the entry chunk>`. [`webReleasePl
 
 ## Tests
 
-The unit tests cover the on/off rule, the client `beforeSend` with the Supabase auth-error drop, the user rule, and the release, by building a small page with Vite. Only this library and the web app may depend on the client SDK family ([SDK family check](../../qa/workspace-checks/README.md#sentry-sdk-family-check)); take `@sentry/capacitor` and `@sentry/react` from the `sentry-client` catalog.
+The unit tests cover the on/off rules of the browser and the shells, the client `beforeSend` with the Supabase auth-error drop, the user rule, and the release, by building a small page with Vite. Only this library, the web app and the mobile app, for the native plugin, may depend on the client SDK family ([SDK family check](../../qa/workspace-checks/README.md#sentry-sdk-family-check)); take `@sentry/capacitor` and `@sentry/react` from the `sentry-client` catalog.

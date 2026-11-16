@@ -17,7 +17,7 @@ Packages in `tooling/` and `qa/` hold no production code, so the check accepts a
 Sentry's server SDK (`@sentry/cloudflare`) and its client SDK (`@sentry/capacitor` with `@sentry/react`) move on different majors, each with its own `@sentry/core`. The [SDK family test](test/sentry-sdk-families.test.ts) reads every package's dependencies, dev dependencies and peer dependencies and applies the [rule](src/sentry-sdk-families.ts):
 
 - Only `@cup/telemetry.cloudflare` and packages that depend on it may depend on `@sentry/cloudflare`. Other server code that only captures, such as the API server, uses `@sentry/core` from the `sentry-server` catalog.
-- Only `@cup/telemetry.browser` and `@cup/web-app` may depend on a client SDK (`@sentry/browser`, `@sentry/capacitor`, `@sentry/react`).
+- Only `@cup/telemetry.browser`, `@cup/web-app` and `@cup/mobile-app` may depend on a client SDK (`@sentry/browser`, `@sentry/capacitor`, `@sentry/react`). The mobile app runs no Sentry code; it declares `@sentry/capacitor` so that `cap sync` adds the SDK's native plugin to the shells.
 - No package depends on both families. A Sentry package belongs to the family of its SDK, or of its catalog (`catalog:sentry-server` or `catalog:sentry-client`) for a shared package such as `@sentry/core`. `@sentry/cli`, a build tool, belongs to neither.
 
 The check reads declared dependencies, not import statements: pnpm's strict layout lets a package import only what it declares.

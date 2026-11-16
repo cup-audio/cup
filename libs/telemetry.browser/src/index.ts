@@ -1,6 +1,7 @@
 export {
   createClientSentryOptions,
   type ClientTelemetryContext,
+  type ShellTelemetryContext,
 } from "#src/client-sentry-options.ts";
 export {
   followAccountSession,

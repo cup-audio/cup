@@ -33,6 +33,7 @@ public class DebugApplication extends Application {
                 return;
             }
             // Throws on a malformed argument, which stops the app before it can reach production.
+            TestSentryDsn.fromIntent(activity.getIntent());
             if (TestApiOrigin.fromIntent(activity.getIntent()) != null) {
                 ((BridgeActivity) activity).registerPlugin(TestApiOriginPlugin.class);
                 ((BridgeActivity) activity).registerPlugin(FocusProbePlugin.class);

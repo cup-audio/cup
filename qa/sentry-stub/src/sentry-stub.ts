@@ -12,6 +12,7 @@
 
 import assert from "node:assert/strict";
 import http from "node:http";
+import zlib from "node:zlib";
 
 /** The stub's numeric project IDs; a DSN from {@link SentryStub.dsn} names one of them. */
 export const SENTRY_STUB_PROJECTS = { "cup-worker": "1", "cup-app": "2" } as const;
@@ -111,7 +112,10 @@ export async function startSentryStub(): Promise<SentryStub> {
 
   async function handleRequest(request: http.IncomingMessage, response: http.ServerResponse) {
     const requestUrl = new URL(request.url ?? "/", "http://127.0.0.1");
-    const body = await readBody(request);
+    const rawBody = await readBody(request);
+    // The native Android SDK compresses its envelopes.
+    const body =
+      request.headers["content-encoding"] === "gzip" ? zlib.gunzipSync(rawBody) : rawBody;
     const project = findProject(requestUrl.pathname);
     if (request.method !== "POST" || project === undefined) {
       response.writeHead(404, { "Content-Type": "application/json" });

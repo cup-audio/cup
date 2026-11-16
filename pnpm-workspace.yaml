@@ -110,3 +110,5 @@ minimumReleaseAgeExclude:
   - wrangler@4.124.0 || 4.136.1
   - openai@7.7.0
   - '@cloudflare/unenv-preset@2.16.2'
+patchedDependencies:
+  '@sentry/capacitor@4.5.0': patches/@sentry__capacitor@4.5.0.patch

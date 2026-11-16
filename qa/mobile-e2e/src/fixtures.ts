@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, inject, type TestContext } from "vitest";
 
+import { startSentryStub, type SentryStub } from "@cup/sentry-stub";
 import {
   startAuthProvider,
   startTestWorker,
@@ -28,8 +29,18 @@ const PORT_ATTEMPTS = 5;
 /** The servers a test started and the host ports it exposed to the app for them. */
 type TestServers = {
   authProvider?: AuthProvider;
+  sentryStub?: SentryStub;
   worker?: TestWorker;
   exposedPorts: number[];
+};
+
+type UseMobileAppOptions = {
+  /**
+   * Gives each test a Sentry stub, reachable from the app at `127.0.0.1`, whose `cup-app` DSN the
+   * test Worker's telemetry tunnel forwards to. Pass `testSentryDsn` as a launch argument for the
+   * debug build to report to it.
+   */
+  sentryStub?: boolean;
 };
 
 declare module "vitest" {
@@ -56,6 +67,10 @@ export type MobileApp = {
    * reads its recorded authorization requests and sets its access token lifetime.
    */
   readonly authProvider: AuthProvider;
+  /** This test's Sentry stub; only with the `sentryStub` option. */
+  readonly sentryStub: SentryStub;
+  /** The stub's `cup-app` DSN, which the app reaches through the exposed port. */
+  readonly testSentryDsn: string;
 };
 
 /**
@@ -63,7 +78,7 @@ export type MobileApp = {
  * Worker and fake auth provider, reachable from the app at `localhost`. When a test fails, it keeps
  * the test's failure artifacts before the teardown stops the app.
  */
-export function useMobileApp(): MobileApp {
+export function useMobileApp(options: UseMobileAppOptions = {}): MobileApp {
   let device: AppDevice | undefined;
   /** What this test started so far, so the teardown also undoes a half-finished `beforeEach`. */
   let testServers: TestServers = { exposedPorts: [] };
@@ -89,18 +104,31 @@ export function useMobileApp(): MobileApp {
       stop: (server) => server.close(),
     });
     testServers.authProvider = authProvider;
+    if (options.sentryStub === true) {
+      // The stub listens on the host's 127.0.0.1, as does the test Worker that forwards to it.
+      const { stub } = await startExposed(openedDevice, exposedPorts, {
+        start: async () => {
+          const startedStub = await startSentryStub();
+          return { origin: startedStub.url, stub: startedStub };
+        },
+        stop: (server) => server.stub.close(),
+      });
+      testServers.sentryStub = stub;
+    }
+    const { sentryStub } = testServers;
     testServers.worker = await startExposed(openedDevice, exposedPorts, {
       start: () =>
         startTestWorker({
           authProviderOrigin: authProvider.origin,
           streamLogs: STREAM_WORKER_LOGS,
+          ...(sentryStub === undefined ? {} : { sentryTunnelDsns: sentryStub.dsn("cup-app") }),
         }),
       stop: (server) => server.stop(),
     });
   });
 
   afterEach(async (context) => {
-    const { worker, authProvider, exposedPorts } = testServers;
+    const { worker, authProvider, sentryStub, exposedPorts } = testServers;
     testServers = { exposedPorts: [] };
     const failed = context.task.result?.state === "fail";
     const artifactFolder = failed
@@ -132,6 +160,7 @@ export function useMobileApp(): MobileApp {
       // Also when the device does not answer, so no Wrangler process outlives the test.
       await worker?.stop({ retainPersistenceDirectory });
       await authProvider?.close();
+      await sentryStub?.close();
     }
     if (retainPersistenceDirectory && worker !== undefined && artifactFolder !== undefined) {
       await fs.writeFile(
@@ -158,6 +187,12 @@ export function useMobileApp(): MobileApp {
     },
     get authProvider() {
       return requireDefined(testServers.authProvider, "This test's fake auth provider");
+    },
+    get sentryStub() {
+      return requireDefined(testServers.sentryStub, "This test's Sentry stub");
+    },
+    get testSentryDsn() {
+      return requireDefined(testServers.sentryStub, "This test's Sentry stub").dsn("cup-app");
     },
   };
 }

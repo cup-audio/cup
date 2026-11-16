@@ -19,7 +19,10 @@ if (rootElement === null) {
 
 const router = createAppRouter();
 
-initializeTelemetry(router);
+await initializeTelemetry(router).catch((error: unknown) => {
+  // Telemetry is off, so the failure to start it goes where the browser reports errors.
+  reportError(error);
+});
 
 await initializeAndroidBackButton(router.history);
 

@@ -31,6 +31,11 @@ export const TELEMETRY_ATTRIBUTES = {
   AUDIO_SEGMENT_ATTEMPTS: "cup.audio_segment.attempts",
   /** `preparation` or `synthesis`: the stage a stuck conversion hangs in. */
   CONVERSION_STAGE: "cup.conversion.stage",
+  /**
+   * A shell's web bundle, `web@<content hash of the entry chunk>`: the shell's release names its
+   * app version instead, so its JS and native events share one release.
+   */
+  WEB_RELEASE: "cup.web_release",
   /** The wrapper types of a logged error, outermost to innermost. */
   EXCEPTION_CHAIN: "cup.exception.chain",
   /** A Cloudflare Workflow instance ID, such as a segment's; a preparation's is its conversion ID. */

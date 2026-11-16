@@ -36,6 +36,9 @@ dependencies {
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
+    // `io.sentry.android.core.InMemoryInstallation` reaches into this version's package-private
+    // `Installation`; the check below keeps it equal to the version @sentry/capacitor brings.
+    implementation "io.sentry:sentry-android-core:$sentryAndroidVersion"
     // The narration track's engine and the media session that keeps it playing in the background.
     implementation "androidx.media3:media3-exoplayer:$androidxMedia3Version"
     implementation "androidx.media3:media3-session:$androidxMedia3Version"
@@ -48,6 +51,25 @@ dependencies {
 }
 
 apply from: 'capacitor.build.gradle'
+
+// Fails every build whose pinned Sentry Android core differs from the `io.sentry:sentry-android`
+// version that @sentry/capacitor's native plugin declares: an update of the plugin must move the pin,
+// after checking that the in-memory installation ID still works with that version.
+gradle.projectsEvaluated {
+    def sentryPlugin = rootProject.findProject(':sentry-capacitor')
+    if (sentryPlugin == null) {
+        throw new GradleException("The @sentry/capacitor native plugin is missing; run `cap sync android`.")
+    }
+    def broughtVersion = sentryPlugin.configurations.getByName('implementation').dependencies
+        .find { it.group == 'io.sentry' && it.name == 'sentry-android' }?.version
+    if (broughtVersion != sentryAndroidVersion) {
+        throw new GradleException(
+            "sentry-android-core is pinned to ${sentryAndroidVersion} in variables.gradle, but @sentry/capacitor " +
+            "brings io.sentry:sentry-android ${broughtVersion}. Set sentryAndroidVersion to ${broughtVersion} and " +
+            "check that the in-memory installation ID (io.sentry.android.core.InMemoryInstallation) still works."
+        )
+    }
+}
 
 try {
     def servicesJSON = file('google-services.json')

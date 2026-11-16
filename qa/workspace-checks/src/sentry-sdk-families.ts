@@ -16,7 +16,14 @@ export type PackageDependencies = {
 const SERVER_TELEMETRY_LIBRARY = "@cup/telemetry.cloudflare";
 const SERVER_SDK = "@sentry/cloudflare";
 const CLIENT_SDKS = new Set(["@sentry/browser", "@sentry/capacitor", "@sentry/react"]);
-const CLIENT_SDK_PACKAGES = new Set(["@cup/telemetry.browser", "@cup/web-app"]);
+/**
+ * The mobile app runs no Sentry code; it declares `@sentry/capacitor` so that `cap sync` adds the
+ * SDK's native plugin to the shells.
+ */
+const CLIENT_SDK_PACKAGES = new Set(["@cup/telemetry.browser", "@cup/web-app", "@cup/mobile-app"]);
+const CLIENT_SDK_PACKAGE_LIST = new Intl.ListFormat("en-GB", { type: "conjunction" }).format(
+  [...CLIENT_SDK_PACKAGES].map((entry) => `\`${entry}\``),
+);
 /** A build tool that uploads debug files, used next to either family; it is in neither. */
 const SENTRY_CLI = "@sentry/cli";
 
@@ -47,7 +54,7 @@ export function findSentrySdkFamilyProblems(packages: PackageDependencies[]): st
     const clientSdk = sentryDependencies.find(([dependency]) => CLIENT_SDKS.has(dependency));
     if (clientSdk !== undefined && !CLIENT_SDK_PACKAGES.has(name)) {
       problems.push(
-        `\`${name}\` depends on \`${clientSdk[0]}\`; only ${[...CLIENT_SDK_PACKAGES].map((entry) => `\`${entry}\``).join(" and ")} may depend on the client SDK family.`,
+        `\`${name}\` depends on \`${clientSdk[0]}\`; only ${CLIENT_SDK_PACKAGE_LIST} may depend on the client SDK family.`,
       );
     }
 

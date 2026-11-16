@@ -66,6 +66,14 @@ adb shell am start -n audio.cup.app/.MainActivity --es cupTestApiOrigin http://l
 
 It has no effect without `cupTestApiOrigin`.
 
+The third launch argument, the string extra `cupTestSentryDsn`, makes the debug build report to Sentry, which it otherwise never does: the mobile E2E suite passes its Sentry stub's DSN. The value must be exactly `http://<key>@127.0.0.1:<port>/<project>` and needs `cupTestApiOrigin`, or the app stops at launch with an `IllegalArgumentException`. The debug sources set it as the global `window.cupTestSentryDsn` next to `window.cupTestApiOrigin`, and allow plain HTTP to `127.0.0.1`, where the native SDK sends:
+
+```sh
+adb shell am start -n audio.cup.app/.MainActivity --es cupTestApiOrigin http://localhost:8787 --es cupTestSentryDsn http://public@127.0.0.1:9000/2
+```
+
+JS events go through the test Worker's telemetry tunnel, which must allowlist the DSN in `SENTRY_TUNNEL_DSNS`; native events go straight to the DSN, so its port needs `adb reverse` too.
+
 ## iOS
 
 After building, open `apps/mobile-app/ios/App/App.xcodeproj` in Xcode and choose a simulator or a device. The project uses Swift Package Manager, matching Content Relay. Both targets, `App` and `CupShare`, sign automatically with the Apple Developer team `4GQ2V3WJW8`, which owns both bundle identifiers; signing for a device or the App Store needs an Xcode account in that team.
@@ -130,12 +138,28 @@ The [mobile E2E tests](../../qa/mobile-e2e/README.md#share-intake-ios) cover wha
 
 Build the App scheme; it builds, signs, and embeds the extension. A developer outside the project's signing team passes their own `DEVELOPMENT_TEAM` to `xcodebuild` instead of changing the project. Both bundle identifiers need provisioning: `audio.cup.app` and `audio.cup.app.share`. If Cup is hidden in the Share Sheet, look under More in its app row.
 
+## Sentry
+
+The shells report to Sentry's `cup-app` project through the web app's `initializeTelemetry`, which starts `@sentry/capacitor` and with it the native SDK; the [observability page](../../docs/architecture/observability.md#what-the-shells-send) describes what they send. Native crashes are captured without a consent prompt and with no installation ID kept on the device ([ADR 0030](../../docs/adr/0030-capture-native-crashes-in-the-shells-without-consent-keeping-no-installation-id-on-the-device.md)). Only the Android shell reports so far; the web app starts no Sentry on iOS, and `cap sync` leaves the plugin out of the iOS app (`ios.includePlugins` in the Capacitor configuration).
+
+On or off, by the rule of [`@cup/telemetry.browser`](../../libs/telemetry.browser/README.md): a release build sends only while its backend is `https://cup.audio`. A debug build, which the web app recognises by the `Capacitor.DEBUG` flag that Capacitor's native side sets, sends nothing unless it was launched with the [`cupTestSentryDsn`](#debug-launch-arguments) argument, and then only to that DSN. Both send as release `audio.cup.app@<versionName>+<versionCode>` with `dist` the version code, read through `App.getInfo()`.
+
+The mobile app declares `@sentry/capacitor`, and imports it in the Capacitor configuration like its other plugins, only so that `cap sync` adds its native plugin; the web app holds the Sentry code. The workspace's `pnpm patch` of `@sentry/capacitor` (`patches/`) forwards `enableAutoSessionTracking` to the native SDKs, which the plugin otherwise leaves at their defaults, and lets the JavaScript options carry Cocoa options (`cocoaOptions`) for the iOS shell.
+
+### Android
+
+- **No installation ID on the device.** [`InMemoryInstallation`](android/app/src/main/java/io/sentry/android/core/InMemoryInstallation.java), in Sentry's own package `io.sentry.android.core`, sets Sentry's package-private installation ID to a random value per process. `MainActivity.onCreate` calls it before `super.onCreate`, before the page can start the SDK, so the SDK never writes or reads its `INSTALLATION` file.
+- **A pinned native core.** The helper depends on the exact version of `io.sentry:sentry-android-core`, which `variables.gradle` pins as `sentryAndroidVersion`. Every Gradle build fails when the pin differs from the `io.sentry:sentry-android` version that `@sentry/capacitor`'s native plugin declares. After a `@sentry/capacitor` update, move the pin, check that `Installation` still has `deviceId` and `staticLock`, and run the [mobile E2E telemetry test](../../qa/mobile-e2e/README.md#telemetry-android).
+- **Manifest settings** in [`AndroidManifest.xml`](android/app/src/main/AndroidManifest.xml): no automatic init (the page starts the SDK), no session tracking and no scope persistence, and no NDK, because sentry-native stores an installation ID of its own. Native crashes arrive as tombstones, without the raw tombstone and without reports from before the first launch; ANRs with thread dumps and fingerprinting, without historical reports; the memory limiter on, without historical reports; no external storage context and no root check. Traces at 1.0 with activity tracing and frames tracking, without user-interaction tracing. No screenshots, view hierarchies, feedback, replay or profiling. `attachThreads` comes from the JS options.
+- The Sentry SDK still creates its cache folder under `cache/sentry/`, with options, an outbox and an empty breadcrumb queue, but no file holding an ID.
+
 ## Automated and manual checks
 
 The [mobile E2E tests](../../qa/mobile-e2e/README.md) run the debug build of each shell on an emulator or simulator against a local test Worker, in the [deploy gate](../../AGENTS.md#validation-gates). They cover:
 
 - **Both platforms**: a cold start against the test Worker, signing in from the landing page and from the home page's sign-in link and seeing Recents loaded from the test Worker ([`test/sign-in.test.ts`](../../qa/mobile-e2e/test/sign-in.test.ts)).
 - **Both platforms, signed in**: the session in Secure Storage across a relaunch after signing in and after signing out, its refresh after a return from the background, and native networking: bearer-token requests and an Origin-less mutation through `CapacitorHttp`.
+- **Android, telemetry**: against the test's Sentry stub, a shell JS error arrives through the telemetry tunnel without client IP headers, a native crash arrives with the account ID as its user, two launches send different device IDs, and no installation ID file or sentry-native folder exists ([`test/android/telemetry.test.ts`](../../qa/mobile-e2e/test/android/telemetry.test.ts)).
 - **Android**: sign-in through the native adapter with a fake of the Google sign-in plugin, cancelling Google's real add-account screen, share intake through `ACTION_SEND` intents (signed in with Cup stopped or running, `&`, `+` and fragments, a URL inside text, and signed out), the back button, and [playback](#playback): no session before the first Play, then a foreground `mediaPlayback` service whose session shows the title, cover, whole duration and position; media keys and the notification's buttons and seek bar acting on the player, and its Close ending a playing session; a listen of about two minutes with the screen off and Cup unfrozen; a call and focus requests pausing and resuming it; failure paths: expired or refused track URLs ending the session, and a lost connection showing the playback error, reporting `ERROR` to the system and playing on after Play from the notification or the page; the lifecycle: a playing session surviving a swipe from recents and taken over on reopening, a swipe while paused, sign-out and hiding the media controls after the shortened grace ending it; and every case's saves arriving through the position URL, never from the page ([`test/android/playback.test.ts`](../../qa/mobile-e2e/test/android/playback.test.ts)).
 - **iOS**: sign-in through the real `ASWebAuthenticationSession` against the fake auth provider, share links starting a conversion when signed in and filling the landing page's start form and asking to sign in when signed out, each with Cup started by the link or running, sharing from Safari through the Share Sheet and `CupShare`, which starts Cup and, signed in, the conversion with no tap after **Cup**, and the audiobook page's sticky header staying below the status bar, at rest and scrolled, and the status bar backdrop on Recents ([`test/ios/safe-area.test.ts`](../../qa/mobile-e2e/test/ios/safe-area.test.ts)).
 

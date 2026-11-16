@@ -4,6 +4,7 @@ import "@aparajita/capacitor-secure-storage";
 import "@capacitor/app";
 import type { CapacitorConfig } from "@capacitor/cli";
 import "@capawesome/capacitor-google-sign-in";
+import "@sentry/capacitor";
 
 const pathToWebApp = require.resolve("@cup/web-app/package.json");
 const pathToWebAppDist = path.join(pathToWebApp, "..", "./dist/web");

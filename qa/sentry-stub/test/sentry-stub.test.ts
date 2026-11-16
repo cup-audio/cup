@@ -1,3 +1,4 @@
+import zlib from "node:zlib";
 import { expect, test } from "vitest";
 
 import { useSentryStub } from "#src/sentry-stub.ts";
@@ -47,6 +48,32 @@ test("records an envelope with its project, headers and items, by length or by n
   ]);
   expect(stub.errorEvents("cup-worker")).toEqual([JSON.parse(event)]);
   expect(stub.errorEvents("cup-app")).toEqual([]);
+});
+
+test("records a gzip-compressed envelope, as the native Android SDK sends it", async ({
+  onTestFinished,
+}) => {
+  const stub = await useSentryStub({ onTestFinished });
+  const event = JSON.stringify({ event_id: "b".repeat(32), level: "fatal" });
+  const body = [
+    JSON.stringify({ event_id: "b".repeat(32) }),
+    JSON.stringify({ type: "event", length: Buffer.byteLength(event) }),
+    event,
+  ].join("\n");
+  const { origin, pathname } = new URL(stub.dsn("cup-app"));
+
+  const response = await fetch(`${origin}/api${pathname}/envelope/`, {
+    method: "POST",
+    headers: {
+      "Content-Encoding": "gzip",
+      "Content-Type": "application/x-sentry-envelope",
+      "X-Sentry-Auth": "Sentry sentry_version=7, sentry_key=public",
+    },
+    body: zlib.gzipSync(body),
+  });
+
+  expect(response.status).toBe(200);
+  expect(stub.errorEvents("cup-app")).toEqual([JSON.parse(event)]);
 });
 
 test("lists the streamed spans of a project", async ({ onTestFinished }) => {
