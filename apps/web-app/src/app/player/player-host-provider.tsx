@@ -15,7 +15,7 @@ import {
 } from "#src/app/player/player-host.js";
 import { authStateSnapshot, subscribeAuthState } from "#src/auth/account-session.js";
 import { fetchAudiobookForPlayer, getLocalPlaybackPosition } from "#src/data-fetching/reader.js";
-import { publishMediaMetadata } from "#src/platform/media-session.js";
+import { mediaSession } from "#src/platform/media-session.js";
 import { STOP_PLAYBACK_EVENT_NAME } from "#src/playback-events.js";
 
 const PlayerHostContext = React.createContext<PlayerHost | null>(null);
@@ -30,7 +30,7 @@ export function PlayerHostProvider({ children }: { children: React.ReactNode }) 
       new PlayerHost({
         createAudioElement: createNarrationAudioElement,
         createSession: createPlaybackSession,
-        publishMediaMetadata,
+        mediaSession,
         getAccount: readPlayerHostAccount,
         getLocalPosition: getLocalPlaybackPosition,
         fetchAudiobook: (conversionId) => fetchAudiobookForPlayer(conversionId),

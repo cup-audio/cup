@@ -11,6 +11,7 @@ export type NarrationAudioElement = EventTarget & {
   readonly ended: boolean;
   readonly seeking: boolean;
   readonly readyState: number;
+  readonly playbackRate: number;
   readonly error: { code: number } | null;
   play(): Promise<void>;
   pause(): void;
