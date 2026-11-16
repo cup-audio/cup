@@ -4,7 +4,6 @@ import type { NarrationTrack, PlaybackPosition } from "@cup/listener-api.routes"
 
 import { clampToTimeline, findUnitIndexAt } from "#src/app/player/audiobook-timeline.ts";
 import {
-  SAVE_RETRY_DELAY_MILLISECONDS,
   SAVE_RETRY_FAILURE_MESSAGE,
   type PlaybackSession,
 } from "#src/app/player/playback-session.ts";
@@ -31,6 +30,23 @@ export type NativeClosedReason =
   /** Android stopped the service for another reason. */
   | "serviceStopped";
 
+/**
+ * How the plugin's listening-position saves fare, by the web player's rules
+ * (`PlaybackSession.getSaveFailure`).
+ */
+export type NativePositionSave =
+  /** The last save succeeded, or none failed yet. */
+  | { status: "ok" }
+  /**
+   * Saves fail for a reason that can pass, such as a lost connection; the plugin retries the
+   * latest.
+   */
+  | { status: "failing" }
+  /** Saves still fail: a retry failed too, or saves have failed for the retry delay. */
+  | { status: "stillFailing" }
+  /** The server refused the last save for good, in its words. */
+  | { status: "refused"; refusal: string };
+
 /** What the Android app's plugin reports after every change of its ExoPlayer. */
 export type NativePlaybackState = {
   conversionId: string;
@@ -52,19 +68,11 @@ export type NativePlaybackState = {
    */
   error: "playback" | "trackUrlExpired" | null;
   /**
-   * The plugin ended the session without the page and dropped its media item; the position is the
-   * last one. It keeps reporting this state until the next `load`.
+   * Set when the plugin ended the session without the page and dropped its media item; the position
+   * is the last one. It keeps reporting this state until the next `load`.
    */
-  closed: boolean;
   closedReason: NativeClosedReason | null;
-  /**
-   * How the plugin's listening-position saves fare: `"failing"` for a reason that can pass, such as
-   * a lost connection, while it retries the latest; `"refused"` for good, in the server's words.
-   */
-  positionSave: "ok" | "failing" | "refused";
-  positionSaveRefusal: string | null;
-  /** When the saves started failing for a reason that can pass, by the page's clock. */
-  positionSaveFailingSince: number | null;
+  positionSave: NativePositionSave;
 };
 
 export type NativeLoadOptions = {
@@ -189,7 +197,7 @@ export function createRunningPlayerFinder(
       console.error("The media playback plugin did not report its state.", error);
       return null;
     }
-    if (!state || state.closed) {
+    if (!state || state.closedReason !== null) {
       return null;
     }
 
@@ -265,11 +273,8 @@ class NativeTrackPlayer implements Player {
         positionMilliseconds: session.initialPositionMilliseconds,
         positionReadAt: services.now(),
         error: null,
-        closed: false,
         closedReason: null,
-        positionSave: "ok",
-        positionSaveRefusal: null,
-        positionSaveFailingSince: null,
+        positionSave: { status: "ok" },
       };
       this.urls = start.urls;
       this.sendLoad(session.initialPositionMilliseconds);
@@ -299,7 +304,7 @@ class NativeTrackPlayer implements Player {
 
   play = () => {
     this.failure = null;
-    if (this.state.closed) {
+    if (this.isNativelyStopped()) {
       this.sendLoad(this.readPosition());
     }
     this.setState({
@@ -307,7 +312,6 @@ class NativeTrackPlayer implements Player {
       isBuffering: true,
       hasEnded: false,
       error: null,
-      closed: false,
       closedReason: null,
     });
     this.send(this.plugin.play());
@@ -315,7 +319,7 @@ class NativeTrackPlayer implements Player {
 
   pause = () => {
     this.setState(this.stateAt({ isPlaying: false, isBuffering: false }));
-    if (!this.state.closed) {
+    if (!this.isNativelyStopped()) {
       this.send(this.plugin.pause());
     }
   };
@@ -332,7 +336,7 @@ class NativeTrackPlayer implements Player {
   seekTo = (positionMilliseconds: number) => {
     const position = clampToTimeline(this.session.timeline, positionMilliseconds);
     this.setState(this.stateAt({ positionMilliseconds: position }));
-    if (!this.state.closed) {
+    if (!this.isNativelyStopped()) {
       this.send(this.plugin.seekTo({ positionMilliseconds: position }));
     }
   };
@@ -343,7 +347,7 @@ class NativeTrackPlayer implements Player {
       this.readPosition() + deltaMilliseconds,
     );
     this.setState(this.stateAt({ positionMilliseconds: position }));
-    if (!this.state.closed) {
+    if (!this.isNativelyStopped()) {
       this.send(this.plugin.skipBy({ deltaMilliseconds }));
     }
   };
@@ -352,7 +356,7 @@ class NativeTrackPlayer implements Player {
   replaceUrls = (narrationTrack: NarrationTrack, receivedAt: number) => {
     const urls = readNativeUrls(this.session.conversionId, narrationTrack, receivedAt);
     this.urls = urls;
-    if (!this.state.closed) {
+    if (!this.isNativelyStopped()) {
       this.send(
         this.plugin.replaceUrls({
           trackUrl: urls.trackUrl,
@@ -446,6 +450,11 @@ class NativeTrackPlayer implements Player {
     }
   }
 
+  /** The plugin ended its session without the page, so it has no media item. */
+  private isNativelyStopped() {
+    return this.state.closedReason !== null;
+  }
+
   /** The current state with the position read now, changed by `changes`. */
   private stateAt(changes: Partial<NativePlaybackState>): Partial<NativePlaybackState> {
     return {
@@ -505,24 +514,14 @@ class NativeTrackPlayer implements Player {
     };
   }
 
-  /**
-   * The plugin's save failure in the web player's words (`PlaybackSession.getSaveFailure`): a
-   * refusal in the server's, and a failure that can pass only once saves have failed for the retry
-   * delay, which the plugin's report after each failed retry shows.
-   */
+  /** The plugin's save failure in the web player's words (`PlaybackSession.getSaveFailure`). */
   private readSaveFailure(): string | null {
-    const { positionSave, positionSaveRefusal, positionSaveFailingSince } = this.state;
-    if (positionSave === "refused") {
-      return positionSaveRefusal;
+    const { positionSave } = this.state;
+    if (positionSave.status === "refused") {
+      return positionSave.refusal;
     }
-    if (
-      positionSave === "failing" &&
-      positionSaveFailingSince !== null &&
-      this.services.now() - positionSaveFailingSince >= SAVE_RETRY_DELAY_MILLISECONDS
-    ) {
-      return SAVE_RETRY_FAILURE_MESSAGE;
-    }
-    return null;
+    // A failure that can pass stays quiet until the plugin reports that saves still fail.
+    return positionSave.status === "stillFailing" ? SAVE_RETRY_FAILURE_MESSAGE : null;
   }
 
   /** Replaces the snapshot only when a value changed, as `useSyncExternalStore` re-renders. */

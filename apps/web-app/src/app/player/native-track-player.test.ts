@@ -8,7 +8,6 @@ import {
 } from "#src/app/player/native-track-player.ts";
 import {
   PlaybackSession,
-  SAVE_RETRY_DELAY_MILLISECONDS,
   SAVE_RETRY_FAILURE_MESSAGE,
   type PlayableAudiobook,
 } from "#src/app/player/playback-session.ts";
@@ -252,11 +251,8 @@ function stateOf(state: Partial<NativePlaybackState> = {}): NativePlaybackState 
     positionMilliseconds: 0,
     positionReadAt: 1_000_000,
     error: null,
-    closed: false,
     closedReason: null,
-    positionSave: "ok",
-    positionSaveRefusal: null,
-    positionSaveFailingSince: null,
+    positionSave: { status: "ok" },
     ...state,
   };
 }
@@ -471,44 +467,25 @@ test("every state the plugin reports writes its listening position into the cach
   plugin.emit(stateOf({ isPlaying: true, positionMilliseconds: 6_000 }));
   plugin.emit(stateOf({ positionMilliseconds: 11_500 }));
   // The last position of a native stop too, which the next Play on this page saves.
-  plugin.emit(stateOf({ positionMilliseconds: 2_000, closed: true, closedReason: "taskRemoved" }));
+  plugin.emit(stateOf({ positionMilliseconds: 2_000, closedReason: "taskRemoved" }));
 
   expect(cached).toEqual(["first unit-2+2000", "first unit-3+1500", "first unit-1+2000"]);
 });
 
-test("saves that fail for a reason that can pass show plain words once they have failed for the retry delay", () => {
-  const { host, plugin, player, clock } = createHost();
+test("saves that fail for a reason that can pass show plain words once the plugin reports they still fail", () => {
+  const { host, plugin, player } = createHost();
   host.showConversion("first", FIRST);
   host.playShown();
 
-  plugin.emit(stateOf({ positionSave: "failing", positionSaveFailingSince: clock.now }));
+  plugin.emit(stateOf({ positionSave: { status: "failing" } }));
   expect(player().getSnapshot().error).toBeNull();
 
-  clock.now += SAVE_RETRY_DELAY_MILLISECONDS;
-  // The plugin reports again after its retry failed.
-  plugin.emit(stateOf({ positionSave: "failing", positionSaveFailingSince: clock.now - 15_000 }));
+  // A retry failed too, or saves have failed for the retry delay.
+  plugin.emit(stateOf({ positionSave: { status: "stillFailing" } }));
   expect(player().getSnapshot().error).toBe(SAVE_RETRY_FAILURE_MESSAGE);
 
-  plugin.emit(stateOf({ positionSave: "ok" }));
+  plugin.emit(stateOf({ positionSave: { status: "ok" } }));
   expect(player().getSnapshot().error).toBeNull();
-});
-
-test("while saves keep failing during playback, the message shows once the retry delay passed", () => {
-  const { host, plugin, player, clock, tick } = createHost();
-  host.showConversion("first", FIRST);
-  host.playShown();
-  plugin.emit(
-    stateOf({
-      isPlaying: true,
-      positionSave: "failing",
-      positionSaveFailingSince: clock.now,
-    }),
-  );
-
-  clock.now += SAVE_RETRY_DELAY_MILLISECONDS;
-  tick();
-
-  expect(player().getSnapshot().error).toBe(SAVE_RETRY_FAILURE_MESSAGE);
 });
 
 test("a save the server refuses shows the server's words", () => {
@@ -516,23 +493,17 @@ test("a save the server refuses shows the server's words", () => {
   host.showConversion("first", FIRST);
   host.playShown();
 
-  plugin.emit(stateOf({ positionSave: "refused", positionSaveRefusal: "Audiobook not found." }));
+  plugin.emit(stateOf({ positionSave: { status: "refused", refusal: "Audiobook not found." } }));
 
   expect(player().getSnapshot().error).toBe("Audiobook not found.");
 });
 
 test("a playback error shows before a failing save", () => {
-  const { host, plugin, player, clock } = createHost();
+  const { host, plugin, player } = createHost();
   host.showConversion("first", FIRST);
   host.playShown();
 
-  plugin.emit(
-    stateOf({
-      error: "playback",
-      positionSave: "failing",
-      positionSaveFailingSince: clock.now - SAVE_RETRY_DELAY_MILLISECONDS,
-    }),
-  );
+  plugin.emit(stateOf({ error: "playback", positionSave: { status: "stillFailing" } }));
 
   expect(player().getSnapshot().error).toBe(MEDIA_ERROR_MESSAGE);
 });
@@ -610,7 +581,7 @@ test("after a native stop the audiobook stays loaded at the last position, and t
   host.playShown();
 
   // The listener swiped Cup from recents while it was paused.
-  plugin.emit(stateOf({ positionMilliseconds: 8_000, closed: true, closedReason: "taskRemoved" }));
+  plugin.emit(stateOf({ positionMilliseconds: 8_000, closedReason: "taskRemoved" }));
   expect(player().getSnapshot()).toMatchObject({
     isPlaying: false,
     positionMilliseconds: 8_000,
@@ -652,7 +623,6 @@ test("expired track URLs end the native session, and the next Play renews them, 
     stateOf({
       positionMilliseconds: 7_000,
       error: "trackUrlExpired",
-      closed: true,
       closedReason: "trackUrlExpired",
     }),
   );
@@ -687,7 +657,6 @@ test("a native stop the hidden page missed shows once the page becomes visible",
 
   plugin.currentState = stateOf({
     positionMilliseconds: 12_000,
-    closed: true,
     closedReason: "notificationDismissed",
   });
   becomeVisible();
@@ -791,7 +760,7 @@ test("taking a session over waits until the stored account is restored", async (
 
 test("a page that starts after a native stop has no session to take over", async () => {
   const { host, plugin, fetched } = createHost();
-  plugin.currentState = stateOf({ closed: true, closedReason: "taskRemoved" });
+  plugin.currentState = stateOf({ closedReason: "taskRemoved" });
 
   await host.adoptRunningPlayer();
 

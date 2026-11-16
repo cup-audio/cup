@@ -141,13 +141,18 @@ public class MediaPlaybackPlugin extends Plugin {
     @PluginMethod
     public void close(PluginCall call) {
         String position = call.getString("position");
-        if (!"save".equals(position) && !"discard".equals(position)) {
+        PlaybackEngine.PositionOnClose positionOnClose;
+        if ("save".equals(position)) {
+            positionOnClose = PlaybackEngine.PositionOnClose.SAVE;
+        } else if ("discard".equals(position)) {
+            positionOnClose = PlaybackEngine.PositionOnClose.DISCARD;
+        } else {
             call.reject("Closing needs the position to \"save\" or \"discard\".");
             return;
         }
         getBridge()
             .executeOnMainThread(() -> {
-                engine().close("save".equals(position));
+                engine().close(positionOnClose);
                 call.resolve();
             });
     }

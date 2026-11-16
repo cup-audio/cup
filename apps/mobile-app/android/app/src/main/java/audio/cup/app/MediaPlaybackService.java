@@ -103,7 +103,7 @@ public class MediaPlaybackService extends MediaSessionService {
     public void onTaskRemoved(@Nullable Intent rootIntent) {
         Player player = session == null ? null : session.getPlayer();
         if (!isPlaybackOngoing() || player == null || !player.isPlaying()) {
-            PlaybackEngine.get(this).stopNatively(PlaybackEngine.CLOSED_TASK_REMOVED);
+            PlaybackEngine.get(this).stopNatively(PlaybackEngine.ClosedReason.TASK_REMOVED);
         }
         super.onTaskRemoved(rootIntent);
     }
@@ -153,7 +153,7 @@ public class MediaPlaybackService extends MediaSessionService {
             if (!intent.getBooleanExtra(MediaNotification.NOTIFICATION_DISMISSED_EVENT_KEY, false)) {
                 return false;
             }
-            PlaybackEngine.get(MediaPlaybackService.this).stopNatively(PlaybackEngine.CLOSED_NOTIFICATION_DISMISSED);
+            PlaybackEngine.get(MediaPlaybackService.this).stopNatively(PlaybackEngine.ClosedReason.NOTIFICATION_DISMISSED);
             return true;
         }
     }

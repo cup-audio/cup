@@ -7,7 +7,8 @@ import java.util.ArrayDeque;
  * ({@code PlaybackSession} in {@code playback-session.ts}): saves are written in order through the
  * signed position URL, and only the latest save that failed for a reason that can pass is saved
  * again, after the retry delay or when the connection may be back, unless a newer save comes first.
- * A {@code 403} or {@code 404} refuses the save for good. Plain Java, so JVM unit tests cover it.
+ * Every {@code 4xx} answer but {@code 401} and {@code 429} refuses the save for good. Plain Java, so
+ * JVM unit tests cover it.
  *
  * <p>Must be used on one thread, which also receives the write callbacks.
  */
@@ -22,6 +23,12 @@ final class PositionSaves {
         OK,
         /** Saves fail for a reason that can pass, such as a lost connection; the latest is retried. */
         FAILING,
+        /**
+         * Saves still fail for a reason that can pass: a retry failed too, or saves have failed for
+         * {@link #SAVE_RETRY_DELAY_MILLISECONDS}. The page then tells the listener, as the web player
+         * does; it stays until a save succeeds or is refused.
+         */
+        STILL_FAILING,
         /** The server refused the last save for good, in the words of {@link #getRefusalDetail()}. */
         REFUSED,
     }
@@ -37,7 +44,7 @@ final class PositionSaves {
         /** Calls `callback` once after the delay, on the saves' thread; the returned task cancels it. */
         Runnable setRetryTimer(Runnable callback, long delayMilliseconds);
 
-        /** The status, the refusal or when the failures began changed, or another save failed. */
+        /** The status or the refusal changed. */
         void onSaveStateChanged();
     }
 
@@ -62,9 +69,10 @@ final class PositionSaves {
             if (httpStatus >= 200 && httpStatus < 300) {
                 return new Outcome(Status.OK, null);
             }
-            // The audiobook is gone or no longer this account's, or the account is blocked. An expired
-            // position URL (401) is retried: the page's next renewal replaces it.
-            if (httpStatus == 403 || httpStatus == 404) {
+            // A lasting refusal, as the web player reads every client error but too many requests,
+            // such as an audiobook that is gone or no longer this account's. An expired position URL
+            // (401) is retried instead: the page's next renewal replaces it.
+            if (httpStatus >= 400 && httpStatus < 500 && httpStatus != 401 && httpStatus != 429) {
                 return new Outcome(Status.REFUSED, refusalDetail == null ? "The server refused the save." : refusalDetail);
             }
             return new Outcome(Status.FAILING, null);
@@ -78,10 +86,13 @@ final class PositionSaves {
 
     private static final class SaveRequest {
         final ListeningPosition position;
+        /** Whether this retries a failed save, rather than saving what the listener's playback asked for. */
+        final boolean isRetry;
         final long saveNumber;
 
-        SaveRequest(ListeningPosition position, long saveNumber) {
+        SaveRequest(ListeningPosition position, boolean isRetry, long saveNumber) {
             this.position = position;
+            this.isRetry = isRetry;
             this.saveNumber = saveNumber;
         }
     }
@@ -112,7 +123,7 @@ final class PositionSaves {
 
     /** Saves a position on the narration track now. */
     void save(long positionMilliseconds) {
-        enqueueSave(positions.at(positionMilliseconds));
+        enqueueSave(positions.at(positionMilliseconds), false);
     }
 
     /** Saves during playback, at most every {@link #SAVE_INTERVAL_MILLISECONDS}. */
@@ -150,27 +161,21 @@ final class PositionSaves {
         return refusalDetail;
     }
 
-    /** When the saves started failing for a reason that can pass, or `null`. */
-    Long getFailingSince() {
-        return failingSince;
-    }
-
-    /** Whether the last save failed for a reason that can pass, so a final save may still succeed. */
+    /** Whether saves fail for a reason that can pass, so a final save may still succeed. */
     boolean isFailing() {
-        return status == Status.FAILING;
+        return status == Status.FAILING || status == Status.STILL_FAILING;
     }
 
-    private void enqueueSave(ListeningPosition position) {
+    private void enqueueSave(ListeningPosition position, boolean isRetry) {
         disarmRetry();
         latestSaveNumber += 1;
         lastSavedAt = services.now();
-        queue.add(new SaveRequest(position, latestSaveNumber));
+        queue.add(new SaveRequest(position, isRetry, latestSaveNumber));
         writeNext();
     }
 
     private void retry() {
-        ListeningPosition position = retryPosition;
-        enqueueSave(position);
+        enqueueSave(retryPosition, true);
     }
 
     private void writeNext() {
@@ -204,24 +209,26 @@ final class PositionSaves {
         if (failingSince == null) {
             failingSince = services.now();
         }
-        if (!setStatus(Status.FAILING, null) && !isClosed) {
-            // The page words a failure once saves have failed for the retry delay, which it can only
-            // tell from a report after each failed save.
-            services.onSaveStateChanged();
+        // During playback, newer saves replace the retry every few seconds; they stay quiet until
+        // saves have failed for as long as the retry delay.
+        boolean hasFailedForRetryDelay = services.now() - failingSince >= SAVE_RETRY_DELAY_MILLISECONDS;
+        if (request.isRetry || hasFailedForRetryDelay) {
+            setStatus(Status.STILL_FAILING, null);
+        } else if (status == Status.OK) {
+            // A refusal, or a failure the page tells, stays until a save succeeds, as on the web.
+            setStatus(Status.FAILING, null);
         }
         armRetry(request.position);
     }
 
-    /** Returns whether it reported a change. */
-    private boolean setStatus(Status nextStatus, String nextRefusalDetail) {
+    private void setStatus(Status nextStatus, String nextRefusalDetail) {
         boolean isUnchanged = nextStatus == status && equalOrBothNull(nextRefusalDetail, refusalDetail);
         status = nextStatus;
         refusalDetail = nextRefusalDetail;
         if (isUnchanged || isClosed) {
-            return false;
+            return;
         }
         services.onSaveStateChanged();
-        return true;
     }
 
     private void armRetry(ListeningPosition position) {

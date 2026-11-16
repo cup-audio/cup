@@ -131,7 +131,6 @@ public class PositionSavesTest {
         services.answer(NOT_CONNECTED);
         assertEquals(PositionSaves.SAVE_RETRY_DELAY_MILLISECONDS, services.retryDelay);
         assertEquals(PositionSaves.Status.FAILING, saves.getStatus());
-        assertEquals(Long.valueOf(1_000_000), saves.getFailingSince());
 
         services.fireRetryTimer();
         services.answer(SAVED);
@@ -139,7 +138,6 @@ public class PositionSavesTest {
         assertEquals(List.of(POSITION_URL + " unit-1+1000", POSITION_URL + " unit-1+1000"), services.sent);
         assertNull(services.retryTimer);
         assertEquals(PositionSaves.Status.OK, saves.getStatus());
-        assertNull(saves.getFailingSince());
     }
 
     @Test
@@ -193,37 +191,87 @@ public class PositionSavesTest {
     }
 
     @Test
-    public void failuresReportWhenTheyBeganUntilASaveSucceeds() {
+    public void aFailedRetryReportsThatSavesStillFailUntilASaveSucceeds() {
         FakeServices services = new FakeServices();
         PositionSaves saves = new PositionSaves(POSITIONS, POSITION_URL, services);
 
         saves.save(1_000);
         services.answer(NOT_CONNECTED);
-        services.now += PositionSaves.SAVE_INTERVAL_MILLISECONDS;
-        saves.save(2_000);
-        services.answer(NOT_CONNECTED);
-
-        // The page shows its message once saves have failed for the retry delay, from this time.
-        assertEquals(Long.valueOf(1_000_000), saves.getFailingSince());
+        // The page stays quiet about a first failure, as the web player does.
+        assertEquals(PositionSaves.Status.FAILING, saves.getStatus());
         assertTrue(saves.isFailing());
 
-        saves.save(3_000);
+        services.fireRetryTimer();
+        services.answer(NOT_CONNECTED);
+        assertEquals(PositionSaves.Status.STILL_FAILING, saves.getStatus());
+        assertTrue(saves.isFailing());
+
+        services.fireRetryTimer();
         services.answer(SAVED);
         assertEquals(PositionSaves.Status.OK, saves.getStatus());
-        assertNull(saves.getFailingSince());
         assertFalse(saves.isFailing());
     }
 
     @Test
-    public void everyFailedSaveReportsTheStateAgainSoThePageCanShowTheFailure() {
+    public void aRetryOnReconnectThatFailsReportsThatSavesStillFailBeforeTheRetryDelay() {
+        FakeServices services = new FakeServices();
+        PositionSaves saves = new PositionSaves(POSITIONS, POSITION_URL, services);
+
+        saves.save(1_000);
+        services.answer(NOT_CONNECTED);
+        services.now += 1_000;
+        saves.reconnected();
+        services.answer(NOT_CONNECTED);
+
+        assertEquals(PositionSaves.Status.STILL_FAILING, saves.getStatus());
+    }
+
+    @Test
+    public void newSavesThatFailForTheRetryDelayReportThatSavesStillFail() {
+        FakeServices services = new FakeServices();
+        PositionSaves saves = new PositionSaves(POSITIONS, POSITION_URL, services);
+
+        saves.save(1_000);
+        services.answer(NOT_CONNECTED);
+        services.now += PositionSaves.SAVE_RETRY_DELAY_MILLISECONDS - 1;
+        saves.save(2_000);
+        services.answer(NOT_CONNECTED);
+        assertEquals(PositionSaves.Status.FAILING, saves.getStatus());
+
+        services.now += 1;
+        saves.save(3_000);
+        services.answer(NOT_CONNECTED);
+        assertEquals(PositionSaves.Status.STILL_FAILING, saves.getStatus());
+    }
+
+    @Test
+    public void aNewSaveThatFailsKeepsReportingThatSavesStillFail() {
+        FakeServices services = new FakeServices();
+        PositionSaves saves = new PositionSaves(POSITIONS, POSITION_URL, services);
+
+        saves.save(1_000);
+        services.answer(NOT_CONNECTED);
+        saves.reconnected();
+        services.answer(NOT_CONNECTED);
+        // Within the retry delay of the first failure, but saves still fail.
+        saves.save(2_000);
+        services.answer(NOT_CONNECTED);
+
+        assertEquals(PositionSaves.Status.STILL_FAILING, saves.getStatus());
+    }
+
+    @Test
+    public void theStateIsReportedOnlyWhenTheStatusChanges() {
         FakeServices services = new FakeServices();
         PositionSaves saves = new PositionSaves(POSITIONS, POSITION_URL, services);
 
         saves.save(1_000);
         services.answer(NOT_CONNECTED);
         assertEquals(1, services.stateChanges);
+        saves.save(2_000);
+        services.answer(NOT_CONNECTED);
+        assertEquals(1, services.stateChanges);
 
-        services.now += PositionSaves.SAVE_RETRY_DELAY_MILLISECONDS;
         services.fireRetryTimer();
         services.answer(NOT_CONNECTED);
         assertEquals(2, services.stateChanges);
@@ -231,15 +279,14 @@ public class PositionSavesTest {
         services.fireRetryTimer();
         services.answer(SAVED);
         assertEquals(3, services.stateChanges);
-        // A success after a success changes nothing.
-        saves.save(2_000);
+        saves.save(3_000);
         services.answer(SAVED);
         assertEquals(3, services.stateChanges);
     }
 
     @Test
-    public void aForbiddenOrMissingAudiobookRefusesTheSaveInTheServersWordsWithoutRetrying() {
-        for (int status : new int[] { 403, 404 }) {
+    public void everyClientErrorButAnExpiredUrlOrTooManyRequestsRefusesTheSaveInTheServersWordsWithoutRetrying() {
+        for (int status : new int[] { 400, 403, 404, 409, 422 }) {
             FakeServices services = new FakeServices();
             PositionSaves saves = new PositionSaves(POSITIONS, POSITION_URL, services);
 
@@ -269,7 +316,7 @@ public class PositionSavesTest {
     }
 
     @Test
-    public void serverFailuresAndOtherAnswersAreRetried() {
+    public void anExpiredUrlTooManyRequestsAndServerFailuresAreRetried() {
         for (int status : new int[] { 401, 429, 500, 503 }) {
             FakeServices services = new FakeServices();
             PositionSaves saves = new PositionSaves(POSITIONS, POSITION_URL, services);

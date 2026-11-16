@@ -20,7 +20,6 @@ import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy;
 import com.getcapacitor.JSObject;
-import java.util.Locale;
 
 /**
  * The narration track's engine in the Android app: one Media3 ExoPlayer for the whole process, so
@@ -35,8 +34,9 @@ import java.util.Locale;
  *
  * <p>The session ends without the page when the listener swipes Cup from recents while paused,
  * swipes the notification away, or the URLs can no longer play: they expired while paused, or the
- * server refused them. The engine then drops its media item and reports a {@code closed} state with
- * the reason and the last position, which it keeps for {@code getState} until the next load.
+ * server refused them. The engine then drops its media item and reports a state with the
+ * {@link ClosedReason} and the last position, which it keeps for {@code getState} until the next
+ * load.
  *
  * <p>Must be used on the main thread.
  */
@@ -47,14 +47,32 @@ final class PlaybackEngine {
         void onState(JSObject state);
     }
 
-    /** The listener swiped Cup from recents while it was paused. */
-    static final String CLOSED_TASK_REMOVED = "taskRemoved";
-    /** The listener swiped the notification away, after the service left the foreground. */
-    static final String CLOSED_NOTIFICATION_DISMISSED = "notificationDismissed";
-    /** The URLs expired while paused, or the server refused the track URL. */
-    static final String CLOSED_TRACK_URL_EXPIRED = "trackUrlExpired";
-    /** Android stopped the service for another reason. */
-    static final String CLOSED_SERVICE_STOPPED = "serviceStopped";
+    /** Why the engine ended its session without the page; {@code NativeClosedReason} on the page. */
+    enum ClosedReason {
+        /** The listener swiped Cup from recents while it was paused. */
+        TASK_REMOVED("taskRemoved"),
+        /** The listener swiped the notification away, after the service left the foreground. */
+        NOTIFICATION_DISMISSED("notificationDismissed"),
+        /** The URLs expired while paused, or the server refused the track URL. */
+        TRACK_URL_EXPIRED("trackUrlExpired"),
+        /** Android stopped the service for another reason. */
+        SERVICE_STOPPED("serviceStopped");
+
+        /** The reason as the page's `state` events name it. */
+        final String wireName;
+
+        ClosedReason(String wireName) {
+            this.wireName = wireName;
+        }
+    }
+
+    /** What closing for the page does with the position; {@code PositionOnClose} on the page. */
+    enum PositionOnClose {
+        /** Saves the position one last time. */
+        SAVE,
+        /** Saves nothing, since a save would race the audiobook's deletion. */
+        DISCARD,
+    }
 
     /** How far the notification's back and forward buttons skip, as Cup's player does. */
     private static final long SKIP_MILLISECONDS = 15_000;
@@ -295,11 +313,11 @@ final class PlaybackEngine {
      * position one last time, or without saving when the loaded audiobook is deleted or a starting
      * page cannot take the session over, since a save would race the deletion. Reports nothing.
      */
-    void close(boolean shouldSave) {
+    void close(PositionOnClose position) {
         ExoPlayer exoPlayer = player;
         Loaded audiobook = loaded;
         if (exoPlayer != null && audiobook != null) {
-            if (shouldSave) {
+            if (position == PositionOnClose.SAVE) {
                 // The position URL authorizes this save after the listener's session is gone.
                 audiobook.saves.save(exoPlayer.getCurrentPosition());
             }
@@ -324,9 +342,9 @@ final class PlaybackEngine {
 
     /**
      * Ends the session without the page, for `reason`: drops the media item, stops the service, which
-     * removes the notification, and reports a `closed` state with the last position.
+     * removes the notification, and reports the closed state with the last position.
      */
-    void stopNatively(String reason) {
+    void stopNatively(ClosedReason reason) {
         if (player == null || loaded == null) {
             return;
         }
@@ -334,9 +352,8 @@ final class PlaybackEngine {
         JSObject state = readLiveState(false);
         state.put("isPlaying", false);
         state.put("isBuffering", false);
-        state.put("error", CLOSED_TRACK_URL_EXPIRED.equals(reason) ? "trackUrlExpired" : JSObject.NULL);
-        state.put("closed", true);
-        state.put("closedReason", reason);
+        state.put("error", reason == ClosedReason.TRACK_URL_EXPIRED ? "trackUrlExpired" : JSObject.NULL);
+        state.put("closedReason", reason.wireName);
         releasePlayer();
         closedState = state;
         if (listener != null) {
@@ -356,8 +373,7 @@ final class PlaybackEngine {
         JSObject state = readLiveState(false);
         state.put("isPlaying", false);
         state.put("isBuffering", false);
-        state.put("closed", true);
-        state.put("closedReason", CLOSED_SERVICE_STOPPED);
+        state.put("closedReason", ClosedReason.SERVICE_STOPPED.wireName);
         // The service released the player already.
         forgetPlayer();
         closedState = state;
@@ -368,7 +384,7 @@ final class PlaybackEngine {
 
     /**
      * Before a native stop, tries one final save unless the last one succeeded or the URLs expired.
-     * If it fails, the position is lost here, but the `closed` state reports it to the page.
+     * If it fails, the position is lost here, but the closed state reports it to the page.
      */
     private void finishSaves(long positionMilliseconds) {
         Loaded audiobook = loaded;
@@ -453,7 +469,7 @@ final class PlaybackEngine {
             return;
         }
         if (audiobook.expiry.hasExpired(System.currentTimeMillis())) {
-            stopNatively(CLOSED_TRACK_URL_EXPIRED);
+            stopNatively(ClosedReason.TRACK_URL_EXPIRED);
         } else {
             updateExpiryCheck();
         }
@@ -511,15 +527,30 @@ final class PlaybackEngine {
         state.put("positionMilliseconds", exoPlayer.getCurrentPosition());
         state.put("positionReadAt", System.currentTimeMillis());
         state.put("error", hasPlaybackError ? "playback" : JSObject.NULL);
-        state.put("closed", false);
         state.put("closedReason", JSObject.NULL);
-        PositionSaves saves = audiobook.saves;
-        String refusal = saves.getRefusalDetail();
-        Long failingSince = saves.getFailingSince();
-        state.put("positionSave", saves.getStatus().name().toLowerCase(Locale.ROOT));
-        state.put("positionSaveRefusal", refusal == null ? JSObject.NULL : refusal);
-        state.put("positionSaveFailingSince", failingSince == null ? JSObject.NULL : failingSince);
+        state.put("positionSave", readPositionSave(audiobook.saves));
         return state;
+    }
+
+    /** How the saves fare, as {@code NativePositionSave} on the page. */
+    private static JSObject readPositionSave(PositionSaves saves) {
+        JSObject positionSave = new JSObject();
+        switch (saves.getStatus()) {
+            case OK:
+                positionSave.put("status", "ok");
+                break;
+            case FAILING:
+                positionSave.put("status", "failing");
+                break;
+            case STILL_FAILING:
+                positionSave.put("status", "stillFailing");
+                break;
+            case REFUSED:
+                positionSave.put("status", "refused");
+                positionSave.put("refusal", saves.getRefusalDetail());
+                break;
+        }
+        return positionSave;
     }
 
     /** Paused for a transient loss of audio focus, such as a call, ExoPlayer still wants to play. */
@@ -642,7 +673,7 @@ final class PlaybackEngine {
                 handler.post(() -> {
                     if (player == exoPlayer) {
                         isStopping = false;
-                        stopNatively(CLOSED_TRACK_URL_EXPIRED);
+                        stopNatively(ClosedReason.TRACK_URL_EXPIRED);
                     }
                 });
                 return;

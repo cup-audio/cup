@@ -356,8 +356,9 @@ test("signing out saves the position one last time through the position URL and 
   webView = await device.webView();
   const scheduleDeletion = webView.$("button=Schedule deletion");
   await scheduleDeletion.waitForEnabled({ timeout: 30_000 });
-  // The player paused on the way here (on the 2026-11-16 run, about 2 s after Play), but its
-  // session runs on until the sign-out closes it.
+  // "Delete account…" signed in afresh, which pauses the player as every sign-in does, on the web
+  // too: `signInAgain()` sends `SIGN_IN`, whose `stopPlayback` dispatches `cup:stop-playback`, which
+  // `host.pause` handles. The paused session runs on until the sign-out closes it.
   expect(await cupMediaPlaybackService(device)).toBeDefined();
   const savesBeforeSignOut = positionSaves(conversionId).length;
   await scheduleDeletion.click();
