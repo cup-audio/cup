@@ -11,6 +11,7 @@
     }
   },
   "scripts": {
+    "android:release": "node scripts/android-release.mts",
     "android:run": "node scripts/android-run.mts",
     "android:upload-key:create": "node scripts/android-upload-key-create.mts",
     "build": "turbo run turbo:build && pnpm run native:sync",
@@ -19,7 +20,11 @@
     "lint:fix": "turbo run turbo:lint:fix",
     "native:sync": "cap sync android && cap sync ios",
     "symbols:upload": "upload-shell-symbols --web-source-map-dir ../web-app/dist/source-maps --android-web-dir android/app/src/main/assets/public",
-    "test": "node scripts/test-jvm.mts",
+    "test": "pnpm run test:scripts && pnpm run test:jvm",
+    "test:jvm": "node scripts/test-jvm.mts",
+    "test:scripts": "vitest run",
+    "test:scripts:coverage": "vitest run --coverage",
+    "test:scripts:watch": "vitest",
     "turbo:build": "tsc --build",
     "turbo:lint": "oxlint --type-aware --max-warnings 0 .",
     "turbo:lint:fix": "pnpm run turbo:lint --fix",
@@ -40,10 +45,15 @@
     "@cup/config-oxlint": "workspace:*",
     "@cup/source-maps": "workspace:*",
     "@patricktree-stack/config-typescript": "workspace:*",
+    "@patricktree-stack/config-vitest": "workspace:*",
     "@types/node": "catalog:",
     "@typescript/native": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
     "oxlint": "catalog:",
     "oxlint-tsgolint": "catalog:",
-    "typescript": "catalog:"
+    "temporal-polyfill": "^1.0.5",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
   }
 }

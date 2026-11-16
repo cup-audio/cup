@@ -7,18 +7,17 @@
 import childProcess from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 
-const MOBILE_APP_ROOT = path.resolve(import.meta.dirname, "..");
-// `tooling/env-setup` copies this file into linked worktrees, and `android/.gitignore` keeps it out of Git.
-const KEYSTORE = path.join(MOBILE_APP_ROOT, "android", "upload-keystore.jks");
-const KEYCHAIN_SERVICE = "cup-android-upload-key";
-const KEYCHAIN_ACCOUNT = os.userInfo().username;
-const KEY_ALIAS = "upload";
-const PASSWORD_VARIABLE = "CUP_UPLOAD_KEYSTORE_PASSWORD";
-/** `security find-generic-password` exits with this status when no item matches. */
-const SECURITY_ITEM_NOT_FOUND = 44;
+import {
+  hasKeychainItem,
+  KEY_ALIAS,
+  KEYCHAIN_ACCOUNT,
+  KEYCHAIN_ITEM_DESCRIPTION,
+  KEYCHAIN_SERVICE,
+  KEYSTORE,
+  PASSWORD_VARIABLE,
+} from "#scripts/release/upload-key.mts";
 
 if (process.platform !== "darwin") {
   fail("The upload key's password lives in the macOS Keychain, so create the key on a Mac.");
@@ -28,11 +27,10 @@ const keytool =
   process.env["JAVA_HOME"] === undefined
     ? "keytool"
     : path.join(process.env["JAVA_HOME"], "bin", "keytool");
-const keychainItem = `the Keychain generic-password item with service "${KEYCHAIN_SERVICE}" and account "${KEYCHAIN_ACCOUNT}"`;
 
 const existing = [
   ...(fs.existsSync(KEYSTORE) ? [`the keystore ${KEYSTORE}`] : []),
-  ...(hasKeychainItem() ? [keychainItem] : []),
+  ...(hasKeychainItem() ? [KEYCHAIN_ITEM_DESCRIPTION] : []),
 ];
 if (existing.length > 0) {
   fail(
@@ -82,7 +80,7 @@ const added = childProcess.spawnSync("security", ["-i"], {
 if (added.status !== 0 || !hasKeychainItem()) {
   fs.rmSync(KEYSTORE);
   fail(
-    `Storing the password in ${keychainItem} failed, so the new keystore was deleted again:\n${added.stderr}`,
+    `Storing the password in ${KEYCHAIN_ITEM_DESCRIPTION} failed, so the new keystore was deleted again:\n${added.stderr}`,
   );
 }
 
@@ -118,26 +116,8 @@ Certificate fingerprints:
 
 Back up both as one entry in your password manager:
   - the keystore file ${KEYSTORE}
-  - its password, in ${keychainItem}
+  - its password, in ${KEYCHAIN_ITEM_DESCRIPTION}
     (show it with \`security find-generic-password -s ${KEYCHAIN_SERVICE} -a ${KEYCHAIN_ACCOUNT} -w\`)`);
-
-function hasKeychainItem(): boolean {
-  // Without `-w` or `-g`, `security` prints the item's attributes but never its password.
-  const result = childProcess.spawnSync(
-    "security",
-    ["find-generic-password", "-s", KEYCHAIN_SERVICE, "-a", KEYCHAIN_ACCOUNT],
-    { encoding: "utf8" },
-  );
-  if (result.status === 0) {
-    return true;
-  }
-  if (result.status === SECURITY_ITEM_NOT_FOUND) {
-    return false;
-  }
-  return fail(
-    `Looking up ${keychainItem} failed with exit status ${String(result.status)}:\n${result.stderr}`,
-  );
-}
 
 function run(command: string, args: readonly string[], env: NodeJS.ProcessEnv): string {
   const result = childProcess.spawnSync(command, args, { env, encoding: "utf8" });

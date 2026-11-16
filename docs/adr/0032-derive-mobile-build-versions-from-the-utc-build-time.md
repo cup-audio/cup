@@ -4,7 +4,7 @@ status: accepted
 
 # Derive mobile build versions from the UTC build time
 
-Every upload to Google Play needs a `versionCode` higher than any uploaded before, and Play never accepts a code twice; `versionName` is what testers see. Until now both were hard-coded in the Android app (`1` and `"1.0"`), as were iOS's `CURRENT_PROJECT_VERSION` and `MARKETING_VERSION`, and no other part of Cup carries a version. The map [patricktree/cup#355](https://github.com/patricktree/cup/issues/355), answering Linear CUP-80, decided the scheme on 2026-11-14 in [#359](https://github.com/patricktree/cup/issues/359), so that Linear CUP-79 can reuse it for iOS. It is not implemented yet.
+Every upload to Google Play needs a `versionCode` higher than any uploaded before, and Play never accepts a code twice; `versionName` is what testers see. Until now both were hard-coded in the Android app (`1` and `"1.0"`), as were iOS's `CURRENT_PROJECT_VERSION` and `MARKETING_VERSION`, and no other part of Cup carries a version. The map [patricktree/cup#355](https://github.com/patricktree/cup/issues/355), answering Linear CUP-80, decided the scheme on 2026-11-14 in [#359](https://github.com/patricktree/cup/issues/359), so that Linear CUP-79 can reuse it for iOS. Android implements it in `android:release` since [#442](https://github.com/patricktree/cup/issues/442) (2026-11-16); iOS does not yet.
 
 ## Decision
 

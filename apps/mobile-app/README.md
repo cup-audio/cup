@@ -92,6 +92,29 @@ Right after creating the key, store the keystore file and its password as one en
 
 Git ignores the keystore (`*.jks` in `android/.gitignore`). In a linked worktree, `pnpm install` copies it from the main checkout when the main checkout has one and the worktree doesn't, as it does for `.env.local`; the Keychain item is shared by every checkout on the Mac.
 
+### Build a release
+
+On the operator's Mac, with `JAVA_HOME` set as for [Android locally](#android-locally), build a release-signed Android App Bundle from the checked-out commit:
+
+```sh
+pnpm --filter '@cup/mobile-app' android:release --skip-upload
+```
+
+The command runs `env:check`, checks the release preconditions, builds the web app, syncs Capacitor for Android, and runs Gradle's `bundleRelease`. It prints the bundle's path, `android/app/build/outputs/bundle/release/app-release.aab`, and the release name. No [validation gate](../../AGENTS.md#validation-gates) runs; pick the one that fits the moment yourself. Uploading isn't implemented yet: without `--skip-upload` the command stops before doing anything, so upload the bundle in the Play Console.
+
+Each build's version comes from its UTC build time ([ADR 0029](../../docs/adr/0029-derive-mobile-build-versions-from-the-utc-build-time.md)): `versionCode` is the whole minutes since `2026-01-01T00:00Z` and `versionName` the date as `YYYY.MM.DD`. The release name is `<versionName> (<7-character short SHA>)`, for example `2026.11.14 (8e5c815)`; use it as the Play release name, so that you can tell which commit a tester runs. Debug builds keep `versionCode 1` and `versionName "0.0.0"`.
+
+Before Gradle starts, the command refuses, listing every failure at once and pointing here, when:
+
+- tracked files have changes (ignored and untracked files don't count), so the release name would not describe what testers run;
+- `HEAD` is on no remote-tracking branch, so the commit might become unreachable; any pushed branch, including a feature branch, is fine;
+- the upload keystore `android/upload-keystore.jks` is missing;
+- the Keychain item `cup-android-upload-key` is missing.
+
+The command reads the password from the Keychain, where macOS may ask to allow access, and hands it and the keystore's path to Gradle as the environment variables `CUP_UPLOAD_KEYSTORE_PASSWORD` and `CUP_UPLOAD_KEYSTORE_PATH`, and the version as the Gradle properties `cupVersionCode` and `cupVersionName`. A release task run directly, such as `./gradlew bundleRelease`, fails without any of the four and points to `android:release`, so Gradle never produces an unsigned or unversioned release bundle. Debug tasks need none of them.
+
+Check that a bundle is signed with the upload key with `keytool -printcert -jarfile <bundle>`, whose certificate owner is `CN=Cup`, or `jarsigner -verify <bundle>`.
+
 ## iOS
 
 After building, open `apps/mobile-app/ios/App/App.xcodeproj` in Xcode and choose a simulator or a device. The project uses Swift Package Manager, matching Content Relay. Both targets, `App` and `CupShare`, sign automatically with the Apple Developer team `4GQ2V3WJW8`, which owns both bundle identifiers; signing for a device or the App Store needs an Xcode account in that team.
