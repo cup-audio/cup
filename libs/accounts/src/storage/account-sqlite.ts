@@ -627,6 +627,34 @@ export class AccountSqlite {
       .map((row) => accountConversionDeletionSchema.parse(row));
   }
 
+  /** The marked conversions the stuck-conversion-deletion check has not reported. */
+  unreportedConversionDeletions(): AccountConversionDeletion[] {
+    return this.database
+      .select({
+        conversionId: accountConversions.conversionId,
+        deletingSinceMs: accountConversions.deletingSinceMs,
+      })
+      .from(accountConversions)
+      .where(
+        and(
+          isNotNull(accountConversions.deletingSinceMs),
+          isNull(accountConversions.deletionStuckReportedAtMs),
+        ),
+      )
+      .orderBy(accountConversions.deletingSinceMs, accountConversions.conversionId)
+      .all()
+      .map((row) => accountConversionDeletionSchema.parse(row));
+  }
+
+  /** Records that the stuck-conversion-deletion check reported the marked conversion. */
+  markDeletionStuckReported(conversionId: string, nowMs: number): void {
+    this.database
+      .update(accountConversions)
+      .set({ deletionStuckReportedAtMs: nowMs })
+      .where(eq(accountConversions.conversionId, conversionId))
+      .run();
+  }
+
   /** A conversion marked for deletion reads as missing, which also fences its execution. */
   getConversion(conversionId: string):
     | (AccountConversion & {

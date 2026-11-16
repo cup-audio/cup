@@ -88,6 +88,13 @@ export default {
         tag: "0011_conversion_stuck_check",
         breakpoints: true,
       },
+      {
+        idx: 12,
+        version: "6",
+        when: 1794836920929,
+        tag: "0012_conversion_deletion_stuck_check",
+        breakpoints: true,
+      },
     ],
   },
   migrations: {
@@ -111,5 +118,6 @@ export default {
     m0010: "ALTER TABLE `account_conversions` ADD `narration_language` text;",
     m0011:
       "ALTER TABLE `account_conversions` ADD `stage_started_at_ms` integer;--> statement-breakpoint\nALTER TABLE `account_conversions` ADD `stuck_reported_at_ms` integer;--> statement-breakpoint\n-- Preparation started at acceptance, synthesis when the conversion became ready; a retry before this\n-- migration is not recorded, so a retried conversion counts from its acceptance.\nUPDATE `account_conversions` SET `stage_started_at_ms` = coalesce(`completed_at_ms`, `created_at_ms`);",
+    m0012: "ALTER TABLE `account_conversions` ADD `deletion_stuck_reported_at_ms` integer;",
   },
 };

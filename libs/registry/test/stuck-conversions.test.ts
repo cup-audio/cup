@@ -1,5 +1,6 @@
 /*
- * The stuck-conversion check on both owners' alarms, against a Sentry stub (`@cup/sentry-stub`).
+ * The stuck-conversion check on both owners' alarms and the account's stuck-conversion-deletion
+ * check, against a Sentry stub (`@cup/sentry-stub`).
  * Both owners run Sentry-wrapped, as in the Worker, and each alarm pass runs at a chosen `nowMs`.
  * A pass that sends nothing is followed by one that reports a second conversion of the same owner,
  * so waiting for that event shows that the quiet pass has flushed too.
@@ -248,6 +249,40 @@ test(
   TEST_TIMEOUT_MS,
 );
 
+test(
+  "a conversion deletion still marked 1 hour after it was marked is reported once",
+  async () => {
+    const { account, accountId } = await createAccount();
+    // Marked one and five minutes apart, so that each pass after the first report also reports a
+    // different deletion before any repeat: Sentry's Dedupe drops only an immediate repeat.
+    const first = await startStalledDeletion(account, accountId, T0_MS);
+    const second = await startStalledDeletion(account, accountId, T0_MS + MINUTE_MS);
+    const third = await startStalledDeletion(account, accountId, T0_MS + 5 * MINUTE_MS);
+
+    await account.reconcileAtForTest(T0_MS + 59 * MINUTE_MS);
+    await account.reconcileAtForTest(T0_MS + 62 * MINUTE_MS);
+    await waitForDeletionStuckEvents(second, 1);
+    expect(deletionStuckEvents(first)).toEqual([
+      expect.objectContaining({
+        level: "error",
+        fingerprint: ["conversion-deletion-stuck"],
+        tags: expect.objectContaining({
+          "cup.conversion.id": first,
+          "cup.component": "account-durable-object",
+        }),
+      }),
+    ]);
+    expect(deletionStuckEvents(third)).toEqual([]);
+
+    await account.reconcileAtForTest(T0_MS + 66 * MINUTE_MS);
+    await waitForDeletionStuckEvents(third, 1);
+    expect(deletionStuckEvents(first)).toHaveLength(1);
+    expect(deletionStuckEvents(second)).toHaveLength(1);
+    expect(deletionStuckEvents(third)).toHaveLength(1);
+  },
+  TEST_TIMEOUT_MS,
+);
+
 async function createAccount() {
   const accountId = crypto.randomUUID();
   const account = bindings.SENTRY_ACCOUNTS.get(bindings.SENTRY_ACCOUNTS.idFromName(accountId));
@@ -295,6 +330,27 @@ async function settleAccountConversionReady(
     1,
     NARRATION_TEXT_CHARACTERS_BY_SEGMENT,
   );
+}
+
+/**
+ * Marks a conversion for deletion at `markedAtMs` behind a writer whose put never lands, so every
+ * cleanup pass waits on the undrained writer and the conversion stays marked.
+ */
+async function startStalledDeletion(
+  account: Awaited<ReturnType<typeof createAccount>>["account"],
+  accountId: string,
+  markedAtMs: number,
+) {
+  const conversionId = await startAccountConversion(account, markedAtMs);
+  const executionPrefix = `accounts/${accountId}/conversions/${conversionId}/executions/1/`;
+  await account.prepareArtifactWrite(
+    crypto.randomUUID(),
+    1,
+    executionPrefix,
+    executionPrefix + "audiobook.mp3",
+  );
+  expect(await account.deleteConversion(conversionId, markedAtMs)).toEqual({ result: "marked" });
+  return conversionId;
 }
 
 async function createGrant() {
@@ -353,6 +409,23 @@ function waitForStuckEvents(conversionId: string, count: number) {
   return stub.waitFor(
     `${count} stuck-conversion event(s) of ${conversionId}`,
     () => stuckEvents(conversionId).length >= count,
+  );
+}
+
+function deletionStuckEvents(conversionId: string): SentryErrorEvent[] {
+  return stub
+    .errorEvents("cup-worker")
+    .filter(
+      (event) =>
+        event.tags?.["cup.conversion.id"] === conversionId &&
+        JSON.stringify(event["fingerprint"]) === JSON.stringify(["conversion-deletion-stuck"]),
+    );
+}
+
+function waitForDeletionStuckEvents(conversionId: string, count: number) {
+  return stub.waitFor(
+    `${count} stuck-conversion-deletion event(s) of ${conversionId}`,
+    () => deletionStuckEvents(conversionId).length >= count,
   );
 }
 

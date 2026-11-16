@@ -1,0 +1,1 @@
+ALTER TABLE `account_conversions` ADD `deletion_stuck_reported_at_ms` integer;

@@ -67,6 +67,9 @@ export const accountConversions = sqliteTable(
     stageStartedAtMs: integer("stage_started_at_ms"),
     // Set when the stuck-conversion check reported the current stage; a stage start clears it.
     stuckReportedAtMs: integer("stuck_reported_at_ms"),
+    // Set when the stuck-conversion-deletion check reported the marked conversion; it never clears,
+    // because the row goes once the cleanup finishes.
+    deletionStuckReportedAtMs: integer("deletion_stuck_reported_at_ms"),
   },
   (table) => [
     check("account_conversion_status", sql`${table.status} IN ('pending', 'ready', 'failed')`),

@@ -11,7 +11,11 @@ import {
   createConversionArtifactPrefix,
   createSegmentWorkflowId,
 } from "@cup/conversion-contracts";
-import { logEvent, reportStuckConversions } from "@cup/telemetry.cloudflare";
+import {
+  logEvent,
+  reportStuckConversionDeletions,
+  reportStuckConversions,
+} from "@cup/telemetry.cloudflare";
 import { TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
 
 import type {
@@ -366,7 +370,7 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
     await this.reconcile(Temporal.Now.instant().epochMilliseconds);
   }
 
-  /** One alarm pass; only the stuck-conversion check reads `nowMs`, so tests can choose it. */
+  /** One alarm pass; only the stuck checks read `nowMs`, so tests can choose it. */
   protected async reconcile(nowMs: number) {
     if (this.sqlite.isErased()) {
       await this.ctx.storage.deleteAlarm();
@@ -383,6 +387,9 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
       return;
     }
     await this.cleanUpDeletedConversions();
+    // Right after the cleanup, so a deletion that finished in this pass is not reported, and ahead
+    // of the steps that can throw.
+    this.reportStuckConversionDeletions(nowMs);
     await this.reconcileDispatch();
     await this.reconcileSynthesis();
     this.reportStuckConversions(nowMs);
@@ -569,6 +576,20 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
       if (result === "stopped") {
         this.sqlite.releaseAudioSegment(segment.conversionId, segment.sequence);
       }
+    }
+  }
+
+  /**
+   * Sends one Sentry event per stuck conversion deletion; see
+   * docs/architecture/conversion-deletion.md.
+   */
+  private reportStuckConversionDeletions(nowMs: number) {
+    const reported = reportStuckConversionDeletions(
+      this.sqlite.unreportedConversionDeletions(),
+      nowMs,
+    );
+    for (const conversionId of reported) {
+      this.sqlite.markDeletionStuckReported(conversionId, nowMs);
     }
   }
 

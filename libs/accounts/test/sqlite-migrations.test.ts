@@ -484,6 +484,31 @@ test("the stuck-conversion check starts existing conversions' stages at completi
   }
 });
 
+test("the stuck-conversion-deletion check leaves existing marked conversions unreported", () => {
+  const database = new sqlite.DatabaseSync(":memory:");
+  try {
+    const { key, earlierKeys } = findMigration("conversion_deletion_stuck_check");
+    applyMigrations(database, earlierKeys);
+    database.exec(`INSERT INTO account_conversions
+      (conversion_id, idempotency_key, source_url, created_at_ms, status, last_started_phase, deleting_since_ms, stage_started_at_ms)
+      VALUES ('marked', 'key-marked', 'https://example.com/m', 1, 'pending', 'conversion-start', 2, 1)`);
+
+    applyMigrations(database, [key]);
+
+    expect(
+      database
+        .prepare(
+          "SELECT conversion_id, deleting_since_ms, deletion_stuck_reported_at_ms FROM account_conversions",
+        )
+        .all(),
+    ).toEqual([
+      { conversion_id: "marked", deleting_since_ms: 2, deletion_stuck_reported_at_ms: null },
+    ]);
+  } finally {
+    database.close();
+  }
+});
+
 /**
  * Finds a migration by its journal tag without its number prefix, so renumbering it after a rebase
  * keeps the test valid; also returns the keys of all migrations that run before it.
