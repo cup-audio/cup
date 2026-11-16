@@ -35,6 +35,9 @@
     "@cup/conversion-contracts": "workspace:*",
     "@cup/conversion-grants": "workspace:*",
     "@cup/rolling-limits": "workspace:*",
+    "@cup/telemetry.cloudflare": "workspace:*",
+    "@cup/telemetry.core": "workspace:*",
+    "@sentry/core": "catalog:sentry-server",
     "drizzle-orm": "^0.45.4",
     "temporal-polyfill": "^1.0.5",
     "zod": "^4.6.5"
@@ -45,7 +48,6 @@
     "@cup/prepare-declaration-build": "workspace:*",
     "@cup/resend-stub": "workspace:*",
     "@cup/sentry-stub": "workspace:*",
-    "@cup/telemetry.cloudflare": "workspace:*",
     "@patricktree-stack/config-typescript": "workspace:*",
     "@patricktree-stack/config-vitest": "workspace:*",
     "@sentry/cloudflare": "catalog:sentry-server",

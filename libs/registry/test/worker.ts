@@ -372,3 +372,12 @@ export class DeletionTestDurableObject extends DurableObject<{
     this.accountHold?.release();
   }
 }
+
+/**
+ * The deletion coordinator test object wrapped with Sentry as production wraps the registry, so a
+ * test that points SENTRY_DSN at a Sentry stub sees what an alarm pass reports.
+ */
+export const SentryDeletionTestDurableObject = Sentry.instrumentDurableObjectWithSentry(
+  (env) => createWorkerSentryOptions(env, "registry-durable-object"),
+  DeletionTestDurableObject,
+);

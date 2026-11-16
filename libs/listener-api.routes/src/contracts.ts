@@ -58,6 +58,9 @@ export const uuidV4Schema = z
   .string()
   .regex(LOWERCASE_UUID_V4_PATTERN, "Must be a lowercase UUIDv4");
 
+/** The health endpoint's answer while the Worker runs. */
+export const healthResponseSchema = z.object({ status: z.literal("ok") });
+
 export const authConfigResponseSchema = z.object({
   supabaseUrl: z.string(),
   publishableKey: z.string().min(1),

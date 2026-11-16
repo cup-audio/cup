@@ -11,8 +11,8 @@ import {
   createConversionArtifactPrefix,
   createSegmentWorkflowId,
 } from "@cup/conversion-contracts";
-import { findRootCauseMessage } from "@cup/errors";
-import { reportStuckConversions } from "@cup/telemetry.cloudflare";
+import { logEvent, reportStuckConversions } from "@cup/telemetry.cloudflare";
+import { TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
 
 import type {
   AccountConversionOutcome,
@@ -303,13 +303,16 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
       try {
         await (await workflow.get(id)).terminate();
       } catch (error) {
-        console.warn(
-          JSON.stringify({
-            event: "conversion-workflow-termination-failed",
-            conversionId,
-            workflowInstanceId: id,
-            error: findRootCauseMessage(error),
-          }),
+        logEvent(
+          "conversion-workflow-termination-failed",
+          "A deleted conversion's Workflow instance could not be terminated.",
+          {
+            attributes: {
+              [TELEMETRY_ATTRIBUTES.CONVERSION_ID]: conversionId,
+              [TELEMETRY_ATTRIBUTES.WORKFLOW_INSTANCE_ID]: id,
+            },
+            error,
+          },
         );
       }
     }
@@ -421,12 +424,10 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
         await this.cleanUpDeletedConversion(conversionId);
       } catch (error) {
         // The marked row stays, so the alarm stays armed and retries.
-        console.warn(
-          JSON.stringify({
-            event: "conversion-deletion-cleanup-failed",
-            conversionId,
-            error: findRootCauseMessage(error),
-          }),
+        logEvent(
+          "conversion-deletion-cleanup-failed",
+          "A pass of a deleted conversion's cleanup failed; the next alarm retries it.",
+          { attributes: { [TELEMETRY_ATTRIBUTES.CONVERSION_ID]: conversionId }, error },
         );
       }
     }

@@ -1,4 +1,13 @@
 export { CUP_APP_DSN, CUP_WORKER_DSN } from "#src/sentry-dsns.ts";
+export {
+  beforeSendLog,
+  LOG_ATTRIBUTES,
+  LOG_EVENTS,
+  type LogEventName,
+  type LogEventSeverity,
+  type LogLevel,
+  type TelemetryLog,
+} from "#src/log-events.ts";
 export { SIGNED_OUT_USER, TELEMETRY_ATTRIBUTES } from "#src/telemetry-attributes.ts";
 export {
   MASKED_QUERY_PARAMETERS,

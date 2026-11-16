@@ -63,6 +63,16 @@ export type SentryStreamedSpan = {
   attributes: Record<string, { value: unknown; type: string }>;
 };
 
+/** One log record (`log` items); attributes arrive typed, as `{ value, type }`. */
+export type SentryLog = {
+  timestamp: number;
+  level: string;
+  body: string;
+  trace_id?: string;
+  severity_number?: number;
+  attributes: Record<string, { value: unknown; type: string }>;
+};
+
 export type SentryStub = {
   /** The stub's origin on 127.0.0.1. */
   url: string;
@@ -74,6 +84,8 @@ export type SentryStub = {
   errorEvents(project: SentryStubProject): SentryErrorEvent[];
   /** The streamed spans (`span` items, `traceLifecycle: "stream"`) that reached one project. */
   spans(project: SentryStubProject): SentryStreamedSpan[];
+  /** The log records (`log` items) that reached one project. */
+  logs(project: SentryStubProject): SentryLog[];
   /**
    * Resolves once `condition` holds, checking whenever an envelope arrives and at the start.
    * Rejects after `timeoutMs` (default 10 s), naming `description` in the error.
@@ -145,6 +157,12 @@ export async function startSentryStub(): Promise<SentryStub> {
         .flatMap((envelope) => envelope.items)
         .filter((item) => item.header["type"] === "span")
         .flatMap((item) => (isSpanContainer(item.payload) ? item.payload.items : [])),
+    logs: (project) =>
+      envelopes
+        .filter((envelope) => envelope.project === project)
+        .flatMap((envelope) => envelope.items)
+        .filter((item) => item.header["type"] === "log")
+        .flatMap((item) => (isLogContainer(item.payload) ? item.payload.items : [])),
     waitFor: (description, condition, { timeoutMs = DEFAULT_WAIT_TIMEOUT_MS } = {}) =>
       new Promise<void>((resolve, reject) => {
         const check = () => {
@@ -257,6 +275,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 /** A `span` item's payload: the spans in `items`; the stub trusts their shape, as Sentry sent it. */
 function isSpanContainer(value: unknown): value is { items: SentryStreamedSpan[] } {
+  return isRecord(value) && Array.isArray(value["items"]);
+}
+
+function isLogContainer(value: unknown): value is { items: SentryLog[] } {
   return isRecord(value) && Array.isArray(value["items"]);
 }
 
