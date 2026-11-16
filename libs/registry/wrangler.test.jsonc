@@ -4,13 +4,26 @@
   "main": "test/worker.ts",
   "compatibility_flags": ["nodejs_compat"],
   "compatibility_date": "2026-08-15",
-  /* Registry tests that send through a Resend stub pass its origin explicitly; nothing reaches Resend. */
-  "vars": { "CONVERSION_OWNER_LIMIT": "10", "RESEND_BASE_URL": "http://127.0.0.1:9" },
+  /* Registry tests that send through a Resend stub pass its origin explicitly; nothing reaches Resend.
+     The Sentry-wrapped test objects send to the discard port, and the stuck-conversion tests point
+     SENTRY_DSN at a Sentry stub instead; nothing reaches Sentry either. */
+  "vars": {
+    "CONVERSION_OWNER_LIMIT": "10",
+    "RESEND_BASE_URL": "http://127.0.0.1:9",
+    "LOCAL_DEVELOPMENT": "false",
+    "SENTRY_DSN": "http://test@127.0.0.1:9/1",
+  },
+  "version_metadata": { "binding": "CF_VERSION_METADATA" },
   "durable_objects": {
     "bindings": [
       { "name": "DELETION_TEST", "class_name": "DeletionTestDurableObject" },
       { "name": "ACCOUNT_DISPATCH_TEST", "class_name": "AccountDispatchTestDurableObject" },
       { "name": "ACCOUNTS", "class_name": "AccountDurableObject" },
+      { "name": "SENTRY_ACCOUNTS", "class_name": "SentryAccountDurableObject" },
+      {
+        "name": "SENTRY_CONVERSION_GRANTS",
+        "class_name": "SentryConversionGrantDurableObject",
+      },
       {
         "name": "CONVERSION_GRANTS",
         "class_name": "ConversionGrantDurableObject",
@@ -25,6 +38,10 @@
   "migrations": [
     { "tag": "test-deletion", "new_sqlite_classes": ["DeletionTestDurableObject"] },
     { "tag": "test-dispatch", "new_sqlite_classes": ["AccountDispatchTestDurableObject"] },
+    {
+      "tag": "test-sentry",
+      "new_sqlite_classes": ["SentryAccountDurableObject", "SentryConversionGrantDurableObject"],
+    },
     {
       "tag": "v1",
       "new_sqlite_classes": ["ConversionGrantDurableObject", "RegistryDurableObject"],

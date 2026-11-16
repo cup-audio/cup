@@ -15,6 +15,10 @@ export const TELEMETRY_ATTRIBUTES = {
   /** Which Worker entry point reported; `WorkerComponent` in `@cup/telemetry.cloudflare` lists them. */
   COMPONENT: "cup.component",
   CONVERSION_FAILURE_CATEGORY: "cup.conversion.failure_category",
+  /** The conversion phase a conversion last started, such as `narration-content-selection`. */
+  CONVERSION_PHASE: "cup.conversion.phase",
+  /** `preparation` or `synthesis`: the stage a stuck conversion hangs in. */
+  CONVERSION_STAGE: "cup.conversion.stage",
   /** The wrapper types of a logged error, outermost to innermost. */
   EXCEPTION_CHAIN: "cup.exception.chain",
 } as const;

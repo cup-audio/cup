@@ -12,6 +12,7 @@ import {
   createSegmentWorkflowId,
 } from "@cup/conversion-contracts";
 import { findRootCauseMessage } from "@cup/errors";
+import { reportStuckConversions } from "@cup/telemetry.cloudflare";
 
 import type {
   AccountConversionOutcome,
@@ -329,7 +330,7 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
       }
       const account = this.sqlite.snapshot();
       const workflow = this.env.PREPARE_AUDIOBOOK_WORKFLOW;
-      this.sqlite.retryPreparation(conversionId);
+      this.sqlite.retryPreparation(conversionId, Temporal.Now.instant().epochMilliseconds);
       try {
         try {
           await workflow.create({
@@ -359,6 +360,11 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
   }
 
   override async alarm() {
+    await this.reconcile(Temporal.Now.instant().epochMilliseconds);
+  }
+
+  /** One alarm pass; only the stuck-conversion check reads `nowMs`, so tests can choose it. */
+  protected async reconcile(nowMs: number) {
     if (this.sqlite.isErased()) {
       await this.ctx.storage.deleteAlarm();
       return;
@@ -376,6 +382,7 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
     await this.cleanUpDeletedConversions();
     await this.reconcileDispatch();
     await this.reconcileSynthesis();
+    this.reportStuckConversions(nowMs);
     await this.publishRegistryUsage();
     if (
       this.sqlite.snapshot().state === "active" &&
@@ -561,6 +568,19 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
       if (result === "stopped") {
         this.sqlite.releaseAudioSegment(segment.conversionId, segment.sequence);
       }
+    }
+  }
+
+  /** Sends one Sentry event per stuck conversion and stage; see docs/architecture/conversion.md. */
+  private reportStuckConversions(nowMs: number) {
+    const { accountId } = this.sqlite.snapshot();
+    const reported = reportStuckConversions(
+      this.sqlite.stuckConversionCandidates(),
+      { kind: "account", accountId },
+      nowMs,
+    );
+    for (const conversionId of reported) {
+      this.sqlite.markStuckReported(conversionId, nowMs);
     }
   }
 

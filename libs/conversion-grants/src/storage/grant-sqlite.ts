@@ -124,6 +124,8 @@ function conversionRowToUnknown(row: ConversionRow): unknown {
     createdAtMs: row.createdAtMs,
     ...(row.workflowStartedAtMs === null ? {} : { workflowStartedAtMs: row.workflowStartedAtMs }),
     lastStartedPhase: row.lastStartedPhase,
+    stageStartedAtMs: row.stageStartedAtMs,
+    ...(row.stuckReportedAtMs === null ? {} : { stuckReportedAtMs: row.stuckReportedAtMs }),
   };
   if (row.status === "pending") {
     return { ...base, status: "pending" };
@@ -205,6 +207,8 @@ function conversionToRow(conversion: GrantConversion): typeof conversionTable.$i
     sourceUrl: conversion.sourceUrl,
     createdAtMs: conversion.createdAtMs,
     workflowStartedAtMs: conversion.workflowStartedAtMs ?? null,
+    stageStartedAtMs: conversion.stageStartedAtMs,
+    stuckReportedAtMs: conversion.stuckReportedAtMs ?? null,
     status: conversion.status,
     ...values,
   };
@@ -233,6 +237,7 @@ function isGrantConversion(value: unknown): value is GrantConversion {
     typeof value["idempotencyKey"] !== "string" ||
     typeof value["sourceUrl"] !== "string" ||
     typeof value["createdAtMs"] !== "number" ||
+    typeof value["stageStartedAtMs"] !== "number" ||
     !conversionPhaseSchema.safeParse(value["lastStartedPhase"]).success
   ) {
     return false;
