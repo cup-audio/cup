@@ -341,6 +341,57 @@ test("a URL handed out at 23:59 UTC is accepted until 48 hours after the start o
   }
 });
 
+test("in local development, a shortened lifetime expires media URLs that many seconds after they are handed out", async () => {
+  const { app, env: productionEnv } = fixture(accountOwner);
+  const env = {
+    ...productionEnv,
+    LOCAL_DEVELOPMENT: "true",
+    LOCAL_SIGNED_URL_LIFETIME_SECONDS: "30",
+  };
+  vi.useFakeTimers({ toFake: ["Date"] });
+  try {
+    vi.setSystemTime(Temporal.Instant.from("2026-10-27T12:00:00.000Z").epochMilliseconds);
+    const audiobook = await requestJson(app, env, audiobookPath, {
+      Authorization: `Bearer ${await createAccessToken()}`,
+    });
+
+    for (const [instant, status] of [
+      ["2026-10-27T12:00:29.999Z", 200],
+      ["2026-10-27T12:00:30.000Z", 401],
+    ] as const) {
+      vi.setSystemTime(Temporal.Instant.from(instant).epochMilliseconds);
+      for (const url of [getCoverImageUrl(audiobook), getNarrationTrackUrl(audiobook)]) {
+        expect((await app.request(url, { method: "HEAD" }, env)).status).toBe(status);
+      }
+    }
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("outside local development, the shortened lifetime is ignored", async () => {
+  const { app, env: productionEnv } = fixture(accountOwner);
+  const env = {
+    ...productionEnv,
+    LOCAL_DEVELOPMENT: "false",
+    LOCAL_SIGNED_URL_LIFETIME_SECONDS: "30",
+  };
+  vi.useFakeTimers({ toFake: ["Date"] });
+  try {
+    vi.setSystemTime(Temporal.Instant.from("2026-10-27T12:00:00.000Z").epochMilliseconds);
+    const audiobook = await requestJson(app, env, audiobookPath, {
+      Authorization: `Bearer ${await createAccessToken()}`,
+    });
+
+    vi.setSystemTime(Temporal.Instant.from("2026-10-27T12:01:00.000Z").epochMilliseconds);
+    expect(
+      (await app.request(getNarrationTrackUrl(audiobook), { method: "HEAD" }, env)).status,
+    ).toBe(200);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test("an unexpired token stops authorizing once the account's deletion is scheduled", async () => {
   const { app, env, bucketRead, accountState } = fixture(accountOwner);
   const url = await signCoverImageUrl(accountOwner);

@@ -16,6 +16,13 @@ export type AndroidLaunchArguments = LaunchArguments & {
    * build's fake that signs in against the fake auth provider.
    */
   readonly realGoogleSignIn?: boolean;
+  /**
+   * How long the native player treats signed URLs as valid; pass the test Worker's
+   * `signedUrlLifetimeSeconds`.
+   */
+  readonly signedUrlLifetimeSeconds?: number;
+  /** Media3's foreground grace after a pause, instead of 10 minutes. */
+  readonly foregroundGraceSeconds?: number;
 };
 
 const APP_PACKAGE = "audio.cup.app";
@@ -24,6 +31,10 @@ const MAIN_ACTIVITY = `${APP_PACKAGE}/.MainActivity`;
 const API_ORIGIN_EXTRA = "cupTestApiOrigin";
 /** Read only by the debug build's `DebugApplication`. */
 const REAL_GOOGLE_SIGN_IN_EXTRA = "cupTestRealGoogleSignIn";
+/** Read only by the debug build's `TestPlaybackTimings`. */
+const SIGNED_URL_LIFETIME_EXTRA = "cupTestSignedUrlLifetimeSeconds";
+/** Read only by the debug build's `TestPlaybackTimings`. */
+const FOREGROUND_GRACE_EXTRA = "cupTestForegroundGraceSeconds";
 const WEBVIEW_CONTEXT = `WEBVIEW_${APP_PACKAGE}`;
 /** Received only by the debug build's `FocusProbePlugin`. */
 const FOCUS_PROBE_ACTION = `${APP_PACKAGE}.FOCUS_PROBE`;
@@ -144,6 +155,77 @@ export class AndroidAppDevice implements AppDevice {
       text,
       ...launchArgumentExtras(launchArguments),
     ]);
+  }
+
+  /**
+   * Opens Cup with the arguments of the last launch without stopping it first, as tapping its icon
+   * does: a process that still runs, such as one kept by a playing media session, stays.
+   */
+  async reopen(): Promise<void> {
+    if (this.lastLaunchArguments === undefined) {
+      throw new Error("Cup has not been launched in this spec file, so it cannot be reopened.");
+    }
+    await this.adb([
+      "shell",
+      "am",
+      "start",
+      "-W",
+      "-n",
+      MAIN_ACTIVITY,
+      ...launchArgumentExtras(this.lastLaunchArguments),
+    ]);
+  }
+
+  /**
+   * Swipes Cup's task away in the recent apps screen, which destroys its activity; Android then
+   * tells its running services through `onTaskRemoved`.
+   */
+  async removeFromRecents(): Promise<void> {
+    await this.adb(["shell", "input", "keyevent", "KEYCODE_APP_SWITCH"]);
+    await this.driver.switchContext("NATIVE_APP");
+    // The launcher shows the recent apps with Cup's card, the latest task, in the middle. Its
+    // snapshot exists only there, unlike a "Cup" label in Cup's own screen.
+    const card = this.driver.$(`android=new UiSelector().resourceIdMatches(".*:id/snapshot")`);
+    await card.waitForExist({ timeout: 10_000 });
+    // The card slides into place; swipe it once it has stopped.
+    let location = await card.getLocation();
+    await waitFor(
+      "Cup's card in the recent apps to settle",
+      async () => {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        const previous = location;
+        location = await card.getLocation();
+        return location.x === previous.x && location.y === previous.y ? true : undefined;
+      },
+      10_000,
+    );
+    const { x, y } = location;
+    const { width, height } = await card.getSize();
+    const centerX = Math.round(x + width / 2);
+    await this.adb([
+      "shell",
+      "input",
+      "swipe",
+      String(centerX),
+      String(Math.round(y + height / 2)),
+      String(centerX),
+      "0",
+      "200",
+    ]);
+    await waitFor(
+      "Cup's task to leave the recent apps",
+      async () => {
+        const { stdout } = await this.adb(["shell", "dumpsys", "activity", "recents"]);
+        return new RegExp(
+          String.raw`\bA=(?:\d+:)?${APP_PACKAGE.replaceAll(".", String.raw`\.`)}\b`,
+          "u",
+        ).test(stdout)
+          ? undefined
+          : true;
+      },
+      10_000,
+    );
+    await this.adb(["shell", "input", "keyevent", "KEYCODE_HOME"]);
   }
 
   async relaunch(): Promise<void> {
@@ -372,6 +454,32 @@ export class AndroidAppDevice implements AppDevice {
     });
   }
 
+  /**
+   * Dismisses the media controls in the notification shade as a listener does since Android 13,
+   * where they replace the media notification: a long press on the player, then "Hide". System UI
+   * then cancels the notification, which Media3 hears as its dismissal. It is offered only once the
+   * session's service left the foreground.
+   */
+  async hideMediaControls(): Promise<void> {
+    await this.inNotificationShade(async () => {
+      const seekBar = this.driver.$(
+        `android=new UiSelector().packageName("${SYSTEM_UI_PACKAGE}").className("android.widget.SeekBar")`,
+      );
+      await seekBar.waitForExist({ timeout: 10_000 });
+      const { x, y } = await seekBar.getLocation();
+      const { width } = await seekBar.getSize();
+      // Above the seek bar, on the player's title; a swipe that stays in place is a long press.
+      const pressX = String(Math.round(x + width / 2));
+      const pressY = String(Math.round(y - 60));
+      await this.adb(["shell", "input", "swipe", pressX, pressY, pressX, pressY, "1500"]);
+      const hide = this.driver.$(
+        `android=new UiSelector().packageName("${SYSTEM_UI_PACKAGE}").text("Hide")`,
+      );
+      await hide.waitForExist({ timeout: 10_000 });
+      await hide.click();
+    });
+  }
+
   /** The output of `dumpsys <service>`, such as `media_session` or `activity services`. */
   async dumpsys(service: string, ...args: string[]): Promise<string> {
     const { stdout } = await this.adb(["shell", "dumpsys", service, ...args]);
@@ -387,6 +495,20 @@ export class AndroidAppDevice implements AppDevice {
     await this.driver.switchContext("NATIVE_APP");
     await waitFor("Cup's WebView", () => this.findWebViewContext(), 60_000);
     await this.driver.switchContext(WEBVIEW_CONTEXT);
+    // Reopening Cup in a process that still runs, such as one a playing media session kept, creates
+    // a new WebView page in the same context and closes the one Chromedriver was attached to.
+    await waitFor(
+      "Cup's WebView page",
+      async () => {
+        const handle = (await this.driver.getWindowHandles()).at(-1);
+        if (handle === undefined) {
+          return undefined;
+        }
+        await this.driver.switchToWindow(handle);
+        return true;
+      },
+      60_000,
+    );
     return this.driver;
   }
 
@@ -461,6 +583,12 @@ function launchArgumentExtras(launchArguments: AndroidLaunchArguments): string[]
     ...(launchArguments.realGoogleSignIn === true
       ? ["--ez", REAL_GOOGLE_SIGN_IN_EXTRA, "true"]
       : []),
+    ...(launchArguments.signedUrlLifetimeSeconds === undefined
+      ? []
+      : ["--ei", SIGNED_URL_LIFETIME_EXTRA, String(launchArguments.signedUrlLifetimeSeconds)]),
+    ...(launchArguments.foregroundGraceSeconds === undefined
+      ? []
+      : ["--ei", FOREGROUND_GRACE_EXTRA, String(launchArguments.foregroundGraceSeconds)]),
   ];
 }
 

@@ -220,6 +220,7 @@ function createHost({
 
   const host = new PlayerHost({
     createPlayer: createElementPlayers(element),
+    findRunningPlayer: () => Promise.resolve(null),
     createSession: (request) =>
       new PlaybackSession(request, {
         savePosition: (position, savedSubject) => {

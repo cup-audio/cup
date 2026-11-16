@@ -25,7 +25,7 @@ export function PlayerHostProvider({ children }: { children: React.ReactNode }) 
   const [host] = React.useState(
     () =>
       new PlayerHost({
-        createPlayer: createPlatformPlayers(),
+        ...createPlatformPlayers(),
         createSession: createPlaybackSession,
         mediaSession,
         getAccount: readPlayerHostAccount,
@@ -38,6 +38,13 @@ export function PlayerHostProvider({ children }: { children: React.ReactNode }) 
   React.useEffect(
     function unloadWhenLeavingTheShell() {
       return () => host.unload();
+    },
+    [host],
+  );
+
+  React.useEffect(
+    function adoptWhatPlaysWhenThePageStarts() {
+      void host.adoptRunningPlayer();
     },
     [host],
   );

@@ -12,6 +12,7 @@ import {
 import {
   SKIP_MILLISECONDS,
   type CreatePlayer,
+  type FindRunningPlayer,
   type PlaybackChange,
   type Player,
   type PlayerEnding,
@@ -66,6 +67,8 @@ export type PlayerHostServices = {
    * app's native player.
    */
   createPlayer: CreatePlayer;
+  /** What already plays when the page starts, which the host takes over. */
+  findRunningPlayer: FindRunningPlayer;
   createSession(request: PlaybackSessionRequest): PlaybackSession;
   /** The system's media controls, which show the loaded audiobook and send their actions. */
   mediaSession: MediaSessionPort;
@@ -114,6 +117,10 @@ export class PlayerHost {
   private pendingRenewal: symbol | null = null;
   /** Stops reporting the loaded player's playback changes to the system's media controls. */
   private unsubscribeMediaSessionReports: (() => void) | null = null;
+  /** The host looks for a running player once, when the page starts. */
+  private hasLookedForRunningPlayer = false;
+  /** Called once the account is known, by what waits for its restore. */
+  private readonly accountWaiters = new Set<() => void>();
 
   constructor(services: PlayerHostServices) {
     this.services = services;
@@ -141,6 +148,68 @@ export class PlayerHost {
 
     // Which listening position applies depends on the account.
     this.refreshResumePosition();
+
+    if (account.status === "known") {
+      for (const waiter of this.accountWaiters) {
+        waiter();
+      }
+      this.accountWaiters.clear();
+    }
+  };
+
+  /**
+   * Takes over what already plays when the page starts, such as the Android app's native session
+   * after a reload, a renderer crash, a live update or a relaunch: it fetches that audiobook and
+   * makes it the loaded one without loading it again, so playback goes on and the mini player shows
+   * it. A deleted audiobook, or one loaded for another account, ends the session instead. Runs
+   * once; a load before it finishes replaces the session's audiobook, and it then takes nothing
+   * over.
+   */
+  adoptRunningPlayer = async () => {
+    if (this.hasLookedForRunningPlayer) {
+      return;
+    }
+    this.hasLookedForRunningPlayer = true;
+
+    const running = await this.services.findRunningPlayer();
+    if (!running) {
+      return;
+    }
+    const subject = await this.readKnownSubject();
+    if (this.snapshot.loaded) {
+      return;
+    }
+    if (running.subject !== subject) {
+      running.discard();
+      return;
+    }
+
+    let audiobook: Audiobook | null;
+    try {
+      audiobook = await this.services.fetchAudiobook(running.conversionId);
+    } catch {
+      // The request layer reports the failure itself; the session plays on, and the next load
+      // replaces it.
+      return;
+    }
+    if (this.snapshot.loaded) {
+      return;
+    }
+    if (audiobook?.status !== "ready" || !isPlayableAudiobook(audiobook)) {
+      running.discard();
+      return;
+    }
+
+    const { conversionId } = running;
+    const session = this.services.createSession({
+      conversionId,
+      audiobook,
+      position: this.readStoredPosition(conversionId, audiobook, subject),
+      subject,
+    });
+    // The session's URLs came from an earlier page, so the first Play renews them.
+    this.trackUrlReceivedAt = Number.NEGATIVE_INFINITY;
+    this.setLoaded({ conversionId, audiobook, subject, player: running.adopt(session) });
   };
 
   /**
@@ -277,6 +346,17 @@ export class PlayerHost {
     }
   };
 
+  /** Who listens, once the stored account is restored. */
+  private async readKnownSubject(): Promise<string | null> {
+    const account = this.services.getAccount();
+    if (account.status === "known") {
+      return account.subject;
+    }
+
+    await new Promise<void>((resolve) => this.accountWaiters.add(resolve));
+    return this.readKnownSubject();
+  }
+
   /** Signed-in listeners keep their position on the server; others on the device. */
   private readStoredPosition(
     conversionId: string,
@@ -345,9 +425,15 @@ export class PlayerHost {
       position: this.readStoredPosition(conversionId, audiobook, subject),
       subject,
     });
-    const player = this.services.createPlayer(session);
     this.trackUrlReceivedAt = this.shownAudiobookReceivedAt;
-    this.update({ loaded: { conversionId, audiobook, subject, player }, unavailable: null });
+    const player = this.services.createPlayer(session, this.trackUrlReceivedAt);
+    this.setLoaded({ conversionId, audiobook, subject, player });
+  }
+
+  /** Makes `loaded` the loaded audiobook and shows it in the system's media controls. */
+  private setLoaded(loaded: LoadedAudiobook) {
+    const { audiobook, player } = loaded;
+    this.update({ loaded, unavailable: null });
 
     const { mediaSession } = this.services;
     mediaSession.setMetadata({ title: audiobook.title, artworkUrl: audiobook.coverImage?.url });
@@ -432,7 +518,7 @@ export class PlayerHost {
     }
 
     this.trackUrlReceivedAt = this.services.now();
-    loaded.player.replaceTrackUrl(audiobook.narrationTrack.url);
+    loaded.player.replaceTrackUrl(audiobook.narrationTrack.url, this.trackUrlReceivedAt);
     loaded.player.play();
   }
 

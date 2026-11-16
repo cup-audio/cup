@@ -35,8 +35,11 @@ export type Player = {
   seekTo: (positionMilliseconds: number) => void;
   /** Seeks by an amount from the current position, back when negative, such as −15 s and +15 s. */
   skipBy: (deltaMilliseconds: number) => void;
-  /** Loads the same track from a newly signed URL, keeping the position; plays nothing. */
-  replaceTrackUrl: (url: string) => void;
+  /**
+   * Loads the same track from a newly signed URL, which the client received at `receivedAt`,
+   * keeping the position; plays nothing.
+   */
+  replaceTrackUrl: (url: string, receivedAt: number) => void;
   /** Shows a failure that happened outside the player, until the next Play. */
   showError: (message: string) => void;
   /**
@@ -53,8 +56,28 @@ export type PositionOnClose = "save" | "discard";
 /** Whether another player follows the closed one. */
 export type PlayerEnding = "unload" | "replace";
 
-/** Builds the player for a newly loaded audiobook, given its playback session. */
-export type CreatePlayer = (session: PlaybackSession) => Player;
+/**
+ * Builds the player for a newly loaded audiobook, given its playback session and when the client
+ * received the audiobook whose track URL it loads.
+ */
+export type CreatePlayer = (session: PlaybackSession, trackUrlReceivedAt: number) => Player;
+
+/**
+ * What already plays an audiobook when the page starts: the Android app's native session after a
+ * reload, a renderer crash, a live update or a relaunch.
+ */
+export type RunningPlayer = {
+  conversionId: string;
+  /** The signed-in user it was loaded for. */
+  subject: string;
+  /** Becomes the loaded audiobook's player without interrupting what plays. */
+  adopt: (session: PlaybackSession) => Player;
+  /** Ends it without saving, for an audiobook the page cannot take over. */
+  discard: () => void;
+};
+
+/** Resolves to what already plays when the page starts, or `null`, as in every browser. */
+export type FindRunningPlayer = () => Promise<RunningPlayer | null>;
 
 /** How far the −15 s and +15 s controls skip. */
 export const SKIP_MILLISECONDS = 15_000;

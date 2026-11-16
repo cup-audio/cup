@@ -4,30 +4,33 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.util.Log;
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.media3.common.Player;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.session.CommandButton;
+import androidx.media3.session.MediaNotification;
 import androidx.media3.session.MediaSession;
 import androidx.media3.session.MediaSessionService;
 import com.google.common.collect.ImmutableList;
 
 /**
  * The {@code mediaPlayback} foreground service that holds Cup's media session around the
- * {@link MediaPlaybackPlugin}'s ExoPlayer, which keeps Cup unfrozen and its network reachable with
- * the screen locked or in another app. The notification, the lock screen, media keys, headsets and
+ * {@link PlaybackEngine}'s ExoPlayer, which keeps Cup unfrozen and its network reachable with the
+ * screen locked or in another app. The notification, the lock screen, media keys, headsets and
  * earbuds act on the player through the session, without the page.
  *
- * <p>The plugin starts it on the first Play, always after a tap in Cup's visible UI. Media3 then runs
- * it in the foreground while the player plays, and for its 10-minute grace after a pause or the end,
- * after which it leaves the foreground and keeps the notification. The service releases the player
- * when it stops.
+ * <p>The engine starts it on the first Play, always after a tap in Cup's visible UI. Media3 then
+ * runs it in the foreground while the player plays, and for its grace after a pause or the end,
+ * after which it leaves the foreground and keeps the notification. Swiping Cup from recents keeps a
+ * playing session and ends a paused one, Media3's default; swiping the notification away, possible
+ * only after the grace, ends it too. The service releases the player when it stops.
  */
 @UnstableApi
 public class MediaPlaybackService extends MediaSessionService {
     private static final String TAG = "CupMediaPlayback";
 
-    /** The plugin's player, handed over before the plugin starts the service. */
+    /** The engine's player, handed over before the engine starts the service. */
     @Nullable
     private static Player sharedPlayer;
 
@@ -79,10 +82,12 @@ public class MediaPlaybackService extends MediaSessionService {
             return;
         }
         running = this;
+        setForegroundServiceTimeoutMs(PlaybackTimings.foregroundGraceMilliseconds);
         Intent openCup = new Intent(this, MainActivity.class).setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
         session = new MediaSession.Builder(this, player)
             .setSessionActivity(PendingIntent.getActivity(this, 0, openCup, PendingIntent.FLAG_IMMUTABLE))
             .setMediaButtonPreferences(notificationButtons())
+            .setCallback(new SessionCallback())
             .build();
         addSession(session);
     }
@@ -93,6 +98,16 @@ public class MediaPlaybackService extends MediaSessionService {
         return session;
     }
 
+    /** Media3's default keeps a playing session in the foreground and stops the service otherwise. */
+    @Override
+    public void onTaskRemoved(@Nullable Intent rootIntent) {
+        Player player = session == null ? null : session.getPlayer();
+        if (!isPlaybackOngoing() || player == null || !player.isPlaying()) {
+            PlaybackEngine.get(this).stopNatively(PlaybackEngine.CLOSED_TASK_REMOVED);
+        }
+        super.onTaskRemoved(rootIntent);
+    }
+
     @Override
     public void onDestroy() {
         if (running == this) {
@@ -100,6 +115,7 @@ public class MediaPlaybackService extends MediaSessionService {
         }
         if (session != null) {
             Player player = session.getPlayer();
+            PlaybackEngine.get(this).onServiceDestroyed(player);
             session.release();
             player.release();
             session = null;
@@ -121,5 +137,24 @@ public class MediaPlaybackService extends MediaSessionService {
                 .setSlots(CommandButton.SLOT_FORWARD)
                 .build()
         );
+    }
+
+    private final class SessionCallback implements MediaSession.Callback {
+        /**
+         * Swiping the notification away arrives as stop, which the session player handles as pause;
+         * the notification would then come back. It ends the session instead.
+         */
+        @Override
+        public boolean onMediaButtonEvent(
+            @NonNull MediaSession mediaSession,
+            @NonNull MediaSession.ControllerInfo controllerInfo,
+            @NonNull Intent intent
+        ) {
+            if (!intent.getBooleanExtra(MediaNotification.NOTIFICATION_DISMISSED_EVENT_KEY, false)) {
+                return false;
+            }
+            PlaybackEngine.get(MediaPlaybackService.this).stopNatively(PlaybackEngine.CLOSED_NOTIFICATION_DISMISSED);
+            return true;
+        }
     }
 }

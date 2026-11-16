@@ -36,6 +36,7 @@ public class DebugApplication extends Application {
             if (TestApiOrigin.fromIntent(activity.getIntent()) != null) {
                 ((BridgeActivity) activity).registerPlugin(TestApiOriginPlugin.class);
                 ((BridgeActivity) activity).registerPlugin(FocusProbePlugin.class);
+                TestPlaybackTimings.apply(activity.getIntent());
             }
         }
 

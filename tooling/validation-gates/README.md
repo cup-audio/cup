@@ -4,7 +4,7 @@ This package is the runner behind `pnpm gate:review`, `pnpm gate:merge` and `pnp
 
 ## How gates compose
 
-Each gate's prerequisites and steps are data in [`src/gates.ts`](src/gates.ts). A prerequisite is a named check that returns what is missing, if anything; a step is a named command run from the repository root without a shell, with an optional check that skips it and gives the reason. A later gate spreads its predecessor's `prerequisites` and `steps` and appends its own, so each gate includes every check of the gate before it.
+Each gate's prerequisites and steps are data in [`src/gates.ts`](src/gates.ts). The review gate's prerequisites are Docker, `uvx`, GitHub CLI authentication, and Java 21 with the Android SDK, which the test step's Gradle run of the Android app's JVM unit tests needs; the mobile app's `jvm:check` script checks those two and names the fix. The deploy gate adds the clean `origin/main` checkout and the mobile E2E suite's preflight. A prerequisite is a named check that returns what is missing, if anything; a step is a named command run from the repository root without a shell, with an optional check that skips it and gives the reason. A later gate spreads its predecessor's `prerequisites` and `steps` and appends its own, so each gate includes every check of the gate before it.
 
 ## Step order
 

@@ -1,4 +1,16 @@
 {
   "$schema": "../../node_modules/turbo/schema.json",
   "extends": ["//", "@patricktree-stack/config-turbo-typescript"],
+  "tasks": {
+    /* The JVM unit tests of the Android app's plain Java logic, through Gradle. `^turbo:build` builds the web app, whose bundle `cap update` requires to exist. */
+    "turbo:test": {
+      "inputs": [
+        "$TURBO_EXTENDS$",
+        /* Git-ignored, so not a default input, but Gradle reads `sdk.dir` from it. */
+        "$TURBO_ROOT$/apps/mobile-app/android/local.properties",
+      ],
+      /* Gradle finds the Android SDK and Java 21 through these. */
+      "passThroughEnv": ["ANDROID_HOME", "ANDROID_SDK_ROOT", "JAVA_HOME"],
+    },
+  },
 }

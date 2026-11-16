@@ -42,13 +42,24 @@ export type TestWorker = {
   requests(): RecordedRequest[];
   /** Creates a conversion grant through the operator API, authorized by the fake access check. */
   createGrant(label?: string): Promise<CreatedGrant>;
-  /** Restarts Wrangler with another scenario, keeping the port and persisted storage. */
-  restart(scenario: TestWorkerScenario): Promise<void>;
+  /**
+   * Restarts Wrangler with another scenario, keeping the port and persisted storage. The signed URL
+   * lifetime stays unless `options` sets another.
+   */
+  restart(scenario: TestWorkerScenario, options?: SignedUrlOptions): Promise<void>;
   /** Stops Wrangler and removes the persistence directory unless it is retained. */
   stop(options?: { retainPersistenceDirectory?: boolean }): Promise<void>;
 };
 
-type StartTestWorkerOptions = {
+type SignedUrlOptions = {
+  /**
+   * Signed media and position URLs expire this many seconds after the Worker hands them out,
+   * instead of at least a day, so a test sees them expire.
+   */
+  signedUrlLifetimeSeconds?: number;
+};
+
+type StartTestWorkerOptions = SignedUrlOptions & {
   scenario?: TestWorkerScenario;
   /** The fake auth provider the Worker verifies tokens against, if the test signs in. */
   authProviderOrigin?: string;
@@ -83,6 +94,7 @@ export async function startTestWorker(options: StartTestWorkerOptions = {}): Pro
   const persistenceDirectory = await fs.mkdtemp(path.join(os.tmpdir(), "cup-test-worker-"));
   const logs: string[] = [];
   let workerProcess: childProcess.ChildProcess | undefined;
+  let { signedUrlLifetimeSeconds } = options;
 
   const start = async (scenario: TestWorkerScenario): Promise<void> => {
     const environment = { ...process.env };
@@ -132,6 +144,10 @@ export async function startTestWorker(options: StartTestWorkerOptions = {}): Pro
               `LOCAL_TEST_ACCOUNT_PASSWORD:${TEST_ACCOUNT.password}`,
             ]
           : []),
+        // The API server honours it only with `LOCAL_DEVELOPMENT`, which the Worker's config sets.
+        ...(signedUrlLifetimeSeconds === undefined
+          ? []
+          : ["--var", `LOCAL_SIGNED_URL_LIFETIME_SECONDS:${signedUrlLifetimeSeconds}`]),
       ],
       { cwd: PACKAGE_ROOT, detached: true, env: environment, stdio: ["ignore", "pipe", "pipe"] },
     );
@@ -147,7 +163,9 @@ export async function startTestWorker(options: StartTestWorkerOptions = {}): Pro
     logs,
     requests: () => parseRequestLog(logs),
     createGrant: (label = "Trial") => createGrant(origin, label),
-    async restart(scenario) {
+    async restart(scenario, restartOptions = {}) {
+      signedUrlLifetimeSeconds =
+        restartOptions.signedUrlLifetimeSeconds ?? signedUrlLifetimeSeconds;
       await stopProcess(workerProcess);
       workerProcess = undefined;
       await start(scenario);

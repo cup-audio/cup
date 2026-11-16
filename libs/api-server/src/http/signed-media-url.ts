@@ -32,19 +32,43 @@ const TOKEN_VERSION = "v1";
 /** A media route under `/api/files/audiobooks/{conversionId}/`. */
 type AudiobookMediaResource = "cover-image" | "narration-track.mp3";
 
+/** The settings that signing reads. */
+type SigningEnvironment = Pick<
+  ApiServerEnvironment,
+  "MEDIA_URL_SIGNING_KEY" | "LOCAL_DEVELOPMENT" | "LOCAL_SIGNED_URL_LIFETIME_SECONDS"
+>;
+
 /** Signs media URLs on the request's origin for one principal, which must have access. */
 export function createMediaUrlSigner(
-  context: { req: { url: string }; env: { MEDIA_URL_SIGNING_KEY: string } },
+  context: { req: { url: string }; env: SigningEnvironment },
   principal: MediaUrlPrincipal,
 ): (conversionId: string, resource: AudiobookMediaResource) => Promise<string> {
   return (conversionId, resource) =>
     signAudiobookMediaUrl({
       requestUrl: context.req.url,
       signingKey: context.env.MEDIA_URL_SIGNING_KEY,
+      lifetimeMs: readLocalLifetimeMs(context.env),
       conversionId,
       principal,
       resource,
     });
+}
+
+/**
+ * The shortened lifetime of local development, `LOCAL_SIGNED_URL_LIFETIME_SECONDS`, with which the
+ * mobile E2E suite sees URLs expire within a test; `undefined` everywhere else.
+ */
+function readLocalLifetimeMs(env: SigningEnvironment): number | undefined {
+  const seconds = Number(env.LOCAL_SIGNED_URL_LIFETIME_SECONDS);
+  if (
+    env.LOCAL_DEVELOPMENT !== "true" ||
+    env.LOCAL_SIGNED_URL_LIFETIME_SECONDS === undefined ||
+    !Number.isInteger(seconds) ||
+    seconds <= 0
+  ) {
+    return undefined;
+  }
+  return seconds * 1_000;
 }
 
 /**
@@ -53,7 +77,7 @@ export function createMediaUrlSigner(
  * the listener's session.
  */
 export function signPositionUrl(
-  context: { req: { url: string }; env: { MEDIA_URL_SIGNING_KEY: string } },
+  context: { req: { url: string }; env: SigningEnvironment },
   principal: Extract<MediaUrlPrincipal, { kind: "account" }>,
   conversionId: string,
 ): Promise<string> {
@@ -63,6 +87,7 @@ export function signPositionUrl(
     principal,
     signingKey: context.env.MEDIA_URL_SIGNING_KEY,
     nowMs: Temporal.Now.instant().epochMilliseconds,
+    lifetimeMs: readLocalLifetimeMs(context.env),
     purpose: "position",
   });
 }
@@ -71,12 +96,14 @@ export function signPositionUrl(
 function signAudiobookMediaUrl({
   requestUrl,
   signingKey,
+  lifetimeMs,
   conversionId,
   principal,
   resource,
 }: {
   requestUrl: string;
   signingKey: string;
+  lifetimeMs: number | undefined;
   conversionId: string;
   principal: MediaUrlPrincipal;
   resource: AudiobookMediaResource;
@@ -87,6 +114,7 @@ function signAudiobookMediaUrl({
     principal,
     signingKey,
     nowMs: Temporal.Now.instant().epochMilliseconds,
+    lifetimeMs,
   });
 }
 
@@ -96,7 +124,8 @@ function signAudiobookMediaUrl({
  * Within one UTC day, the same URL and principal therefore get a byte-identical URL, which lets
  * browsers cache cover images (ADR 0013). The token is stateless: rotating `signingKey` invalidates
  * every outstanding URL. A `purpose` is added to the payload last, so tokens without one stay
- * byte-identical to the media tokens issued before purposes existed.
+ * byte-identical to the media tokens issued before purposes existed. With `lifetimeMs`, local
+ * development's shortened lifetime, the token instead expires that long after `nowMs`.
  */
 export async function signMediaUrl({
   url,
@@ -104,6 +133,7 @@ export async function signMediaUrl({
   principal,
   signingKey,
   nowMs,
+  lifetimeMs,
   purpose,
 }: {
   url: string;
@@ -111,9 +141,13 @@ export async function signMediaUrl({
   principal: MediaUrlPrincipal;
   signingKey: string;
   nowMs: number;
+  lifetimeMs?: number | undefined;
   purpose?: SignedUrlPurpose;
 }): Promise<string> {
-  const issuedAtMs = nowMs - (nowMs % DAY_MS);
+  const expiresAtMs =
+    lifetimeMs === undefined
+      ? nowMs - (nowMs % DAY_MS) + SIGNED_MEDIA_URL_LIFETIME_MS
+      : nowMs + lifetimeMs;
   const payload = encodeBase64Url(
     new TextEncoder().encode(
       JSON.stringify({
@@ -123,7 +157,7 @@ export async function signMediaUrl({
           principal.kind === "account"
             ? { kind: principal.kind, accountId: principal.accountId }
             : { kind: principal.kind, grantId: principal.grantId },
-        expiresAtMs: issuedAtMs + SIGNED_MEDIA_URL_LIFETIME_MS,
+        expiresAtMs,
         ...(purpose === undefined ? {} : { purpose }),
       }),
     ),

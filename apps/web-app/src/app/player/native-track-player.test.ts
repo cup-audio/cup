@@ -2,6 +2,7 @@ import type { Audiobook, PlaybackPosition } from "@cup/listener-api.routes";
 
 import {
   createNativePlayers,
+  createRunningPlayerFinder,
   type MediaPlaybackPlugin,
   type NativePlaybackState,
 } from "#src/app/player/native-track-player.ts";
@@ -130,10 +131,12 @@ const RENEWED_TRACK_URL = "https://example.com/First/narration-track.mp3?token=r
 
 function createHost({
   subject = "user-1",
+  initialAccount = { status: "known", subject },
   fetchAudiobook = (conversionId) =>
     Promise.reject(new Error(`Unexpected fetch of audiobook ${conversionId}.`)),
 }: {
   subject?: string | null;
+  initialAccount?: PlayerHostAccount;
   fetchAudiobook?: (conversionId: string) => Promise<Audiobook | null>;
 } = {}) {
   const plugin = new FakeMediaPlaybackPlugin();
@@ -143,20 +146,24 @@ function createHost({
   const ticks = new Set<() => void>();
   /** The page became visible again, which tests trigger in place of `visibilitychange`. */
   const visibility = new Set<() => void>();
-  let account: PlayerHostAccount = { status: "known", subject };
+  /** The audiobooks the host fetched. */
+  const fetched: string[] = [];
+  let account = initialAccount;
+  const nativeServices = {
+    now: () => clock.now,
+    setInterval: (callback: () => void) => {
+      ticks.add(callback);
+      return () => ticks.delete(callback);
+    },
+    onVisible: (callback: () => void) => {
+      visibility.add(callback);
+      return () => visibility.delete(callback);
+    },
+  };
 
   const host = new PlayerHost({
-    createPlayer: createNativePlayers(plugin, {
-      now: () => clock.now,
-      setInterval: (callback) => {
-        ticks.add(callback);
-        return () => ticks.delete(callback);
-      },
-      onVisible: (callback) => {
-        visibility.add(callback);
-        return () => visibility.delete(callback);
-      },
-    }),
+    createPlayer: createNativePlayers(plugin, nativeServices),
+    findRunningPlayer: createRunningPlayerFinder(plugin, nativeServices),
     createSession: (request) =>
       new PlaybackSession(request, {
         savePosition: (position) => {
@@ -170,7 +177,10 @@ function createHost({
     mediaSession: NO_MEDIA_SESSION,
     getAccount: () => account,
     getLocalPosition: () => null,
-    fetchAudiobook,
+    fetchAudiobook: (conversionId) => {
+      fetched.push(conversionId);
+      return fetchAudiobook(conversionId);
+    },
     now: () => clock.now,
   });
   host.accountChanged();
@@ -196,7 +206,7 @@ function createHost({
     }
   };
 
-  return { host, plugin, player, saved, clock, setAccount, tick, ticks, becomeVisible };
+  return { host, plugin, player, saved, fetched, clock, setAccount, tick, ticks, becomeVisible };
 }
 
 /** A state the plugin reports for the first audiobook, read at `positionReadAt`. */
@@ -211,6 +221,8 @@ function stateOf(state: Partial<NativePlaybackState> = {}): NativePlaybackState 
     positionMilliseconds: 0,
     positionReadAt: 1_000_000,
     error: null,
+    closed: false,
+    closedReason: null,
     ...state,
   };
 }
@@ -231,6 +243,8 @@ test("loading the shown audiobook sets it in the plugin at its listening positio
         conversionId: "first",
         subject: "user-1",
         trackUrl: "https://example.com/First/narration-track.mp3?token=fixture",
+        // The page received the URLs with the audiobook, when it showed it.
+        urlsIssuedAt: 1_000_000,
         title: "First",
         artworkUrl: "https://example.com/First/cover?token=fixture",
         durationMilliseconds: 15_000,
@@ -424,7 +438,10 @@ test("Play more than 12 hours after receiving the track URL renews it in the plu
   await settle();
 
   expect(plugin.commands().slice(1)).toEqual([
-    { method: "replaceUrls", options: { trackUrl: RENEWED_TRACK_URL } },
+    {
+      method: "replaceUrls",
+      options: { trackUrl: RENEWED_TRACK_URL, urlsIssuedAt: clock.now },
+    },
     { method: "play" },
   ]);
 });
@@ -466,4 +483,195 @@ test("loading another audiobook sets it in the running session without closing i
   // The first audiobook's late states no longer reach the page.
   plugin.emit(stateOf({ isPlaying: true, positionMilliseconds: 3_000 }));
   expect(player().getSnapshot()).toMatchObject({ isPlaying: false, positionMilliseconds: 0 });
+});
+
+test("after a native stop the audiobook stays loaded at the last position, and the next Play loads it again and plays", () => {
+  const { host, plugin, player } = createHost();
+  host.showConversion("first", FIRST);
+  host.playShown();
+
+  // The listener swiped Cup from recents while it was paused.
+  plugin.emit(stateOf({ positionMilliseconds: 8_000, closed: true, closedReason: "taskRemoved" }));
+  expect(player().getSnapshot()).toMatchObject({
+    isPlaying: false,
+    positionMilliseconds: 8_000,
+    error: null,
+    needsNewTrackUrl: false,
+  });
+  // The plugin dropped its item, so a skip only moves the position the next load starts from.
+  player().skipBy(2_000);
+  expect(player().getSnapshot().positionMilliseconds).toBe(10_000);
+  host.play();
+
+  expect(plugin.commands().slice(2)).toEqual([
+    {
+      method: "load",
+      options: expect.objectContaining({
+        conversionId: "first",
+        trackUrl: "https://example.com/First/narration-track.mp3?token=fixture",
+        urlsIssuedAt: 1_000_000,
+        startPositionMilliseconds: 10_000,
+      }),
+    },
+    { method: "play" },
+  ]);
+  expect(player().getSnapshot()).toMatchObject({ isPlaying: true });
+});
+
+test("expired track URLs end the native session, and the next Play renews them, then loads and plays", async () => {
+  const { host, plugin, player, clock } = createHost({
+    fetchAudiobook: () =>
+      Promise.resolve({
+        ...FIRST,
+        narrationTrack: { ...FIRST.narrationTrack, url: RENEWED_TRACK_URL },
+      }),
+  });
+  host.showConversion("first", FIRST);
+  host.playShown();
+
+  plugin.emit(
+    stateOf({
+      positionMilliseconds: 7_000,
+      error: "trackUrlExpired",
+      closed: true,
+      closedReason: "trackUrlExpired",
+    }),
+  );
+  expect(player().getSnapshot()).toMatchObject({
+    isPlaying: false,
+    positionMilliseconds: 7_000,
+    error: null,
+    needsNewTrackUrl: true,
+  });
+  clock.now += 60_000;
+  host.play();
+  await settle();
+
+  expect(plugin.commands().slice(2)).toEqual([
+    {
+      method: "load",
+      options: expect.objectContaining({
+        trackUrl: RENEWED_TRACK_URL,
+        urlsIssuedAt: clock.now,
+        startPositionMilliseconds: 7_000,
+      }),
+    },
+    { method: "play" },
+  ]);
+});
+
+test("a native stop the hidden page missed shows once the page becomes visible", async () => {
+  const { host, plugin, player, becomeVisible } = createHost();
+  host.showConversion("first", FIRST);
+  host.playShown();
+
+  plugin.currentState = stateOf({
+    positionMilliseconds: 12_000,
+    closed: true,
+    closedReason: "notificationDismissed",
+  });
+  becomeVisible();
+  await settle();
+  expect(player().getSnapshot()).toMatchObject({ isPlaying: false, positionMilliseconds: 12_000 });
+  host.play();
+
+  expect(
+    plugin
+      .commands()
+      .slice(2)
+      .map(({ method }) => method),
+  ).toEqual(["load", "play"]);
+});
+
+test("a page that starts while the plugin plays the listener's audiobook takes the session over without loading it again", async () => {
+  const { host, plugin, player, fetched, clock } = createHost({
+    fetchAudiobook: () => Promise.resolve(FIRST),
+  });
+  plugin.currentState = stateOf({
+    isPlaying: true,
+    positionMilliseconds: 9_000,
+    positionReadAt: clock.now,
+  });
+
+  await host.adoptRunningPlayer();
+
+  expect(fetched).toEqual(["first"]);
+  expect(host.getSnapshot().loaded).toMatchObject({ conversionId: "first", subject: "user-1" });
+  expect(plugin.commands()).toEqual([]);
+  // The page shows the plugin's position, not the account's.
+  expect(player().getSnapshot()).toMatchObject({ isPlaying: true, positionMilliseconds: 9_000 });
+  host.togglePlayback();
+  expect(plugin.commands()).toEqual([{ method: "pause" }]);
+});
+
+test("the first Play after taking a session over renews its URLs, whose age the page does not know", async () => {
+  const { host, plugin, clock } = createHost({
+    fetchAudiobook: () =>
+      Promise.resolve({
+        ...FIRST,
+        narrationTrack: { ...FIRST.narrationTrack, url: RENEWED_TRACK_URL },
+      }),
+  });
+  plugin.currentState = stateOf({ positionMilliseconds: 9_000 });
+  await host.adoptRunningPlayer();
+
+  host.play();
+  await settle();
+
+  expect(plugin.commands()).toEqual([
+    {
+      method: "replaceUrls",
+      options: { trackUrl: RENEWED_TRACK_URL, urlsIssuedAt: clock.now },
+    },
+    { method: "play" },
+  ]);
+});
+
+test("a page that starts while the plugin plays a deleted audiobook closes the session", async () => {
+  const { host, plugin } = createHost({ fetchAudiobook: () => Promise.resolve(null) });
+  plugin.currentState = stateOf({ isPlaying: true });
+
+  await host.adoptRunningPlayer();
+
+  expect(host.getSnapshot().loaded).toBeNull();
+  expect(plugin.commands()).toEqual([{ method: "close", options: { position: "discard" } }]);
+});
+
+test("a page that starts while the plugin plays another account's audiobook closes the session without fetching it", async () => {
+  const { host, plugin, fetched } = createHost();
+  plugin.currentState = stateOf({ subject: "user-2", isPlaying: true });
+
+  await host.adoptRunningPlayer();
+
+  expect(fetched).toEqual([]);
+  expect(host.getSnapshot().loaded).toBeNull();
+  expect(plugin.commands()).toEqual([{ method: "close", options: { position: "discard" } }]);
+});
+
+test("taking a session over waits until the stored account is restored", async () => {
+  const { host, plugin, setAccount } = createHost({
+    initialAccount: { status: "restoring" },
+    fetchAudiobook: () => Promise.resolve(FIRST),
+  });
+  plugin.currentState = stateOf({ isPlaying: true });
+
+  const adoption = host.adoptRunningPlayer();
+  await settle();
+  expect(host.getSnapshot().loaded).toBeNull();
+  setAccount({ status: "known", subject: "user-1" });
+  await adoption;
+
+  expect(host.getSnapshot().loaded).toMatchObject({ conversionId: "first" });
+  expect(plugin.commands()).toEqual([]);
+});
+
+test("a page that starts after a native stop has no session to take over", async () => {
+  const { host, plugin, fetched } = createHost();
+  plugin.currentState = stateOf({ closed: true, closedReason: "taskRemoved" });
+
+  await host.adoptRunningPlayer();
+
+  expect(fetched).toEqual([]);
+  expect(host.getSnapshot().loaded).toBeNull();
+  expect(plugin.commands()).toEqual([]);
 });

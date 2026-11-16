@@ -16,6 +16,11 @@ export type ApiServerEnvironment = {
   SUPABASE_SECRET_KEY: string;
   // Signs the stateless tokens of signed media URLs; rotating it invalidates every outstanding URL.
   MEDIA_URL_SIGNING_KEY: string;
+  /**
+   * Local development only, read with `LOCAL_DEVELOPMENT=true`: signed media and position URLs
+   * expire this many seconds after they are handed out, so the mobile E2E suite sees them expire.
+   */
+  LOCAL_SIGNED_URL_LIFETIME_SECONDS?: string;
   ACCOUNTS: DurableObjectNamespace<AccountDurableObject>;
   REGISTRY: DurableObjectNamespace<RegistryDurableObject>;
   PREPARE_AUDIOBOOK_WORKFLOW: Workflow<ConversionParams>;

@@ -1,7 +1,11 @@
 import timers from "node:timers/promises";
 import { expect, test } from "vitest";
 
-import { asAndroidAppDevice, type AndroidAppDevice } from "#src/android/android-app-device.ts";
+import {
+  asAndroidAppDevice,
+  type AndroidAppDevice,
+  type AndroidLaunchArguments,
+} from "#src/android/android-app-device.ts";
 import { useMobileApp } from "#src/fixtures.ts";
 import { signInFromLandingPage } from "#src/journeys.ts";
 
@@ -23,6 +27,13 @@ const POSITION_TOLERANCE_MILLISECONDS = 2_500;
 const LOCKED_LISTEN_MILLISECONDS = 120_000;
 /** How often the locked listen checks Cup's process and service. */
 const LOCKED_CHECK_INTERVAL_MILLISECONDS = 20_000;
+/**
+ * The test Worker's shortened signed URL lifetime, long enough for the time between the page's last
+ * fetch of the audiobook and Play.
+ */
+const SHORT_URL_LIFETIME_SECONDS = 30;
+/** Media3's shortened foreground grace after a pause, instead of 10 minutes. */
+const FOREGROUND_GRACE_SECONDS = 10;
 
 test("the first Play starts a foreground media session that shows the audiobook and its position", async () => {
   const device = asAndroidAppDevice(app.device);
@@ -160,9 +171,155 @@ test("a call and transient audio focus requests pause the player and resume it, 
   expect(await waitForCupMediaSession(device, "PLAYING")).toContain(`package=${APP_PACKAGE}`);
 });
 
+test("expired URLs end a paused session, and the next Play renews them and plays from where it stopped", async () => {
+  const device = asAndroidAppDevice(app.device);
+  await app.worker.restart("success", { signedUrlLifetimeSeconds: SHORT_URL_LIFETIME_SECONDS });
+  const opened = await openNewAudiobook(device, {
+    signedUrlLifetimeSeconds: SHORT_URL_LIFETIME_SECONDS,
+  });
+  const { conversionId } = opened;
+  let { webView } = opened;
+  await webView.$(`${PLAYER} button[aria-label="Play"]`).click();
+  await waitForCupMediaSession(device, "PLAYING");
+  await webView.$(`${PLAYER} button[aria-label="Pause"]`).click();
+  await waitForCupMediaSession(device, "PAUSED");
+  const pausedAt = await readPosition(webView);
+
+  await waitForSessionToEnd(device, (SHORT_URL_LIFETIME_SECONDS + 30) * 1_000);
+  webView = await device.webView();
+  await waitForPlayButton(webView, "Play");
+  await expectPositionNear(webView, pausedAt);
+
+  const fetchesBefore = audiobookFetches(conversionId);
+  await webView.$(`${PLAYER} button[aria-label="Play"]`).click();
+  await waitForPlayButton(webView, "Pause");
+  await waitForCupMediaSession(device, "PLAYING");
+  expect(audiobookFetches(conversionId)).toBeGreaterThan(fetchesBefore);
+  expect(await readPosition(webView)).toBeGreaterThanOrEqual(
+    pausedAt - POSITION_TOLERANCE_MILLISECONDS,
+  );
+});
+
+test("a track URL the server refuses ends the playing session, and the next Play renews it and plays", async () => {
+  const device = asAndroidAppDevice(app.device);
+  // Only the server's URLs expire early; the plugin keeps its 24 hours, so the refusal ends it.
+  await app.worker.restart("long-speech", { signedUrlLifetimeSeconds: SHORT_URL_LIFETIME_SECONDS });
+  const opened = await openNewAudiobook(device);
+  const { conversionId } = opened;
+  let { webView } = opened;
+  await webView.$(`${PLAYER} button[aria-label="Play"]`).click();
+  await waitForCupMediaSession(device, "PLAYING");
+
+  await timers.setTimeout((SHORT_URL_LIFETIME_SECONDS + 5) * 1_000);
+  // A seek past the buffer requests the track again, with the expired URL.
+  await webView.$('button[aria-label="Play segment 4"]').click();
+  await waitForSessionToEnd(device, 30_000);
+  webView = await device.webView();
+  await waitForPlayButton(webView, "Play");
+
+  const fetchesBefore = audiobookFetches(conversionId);
+  await webView.$(`${PLAYER} button[aria-label="Play"]`).click();
+  await waitForPlayButton(webView, "Pause");
+  await waitForCupMediaSession(device, "PLAYING");
+  expect(audiobookFetches(conversionId)).toBeGreaterThan(fetchesBefore);
+});
+
+test("a playing session survives a swipe from recents, reopening Cup takes it over, and a swipe while paused ends it", async () => {
+  const device = asAndroidAppDevice(app.device);
+  await app.worker.restart("long-speech");
+  let { webView } = await openNewAudiobook(device);
+  await webView.$(`${PLAYER} button[aria-label="Play"]`).click();
+  await waitForPlayButton(webView, "Pause");
+  await waitForCupMediaSession(device, "PLAYING");
+  await expect.poll(() => readPosition(webView), { timeout: 15_000 }).toBeGreaterThan(3_000);
+  const swipedAt = await readPosition(webView);
+
+  await device.removeFromRecents();
+  await timers.setTimeout(5_000);
+  expect(await cupMediaSession(device)).toMatch(/\bstate=PlaybackState \{state=PLAYING\(3\)/u);
+  expect(await cupMediaPlaybackService(device)).toMatch(/\bisForeground=true\b/u);
+
+  // A new activity and page in the process the service kept, which asks the plugin what plays.
+  await device.reopen();
+  webView = await device.webView();
+  // Recents' mini player or the audiobook's sheet, whichever page Cup opens on.
+  await webView
+    .$('[aria-label="Player"] button[aria-label="Pause"]')
+    .waitForExist({ timeout: 30_000, timeoutMsg: "The page did not take the session over." });
+  const miniPlayerLink = webView.$('section[aria-label="Player"] a');
+  if (await miniPlayerLink.isExisting()) {
+    await miniPlayerLink.click();
+  }
+  await waitForPlayButton(webView, "Pause");
+  await expect
+    .poll(() => readPosition(webView), { timeout: 10_000 })
+    .toBeGreaterThan(swipedAt + 5_000);
+  expect(await cupMediaSession(device)).toMatch(/\bstate=PlaybackState \{state=PLAYING\(3\)/u);
+
+  await webView.$(`${PLAYER} button[aria-label="Pause"]`).click();
+  await waitForCupMediaSession(device, "PAUSED");
+  await device.removeFromRecents();
+  await waitForSessionToEnd(device, 15_000);
+});
+
+test(
+  "after the foreground grace a paused session keeps its notification, whose Play works, and hiding it ends the session",
+  { timeout: 360_000 },
+  async () => {
+    const device = asAndroidAppDevice(app.device);
+    await app.worker.restart("long-speech");
+    let { webView } = await openNewAudiobook(device, {
+      foregroundGraceSeconds: FOREGROUND_GRACE_SECONDS,
+    });
+    await webView.$(`${PLAYER} button[aria-label="Play"]`).click();
+    await waitForCupMediaSession(device, "PLAYING");
+
+    await device.pressMediaKey("KEYCODE_MEDIA_PAUSE");
+    await device.background();
+    await waitForServiceToLeaveTheForeground(device);
+    await waitForCupMediaSession(device, "PAUSED");
+    expect(await cupMediaNotification(device)).toContain(`pkg=${APP_PACKAGE} `);
+
+    // Media3 brings the service back to the foreground before ExoPlayer plays.
+    await device.tapMediaControl("Play");
+    await waitForCupMediaSession(device, "PLAYING");
+    expect(await cupMediaPlaybackService(device)).toMatch(/\bisForeground=true\b/u);
+
+    // During a call ExoPlayer still wants to play, so the service stays in the foreground.
+    await device.emulatorConsole("gsm", "call", "5551234");
+    await waitForCupMediaSession(device, "PAUSED");
+    await timers.setTimeout((FOREGROUND_GRACE_SECONDS + 5) * 1_000);
+    expect(await cupMediaPlaybackService(device)).toMatch(/\bisForeground=true\b/u);
+    await device.emulatorConsole("gsm", "cancel", "5551234");
+    await waitForCupMediaSession(device, "PLAYING");
+
+    await device.pressMediaKey("KEYCODE_MEDIA_PAUSE");
+    await waitForCupMediaSession(device, "PAUSED");
+    await waitForServiceToLeaveTheForeground(device);
+    await device.bringToForeground();
+    webView = await device.webView();
+    const pausedAt = await readPosition(webView);
+    await device.background();
+    await device.hideMediaControls();
+    await waitForSessionToEnd(device, 15_000);
+
+    // The page keeps the audiobook where it stopped, and Play loads it into a new session.
+    await device.bringToForeground();
+    webView = await device.webView();
+    await waitForPlayButton(webView, "Play");
+    await expectPositionNear(webView, pausedAt);
+    await webView.$(`${PLAYER} button[aria-label="Play"]`).click();
+    await waitForPlayButton(webView, "Pause");
+    await waitForCupMediaSession(device, "PLAYING");
+  },
+);
+
 /** Signs in, which opens the new audiobook's page, and waits until it can play. */
-async function openNewAudiobook(device: AndroidAppDevice) {
-  await device.launch({ apiOrigin: app.apiOrigin });
+async function openNewAudiobook(
+  device: AndroidAppDevice,
+  launchArguments: Omit<AndroidLaunchArguments, "apiOrigin"> = {},
+) {
+  await device.launch({ apiOrigin: app.apiOrigin, ...launchArguments });
   const webView = await device.webView();
   await signInFromLandingPage(device, webView);
   await webView.$(`${PLAYER} button[aria-label="Play"]`).waitForEnabled({ timeout: 120_000 });
@@ -170,7 +327,44 @@ async function openNewAudiobook(device: AndroidAppDevice) {
   const durationMilliseconds = await readDuration(webView);
   expect(title).not.toBe("");
   expect(durationMilliseconds).toBeGreaterThan(5_000);
-  return { webView, title, durationMilliseconds };
+  const pathname = await webView.execute(() => location.pathname);
+  const conversionId = /^\/app\/audiobooks\/([^/]+)/u.exec(pathname)?.[1];
+  if (conversionId === undefined) {
+    throw new Error(`The audiobook's page has no conversion in its path: ${pathname}`);
+  }
+  return { webView, title, durationMilliseconds, conversionId };
+}
+
+/** How often the Worker answered a request for the audiobook, which renews its signed URLs. */
+function audiobookFetches(conversionId: string): number {
+  return app.worker
+    .requests()
+    .filter(
+      (request) => request.method === "GET" && request.path === `/api/audiobooks/${conversionId}`,
+    ).length;
+}
+
+/** Waits until Cup's service, its notification and its media session are gone. */
+async function waitForSessionToEnd(device: AndroidAppDevice, timeoutMilliseconds: number) {
+  await expect
+    .poll(() => cupMediaPlaybackService(device), {
+      timeout: timeoutMilliseconds,
+      message: "Cup's media playback service still runs.",
+    })
+    .toBeUndefined();
+  expect(await cupMediaSession(device)).toBeUndefined();
+  expect(await device.dumpsys("notification", "--noredact")).not.toContain(`pkg=${APP_PACKAGE} `);
+}
+
+/** Waits until the service has left the foreground, after the shortened grace. */
+async function waitForServiceToLeaveTheForeground(device: AndroidAppDevice) {
+  await expect
+    .poll(async () => (await cupMediaPlaybackService(device)) ?? "", {
+      timeout: (FOREGROUND_GRACE_SECONDS + 20) * 1_000,
+      message: "Cup's media playback service did not leave the foreground.",
+    })
+    .not.toMatch(/\bisForeground=true\b/u);
+  expect(await cupMediaPlaybackService(device)).toBeDefined();
 }
 
 /** The position the player sheet's scrubber shows. */
