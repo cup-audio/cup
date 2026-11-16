@@ -2,8 +2,8 @@ import { css } from "@linaria/core";
 import React from "react";
 
 import { textStyles } from "#src/app/design-system/text-styles.js";
-import type { Player } from "#src/app/player/narration-track-player.js";
 import { usePlayerState } from "#src/app/player/player-host-provider.js";
+import type { Player } from "#src/app/player/player.js";
 import { composeClassnames } from "#src/app/utils.js";
 
 /** The loaded audiobook's playback failure, such as a refused start or save. */

@@ -1,6 +1,9 @@
 import type { Audiobook, PlaybackPosition } from "@cup/listener-api.routes";
 
-import type { NarrationAudioElement } from "#src/app/player/narration-track-player.ts";
+import {
+  createElementPlayers,
+  type NarrationAudioElement,
+} from "#src/app/player/narration-track-player.ts";
 import {
   PlaybackSession,
   type PlayableAudiobook,
@@ -204,7 +207,9 @@ function createHost({
   fetchAudiobook = (conversionId: string): Promise<Audiobook | null> =>
     Promise.reject(new Error(`Unexpected fetch of audiobook ${conversionId}.`)),
 } = {}) {
-  const elements: FakeAudioElement[] = [];
+  // The browser's players, which the host reaches only through the `Player` port.
+  const element = new FakeAudioElement();
+  const elements = [element];
   const mediaSession = new FakeMediaSession();
   const saved: Array<{ position: PlaybackPosition; subject: string | null }> = [];
   const fetchedConversionIds: string[] = [];
@@ -214,11 +219,7 @@ function createHost({
   let account: PlayerHostAccount = { status: "known", subject };
 
   const host = new PlayerHost({
-    createAudioElement: () => {
-      const element = new FakeAudioElement();
-      elements.push(element);
-      return element;
-    },
+    createPlayer: createElementPlayers(element),
     createSession: (request) =>
       new PlaybackSession(request, {
         savePosition: (position, savedSubject) => {
@@ -253,7 +254,6 @@ function createHost({
     account = value;
     host.accountChanged();
   };
-  const element = elements[0]!;
   const player = () => {
     const loaded = host.getSnapshot().loaded;
     if (!loaded) {

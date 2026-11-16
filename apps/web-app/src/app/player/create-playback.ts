@@ -1,9 +1,15 @@
+import { Capacitor } from "@capacitor/core";
+
+import { createElementPlayers } from "#src/app/player/narration-track-player.js";
+import { createNativePlayers } from "#src/app/player/native-track-player.js";
 import {
   PlaybackSession,
   type PlaybackSessionRequest,
   type PlaybackSessionServices,
 } from "#src/app/player/playback-session.js";
+import type { CreatePlayer } from "#src/app/player/player.js";
 import { savePlaybackPosition } from "#src/data-fetching/reader.js";
+import { mediaPlaybackPlugin } from "#src/platform/media-playback.android.js";
 
 /** Connects a loaded audiobook's playback session to position storage. */
 export function createPlaybackSession(request: PlaybackSessionRequest): PlaybackSession {
@@ -21,11 +27,31 @@ export function createPlaybackSession(request: PlaybackSessionRequest): Playback
 }
 
 /**
- * The player host's one audio element. It sets no `crossOrigin`: the narration track's signed URL
+ * The players of the platform: the Android app's native ExoPlayer, or one `<audio>` element in
+ * browsers and the iOS app. The element sets no `crossOrigin`: the narration track's signed URL
  * carries its own authorization, so the request needs no cookie.
  */
-export function createNarrationAudioElement(): HTMLAudioElement {
-  return new Audio();
+export function createPlatformPlayers(): CreatePlayer {
+  if (Capacitor.getPlatform() !== "android") {
+    return createElementPlayers(new Audio());
+  }
+
+  return createNativePlayers(mediaPlaybackPlugin, {
+    now: () => Date.now(),
+    setInterval: (callback, intervalMilliseconds) => {
+      const interval = setInterval(callback, intervalMilliseconds);
+      return () => clearInterval(interval);
+    },
+    onVisible: (callback) => {
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === "visible") {
+          callback();
+        }
+      };
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+      return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+    },
+  });
 }
 
 /**

@@ -9,7 +9,13 @@ import path from "node:path";
 import { TEST_ACCOUNT } from "#src/auth-provider.ts";
 
 /** Selects how the test Worker's fakes behave; the Worker entry parses the same values. */
-export type TestWorkerScenario = "success" | "tts-failure" | "speech-gated" | "preparation-failure";
+export type TestWorkerScenario =
+  | "success"
+  | "tts-failure"
+  | "speech-gated"
+  /** Each segment speaks for a minute, for a track that plays long enough to lock the device. */
+  | "long-speech"
+  | "preparation-failure";
 
 export type CreatedGrant = {
   grantId: string;

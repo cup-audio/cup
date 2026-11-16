@@ -35,6 +35,7 @@ public class DebugApplication extends Application {
             // Throws on a malformed argument, which stops the app before it can reach production.
             if (TestApiOrigin.fromIntent(activity.getIntent()) != null) {
                 ((BridgeActivity) activity).registerPlugin(TestApiOriginPlugin.class);
+                ((BridgeActivity) activity).registerPlugin(FocusProbePlugin.class);
             }
         }
 

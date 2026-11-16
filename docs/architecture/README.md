@@ -11,11 +11,11 @@ flowchart LR
     subgraph listenerApps[Listener apps]
       direction LR
       web[Web app]
-      native[Capacitor mobile app]
+      native[Capacitor mobile app, with a native player on Android]
     end
     operator[Operator CLI]
   end
-  listenerApps -->|/api and web assets, Supabase JWT or grant cookie| fetch
+  listenerApps -->|/api and web assets, Supabase JWT or grant cookie; media by signed URL| fetch
   listenerApps -->|Google sign-in| auth
   operator -->|/api/operator| access
   subgraph cloudflare[Cloudflare]

@@ -1,11 +1,7 @@
 import { check } from "@patricktree-stack/utils-ecma/assert.utils";
 import React from "react";
 
-import {
-  createNarrationAudioElement,
-  createPlaybackSession,
-} from "#src/app/player/create-playback.js";
-import type { Player, PlayerSnapshot } from "#src/app/player/narration-track-player.js";
+import { createPlatformPlayers, createPlaybackSession } from "#src/app/player/create-playback.js";
 import type { PreparedAudiobook } from "#src/app/player/playback-session.js";
 import {
   PlayerHost,
@@ -13,6 +9,7 @@ import {
   type PlayerHostAccount,
   type PlayerHostSnapshot,
 } from "#src/app/player/player-host.js";
+import type { Player, PlayerSnapshot } from "#src/app/player/player.js";
 import { authStateSnapshot, subscribeAuthState } from "#src/auth/account-session.js";
 import { fetchAudiobookForPlayer, getLocalPlaybackPosition } from "#src/data-fetching/reader.js";
 import { mediaSession } from "#src/platform/media-session.js";
@@ -28,7 +25,7 @@ export function PlayerHostProvider({ children }: { children: React.ReactNode }) 
   const [host] = React.useState(
     () =>
       new PlayerHost({
-        createAudioElement: createNarrationAudioElement,
+        createPlayer: createPlatformPlayers(),
         createSession: createPlaybackSession,
         mediaSession,
         getAccount: readPlayerHostAccount,

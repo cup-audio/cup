@@ -11,7 +11,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         registerPlugin(AndroidSharePlugin.class);
-        registerPlugin(MediaSessionPlugin.class);
+        registerPlugin(MediaPlaybackPlugin.class);
         super.onCreate(savedInstanceState);
     }
 

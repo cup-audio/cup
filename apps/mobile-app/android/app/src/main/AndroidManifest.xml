@@ -30,7 +30,7 @@
 
         </activity>
 
-        <!-- The media session's foreground service; no MediaButtonReceiver, so a media button after it
+        <!-- The native player's media session service; no MediaButtonReceiver, so a media button after it
              stopped does not start Cup again. -->
         <service
             android:name=".MediaPlaybackService"

@@ -113,13 +113,19 @@ async function logRequest(request: Request): Promise<void> {
   );
 }
 
-type QaScenario = "success" | "tts-failure" | "speech-gated" | "preparation-failure";
+type QaScenario =
+  | "success"
+  | "tts-failure"
+  | "speech-gated"
+  | "long-speech"
+  | "preparation-failure";
 
 function parseQaScenario(value: string): QaScenario {
   if (
     value === "success" ||
     value === "tts-failure" ||
     value === "speech-gated" ||
+    value === "long-speech" ||
     value === "preparation-failure"
   ) {
     return value;

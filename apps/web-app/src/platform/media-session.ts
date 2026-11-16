@@ -1,6 +1,5 @@
 import { Capacitor } from "@capacitor/core";
 
-import * as android from "#src/platform/media-session.android.js";
 import * as web from "#src/platform/media-session.web.js";
 
 /** What the system's media controls show for the loaded audiobook. */
@@ -51,8 +50,17 @@ export type MediaSessionPort = {
 };
 
 /**
- * Android WebView has no Media Session API, so the Android shell's plugin stands in for it.
- * Browsers and iOS share the `navigator.mediaSession` implementation.
+ * The port for the Android app, whose native player reports to the system itself, through its own
+ * Media3 session.
  */
+export const noMediaSession: MediaSessionPort = {
+  setMetadata: () => undefined,
+  setPlaybackState: () => undefined,
+  setPositionState: () => undefined,
+  setActionHandlers: () => undefined,
+  clear: () => undefined,
+};
+
+/** Browsers and iOS share the `navigator.mediaSession` implementation. */
 export const mediaSession: MediaSessionPort =
-  Capacitor.getPlatform() === "android" ? android.mediaSession : web.mediaSession;
+  Capacitor.getPlatform() === "android" ? noMediaSession : web.mediaSession;

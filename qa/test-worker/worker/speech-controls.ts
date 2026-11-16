@@ -17,7 +17,9 @@ export function createTrackedSpeechProvider(bucket: R2Bucket, scenario: string):
         { failureStatus: 400 }
       : scenario === "speech-gated"
         ? { durationMilliseconds: 8_000 }
-        : { durationMilliseconds: 5_000 },
+        : scenario === "long-speech"
+          ? { durationMilliseconds: 60_000 }
+          : { durationMilliseconds: 5_000 },
   );
   return {
     gateway: (gatewayId) => ({

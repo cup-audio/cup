@@ -1,5 +1,15 @@
 import { clampToTimeline, findUnitIndexAt } from "#src/app/player/audiobook-timeline.ts";
 import type { PlaybackSession } from "#src/app/player/playback-session.ts";
+import {
+  isSameSnapshot,
+  MEDIA_ERROR_MESSAGE,
+  type CreatePlayer,
+  type PlaybackChange,
+  type Player,
+  type PlayerEnding,
+  type PlayerSnapshot,
+  type PositionOnClose,
+} from "#src/app/player/player.ts";
 
 /** What the player uses of the host's `<audio>` element. */
 export type NarrationAudioElement = EventTarget & {
@@ -19,44 +29,8 @@ export type NarrationAudioElement = EventTarget & {
   removeAttribute(name: string): void;
 };
 
-/** The loaded audiobook's playback, on the whole-audiobook timeline. */
-export type PlayerSnapshot = {
-  currentUnitIndex: number;
-  positionMilliseconds: number;
-  durationMilliseconds: number;
-  isPlaying: boolean;
-  isBuffering: boolean;
-  error: string | null;
-};
-
-/** Plays one loaded audiobook; must be closed before another one uses the element. */
-export type Player = {
-  subscribe: (listener: () => void) => () => void;
-  getSnapshot: () => PlayerSnapshot;
-  /** Must be called from a user gesture: browsers only then allow audio to start. */
-  play: () => void;
-  pause: () => void;
-  seekToUnit: (unitIndex: number) => void;
-  seekTo: (positionMilliseconds: number) => void;
-  /** Seeks by an amount from the current position, back when negative, such as −15 s and +15 s. */
-  skipBy: (deltaMilliseconds: number) => void;
-  /** Loads the same track from a newly signed URL, keeping the position; plays nothing. */
-  replaceTrackUrl: (url: string) => void;
-  /** Shows a failure that happened outside the player, until the next Play. */
-  showError: (message: string) => void;
-  /** Releases the element, saving the position unless told otherwise. */
-  close: (position?: PositionOnClose) => void;
-};
-
-/** `"discard"` skips saving the position, for a track that is deleted or no longer exists. */
-export type PositionOnClose = "save" | "discard";
-
-/** How far the −15 s and +15 s controls skip. */
-export const SKIP_MILLISECONDS = 15_000;
-
 const HAVE_METADATA = 1;
 const HAVE_FUTURE_DATA = 3;
-const MEDIA_ERROR_MESSAGE = "Audio could not be played. Press Play to try again.";
 const MEDIA_EVENT_TYPES = [
   "loadedmetadata",
   "durationchange",
@@ -67,14 +41,34 @@ const MEDIA_EVENT_TYPES = [
   "seeked",
   "timeupdate",
   "ended",
+  "ratechange",
   "error",
 ] as const;
+/** The media events the system's media controls must hear of; they extrapolate time updates. */
+const PLAYBACK_CHANGE_EVENT_TYPES = new Set<string>([
+  "play",
+  "pause",
+  "seeked",
+  "ratechange",
+  "waiting",
+  "playing",
+  "ended",
+]);
+
+/**
+ * Plays every loaded audiobook on the one element, which loads only the track's metadata until
+ * Play; the track itself streams once playback starts.
+ */
+export function createElementPlayers(element: NarrationAudioElement): CreatePlayer {
+  element.preload = "metadata";
+  return (session) => new NarrationTrackPlayer(session, element);
+}
 
 /**
  * Whether the element plays. A source that fails before playback starts leaves it unpaused, as
  * Chromium follows the HTML spec's media source failure steps, though it plays nothing.
  */
-export function isElementPlaying(element: Pick<NarrationAudioElement, "paused" | "error">) {
+function isElementPlaying(element: Pick<NarrationAudioElement, "paused" | "error">) {
   return !element.paused && !element.error;
 }
 
@@ -100,6 +94,7 @@ export class NarrationTrackPlayer implements Player {
   private readonly session: PlaybackSession;
   private readonly element: NarrationAudioElement;
   private readonly listeners = new Set<() => void>();
+  private readonly playbackChangeListeners = new Set<(change: PlaybackChange) => void>();
   /** Where to seek once the element knows the track's duration; it cannot seek before. */
   private pendingPositionMilliseconds: number | null;
   private failure: string | null = null;
@@ -130,6 +125,13 @@ export class NarrationTrackPlayer implements Player {
 
   getSnapshot = () => this.snapshot;
 
+  subscribePlaybackChanges = (listener: (change: PlaybackChange) => void) => {
+    this.playbackChangeListeners.add(listener);
+    return () => {
+      this.playbackChangeListeners.delete(listener);
+    };
+  };
+
   play = () => {
     this.failure = null;
 
@@ -148,6 +150,8 @@ export class NarrationTrackPlayer implements Player {
 
   pause = () => {
     this.element.pause();
+    // The element fires `pause` later; a toggle right after must find it paused already.
+    this.publish();
   };
 
   seekToUnit = (unitIndex: number) => {
@@ -190,8 +194,8 @@ export class NarrationTrackPlayer implements Player {
     this.publish();
   };
 
-  /** Saves the position and releases the element, paused, for the host to reuse or empty. */
-  close = (position: PositionOnClose = "save") => {
+  /** Saves the position and releases the element, paused; unloading also empties it. */
+  close = (position: PositionOnClose, ending: PlayerEnding) => {
     if (this.isClosed) {
       return;
     }
@@ -207,7 +211,13 @@ export class NarrationTrackPlayer implements Player {
       this.element.removeEventListener(type, this.handleMediaEvent);
     }
     this.element.pause();
+    if (ending === "unload") {
+      // Removing the source and loading nothing stops the element's network activity.
+      this.element.removeAttribute("src");
+      this.element.load();
+    }
     this.listeners.clear();
+    this.playbackChangeListeners.clear();
   };
 
   private handleMediaEvent = (event: Event) => {
@@ -243,6 +253,11 @@ export class NarrationTrackPlayer implements Player {
     }
 
     this.publish();
+    if (PLAYBACK_CHANGE_EVENT_TYPES.has(event.type)) {
+      for (const listener of this.playbackChangeListeners) {
+        listener({ hasEnded: event.type === "ended" });
+      }
+    }
   };
 
   private applyPendingPosition() {
@@ -283,6 +298,8 @@ export class NarrationTrackPlayer implements Player {
           : this.session.timeline.durationMilliseconds,
       isPlaying,
       isBuffering: isPlaying && element.readyState < HAVE_FUTURE_DATA,
+      playbackRate: element.playbackRate,
+      needsNewTrackUrl: element.error !== null,
       error:
         this.failure ??
         (element.error ? MEDIA_ERROR_MESSAGE : null) ??
@@ -310,15 +327,4 @@ export class NarrationTrackPlayer implements Player {
       listener();
     }
   }
-}
-
-function isSameSnapshot(left: PlayerSnapshot, right: PlayerSnapshot) {
-  return (
-    left.currentUnitIndex === right.currentUnitIndex &&
-    left.positionMilliseconds === right.positionMilliseconds &&
-    left.durationMilliseconds === right.durationMilliseconds &&
-    left.isPlaying === right.isPlaying &&
-    left.isBuffering === right.isBuffering &&
-    left.error === right.error
-  );
 }
