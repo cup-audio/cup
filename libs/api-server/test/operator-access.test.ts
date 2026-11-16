@@ -360,6 +360,36 @@ test("records account allowance adjustments and reports the resulting balance", 
   expect(adjustAllowance).toHaveBeenCalledWith(requestId, -60_000, "goodwill");
 });
 
+test("records an operator mutation by method, path, trace ID and status, without the operator's email", async ({
+  onTestFinished,
+}) => {
+  const { env } = fixture();
+  const app = createApiServer({ validateOperatorAccess: async () => true });
+  const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+  onTestFinished(() => info.mockRestore());
+
+  const response = await app.request(
+    adjustmentRequest({
+      requestId: "0b8d3e8c-7f43-4c56-8e57-30cbb1ad7b1e",
+      amountMilliseconds: 60_000,
+      reason: "refund",
+    }),
+    {},
+    { ...env, OPERATOR_EMAIL: "operator@example.test" },
+  );
+
+  expect(response.status).toBe(200);
+  expect(info.mock.calls.map(([record]) => JSON.parse(String(record)) as unknown)).toEqual([
+    {
+      event: "operator-mutation",
+      method: "POST",
+      path: `/api/operator/accounts/${accountId}/allowance-adjustments`,
+      traceId: expect.stringMatching(/^[0-9a-f]{32}$/),
+      status: 200,
+    },
+  ]);
+});
+
 test("rejects account allowance adjustments for unknown accounts and invalid input", async () => {
   const { env, adjustAllowance } = fixture();
   const app = createApiServer({ validateOperatorAccess: async () => true });

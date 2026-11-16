@@ -55,7 +55,7 @@ async function recordAudiobookAuthorization(page: Page) {
 
 type ApiRequestModule = typeof import("#src/data-fetching/api-request.ts");
 
-test("unsuccessful responses reject with the API error code, status, retry delay, and request ID", async ({
+test("unsuccessful responses reject with the API error code, status, retry delay, and trace ID", async ({
   page,
 }) => {
   let response = 0;
@@ -69,7 +69,7 @@ test("unsuccessful responses reject with the API error code, status, retry delay
           error: {
             code: ERROR_CODE.RATE_LIMITED,
             message: "Try again shortly.",
-            requestId: "09e6d824-d41d-43bb-9417-18f89232ba56",
+            traceId: "0af7651916cd43dd8448eb211c80319c",
           },
         },
       });
@@ -103,8 +103,8 @@ test("unsuccessful responses reject with the API error code, status, retry delay
       if (!(failure instanceof RpcError)) {
         throw new Error("Expected an RpcError");
       }
-      const { code, message, status, retryAfter, requestId } = failure;
-      results.push({ code, message, status, retryAfter, requestId });
+      const { code, message, status, retryAfter, traceId } = failure;
+      results.push({ code, message, status, retryAfter, traceId });
     }
     return results;
   }, GRANT_ID);
@@ -114,28 +114,28 @@ test("unsuccessful responses reject with the API error code, status, retry delay
       message: "Try again shortly.",
       status: 429,
       retryAfter: 7,
-      requestId: "09e6d824-d41d-43bb-9417-18f89232ba56",
+      traceId: "0af7651916cd43dd8448eb211c80319c",
     },
     {
       code: ERROR_CODE.GRANT_SESSION_INVALID,
       message: "No access.",
       status: 401,
       retryAfter: 60,
-      requestId: undefined,
+      traceId: undefined,
     },
     {
       code: ERROR_CODE.OPERATIONAL_ERROR,
       message: "Not now.",
       status: 409,
       retryAfter: 60,
-      requestId: undefined,
+      traceId: undefined,
     },
     {
       code: ERROR_CODE.OPERATIONAL_ERROR,
       message: "The request could not be completed.",
       status: 502,
       retryAfter: 60,
-      requestId: undefined,
+      traceId: undefined,
     },
   ]);
 });

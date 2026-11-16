@@ -36,6 +36,7 @@ export function ErrorScreen({
   return (
     <ErrorMessage title={description.title}>
       {description.detail}
+      {description.reference === undefined ? null : <p>Reference: {description.reference}</p>}
       {description.isRetryable ? (
         <DSButton type="button" variant="contained" onClick={onRetry}>
           Try again

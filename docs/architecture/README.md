@@ -139,7 +139,7 @@ Durable Object RPC and Workflow invocation are internal platform interfaces, not
 
 ### Errors
 
-Every error response carries the same envelope: an error code from its API's contract, a message, and the request ID; the OpenAPI tests check that every operation declares its errors with the shared schema. Both clients turn every unsuccessful response into an `RpcError` with that code, the HTTP status, the retry delay, and the request ID, through the shared [response handling](../../libs/api-rpc.client/src/rpc-response.ts). A response without a code the client knows, such as a proxy's error page, gets `operational-error`. The contract guides describe how to add an error code.
+Every error response carries the same envelope: an error code from its API's contract, a message, and `traceId`, the request's Sentry trace ID as 32 hex characters, which finds the request's trace in Sentry's search ([Observability](observability.md#error-references)); the OpenAPI tests check that every operation declares its errors with the shared schema. Both clients turn every unsuccessful response into an `RpcError` with that code, the HTTP status, the retry delay, and the trace ID, through the shared [response handling](../../libs/api-rpc.client/src/rpc-response.ts). A response without a code the client knows, such as a proxy's error page, gets `operational-error`. The contract guides describe how to add an error code.
 
 ## Storage ownership
 

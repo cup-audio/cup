@@ -381,7 +381,7 @@ const coverImageHeadRoute = createRoute({ ...coverImageRoute, method: "head" });
 
 type ListenerApiEnvironment<Bindings extends object> = {
   Bindings: Bindings;
-  Variables: { requestId: string };
+  Variables: { traceId: string };
 };
 type ListenerApiRouteHandler<Route, Bindings extends object> = Route extends Parameters<
   typeof createRoute
@@ -484,7 +484,7 @@ export function createListenerOpenApiDocument(): OpenApiDocument {
 function defaultHook(
   result: { success: boolean; error?: { issues: Array<{ message: string }> } },
   context: {
-    get(name: "requestId"): string;
+    get(name: "traceId"): string;
     json(value: unknown, status: 400): Response;
   },
 ) {
@@ -495,7 +495,7 @@ function defaultHook(
           error: {
             code: "invalid-input",
             message: result.error?.issues[0]?.message ?? "Request validation failed.",
-            requestId: context.get("requestId"),
+            traceId: context.get("traceId"),
           },
         },
         400,

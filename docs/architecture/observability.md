@@ -12,7 +12,13 @@ Every Worker entry point is wrapped with `@sentry/cloudflare` in the [Worker ent
 
 Sentry's projects, keys and privacy settings are managed in [Terraform](../../terraform/README.md#sentry); the two public DSNs are constants in `@cup/telemetry.core`. The `cup-app` project for the web app and the shells exists, but nothing sends to it yet.
 
-Planned by the spec and not built yet: Cup's own log records through `Sentry.logger`, the `cup.conversion.id` join key on every conversion-scoped record, `traceId` in error bodies, captures in the Durable Objects and Workflows, the stuck checks, alerts and monitors, the telemetry tunnel, client telemetry in the web app and the shells, `/api/health`, and source map upload.
+Planned by the spec and not built yet: Cup's own log records through `Sentry.logger`, the `cup.conversion.id` join key on every conversion-scoped record, captures in the Durable Objects and Workflows, the stuck checks, alerts and monitors, the telemetry tunnel, client telemetry in the web app and the shells, `/api/health`, and source map upload.
+
+## Error references
+
+Every error body of the Listener API and the Operator API carries `traceId`, the Sentry trace ID of the request: 32 hex characters, read from the request's active span in the [API server](../../libs/api-server/src/api-server.ts). Pasted into Sentry's search, it lands on the request's trace and on the error event of a 500, which carries the same trace ID. The web app shows it as "Reference" on the error screen and in the error toast of a server failure, and the [Operator CLI](../../apps/operator/README.md#use-machine-readable-output) prints it with each API failure. With Sentry off, outside production, the ID is still a well-formed trace ID that matches nothing.
+
+The `operator-mutation` record that the API server writes for each Operator API mutation carries the method, path, trace ID and status, and no email address.
 
 ## Telemetry libraries
 

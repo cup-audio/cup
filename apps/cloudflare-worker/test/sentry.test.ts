@@ -1,5 +1,6 @@
 import { test } from "vitest";
 
+import { errorResponseSchema } from "@cup/listener-api.routes";
 import { LOCAL_OPERATOR_ACCESS_TOKEN } from "@cup/operator-api.routes";
 import { useSentryStub, type SentryStub } from "@cup/sentry-stub";
 
@@ -56,6 +57,27 @@ test("a 500 sends exactly one error event, without the media token", async ({
     exception: { values: [{ type: "Error", value: "MEDIA_URL_SIGNING_KEY must not be empty." }] },
   });
   expect(JSON.stringify(events[0])).not.toContain("eyJhIjoxfQ");
+});
+
+test("a 500's body carries the trace ID of the event Sentry receives", async ({
+  expect,
+  onTestFinished,
+}) => {
+  const sentry = await useSentryStub({ onTestFinished });
+  const worker = await useWorker({
+    onTestFinished,
+    sentryDsn: sentry.dsn("cup-worker"),
+    secrets: { MEDIA_URL_SIGNING_KEY: "" },
+  });
+
+  const response = await worker.fetch(MEDIA_URL);
+
+  expect(response.status).toBe(500);
+  // The contract requires a 32-hex trace ID.
+  const body = errorResponseSchema.parse(await response.json());
+  await sentry.waitFor("an error event", () => sentry.errorEvents("cup-worker").length > 0);
+  const [event] = sentry.errorEvents("cup-worker");
+  expect(event?.contexts?.["trace"]?.["trace_id"]).toBe(body.error.traceId);
 });
 
 test("a 4xx sends no error event", async ({ expect, onTestFinished }) => {

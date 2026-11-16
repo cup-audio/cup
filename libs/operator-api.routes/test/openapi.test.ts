@@ -69,7 +69,7 @@ describe("operator API OpenAPI document", () => {
       properties: {
         error: {
           properties: { code: { enum: Object.values(ERROR_CODE) } },
-          required: ["code", "message", "requestId"],
+          required: ["code", "message", "traceId"],
         },
       },
     });
