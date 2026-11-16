@@ -49,6 +49,15 @@ export const LOG_EVENTS = {
   "narration-track-segment-mismatch": "error",
   /** The operator changed something through the Operator API. */
   "operator-mutation": "info",
+  /**
+   * The owner recorded a preparation outcome: `ready`, `failed` with its failure category, or
+   * `insufficient-duration` for a prepared document that did not fit the available duration.
+   */
+  "conversion-preparation-settled": "info",
+  /** The owner settled an audio segment's audio, or released its reservation after a failure. */
+  "audio-segment-settled": "info",
+  /** The last reserved audio segment of a conversion settled or was released. */
+  "conversion-synthesis-settled": "info",
 } as const satisfies Record<string, LogEventSeverity>;
 
 export type LogEventName = keyof typeof LOG_EVENTS;

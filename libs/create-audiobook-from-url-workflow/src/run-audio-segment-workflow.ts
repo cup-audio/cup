@@ -9,11 +9,16 @@ import {
   RateLimitedNarrationSynthesisError,
   type SpeechSynthesisAi,
 } from "@cup/audiobook-production";
-import { segmentWorkflowParamsSchema, type SegmentWorkflowParams } from "@cup/conversion-contracts";
+import {
+  ConversionPhase,
+  segmentWorkflowParamsSchema,
+  type SegmentWorkflowParams,
+} from "@cup/conversion-contracts";
 import { setConversionScope } from "@cup/telemetry.cloudflare";
 import { TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
 
 import { resolveConversionExecution } from "#src/conversion-execution.ts";
+import { phaseStepName } from "#src/phase-step-name.ts";
 import type { AudiobookWorkflowEnvironment } from "#src/workflow-environment.ts";
 
 // The whole narration document is dispatched at once, so a burst can exceed the provider's
@@ -42,28 +47,40 @@ export async function runAudioSegmentWorkflow({
 
   const execution = resolveConversionExecution(env, params);
   const { artifactPrefix: prefix, artifactBucket: bucket } = execution;
-  const audiobook = await step.do("load prepared narration", async () => {
-    const manifest = await execution.getReadyAudiobookReference();
-    if (!manifest || manifest.key !== `${prefix}audiobook.json`) {
-      throw new NonRetryableError("Prepared narration is unavailable");
-    }
-    return loadAudiobook({ bucket, audiobookReference: manifest });
-  });
+  const audiobook = await step.do(
+    phaseStepName(ConversionPhase.AUDIO_SEGMENT_PRODUCTION, "load prepared narration"),
+    async () => {
+      const manifest = await execution.getReadyAudiobookReference();
+      if (!manifest || manifest.key !== `${prefix}audiobook.json`) {
+        throw new NonRetryableError("Prepared narration is unavailable");
+      }
+      return loadAudiobook({ bucket, audiobookReference: manifest });
+    },
+  );
   const unit = audiobook.narrationDocument.synchronizationUnits[sequence];
   if (!unit) {
     throw new NonRetryableError("Synchronization unit does not exist");
   }
 
-  const synthesize = (rateLimitWaits: number) =>
+  // Each synthesis step counts the run's attempts so far: its own plus those that the steps before
+  // a rate limit wait returned. The release after a final failure reports the count of the step that
+  // ran last; a replay of the run skips step callbacks, so a release after a replay reports none.
+  let lastStepAttempts: number | undefined;
+  const synthesize = (rateLimitWaits: number, earlierAttempts: number) =>
     step.do(
-      rateLimitWaits === 0
-        ? "synthesize and settle audio segment"
-        : `synthesize and settle audio segment after rate limit wait ${rateLimitWaits}`,
+      phaseStepName(
+        ConversionPhase.AUDIO_SEGMENT_PRODUCTION,
+        rateLimitWaits === 0
+          ? "synthesize and settle audio segment"
+          : `synthesize and settle audio segment after rate limit wait ${rateLimitWaits}`,
+      ),
       {
         retries: { limit: 2, delay: "5 seconds", backoff: "exponential" },
         timeout: "2 minutes",
       },
       async ({ attempt }) => {
+        const attempts = earlierAttempts + attempt;
+        lastStepAttempts = attempts;
         // The owner reserves the whole document or nothing; a lone segment never reserves itself.
         const state = await execution.getAudioSegmentState(sequence);
         if (state !== "reserved" && state !== "settled") {
@@ -85,14 +102,14 @@ export async function runAudioSegmentWorkflow({
             synthesisAttempt: attempt,
             synthesisResponseMode: attempt === 1 ? "streaming" : "non-streaming",
           });
-          await execution.completeAudioSegment(sequence, segment.durationMilliseconds);
-          return segment;
+          await execution.completeAudioSegment(sequence, segment.durationMilliseconds, attempts);
+          return { result: "settled" as const, segment };
         } catch (error) {
           if (
             error instanceof RateLimitedNarrationSynthesisError &&
             rateLimitWaits < MAX_RATE_LIMIT_WAITS
           ) {
-            return "rate-limited" as const;
+            return { result: "rate-limited" as const, attempts };
           }
           if (error instanceof PermanentNarrationSynthesisError) {
             throw new NonRetryableError(error.message);
@@ -103,11 +120,13 @@ export async function runAudioSegmentWorkflow({
     );
 
   try {
+    let earlierAttempts = 0;
     for (let rateLimitWaits = 0; ; rateLimitWaits += 1) {
-      const outcome = await synthesize(rateLimitWaits);
-      if (outcome !== "rate-limited") {
-        return outcome;
+      const outcome = await synthesize(rateLimitWaits, earlierAttempts);
+      if (outcome.result === "settled") {
+        return outcome.segment;
       }
+      earlierAttempts = outcome.attempts;
 
       await step.sleep(
         `wait for speech provider rate limit ${rateLimitWaits + 1}`,
@@ -115,24 +134,27 @@ export async function runAudioSegmentWorkflow({
       );
     }
   } catch (error) {
-    await step.do("release failed segment reservation", async () => {
-      await execution.releaseAudioSegment(sequence);
-      await bucket.put(
-        `${prefix}segment-${sequence}-failure.json`,
-        JSON.stringify({
-          explanation:
-            error instanceof Error
-              ? error.message
-              : "Speech generation failed. Retry this segment.",
-        }),
-        { httpMetadata: { contentType: "application/json" } },
-      );
-      // Last in the step, so only a step that released the reservation reports the final failure,
-      // and a replay of the run reuses the recorded step instead of capturing again.
-      captureException(error, {
-        tags: { [TELEMETRY_ATTRIBUTES.CONVERSION_FAILURE_CATEGORY]: "segment" },
-      });
-    });
+    await step.do(
+      phaseStepName(ConversionPhase.AUDIO_SEGMENT_PRODUCTION, "release failed segment reservation"),
+      async () => {
+        await execution.releaseAudioSegment(sequence, lastStepAttempts);
+        await bucket.put(
+          `${prefix}segment-${sequence}-failure.json`,
+          JSON.stringify({
+            explanation:
+              error instanceof Error
+                ? error.message
+                : "Speech generation failed. Retry this segment.",
+          }),
+          { httpMetadata: { contentType: "application/json" } },
+        );
+        // Last in the step, so only a step that released the reservation reports the final failure,
+        // and a replay of the run reuses the recorded step instead of capturing again.
+        captureException(error, {
+          tags: { [TELEMETRY_ATTRIBUTES.CONVERSION_FAILURE_CATEGORY]: "segment" },
+        });
+      },
+    );
     throw error;
   }
 }

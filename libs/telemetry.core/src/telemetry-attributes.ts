@@ -17,6 +17,18 @@ export const TELEMETRY_ATTRIBUTES = {
   CONVERSION_FAILURE_CATEGORY: "cup.conversion.failure_category",
   /** The conversion phase a conversion last started, such as `narration-content-selection`. */
   CONVERSION_PHASE: "cup.conversion.phase",
+  /** A preparation outcome: `ready`, `failed` or `insufficient-duration`. */
+  CONVERSION_OUTCOME: "cup.conversion.outcome",
+  /** Milliseconds from the conversion's creation until the event, retries included. */
+  CONVERSION_ELAPSED_MS: "cup.conversion.elapsed_ms",
+  /** How many of a conversion's audio segments were released after a failure. */
+  CONVERSION_FAILED_SEGMENTS: "cup.conversion.failed_segments",
+  /** How an audio segment settled: `settled` with audio, or `released` after a failure. */
+  AUDIO_SEGMENT_OUTCOME: "cup.audio_segment.outcome",
+  /** Milliseconds from the segment's duration reservation until it settled or was released. */
+  AUDIO_SEGMENT_SYNTHESIS_MS: "cup.audio_segment.synthesis_ms",
+  /** The synthesis attempts of the segment's Workflow run, rate-limited ones included. */
+  AUDIO_SEGMENT_ATTEMPTS: "cup.audio_segment.attempts",
   /** `preparation` or `synthesis`: the stage a stuck conversion hangs in. */
   CONVERSION_STAGE: "cup.conversion.stage",
   /** The wrapper types of a logged error, outermost to innermost. */

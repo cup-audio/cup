@@ -35,6 +35,7 @@ import { logEvent, setConversionScope } from "@cup/telemetry.cloudflare";
 import { TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
 
 import { resolveConversionExecution } from "#src/conversion-execution.ts";
+import { phaseStepName } from "#src/phase-step-name.ts";
 import type { AudiobookWorkflowEnvironment } from "#src/workflow-environment.ts";
 
 const PREPARE_STEP_CONFIG = {
@@ -131,7 +132,10 @@ export async function runPrepareAudiobookWorkflow({
   const result = await (async () => {
     try {
       const sourceMaterial = await step.do(
-        "prepare audiobook source material",
+        phaseStepName(
+          ConversionPhase.SOURCE_MATERIAL_PREPARATION,
+          "prepare audiobook source material",
+        ),
         PREPARE_STEP_CONFIG,
         async () => {
           await execution.phaseStarted(ConversionPhase.SOURCE_MATERIAL_PREPARATION);
@@ -152,18 +156,30 @@ export async function runPrepareAudiobookWorkflow({
       });
 
       stage = "content-selection";
-      await step.do("start narration content selection", PROCESSING_STEP_CONFIG, () =>
-        execution.phaseStarted(ConversionPhase.NARRATION_CONTENT_SELECTION),
+      await step.do(
+        phaseStepName(
+          ConversionPhase.NARRATION_CONTENT_SELECTION,
+          "start narration content selection",
+        ),
+        PROCESSING_STEP_CONFIG,
+        () => execution.phaseStarted(ConversionPhase.NARRATION_CONTENT_SELECTION),
       );
       const { selectedSourceMaterialHtml, usage: contentSelectionUsage } =
         await services.selectNarrationContent(sourceMaterial.html, {
           conversionId,
           runChunk: (chunkIndex, select) =>
-            step.do(`select narration content chunk ${chunkIndex + 1}`, AI_STEP_CONFIG, select),
+            step.do(
+              phaseStepName(
+                ConversionPhase.NARRATION_CONTENT_SELECTION,
+                `select narration content chunk ${chunkIndex + 1}`,
+              ),
+              AI_STEP_CONFIG,
+              select,
+            ),
         });
 
       const narrationDocument = await step.do(
-        "create narration document",
+        phaseStepName(ConversionPhase.NARRATION_DOCUMENT_CREATION, "create narration document"),
         PROCESSING_STEP_CONFIG,
         async () => {
           await execution.phaseStarted(ConversionPhase.NARRATION_DOCUMENT_CREATION);
@@ -215,7 +231,7 @@ export async function runPrepareAudiobookWorkflow({
 
       const coverImage = await coverImagePromise;
       const audiobookReference = await step.do(
-        "store audiobook",
+        phaseStepName(ConversionPhase.AUDIOBOOK_STORAGE, "store audiobook"),
         PROCESSING_STEP_CONFIG,
         async () => {
           await execution.phaseStarted(ConversionPhase.AUDIOBOOK_STORAGE);
@@ -256,7 +272,7 @@ export async function runPrepareAudiobookWorkflow({
       await coverImagePromise;
 
       const failedOutcome = await step.do(
-        "create failed conversion outcome",
+        phaseStepName(ConversionPhase.FINALIZATION, "create failed conversion outcome"),
         PROCESSING_STEP_CONFIG,
         async () => {
           // A content limit is an expected outcome, which the `content-limit` warning records. Any
@@ -283,15 +299,19 @@ export async function runPrepareAudiobookWorkflow({
         },
       );
 
-      await step.do("record conversion failure", TERMINAL_STATE_STEP_CONFIG, async () => {
-        await execution.recordFailed(failedOutcome);
-      });
+      await step.do(
+        phaseStepName(ConversionPhase.FINALIZATION, "record conversion failure"),
+        TERMINAL_STATE_STEP_CONFIG,
+        async () => {
+          await execution.recordFailed(failedOutcome);
+        },
+      );
       throw error;
     }
   })();
 
   const readyOutcome = await step.do(
-    "create ready conversion outcome",
+    phaseStepName(ConversionPhase.FINALIZATION, "create ready conversion outcome"),
     PROCESSING_STEP_CONFIG,
     async () => {
       await execution.phaseStarted(ConversionPhase.FINALIZATION);
@@ -302,15 +322,23 @@ export async function runPrepareAudiobookWorkflow({
     },
   );
 
-  await step.do("record conversion ready", TERMINAL_STATE_STEP_CONFIG, async () => {
-    await execution.recordReady(readyOutcome, result.narrationTextCharactersBySegment);
-  });
+  await step.do(
+    phaseStepName(ConversionPhase.FINALIZATION, "record conversion ready"),
+    TERMINAL_STATE_STEP_CONFIG,
+    async () => {
+      await execution.recordReady(readyOutcome, result.narrationTextCharactersBySegment);
+    },
+  );
 
   // The ready outcome already reserved every segment or none. Insufficient duration is a valid
   // result that leaves nothing to dispatch; the owner's alarm dispatches if this step fails.
-  await step.do("start speech synthesis", TERMINAL_STATE_STEP_CONFIG, async () => {
-    await execution.startSynthesis(result.narrationTextCharactersBySegment);
-  });
+  await step.do(
+    phaseStepName(ConversionPhase.FINALIZATION, "start speech synthesis"),
+    TERMINAL_STATE_STEP_CONFIG,
+    async () => {
+      await execution.startSynthesis(result.narrationTextCharactersBySegment);
+    },
+  );
 
   return result.audiobookReference;
 }
@@ -341,25 +369,30 @@ async function storeDeclaredCoverImage({
   }
 
   try {
-    const outcome = await step.do("store cover image", COVER_IMAGE_STEP_CONFIG, async () => {
-      const loaded = await loadCoverImage(declaration, sourceUrl);
-      if (loaded.result === "refused") {
-        return loaded;
-      }
+    const outcome = await step.do(
+      // Runs beside content selection; it keeps an image the source material declares.
+      phaseStepName(ConversionPhase.SOURCE_MATERIAL_PREPARATION, "store cover image"),
+      COVER_IMAGE_STEP_CONFIG,
+      async () => {
+        const loaded = await loadCoverImage(declaration, sourceUrl);
+        if (loaded.result === "refused") {
+          return loaded;
+        }
 
-      // The bytes are stored inside the step because a step result cannot carry them.
-      const coverImage = await storeCoverImage({
-        artifactPrefix,
-        bucket,
-        bytes: loaded.bytes,
-        contentType: loaded.contentType,
-        conversionId,
-        ...(declaration.alternativeText === undefined
-          ? {}
-          : { alternativeText: declaration.alternativeText }),
-      });
-      return { result: "stored" as const, coverImage };
-    });
+        // The bytes are stored inside the step because a step result cannot carry them.
+        const coverImage = await storeCoverImage({
+          artifactPrefix,
+          bucket,
+          bytes: loaded.bytes,
+          contentType: loaded.contentType,
+          conversionId,
+          ...(declaration.alternativeText === undefined
+            ? {}
+            : { alternativeText: declaration.alternativeText }),
+        });
+        return { result: "stored" as const, coverImage };
+      },
+    );
     if (outcome.result === "stored") {
       return outcome.coverImage;
     }
@@ -393,7 +426,11 @@ async function detectNarrationLanguage({
   const result = await detect(input, {
     conversionId,
     runDetection: (detectLanguage) =>
-      step.do("detect narration language", AI_STEP_CONFIG, detectLanguage),
+      step.do(
+        phaseStepName(ConversionPhase.NARRATION_DOCUMENT_CREATION, "detect narration language"),
+        AI_STEP_CONFIG,
+        detectLanguage,
+      ),
   });
 
   if (result.fallbackReason !== undefined) {

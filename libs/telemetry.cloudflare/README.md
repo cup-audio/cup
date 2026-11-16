@@ -14,6 +14,8 @@ The options include the server `beforeSend` and `beforeSendSpan` from [`server-b
 
 [`logEvent(event, message, { attributes, error })`](src/log-event.ts) writes one log record of the [catalogue](../telemetry.core/src/log-events.ts) through `Sentry.logger`, at the event's fixed severity, with the event name as `event.name`. Pass details as `attributes` under `TELEMETRY_ATTRIBUTES` keys or semantic-convention names, never an email address, and a caught error as `error`: the record then carries its root cause as `exception.*` and the wrapper types as `cup.exception.chain`. Without an active Sentry client, as in local development and tests, it writes nothing. Tests of code that logs mock `logEvent` with `vi.mock` and assert on its calls.
 
+[`logPreparationSettled`](src/conversion-outcomes.ts) and `logAudioSegmentSettled` write the [conversion outcome records](../../docs/architecture/observability.md#conversion-durations) for both conversion owners; `logAudioSegmentSettled` also writes `conversion-synthesis-settled` when the segment was the conversion's last reserved one.
+
 [`setConversionScope({ conversionId, owner, sequence })`](src/conversion-scope.ts) puts the conversion's keys on the current invocation's isolation scope, so Sentry sends them as tags on errors and as attributes on spans and logs; call it once per entry point, as soon as it knows the conversion. `withConversionScope(context, callback)` does the same in a fork of the scope, for one iteration of an alarm that works through several conversions. The [observability page](../../docs/architecture/observability.md#correlation) lists the entry points.
 
 ## Telemetry tunnel

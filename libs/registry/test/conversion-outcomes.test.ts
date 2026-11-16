@@ -1,0 +1,319 @@
+/*
+ * The conversion outcome `info` events both owners send when they record an outcome, against a
+ * Sentry stub (`@cup/sentry-stub`). Both owners run Sentry-wrapped, as in the Worker.
+ */
+
+import nodeUrl from "node:url";
+import { Temporal } from "temporal-polyfill";
+import { afterAll, beforeAll, expect, test } from "vitest";
+import { createTestHarness } from "wrangler";
+
+import { startSentryStub, type SentryLog, type SentryStub } from "@cup/sentry-stub";
+
+import type {
+  SentryAccountDurableObject,
+  SentryConversionGrantDurableObject,
+} from "#test/worker.ts";
+
+type TestEnvironment = {
+  SENTRY_ACCOUNTS: DurableObjectNamespace<InstanceType<typeof SentryAccountDurableObject>>;
+  SENTRY_CONVERSION_GRANTS: DurableObjectNamespace<
+    InstanceType<typeof SentryConversionGrantDurableObject>
+  >;
+};
+
+const MINUTE_MS = 60_000;
+const NARRATION_TEXT_CHARACTERS_BY_SEGMENT = [100, 100];
+/** Each test waits for several end-of-invocation flushes from the Durable Object to the stub. */
+const TEST_TIMEOUT_MS = 30_000;
+
+let stub: SentryStub;
+const harness = createTestHarness({
+  root: nodeUrl.fileURLToPath(new URL("..", import.meta.url)),
+  workers: [{ configPath: "./wrangler.test.jsonc" }],
+});
+const worker = harness.getWorker();
+let bindings: TestEnvironment;
+
+beforeAll(async () => {
+  stub = await startSentryStub();
+  await harness.update({
+    root: nodeUrl.fileURLToPath(new URL("..", import.meta.url)),
+    workers: [
+      { configPath: "./wrangler.test.jsonc", vars: { SENTRY_DSN: stub.dsn("cup-worker") } },
+    ],
+  });
+  await harness.listen();
+  const environment: unknown = await worker.getEnv();
+  if (!isTestEnvironment(environment)) {
+    throw new Error("Conversion outcome test bindings unavailable");
+  }
+  bindings = environment;
+}, 30_000);
+
+afterAll(async () => {
+  await harness.close();
+  await stub.close();
+}, TEST_TIMEOUT_MS);
+
+test(
+  "a trial conversion's preparation, segments and synthesis each send an info event with their outcome and duration",
+  async () => {
+    const { grant } = await createGrant();
+    const createdAtMs = Temporal.Now.instant().epochMilliseconds - 10 * MINUTE_MS;
+    const conversionId = await startGrantConversion(grant, createdAtMs);
+
+    await grant.recordReady(
+      conversionId,
+      { ...readyGrantOutcome(conversionId), completedAtMs: createdAtMs + 5 * MINUTE_MS },
+      NARRATION_TEXT_CHARACTERS_BY_SEGMENT,
+    );
+    await waitForLogs("conversion-preparation-settled", conversionId, 1);
+    expect(logs("conversion-preparation-settled", conversionId)[0]).toMatchObject({
+      level: "info",
+      attributes: {
+        "cup.conversion.id": { value: conversionId },
+        "cup.conversion.outcome": { value: "ready" },
+        "cup.conversion.elapsed_ms": { value: 5 * MINUTE_MS },
+      },
+    });
+
+    await grant.completeAudioSegment(conversionId, 0, 1_000, 2);
+    await grant.releaseAudioSegment(conversionId, 1, 3);
+    await waitForLogs("audio-segment-settled", conversionId, 2);
+    const [settled, released] = logs("audio-segment-settled", conversionId);
+    expect(settled).toMatchObject({
+      level: "info",
+      attributes: {
+        "cup.conversion.id": { value: conversionId },
+        "cup.audio_segment.sequence": { value: 0 },
+        "cup.audio_segment.outcome": { value: "settled" },
+        "cup.audio_segment.attempts": { value: 2 },
+      },
+    });
+    expect(settled?.attributes["cup.audio_segment.synthesis_ms"]?.value).toBeGreaterThanOrEqual(0);
+    expect(released).toMatchObject({
+      attributes: {
+        "cup.audio_segment.sequence": { value: 1 },
+        "cup.audio_segment.outcome": { value: "released" },
+        "cup.audio_segment.attempts": { value: 3 },
+      },
+    });
+
+    // The release settled the last reserved segment; the settlement before it left one reserved.
+    await waitForLogs("conversion-synthesis-settled", conversionId, 1);
+    const synthesisSettled = logs("conversion-synthesis-settled", conversionId);
+    expect(synthesisSettled).toHaveLength(1);
+    expect(synthesisSettled[0]).toMatchObject({
+      level: "info",
+      attributes: {
+        "cup.conversion.id": { value: conversionId },
+        "cup.conversion.failed_segments": { value: 1 },
+      },
+    });
+    expect(
+      synthesisSettled[0]?.attributes["cup.conversion.elapsed_ms"]?.value,
+    ).toBeGreaterThanOrEqual(10 * MINUTE_MS);
+  },
+  TEST_TIMEOUT_MS,
+);
+
+test(
+  "a failed trial preparation sends its failure category",
+  async () => {
+    const { grant } = await createGrant();
+    const createdAtMs = Temporal.Now.instant().epochMilliseconds;
+    const conversionId = await startGrantConversion(grant, createdAtMs);
+
+    await grant.recordFailed(conversionId, {
+      failureCategory: "content-selection",
+      explanation: "Stopped.",
+      completedAtMs: createdAtMs + 2 * MINUTE_MS,
+    });
+
+    await waitForLogs("conversion-preparation-settled", conversionId, 1);
+    expect(logs("conversion-preparation-settled", conversionId)[0]).toMatchObject({
+      attributes: {
+        "cup.conversion.id": { value: conversionId },
+        "cup.conversion.outcome": { value: "failed" },
+        "cup.conversion.failure_category": { value: "content-selection" },
+        "cup.conversion.elapsed_ms": { value: 2 * MINUTE_MS },
+      },
+    });
+  },
+  TEST_TIMEOUT_MS,
+);
+
+test(
+  "a prepared trial conversion that does not fit the available duration settles as insufficient-duration",
+  async () => {
+    const { grant } = await createGrant();
+    const createdAtMs = Temporal.Now.instant().epochMilliseconds;
+    const conversionId = await startGrantConversion(grant, createdAtMs);
+
+    await grant.recordReady(
+      conversionId,
+      { ...readyGrantOutcome(conversionId), completedAtMs: createdAtMs + MINUTE_MS },
+      // Far more narration than a new grant's duration allowance covers.
+      [10_000_000],
+    );
+
+    await waitForLogs("conversion-preparation-settled", conversionId, 1);
+    expect(logs("conversion-preparation-settled", conversionId)[0]).toMatchObject({
+      attributes: {
+        "cup.conversion.outcome": { value: "insufficient-duration" },
+        "cup.conversion.elapsed_ms": { value: MINUTE_MS },
+      },
+    });
+  },
+  TEST_TIMEOUT_MS,
+);
+
+test(
+  "an account conversion whose segments all settle sends its synthesis outcome without failed segments",
+  async () => {
+    const { account, accountId } = await createAccount();
+    const createdAtMs = Temporal.Now.instant().epochMilliseconds - 10 * MINUTE_MS;
+    const conversionId = await startAccountConversion(account, createdAtMs);
+
+    await account.settleConversion(
+      conversionId,
+      {
+        status: "ready",
+        title: "Book",
+        audiobookReference: {
+          key: `accounts/${accountId}/conversions/${conversionId}/executions/1/audiobook.json`,
+          contentType: "application/json",
+          byteLength: 123,
+          etag: "fixture",
+        },
+      },
+      createdAtMs + 3 * MINUTE_MS,
+      1,
+      NARRATION_TEXT_CHARACTERS_BY_SEGMENT,
+    );
+    await account.completeAudioSegment(conversionId, 0, 1_000, 1, 1);
+    await account.completeAudioSegment(conversionId, 1, 1_000, 1, 1);
+
+    await waitForLogs("conversion-synthesis-settled", conversionId, 1);
+    expect(logs("conversion-preparation-settled", conversionId)[0]).toMatchObject({
+      attributes: {
+        "cup.conversion.outcome": { value: "ready" },
+        "cup.conversion.elapsed_ms": { value: 3 * MINUTE_MS },
+      },
+    });
+    expect(logs("audio-segment-settled", conversionId)).toEqual([
+      expect.objectContaining({
+        attributes: expect.objectContaining({
+          "cup.audio_segment.sequence": expect.objectContaining({ value: 0 }),
+          "cup.audio_segment.outcome": expect.objectContaining({ value: "settled" }),
+          "cup.audio_segment.attempts": expect.objectContaining({ value: 1 }),
+        }),
+      }),
+      expect.objectContaining({
+        attributes: expect.objectContaining({
+          "cup.audio_segment.sequence": expect.objectContaining({ value: 1 }),
+        }),
+      }),
+    ]);
+    const [synthesisSettled] = logs("conversion-synthesis-settled", conversionId);
+    expect(synthesisSettled).toMatchObject({
+      attributes: {
+        "cup.conversion.id": { value: conversionId },
+        "cup.conversion.failed_segments": { value: 0 },
+      },
+    });
+    expect(synthesisSettled?.attributes["cup.conversion.elapsed_ms"]?.value).toBeGreaterThanOrEqual(
+      10 * MINUTE_MS,
+    );
+  },
+  TEST_TIMEOUT_MS,
+);
+
+async function createAccount() {
+  const accountId = crypto.randomUUID();
+  const account = bindings.SENTRY_ACCOUNTS.get(bindings.SENTRY_ACCOUNTS.idFromName(accountId));
+  const nowMs = Temporal.Now.instant().epochMilliseconds;
+  await account.initialize({ accountId, subject: crypto.randomUUID(), createdAtMs: nowMs });
+  // Enough duration for the tests' two-segment narration documents.
+  await account.adjustAllowance(crypto.randomUUID(), 3_600_000, "conversion-outcome-test", nowMs);
+  return { account, accountId };
+}
+
+async function startAccountConversion(
+  account: Awaited<ReturnType<typeof createAccount>>["account"],
+  acceptedAtMs: number,
+) {
+  const started = await account.startConversion(
+    { idempotencyKey: crypto.randomUUID(), sourceUrl: "https://example.com/outcome" },
+    acceptedAtMs,
+  );
+  const conversionId = started.conversion?.conversionId;
+  if (conversionId === undefined) {
+    throw new Error("Expected an accepted conversion");
+  }
+  return conversionId;
+}
+
+async function createGrant() {
+  const grantId = crypto.randomUUID();
+  const grant = bindings.SENTRY_CONVERSION_GRANTS.get(
+    bindings.SENTRY_CONVERSION_GRANTS.idFromName(grantId),
+  );
+  const nowMs = Temporal.Now.instant().epochMilliseconds;
+  await grant.initialize(grantId, nowMs - 60 * MINUTE_MS, nowMs + 90 * 24 * 60 * MINUTE_MS);
+  return { grant, grantId };
+}
+
+async function startGrantConversion(
+  grant: Awaited<ReturnType<typeof createGrant>>["grant"],
+  acceptedAtMs: number,
+) {
+  const started = await grant.startConversion(
+    "https://example.com/outcome",
+    crypto.randomUUID(),
+    acceptedAtMs,
+  );
+  if (started.result !== "created") {
+    throw new Error(`Expected an accepted conversion, got ${started.result}`);
+  }
+  return started.conversion.conversionId;
+}
+
+function readyGrantOutcome(conversionId: string) {
+  return {
+    title: "Book",
+    audiobookReference: {
+      key: `conversions/${conversionId}/audiobook.json`,
+      contentType: "application/json" as const,
+      byteLength: 42,
+      etag: "fixture",
+    },
+  };
+}
+
+function logs(eventName: string, conversionId: string): SentryLog[] {
+  return stub
+    .logs("cup-worker")
+    .filter(
+      (log) =>
+        log.attributes["event.name"]?.value === eventName &&
+        log.attributes["cup.conversion.id"]?.value === conversionId,
+    );
+}
+
+function waitForLogs(eventName: string, conversionId: string, count: number) {
+  return stub.waitFor(
+    `${count} ${eventName} log(s) of ${conversionId}`,
+    () => logs(eventName, conversionId).length >= count,
+  );
+}
+
+function isTestEnvironment(value: unknown): value is TestEnvironment {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "SENTRY_ACCOUNTS" in value &&
+    "SENTRY_CONVERSION_GRANTS" in value
+  );
+}

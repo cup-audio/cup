@@ -246,6 +246,22 @@ export class DurationLedger {
     });
   }
 
+  /** When the segment's current reservation was taken, or `undefined` for a segment without one. */
+  reservedAtMs(conversionId: string, sequence: number): number | undefined {
+    return this.database
+      .select({ createdAtMs: creditLedger.createdAtMs })
+      .from(this.segmentsTable)
+      .innerJoin(
+        creditLedger,
+        and(
+          eq(creditLedger.operationId, this.segmentsTable.operationId),
+          eq(creditLedger.eventKind, "reserve"),
+        ),
+      )
+      .where(this.segmentKey(conversionId, sequence))
+      .get()?.createdAtMs;
+  }
+
   segments(conversionId: string): SegmentUsage[] {
     return this.segmentRows(conversionId).map(toSegmentUsage);
   }

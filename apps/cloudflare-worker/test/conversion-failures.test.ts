@@ -103,7 +103,7 @@ test("a failed preparation sends one event, whose ID is the conversion's diagnos
   await expect
     .poll(async () => (await grant.getConversion(conversionId))?.status, { timeout: 20_000 })
     .toBe("failed");
-  await waitForStepSpan(sentry, "record conversion failure");
+  await waitForStepSpan(sentry, "finalization: record conversion failure");
   const events = sentry.errorEvents("cup-worker");
   expect(events).toHaveLength(1);
   expect(events[0]).toMatchObject({
@@ -119,6 +119,56 @@ test("a failed preparation sends one event, whose ID is the conversion's diagnos
   expect(conversion?.status === "failed" && conversion.diagnosticReference).toBe(
     events[0]?.event_id,
   );
+});
+
+test("a preparation's steps are spans named after their conversion phases, and its owner logs the outcome", async ({
+  expect,
+  onTestFinished,
+}) => {
+  const sentry = await useSentryStub({ onTestFinished });
+  const worker = await useWorker({ onTestFinished, sentryDsn: sentry.dsn("cup-worker") });
+  const workflows = await worker.introspectWorkflow("PREPARE_AUDIOBOOK_WORKFLOW");
+  onTestFinished(() => workflows.dispose());
+  await workflows.modifyAll(async (modifier) => {
+    await modifier.disableRetryDelays();
+  });
+  const { env, grantId, conversionId } = await createTrialConversion(worker);
+
+  // The test config binds no `BROWSER`, so source preparation fails on every attempt.
+  await env.PREPARE_AUDIOBOOK_WORKFLOW.create({
+    id: conversionId,
+    params: { sourceUrl: SOURCE_URL, grantId },
+  });
+
+  await waitForStepSpan(sentry, "finalization: record conversion failure");
+  const stepSpanNames = sentry
+    .spans("cup-worker")
+    .filter((span) => span.attributes["workflow.step.name"] !== undefined)
+    .map((span) => span.name);
+  expect(new Set(stepSpanNames)).toEqual(
+    new Set([
+      "source-material-preparation: prepare audiobook source material",
+      "finalization: create failed conversion outcome",
+      "finalization: record conversion failure",
+    ]),
+  );
+  await sentry.waitFor("the conversion-preparation-settled log", () =>
+    sentry
+      .logs("cup-worker")
+      .some((log) => log.attributes["event.name"]?.value === "conversion-preparation-settled"),
+  );
+  expect(
+    sentry
+      .logs("cup-worker")
+      .find((log) => log.attributes["event.name"]?.value === "conversion-preparation-settled"),
+  ).toMatchObject({
+    level: "info",
+    attributes: {
+      "cup.conversion.id": { value: conversionId },
+      "cup.conversion.outcome": { value: "failed" },
+      "cup.conversion.failure_category": { value: "source-preparation" },
+    },
+  });
 });
 
 test("a finally failed segment sends one event tagged segment", async ({
@@ -142,7 +192,7 @@ test("a finally failed segment sends one event tagged segment", async ({
       timeout: 20_000,
     })
     .toBe("released");
-  await waitForStepSpan(sentry, "release failed segment reservation");
+  await waitForStepSpan(sentry, "audio-segment-production: release failed segment reservation");
   const events = sentry.errorEvents("cup-worker");
   expect(events).toHaveLength(1);
   expect(events[0]).toMatchObject({
@@ -152,6 +202,44 @@ test("a finally failed segment sends one event tagged segment", async ({
       "cup.conversion.failure_category": "segment",
       "cup.audio_segment.sequence": "0",
       "cup.owner.kind": "grant",
+    },
+  });
+});
+
+test("a finally failed segment's owner logs its release with the run's attempts", async ({
+  expect,
+  onTestFinished,
+}) => {
+  const sentry = await useSentryStub({ onTestFinished });
+  const worker = await useWorker({ onTestFinished, sentryDsn: sentry.dsn("cup-worker") });
+  const workflows = await worker.introspectWorkflow("SYNTHESIZE_AUDIO_SEGMENT_WORKFLOW");
+  onTestFinished(() => workflows.dispose());
+  await workflows.modifyAll(async (modifier) => {
+    await modifier.disableRetryDelays();
+  });
+  const { env, grantId, conversionId } = await createPreparedTrialConversion(worker);
+
+  // The test config binds no `AI`, so synthesis fails on its first attempt and both retries.
+  await env.SYNTHESIZE_AUDIO_SEGMENT_WORKFLOW.create(segmentWorkflowParams(conversionId, grantId));
+
+  const findLog = (eventName: string) =>
+    sentry.logs("cup-worker").find((log) => log.attributes["event.name"]?.value === eventName);
+  await sentry.waitFor(
+    "the conversion-synthesis-settled log",
+    () => findLog("conversion-synthesis-settled") !== undefined,
+    { timeoutMs: 20_000 },
+  );
+  expect(findLog("audio-segment-settled")).toMatchObject({
+    attributes: {
+      "cup.conversion.id": { value: conversionId },
+      "cup.audio_segment.outcome": { value: "released" },
+      "cup.audio_segment.attempts": { value: 3 },
+    },
+  });
+  expect(findLog("conversion-synthesis-settled")).toMatchObject({
+    attributes: {
+      "cup.conversion.id": { value: conversionId },
+      "cup.conversion.failed_segments": { value: 1 },
     },
   });
 });
@@ -177,7 +265,7 @@ test("a failed Durable Object RPC is captured once, by its caller", async ({
     params: { sourceUrl: SOURCE_URL, grantId: crypto.randomUUID() },
   });
 
-  await waitForStepSpan(sentry, "create failed conversion outcome");
+  await waitForStepSpan(sentry, "finalization: create failed conversion outcome");
   const events = sentry.errorEvents("cup-worker");
   expect(events).toHaveLength(1);
   expect(events[0]).toMatchObject({
@@ -203,20 +291,24 @@ test("a retried Workflow step that then succeeds sends no error event", async ({
   await workflows.modifyAll(async (modifier) => {
     // The test config binds no `AI`; the segment's synthesis is not under test.
     await modifier.mockStepResult(
-      { name: "synthesize and settle audio segment" },
-      { durationMilliseconds: 1_000 },
+      { name: "audio-segment-production: synthesize and settle audio segment" },
+      { result: "settled", segment: { durationMilliseconds: 1_000 } },
     );
   });
 
   // Loading the narration fails while its manifest is missing, and succeeds once it is back.
   await env.AUDIO_BUCKET.delete(manifestKey);
   await env.SYNTHESIZE_AUDIO_SEGMENT_WORKFLOW.create(segmentWorkflowParams(conversionId, grantId));
-  await waitForStepSpan(sentry, "load prepared narration", { status: "error" });
+  await waitForStepSpan(sentry, "audio-segment-production: load prepared narration", {
+    status: "error",
+  });
   await env.AUDIO_BUCKET.put(manifestKey, manifest ?? "", {
     httpMetadata: { contentType: "application/json" },
   });
 
-  await waitForStepSpan(sentry, "load prepared narration", { status: "ok" });
+  await waitForStepSpan(sentry, "audio-segment-production: load prepared narration", {
+    status: "ok",
+  });
   const instance = await env.SYNTHESIZE_AUDIO_SEGMENT_WORKFLOW.get(`segment-${conversionId}-0`);
   await expect.poll(async () => (await instance.status()).status).toBe("complete");
   expect(sentry.errorEvents("cup-worker")).toEqual([]);

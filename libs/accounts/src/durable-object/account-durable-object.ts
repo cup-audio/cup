@@ -12,7 +12,9 @@ import {
   createSegmentWorkflowId,
 } from "@cup/conversion-contracts";
 import {
+  logAudioSegmentSettled,
   logEvent,
+  logPreparationSettled,
   reportStuckConversionDeletions,
   reportStuckConversions,
   setConversionScope,
@@ -124,30 +126,59 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
     if (narrationTextCharactersBySegment !== undefined) {
       await this.ctx.storage.setAlarm(Temporal.Now.instant().epochMilliseconds + 60_000);
     }
-    this.sqlite.settleConversion(
+    this.settle(conversionId, outcome, nowMs, executionEpoch, narrationTextCharactersBySegment);
+    await this.scheduleUsagePublication();
+  }
+
+  /** Records the outcome and sends `conversion-preparation-settled` unless it is a replay. */
+  private settle(
+    conversionId: string,
+    outcome: AccountConversionOutcome,
+    nowMs: number,
+    executionEpoch?: number,
+    narrationTextCharactersBySegment?: readonly number[],
+  ) {
+    const settlement = this.sqlite.settleConversion(
       conversionId,
       outcome,
       nowMs,
       executionEpoch,
       narrationTextCharactersBySegment,
     );
-    await this.scheduleUsagePublication();
+    if (settlement.result === "replayed") {
+      return;
+    }
+    logPreparationSettled({
+      ...(outcome.status === "failed"
+        ? { outcome: "failed", failureCategory: outcome.failureCategory }
+        : { outcome: settlement.isInsufficientDuration ? "insufficient-duration" : "ready" }),
+      conversionId,
+      conversionCreatedAtMs: settlement.conversionCreatedAtMs,
+      settledAtMs: nowMs,
+    });
   }
 
+  /** `attempts` is how many synthesis attempts the segment's Workflow needed. */
   async completeAudioSegment(
     conversionId: string,
     sequence: number,
     durationMilliseconds: number,
     executionEpoch: number,
+    attempts?: number,
   ) {
     setConversionScope({ conversionId });
     this.assertExecution(conversionId, executionEpoch);
+    assertAttempts(attempts);
+    const settledAtMs = Temporal.Now.instant().epochMilliseconds;
     const result = this.sqlite.completeAudioSegment(
       conversionId,
       sequence,
       durationMilliseconds,
-      Temporal.Now.instant().epochMilliseconds,
+      settledAtMs,
     );
+    if (result.result === "recorded") {
+      this.logAudioSegmentSettled(conversionId, sequence, "settled", attempts, settledAtMs);
+    }
     await this.scheduleUsagePublication();
     return result;
   }
@@ -254,11 +285,51 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
     return { result: "started" as const };
   }
 
-  async releaseAudioSegment(conversionId: string, sequence: number, executionEpoch: number) {
+  /** `attempts` is how many synthesis attempts the segment's Workflow made before it failed. */
+  async releaseAudioSegment(
+    conversionId: string,
+    sequence: number,
+    executionEpoch: number,
+    attempts?: number,
+  ) {
     setConversionScope({ conversionId });
     this.assertExecution(conversionId, executionEpoch);
-    this.sqlite.releaseAudioSegment(conversionId, sequence);
+    assertAttempts(attempts);
+    this.release(conversionId, sequence, attempts);
     await this.scheduleUsagePublication();
+  }
+
+  /** Releases the segment's reservation and sends `audio-segment-settled` if it had one. */
+  private release(conversionId: string, sequence: number, attempts: number | undefined) {
+    const releasedAtMs = Temporal.Now.instant().epochMilliseconds;
+    if (this.sqlite.releaseAudioSegment(conversionId, sequence, releasedAtMs)) {
+      this.logAudioSegmentSettled(conversionId, sequence, "released", attempts, releasedAtMs);
+    }
+  }
+
+  private logAudioSegmentSettled(
+    conversionId: string,
+    sequence: number,
+    outcome: "settled" | "released",
+    attempts: number | undefined,
+    settledAtMs: number,
+  ) {
+    const conversion = this.sqlite.getConversion(conversionId);
+    // A conversion marked for deletion reads as missing; its outcomes no longer matter, and the
+    // record must not fail the settlement that already happened.
+    if (conversion === undefined) {
+      return;
+    }
+    logAudioSegmentSettled({
+      conversionId,
+      sequence,
+      outcome,
+      reservedAtMs: this.sqlite.audioSegmentReservedAtMs(conversionId, sequence),
+      attempts,
+      conversionCreatedAtMs: conversion.createdAtMs,
+      segmentStates: this.sqlite.listAudioSegments(conversionId).map((segment) => segment.state),
+      settledAtMs,
+    });
   }
 
   /**
@@ -372,11 +443,7 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
           await instance.restart();
         }
       } catch (error) {
-        this.sqlite.settleConversion(
-          conversionId,
-          conversion.outcome,
-          Temporal.Now.instant().epochMilliseconds,
-        );
+        this.settle(conversionId, conversion.outcome, Temporal.Now.instant().epochMilliseconds);
         throw error;
       }
     });
@@ -529,7 +596,7 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
           if (job.state === "delivered") {
             const status = await (await workflow.get(job.conversionId)).status();
             if (status.status === "errored" || status.status === "terminated") {
-              this.sqlite.settleConversion(
+              this.settle(
                 job.conversionId,
                 {
                   status: "failed",
@@ -598,7 +665,7 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
           { canResume: this.canExecute(segment.conversionId, account.executionEpoch) },
         );
         if (result === "stopped") {
-          this.sqlite.releaseAudioSegment(segment.conversionId, segment.sequence);
+          this.release(segment.conversionId, segment.sequence, undefined);
         }
       });
     }
@@ -767,5 +834,11 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
   }
   pendingConversions() {
     return this.sqlite.pendingConversions();
+  }
+}
+
+function assertAttempts(attempts: number | undefined) {
+  if (attempts !== undefined && (!Number.isSafeInteger(attempts) || attempts < 1)) {
+    throw new Error("Synthesis attempts must be a positive safe integer");
   }
 }

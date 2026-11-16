@@ -18,3 +18,8 @@ export {
   reportStuckConversionDeletions,
   type StuckConversionDeletionCandidate,
 } from "#src/stuck-conversion-deletion.ts";
+export {
+  logAudioSegmentSettled,
+  logPreparationSettled,
+  type PreparationOutcome,
+} from "#src/conversion-outcomes.ts";

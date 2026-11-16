@@ -132,7 +132,7 @@ test.each(["trial", "account"] as const)(
     const step = createImmediateRetryStep();
     const runStep = step.do.bind(step);
     step.do = ((name: string, ...rest: unknown[]) =>
-      name === "start speech synthesis"
+      name === "finalization: start speech synthesis"
         ? Promise.reject(new Error("Dispatch unavailable"))
         : Reflect.apply(runStep, step, [name, ...rest])) as WorkflowStep["do"];
     await expect(
@@ -464,7 +464,7 @@ test.each([
   const runStep = step.do.bind(step);
   step.do = async (name: string, ...rest: unknown[]) => {
     const result: unknown = await Reflect.apply(runStep, step, [name, ...rest]);
-    if (name !== "store audiobook") {
+    if (name !== "audiobook-storage: store audiobook") {
       return result;
     }
     const key = `${artifactPrefix}audiobook.json`;

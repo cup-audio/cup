@@ -1,6 +1,5 @@
 import { and, desc, eq, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { drizzle, type DrizzleSqliteDODatabase } from "drizzle-orm/durable-sqlite";
-import { Temporal } from "temporal-polyfill";
 import { z } from "zod";
 
 import {
@@ -315,12 +314,13 @@ export class AccountSqlite {
       .run();
   }
 
-  releaseAudioSegment(conversionId: string, sequence: number) {
-    this.duration.releaseReservations(
-      conversionId,
-      Temporal.Now.instant().epochMilliseconds,
-      sequence,
-    );
+  /** Returns whether the segment had a reservation to release. */
+  releaseAudioSegment(conversionId: string, sequence: number, nowMs: number): boolean {
+    return this.duration.releaseReservations(conversionId, nowMs, sequence) > 0;
+  }
+
+  audioSegmentReservedAtMs(conversionId: string, sequence: number): number | undefined {
+    return this.duration.reservedAtMs(conversionId, sequence);
   }
 
   getPlaybackPosition(conversionId: string): PlaybackPosition | null {
@@ -459,11 +459,13 @@ export class AccountSqlite {
     nowMs: number,
     executionEpoch?: number,
     narrationTextCharactersBySegment?: readonly number[],
-  ): void {
+  ):
+    | { result: "recorded"; conversionCreatedAtMs: number; isInsufficientDuration: boolean }
+    | { result: "replayed" } {
     z.number().int().nonnegative().safe().parse(nowMs);
     z.uuidv4().parse(conversionId);
     const parsed = accountOutcomeSchema.parse(outcome);
-    this.database.transaction(() => {
+    return this.database.transaction(() => {
       const account = this.snapshot();
       if (executionEpoch !== undefined && account.executionEpoch !== executionEpoch) {
         throw new Error("Account execution epoch mismatch");
@@ -489,7 +491,7 @@ export class AccountSqlite {
         if (canonicalJson(conversion.outcome) !== canonicalJson(parsed)) {
           throw new Error("Conflicting conversion settlement");
         }
-        return;
+        return { result: "replayed" as const };
       }
       if (
         parsed.status === "ready" &&
@@ -508,6 +510,7 @@ export class AccountSqlite {
         .where(eq(accountConversions.conversionId, conversionId))
         .run();
       this.duration.releaseReservations(conversionId, nowMs);
+      let isInsufficientDuration = false;
       // Reserving with the ready outcome leaves no moment in which a prepared conversion has
       // undecided reservations: afterwards a segment without one means the document did not fit.
       if (parsed.status === "ready" && narrationTextCharactersBySegment !== undefined) {
@@ -516,6 +519,7 @@ export class AccountSqlite {
           narrationTextCharactersBySegment,
           nowMs,
         );
+        isInsufficientDuration = reservation.result !== "reserved";
         if (reservation.result === "reserved" && reservation.hasChanged) {
           this.startStage(conversionId, nowMs);
         }
@@ -525,6 +529,11 @@ export class AccountSqlite {
         .set({ state: "delivered" })
         .where(eq(pendingJobs.conversionId, conversionId))
         .run();
+      return {
+        result: "recorded" as const,
+        conversionCreatedAtMs: conversion.createdAtMs,
+        isInsufficientDuration,
+      };
     });
   }
 
