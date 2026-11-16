@@ -31,7 +31,7 @@ Turbo builds the web package once, then the Worker build copies that bundle as s
 
 - `apps/web-app/dist/types`
 - `apps/web-app/dist/web` — the shared SPA bundle, also consumed by Capacitor
-- `apps/web-app/dist/source-maps` — the bundle's source maps, kept out of what is served and packed for the deploy to upload ([release tracking](../../docs/architecture/observability.md#release-tracking))
+- `apps/web-app/dist/source-maps` — the bundle's source maps, kept out of what is served and packed for the deploy to upload ([release tracking](../../docs/architecture/observability-operations.md#release-tracking))
 - `apps/cloudflare-worker/dist/client` — a copy of the shared SPA bundle
 - `apps/cloudflare-worker/dist/create_audiobook_from_url` — the Worker bundle and deployment configuration
 - `apps/cloudflare-worker/dist/source-maps` — the Worker bundle's source map

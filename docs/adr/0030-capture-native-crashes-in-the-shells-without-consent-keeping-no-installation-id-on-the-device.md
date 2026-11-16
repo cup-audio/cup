@@ -29,4 +29,4 @@ Sentry's native SDKs in the Android and iOS shells capture native crashes, ANRs 
 - The Android helper reaches into Sentry's internals, so a `@sentry/capacitor` update that moves the native SDK version fails the Android build until the pin moves; the mobile E2E suite then checks that two launches send different device IDs and that no ID file exists.
 - Native ANR and tombstone events never carry the account ID, only an in-memory ID the scrubbing rule removes.
 - A debug build of a shell sends nothing unless the mobile E2E suite passes it a Sentry stub's DSN, so development builds never reach production Sentry.
-- The [observability page](../architecture/observability.md#what-the-shells-send) and the [mobile app guide](../../apps/mobile-app/README.md#sentry) describe what is built.
+- The [observability page](../architecture/observability-clients.md#what-the-shells-send) and the [mobile app guide](../../apps/mobile-app/README.md#sentry) describe what is built.

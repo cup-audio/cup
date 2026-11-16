@@ -16,7 +16,9 @@ Start with the [glossary](GLOSSARY.md) for Cup's vocabulary and the [system over
 | [Account deletion](architecture/account-deletion.md)               | Fresh authentication, recovery, write fencing, cleanup, and notification retries                         |
 | [Conversion deletion](architecture/conversion-deletion.md)         | Fencing one conversion with a durable marker, releasing its open reservations, and its cleanup           |
 | [Web application screens](architecture/web-app.md)                 | Routes and redirects, Recents with its Add and account dialogs, account recovery, and the detail view    |
-| [Observability](architecture/observability.md)                     | What reaches Sentry, the telemetry libraries, privacy hooks, and why nothing is sent outside production  |
+| [Observability](architecture/observability.md)                       | What the Worker sends to Sentry, the capture and correlation rules, privacy, alerts, and why nothing is sent outside production |
+| [Client observability](architecture/observability-clients.md)        | What the web app and the mobile shells send, crash reports and their switch, and the telemetry tunnel                           |
+| [Observability operations](architecture/observability-operations.md) | Stuck checks, log records, conversion durations, going-live checks, and build and release tracking                              |
 
 ## Operate and develop Cup
 

@@ -1,6 +1,6 @@
 # Source maps
 
-`prepare-source-maps` prepares a build output's source maps for Sentry, and [`upload-shell-symbols`](#upload-shell-symbols) uploads a shell release's symbols. The web app's and the Worker's `turbo:build` run it right after `vite build`; [release tracking](../../docs/architecture/observability.md#release-tracking) describes how the deploy uploads the result.
+`prepare-source-maps` prepares a build output's source maps for Sentry, and [`upload-shell-symbols`](#upload-shell-symbols) uploads a shell release's symbols. The web app's and the Worker's `turbo:build` run it right after `vite build`; [release tracking](../../docs/architecture/observability-operations.md#release-tracking) describes how the deploy uploads the result.
 
 ## Usage
 

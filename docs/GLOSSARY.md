@@ -66,11 +66,23 @@ The internal cleanup step within account deletion that removes the account’s C
 
 _Avoid_: account deletion for the cleanup step alone
 
+## stuck account deletion
+
+An account deletion still not finished an hour after its recovery deadline, because removing the sign-in identity, account erasure or both remain. The operator is told about each one once.
+
+_Avoid_: overdue deletion, hung deletion
+
 ## conversion deletion
 
 Permanently removing one of an account's conversions, together with its audiobook and listening position, at the account holder's or an operator's request. It cannot be undone, and the duration the conversion spent stays spent. Afterwards the conversion is unknown everywhere. Trial conversions cannot be deleted.
 
 _Avoid_: conversion erasure, archiving, removal
+
+## stuck conversion deletion
+
+A conversion deletion still not finished an hour after it was requested. The operator is told about each one once.
+
+_Avoid_: hung deletion, failed deletion
 
 ## account conversion allowance
 
@@ -149,6 +161,18 @@ _Avoid_: grant credential, user session
 The state of a conversion: pending while its narration document is being prepared; synthesizing while audio is generated for any of its segments, during which the text can already be read; ready when every segment has audio or a final failure; failed when preparation could not finish; or insufficient duration when the narration document needs more than the available duration, in which case the document stays readable and synthesis can be requested again.
 
 _Avoid_: workflow status
+
+## conversion outcome
+
+What a conversion's preparation ended in, as its owner records it: ready, failed with a failure category, or insufficient duration. Retrying a failed preparation replaces it.
+
+_Avoid_: workflow result, conversion status for the recorded result
+
+## stuck conversion
+
+A conversion that has stayed in preparation or in synthesis far longer than that stage normally takes. The operator is told once per stage; a retry starts the stage, and with it the wait, again.
+
+_Avoid_: hung conversion, stalled conversion
 
 ## conversion phase
 
@@ -311,3 +335,21 @@ _Avoid_: personal audiobook
 A planned audiobook intentionally accessible without signing in. No audiobook is public yet, and no audiobook is reachable by the audiobook’s link alone.
 
 _Avoid_: unlisted audiobook, shared audiobook
+
+## crash report
+
+A report of a native crash, hang or freeze of a mobile app that the app sends to the operator's error tracking. A listener can turn crash reports off in the app; errors of the web app inside it are reported either way.
+
+_Avoid_: crash log, diagnostics data
+
+## WebView process loss
+
+The end of the separate process that renders a mobile app's web content, by a crash or because the system reclaimed its memory. The app brings its page back and reports each loss once.
+
+_Avoid_: WebView crash, renderer crash, WebContent crash
+
+## telemetry tunnel
+
+Cup's own address on its domain through which the web app and the mobile apps send their error reports and traces, so that blockers of the error tracker's domain do not drop them and no listener's IP address is passed on.
+
+_Avoid_: proxy, Sentry tunnel

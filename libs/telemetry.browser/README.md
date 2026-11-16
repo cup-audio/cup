@@ -1,6 +1,6 @@
 # Telemetry for the browser
 
-Sentry's options, privacy hooks and user rule for the web app, which the Capacitor shells also render, on `@sentry/capacitor` with `@sentry/react`. The [observability page](../../docs/architecture/observability.md#what-the-web-app-sends) describes what the web app sends and why.
+Sentry's options, privacy hooks and user rule for the web app, which the Capacitor shells also render, on `@sentry/capacitor` with `@sentry/react`. The [observability page](../../docs/architecture/observability-clients.md#what-the-web-app-sends) describes what the web app sends and why.
 
 ## Use
 
