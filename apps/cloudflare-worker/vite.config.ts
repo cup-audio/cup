@@ -71,6 +71,9 @@ export default defineConfig(({ command, mode }) => {
     return mergeConfig(workerConfig, {
       root: WORKER_DIRECTORY,
       publicDir: webBundleDirectory,
+      // `prepare-source-maps` in `turbo:build` injects debug IDs and moves the maps out of the
+      // deployed bundle; the deploy uploads them to Sentry (scripts/deploy.ts).
+      build: { sourcemap: "hidden" },
     });
   } else if (command === "serve") {
     return mergeConfig(

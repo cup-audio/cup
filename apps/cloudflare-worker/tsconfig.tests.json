@@ -6,6 +6,6 @@
     "@patricktree-stack/config-typescript/tsconfig.typescript-execution-via-type-stripping.json",
     "@patricktree-stack/config-typescript/tsconfig.vitest.json"
   ],
-  "include": ["test/**/*", "worker-configuration.d.ts"],
+  "include": ["scripts/**/*", "test/**/*", "worker-configuration.d.ts"],
   "references": [{ "path": "./tsconfig.build.json" }]
 }

@@ -157,6 +157,17 @@ test("check rejects empty and placeholder values in existing files", async (t) =
   assert.match(result.stderr, /CLOUDFLARE_API_KEY is a placeholder/);
 });
 
+test("check rejects a Sentry auth token in an environment file", async (t) => {
+  const { root, run } = await fixture(t);
+  assert.equal((await run(["setup"])).status, 0);
+  await fs.appendFile(path.join(root, FILES[0]), "SENTRY_AUTH_TOKEN=sntrys_secret-upload-token\n");
+  const result = await run(["check"]);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /apps\/cloudflare-worker\/\.env\.local: SENTRY_AUTH_TOKEN/);
+  assert.match(result.stderr, /sentry-cli login/);
+  assert.ok(!result.stderr.includes("sntrys_secret-upload-token"));
+});
+
 test("help describes commands without requiring credentials", async (t) => {
   const { run } = await fixture(t);
   const result = await run(["--help"], {});

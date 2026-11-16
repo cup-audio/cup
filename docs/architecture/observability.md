@@ -13,7 +13,7 @@ Every Worker entry point is wrapped with `@sentry/cloudflare` in the [Worker ent
 
 Sentry's projects, keys and privacy settings are managed in [Terraform](../../terraform/README.md#sentry); the two public DSNs are constants in `@cup/telemetry.core`.
 
-Planned by the spec and not built yet: alerts and monitors including the uptime monitor on `/api/health`, client telemetry in the shells, and source map upload.
+Planned by the spec and not built yet: alerts and monitors including the uptime monitor on `/api/health`, client telemetry in the shells, and the shells' native release step for dSYMs and the source maps of the bundle packed into each build.
 
 ## What the web app sends
 
@@ -27,8 +27,6 @@ In the browser on `https://cup.audio`, the web app reports through `@sentry/capa
 - **The release** `web@<hash>`, the first 16 hex digits of the SHA-256 of the entry chunk, which imports every other chunk by its hashed name. A Vite plugin of `@cup/telemetry.browser` writes it into the built `index.html` at build time, so it changes exactly when the bundle's code does, and Turbo can replay E2E suites that ran an unchanged bundle.
 
 Sentry's Supabase integration adds spans and breadcrumbs of the auth client without query data; its auth-error events are dropped, because the web app handles those failures. Off: Zod errors, console capture, feedback, view hierarchy, profiling, CapacitorHttp tracing and replay.
-
-> > > > > > > worktree-agent-a2011e2fdb45a738e
 
 ## Capture rule
 
@@ -179,3 +177,13 @@ The web app decides at runtime, because every web E2E suite runs the production 
 ## Build
 
 The Worker's [Vite configuration](../../apps/cloudflare-worker/vite.config.ts) adds Sentry's Vite plugin for build-time instrumentation only. The Worker entry wraps the entry points itself instead of leaving that to the plugin's auto-instrumentation, because the Worker integration tests run the entry through Wrangler's test harness, which bundles without Vite, and must run the same wrapping as production. Cloudflare receives no source maps (`upload_source_maps: false`).
+
+## Release tracking
+
+Every event names its release (the Worker version or `web@<hash>`), and every Worker and web app stack trace resolves to Cup's source lines through source maps that the deploy uploads before the release goes live.
+
+- **Debug IDs, not releases, match a stack trace to its source map.** The web app and the Worker build with `build.sourcemap: "hidden"`, so no chunk names its map. Each package's `turbo:build` then runs [`prepare-source-maps`](../../tooling/source-maps/README.md), which runs `sentry-cli sourcemaps inject` to write a debug ID into every chunk and its map, and moves every `.map` file into `dist/source-maps`. Neither the Worker's static assets nor `cap sync` ship a map. Sentry CLI derives each debug ID from the file's content, so the build stays deterministic and Turbo replays it on unchanged inputs.
+- **The deploy uploads, then deploys.** The Worker's [deploy script](../production-configuration.md#deploy) checks Sentry auth, builds, uploads the web app's maps to `cup-app` and the Worker's to `cup-worker`, and only then runs `wrangler deploy`; any failure aborts it. It makes no release API calls: events create their releases. `@sentry/vite-plugin`'s upload is not used, and neither is the Cloudflare Vite plugin's.
+- **The upload token stays out of every checkout.** It lives in `~/.sentryclirc` from `sentry-cli login`; the committed [`.sentryclirc`](../../.sentryclirc) names only the organisation and the Germany region, a [deploy test](../../apps/cloudflare-worker/test/deploy.test.ts) pins that, and `pnpm env:check` rejects a token in an environment file. No test calls Sentry: the tests run Sentry CLI without a token against a local discard port.
+
+The [build output test](../../apps/cloudflare-worker/test/web-app-build-output.test.ts) checks that the served web output holds no `.map` file and that every chunk carries a debug ID its map shares.

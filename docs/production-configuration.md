@@ -38,10 +38,25 @@ Deploys are manual: no CI workflow deploys, and pushing to `main` deploys nothin
 pnpm gate:deploy
 ```
 
+Once per machine, log Sentry CLI in to the `cupaudio` organisation, from the repository so that it picks up the committed [`.sentryclirc`](../.sentryclirc):
+
+```sh
+pnpm --filter '@cup/cloudflare-worker' exec sentry-cli login
+```
+
+Paste an organisation auth token, which Sentry creates with the source map upload scope only (`org:ci`). Sentry CLI stores it in `~/.sentryclirc`, outside every checkout. The committed `.sentryclirc` holds only the organisation and the Germany region URL; keep the token out of it, out of `.env.local` (`pnpm env:check` fails on a `SENTRY_AUTH_TOKEN` there) and out of the deploying shell. An organisation auth token carries its region's URL, and Sentry CLI uses it, because it ignores a URL configured in another file than the token.
+
 Then deploy that commit:
 
 ```sh
 pnpm --filter '@cup/cloudflare-worker' run deploy
 ```
 
-The script builds the web app and the Worker, then runs `wrangler deploy` with the [Worker configuration](../apps/cloudflare-worker/wrangler.jsonc), which sets `LOCAL_DEVELOPMENT` to `"false"`. Wrangler authenticates with the operator's own login (`wrangler login`). Keep the Cloudflare credentials from `apps/cloudflare-worker/.env.local` out of the deploying shell: that token covers development AI calls only, and Wrangler fails the asset upload with "No access to the specified resource" when it uses it. `wrangler deployments list`, run in `apps/cloudflare-worker`, shows the version now serving traffic.
+The [deploy script](../apps/cloudflare-worker/scripts/deploy.ts) runs these steps in order, and the first that fails aborts the deploy before anything goes live. There is no flag to deploy anyway; fix the cause and run it again.
+
+1. `sentry-cli info` checks the Sentry token.
+2. It builds the web app and the Worker; each build injects debug IDs and moves its source maps out of what is served and deployed ([release tracking](architecture/observability.md#release-tracking)).
+3. It uploads the web app's source maps to the `cup-app` project and the Worker's to `cup-worker`.
+4. `wrangler deploy` deploys the Worker with the [Worker configuration](../apps/cloudflare-worker/wrangler.jsonc), which sets `LOCAL_DEVELOPMENT` to `"false"`.
+
+The script makes no release API calls: Sentry creates a release from the first event that names it, and matches source maps by debug ID, not by release. Wrangler authenticates with the operator's own login (`wrangler login`). Keep the Cloudflare credentials from `apps/cloudflare-worker/.env.local` out of the deploying shell: that token covers development AI calls only, and Wrangler fails the asset upload with "No access to the specified resource" when it uses it. `wrangler deployments list`, run in `apps/cloudflare-worker`, shows the version now serving traffic.
