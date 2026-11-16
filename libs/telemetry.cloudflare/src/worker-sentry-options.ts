@@ -30,6 +30,17 @@ export type WorkerSentryEnvironment = {
 const DURABLE_OBJECT_BINDINGS = ["ACCOUNTS", "CONVERSION_GRANTS", "REGISTRY"];
 
 /**
+ * The path of the Listener API's health endpoint, which Sentry's uptime monitor checks every
+ * minute. Its traces would be near-empty and use up about 43k spans of the monthly quota.
+ */
+const HEALTH_PATH = "/api/health";
+
+/** Traces every invocation except the uptime monitor's health checks. */
+function sampleWorkerTrace({ attributes }: { attributes?: Record<string, unknown> }): number {
+  return attributes?.["url.path"] === HEALTH_PATH ? 0 : 1;
+}
+
+/**
  * Sentry's options for one Worker entry point, by the on/off rule: Sentry runs exactly when
  * `LOCAL_DEVELOPMENT` is not `"true"`, and `SENTRY_DSN` must agree. A contradiction throws on every
  * invocation, so a misconfigured environment can neither send from local development nor stay quiet
@@ -76,7 +87,7 @@ export function createWorkerSentryOptions(
       // Collected, then masked by the hooks below, so non-credential parameters stay readable.
       urlQueryParams: true,
     },
-    tracesSampleRate: 1,
+    tracesSampler: sampleWorkerTrace,
     traceLifecycle: "stream",
     // Durable Object SQL and storage calls would outnumber every other span.
     ignoreSpans: [{ op: "db.query" }, /^durable_object_storage_/],
