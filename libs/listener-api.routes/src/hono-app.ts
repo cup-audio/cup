@@ -6,6 +6,7 @@ import {
   retryConversionResponseSchema,
   scheduleDeletionResponseSchema,
   signedMediaUrlQuerySchema,
+  signedPositionUrlQuerySchema,
   playbackPositionSchema,
   authConfigResponseSchema,
   accountSnapshotSchema,
@@ -316,13 +317,17 @@ const savePositionRoute = createRoute({
   path: "/api/audiobooks/{conversionId}/position",
   request: {
     params: conversionParamsSchema,
+    query: signedPositionUrlQuerySchema,
     headers: routeBrowserMutationHeadersSchema,
     body: { required: true, content: { "application/json": { schema: playbackPositionSchema } } },
   },
   responses: {
     204: { description: "Position saved with last write wins." },
-    401: errorResponse("Sign in required."),
-    404: errorResponse("Not found."),
+    401: errorResponse(
+      "Neither or both of the bearer token and a signed position URL, or an invalid position URL.",
+    ),
+    403: errorResponse("Origin blocked, or account access blocked."),
+    404: errorResponse("Audiobook not found, not the account's own, or deleted."),
     400: errorResponse("Invalid unit."),
     500: errorResponse("Unavailable."),
   },

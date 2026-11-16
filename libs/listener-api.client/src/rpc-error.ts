@@ -40,6 +40,7 @@ export const ERROR_CODE = {
   OPERATIONAL_ERROR: "operational-error",
   ORIGIN_BLOCKED: "origin-blocked",
   ORIGIN_FORBIDDEN: "origin-forbidden",
+  POSITION_URL_INVALID: "position-url-invalid",
   RANGE_NOT_SATISFIABLE: "range-not-satisfiable",
   RATE_LIMITED: "rate-limited",
   REQUEST_TOO_LARGE: "request-too-large",

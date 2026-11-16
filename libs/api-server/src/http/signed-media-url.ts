@@ -12,6 +12,13 @@ import { accountAuthError, jsonError, requireAccessibleGrantState } from "#src/h
  */
 export type MediaUrlPrincipal = ConversionOwner;
 
+/**
+ * What a signed URL's token authorizes beyond the media routes. A token without a purpose is a
+ * media token; a `"position"` token authorizes only the listening-position route (a signed position
+ * URL). Each route accepts only its own kind.
+ */
+type SignedUrlPurpose = "position";
+
 const DAY_MS = 24 * 60 * 60 * 1_000;
 /**
  * How long a signed media URL authorizes requests after its issue time, the start of the UTC day it
@@ -38,6 +45,26 @@ export function createMediaUrlSigner(
       principal,
       resource,
     });
+}
+
+/**
+ * Signs the position URL of an audiobook on the request's origin for one account, which must own
+ * it: the listening-position route with a position token, so a client can save the position without
+ * the listener's session.
+ */
+export function signPositionUrl(
+  context: { req: { url: string }; env: { MEDIA_URL_SIGNING_KEY: string } },
+  principal: Extract<MediaUrlPrincipal, { kind: "account" }>,
+  conversionId: string,
+): Promise<string> {
+  return signMediaUrl({
+    url: `${new URL(context.req.url).origin}/api/audiobooks/${conversionId}/position`,
+    conversionId,
+    principal,
+    signingKey: context.env.MEDIA_URL_SIGNING_KEY,
+    nowMs: Temporal.Now.instant().epochMilliseconds,
+    purpose: "position",
+  });
 }
 
 /** Issues the signed media URL of one media resource of an audiobook, on the request's origin. */
@@ -68,7 +95,8 @@ function signAudiobookMediaUrl({
  * principal, until {@link SIGNED_MEDIA_URL_LIFETIME_MS} after the start of the UTC day of `nowMs`.
  * Within one UTC day, the same URL and principal therefore get a byte-identical URL, which lets
  * browsers cache cover images (ADR 0013). The token is stateless: rotating `signingKey` invalidates
- * every outstanding URL.
+ * every outstanding URL. A `purpose` is added to the payload last, so tokens without one stay
+ * byte-identical to the media tokens issued before purposes existed.
  */
 export async function signMediaUrl({
   url,
@@ -76,12 +104,14 @@ export async function signMediaUrl({
   principal,
   signingKey,
   nowMs,
+  purpose,
 }: {
   url: string;
   conversionId: string;
   principal: MediaUrlPrincipal;
   signingKey: string;
   nowMs: number;
+  purpose?: SignedUrlPurpose;
 }): Promise<string> {
   const issuedAtMs = nowMs - (nowMs % DAY_MS);
   const payload = encodeBase64Url(
@@ -94,6 +124,7 @@ export async function signMediaUrl({
             ? { kind: principal.kind, accountId: principal.accountId }
             : { kind: principal.kind, grantId: principal.grantId },
         expiresAtMs: issuedAtMs + SIGNED_MEDIA_URL_LIFETIME_MS,
+        ...(purpose === undefined ? {} : { purpose }),
       }),
     ),
   );
@@ -128,6 +159,7 @@ export async function requireSignedMediaUrl(
     conversionId,
     signingKey: env.MEDIA_URL_SIGNING_KEY,
     nowMs: Temporal.Now.instant().epochMilliseconds,
+    purpose: undefined,
   });
   if (token.result !== "valid") {
     return jsonError(
@@ -141,6 +173,56 @@ export async function requireSignedMediaUrl(
     return undefined;
   }
   return requireSignedMediaAccess(env, owner, token.principal, requestId);
+}
+
+type SignedPositionUrlVerification =
+  | { result: "valid"; accountId: string }
+  | { result: "denied"; response: Response };
+
+/**
+ * Authorizes a listening-position save by its signed position URL token: its signature, expiry and
+ * purpose, and that it was issued for this audiobook. Then the account it names must still own the
+ * audiobook and be active, answered as a media request with a media token would be. Whether the
+ * audiobook still exists is the route's check.
+ */
+export async function verifySignedPositionUrl(
+  env: ApiServerEnvironment,
+  requestUrl: string,
+  conversionId: string,
+  owner: ConversionOwner | undefined,
+  requestId: string,
+): Promise<SignedPositionUrlVerification> {
+  const token = await verifyMediaUrlToken({
+    requestUrl,
+    conversionId,
+    signingKey: env.MEDIA_URL_SIGNING_KEY,
+    nowMs: Temporal.Now.instant().epochMilliseconds,
+    purpose: "position",
+  });
+  if (token.result !== "valid" || token.principal.kind !== "account") {
+    return {
+      result: "denied",
+      response: jsonError(
+        requestId,
+        "position-url-invalid",
+        "The position URL is invalid or expired. Reload the audiobook.",
+        401,
+      ),
+    };
+  }
+  // A position URL is issued to accounts only, so an audiobook without an account owner is
+  // not this account's: not found, not the trial's grant-session answer.
+  if (owner?.kind !== "account") {
+    return {
+      result: "denied",
+      response: jsonError(requestId, "audiobook-not-found", "Audiobook not found.", 404),
+    };
+  }
+  const denied = await requireSignedMediaAccess(env, owner, token.principal, requestId);
+  if (denied) {
+    return { result: "denied", response: denied };
+  }
+  return { result: "valid", accountId: token.principal.accountId };
 }
 
 /**
@@ -191,18 +273,21 @@ type MediaUrlTokenVerification =
 
 /**
  * Checks the `token` query parameter of a request for `conversionId`: its signature, its expiry,
- * and that it was issued for this audiobook. The principal's current access is not checked here.
+ * that it was issued for this audiobook, and that it carries exactly `purpose` (none for a media
+ * token). The principal's current access is not checked here.
  */
 async function verifyMediaUrlToken({
   requestUrl,
   conversionId,
   signingKey,
   nowMs,
+  purpose,
 }: {
   requestUrl: string;
   conversionId: string;
   signingKey: string;
   nowMs: number;
+  purpose: SignedUrlPurpose | undefined;
 }): Promise<MediaUrlTokenVerification> {
   const token = new URL(requestUrl).searchParams.get(TOKEN_QUERY_PARAMETER);
   if (token === null) {
@@ -243,6 +328,7 @@ async function verifyMediaUrlToken({
   const expiresAtMs = claims["expiresAtMs"];
   if (
     claims["conversionId"] !== conversionId ||
+    claims["purpose"] !== purpose ||
     !principal.success ||
     typeof expiresAtMs !== "number" ||
     nowMs >= expiresAtMs

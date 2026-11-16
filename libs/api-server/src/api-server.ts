@@ -57,7 +57,12 @@ import {
   serveCoverImage,
   serveNarrationTrack,
 } from "#src/http/serve-audiobook.ts";
-import { createMediaUrlSigner, requireSignedMediaUrl } from "#src/http/signed-media-url.ts";
+import {
+  createMediaUrlSigner,
+  requireSignedMediaUrl,
+  signPositionUrl,
+  verifySignedPositionUrl,
+} from "#src/http/signed-media-url.ts";
 import { applyWebAppCspNonce } from "#src/http/web-app-csp.ts";
 import { createConversionGrant } from "#src/use-cases/create-conversion-grant.ts";
 import { getSynthesisState } from "#src/use-cases/get-synthesis-state.ts";
@@ -603,6 +608,9 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
               narrationTrack: toNarrationTrackResponse(
                 await signMediaUrl(conversionId, "narration-track.mp3"),
                 narrationTrackDurations,
+                owner.kind === "account"
+                  ? await signPositionUrl(context, owner, conversionId)
+                  : undefined,
               ),
             }),
         narrationDocument: toNarrationDocumentResponse(audiobook.narrationDocument),
@@ -677,23 +685,33 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
     if (denied) {
       return denied;
     }
-    const auth = await authenticateAccountRequest(context.req.raw, context.env);
-    if (auth.result !== "authenticated") {
-      return accountAuthError(auth.result, context.get("requestId"));
-    }
-    if (auth.snapshot.state !== "active") {
-      return accountAuthError("blocked", context.get("requestId"));
+    const listener = await authorizePositionSave(
+      context.env,
+      context.req.raw,
+      conversionId,
+      context.get("requestId"),
+    );
+    if (listener.result === "denied") {
+      return listener.response;
     }
     const position = context.req.valid("json");
     const audiobook = await loadReadyAudiobookFromEnvironment(context.env, conversionId);
+    if (!audiobook) {
+      return jsonError(
+        context.get("requestId"),
+        "audiobook-not-found",
+        "Audiobook not found.",
+        404,
+      );
+    }
     if (
-      !audiobook?.narrationDocument.synchronizationUnits.some(
+      !audiobook.narrationDocument.synchronizationUnits.some(
         (unit) => unit.id === position.synchronizationUnitId,
       )
     ) {
       return jsonError(context.get("requestId"), "invalid-input", "Segment not found.", 400);
     }
-    await auth.account.savePlaybackPosition(conversionId, position);
+    await listener.account.savePlaybackPosition(conversionId, position);
     return context.body(null, 204);
   },
 
@@ -1247,6 +1265,13 @@ export function createApiServer(dependencies: ApiServerDependencies = production
   app.use("/api/audiobooks/*", async (context, next) => {
     const origin = context.req.header("Origin");
     allowApplicationOrigin(context, origin);
+    if (isPositionPath(context.req.path)) {
+      // The position route authorizes either of its two credentials, the bearer token or a signed
+      // position URL, and checks ownership itself (`authorizePositionSave`).
+      await next();
+      context.header("Cross-Origin-Resource-Policy", "same-origin");
+      return;
+    }
     const rawConversionId = context.req.path.split("/")[3];
     if (!rawConversionId) {
       return next();
@@ -1441,6 +1466,74 @@ export function createApiServer(dependencies: ApiServerDependencies = production
 /** Whether the path is one of the media routes that a signed media URL authorizes. */
 function isSignedMediaPath(path: string): boolean {
   return /^\/api\/files\/audiobooks\/[^/]+\/(?:narration-track\.mp3|cover-image)$/.test(path);
+}
+
+/** Whether the path is the listening-position route, which a signed position URL authorizes. */
+function isPositionPath(path: string): boolean {
+  return /^\/api\/audiobooks\/[^/]+\/position$/.test(path);
+}
+
+type PositionSaveAuthorization =
+  | { result: "authorized"; account: ReturnType<ApiServerEnvironment["ACCOUNTS"]["get"]> }
+  | { result: "denied"; response: Response };
+
+/**
+ * Authorizes a listening-position save by exactly one credential: the listener's bearer token or a
+ * signed position URL's `token`. Either way, an active account must own the audiobook. Sign-out
+ * does not revoke a position URL; it stays valid until it expires.
+ */
+async function authorizePositionSave(
+  env: ApiServerEnvironment,
+  request: Request,
+  conversionId: string,
+  requestId: string,
+): Promise<PositionSaveAuthorization> {
+  const hasBearer = request.headers.has("Authorization");
+  const hasToken = new URL(request.url).searchParams.has("token");
+  if (hasBearer && hasToken) {
+    return {
+      result: "denied",
+      response: jsonError(
+        requestId,
+        "position-url-invalid",
+        "Send either a bearer token or a position URL, not both.",
+        401,
+      ),
+    };
+  }
+
+  const owner = await getRegistryStub(env).findConversionOwner(conversionId);
+  if (hasToken) {
+    const verification = await verifySignedPositionUrl(
+      env,
+      request.url,
+      conversionId,
+      owner,
+      requestId,
+    );
+    if (verification.result === "denied") {
+      return verification;
+    }
+    return {
+      result: "authorized",
+      account: env.ACCOUNTS.get(env.ACCOUNTS.idFromName(verification.accountId)),
+    };
+  }
+
+  const auth = await authenticateAccountRequest(request, env);
+  if (auth.result !== "authenticated") {
+    return { result: "denied", response: accountAuthError(auth.result, requestId) };
+  }
+  if (auth.snapshot.state !== "active") {
+    return { result: "denied", response: accountAuthError("blocked", requestId) };
+  }
+  if (owner?.kind !== "account" || owner.accountId !== auth.snapshot.accountId) {
+    return {
+      result: "denied",
+      response: jsonError(requestId, "audiobook-not-found", "Audiobook not found.", 404),
+    };
+  }
+  return { result: "authorized", account: auth.account };
 }
 
 /** The web app's origins: the production origin and the one its Capacitor shells load it from. */

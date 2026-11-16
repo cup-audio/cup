@@ -165,11 +165,17 @@ export function toNarrationDocumentResponse(document: StoredAudiobook["narration
 /**
  * `durations` are the settled segment durations in sequence order. Each segment starts at the sum
  * of the durations before it; the constant decoder delay at each join is not corrected for.
+ * `positionUrl` is the signed position URL, which only account principals get.
  */
-export function toNarrationTrackResponse(url: string, durations: readonly number[]) {
+export function toNarrationTrackResponse(
+  url: string,
+  durations: readonly number[],
+  positionUrl?: string,
+) {
   const { startOffsets, totalLength } = layOutConsecutively(durations);
   return {
     url,
+    ...(positionUrl === undefined ? {} : { positionUrl }),
     durationMilliseconds: totalLength,
     startMilliseconds: startOffsets,
   } satisfies NonNullable<ReadyAudiobook["narrationTrack"]>;
