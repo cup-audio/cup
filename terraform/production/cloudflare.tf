@@ -52,25 +52,9 @@ resource "cloudflare_dns_record" "cup_audio_resend_return_path" {
   ttl     = 1
 }
 
-# Both domains receive no mail and authorize no sender through SPF; Resend signs with DKIM, which
-# DMARC accepts.
-resource "cloudflare_dns_record" "cup_audio_null_mx" {
-  zone_id  = local.cup_audio_zone_id
-  name     = "cup.audio"
-  type     = "MX"
-  content  = "."
-  priority = 0
-  ttl      = 1
-}
-
-resource "cloudflare_dns_record" "cup_audio_spf" {
-  zone_id = local.cup_audio_zone_id
-  name    = "cup.audio"
-  type    = "TXT"
-  content = "\"v=spf1 -all\""
-  ttl     = 1
-}
-
+# cup.audio receives mail through Email Routing below, which adds and locks its own MX and SPF
+# records, so they stay out of Terraform. Neither domain's SPF authorizes Resend: it signs with DKIM,
+# which DMARC accepts.
 resource "cloudflare_dns_record" "cup_audio_dmarc" {
   zone_id = local.cup_audio_zone_id
   name    = "_dmarc.cup.audio"
@@ -79,6 +63,7 @@ resource "cloudflare_dns_record" "cup_audio_dmarc" {
   ttl     = 1
 }
 
+# cup-audio.com receives no mail and authorizes no sender through SPF.
 resource "cloudflare_dns_record" "cup_audio_com_null_mx" {
   zone_id  = local.cup_audio_com_zone_id
   name     = "cup-audio.com"
@@ -102,6 +87,51 @@ resource "cloudflare_dns_record" "cup_audio_com_dmarc" {
   type    = "TXT"
   content = "\"v=DMARC1; p=reject; sp=reject\""
   ttl     = 1
+}
+
+# Email Routing on cup.audio forwards support@cup.audio, the Google Play developer email, to the
+# operator. Enabling it adds and locks Cloudflare's MX, SPF and DKIM records on the zone. With no
+# catch-all rule, mail to any other address is rejected.
+resource "cloudflare_email_routing_dns" "cup_audio" {
+  zone_id = local.cup_audio_zone_id
+}
+
+# The operator's private inbox. Cloudflare sends it a verification link that must be clicked once
+# before the rule forwards anything.
+variable "support_email_destination" {
+  type      = string
+  sensitive = true
+
+  validation {
+    condition     = can(regex("^[^@\\s]+@[^@\\s]+$", var.support_email_destination))
+    error_message = "Provide the operator's private email address that support@cup.audio forwards to."
+  }
+}
+
+resource "cloudflare_email_routing_address" "operator" {
+  account_id = local.cloudflare_account_id
+  email      = var.support_email_destination
+}
+
+resource "cloudflare_email_routing_rule" "support" {
+  zone_id = local.cup_audio_zone_id
+  name    = "support@cup.audio to the operator"
+  enabled = true
+  matchers = [
+    {
+      type  = "literal"
+      field = "to"
+      value = "support@cup.audio"
+    },
+  ]
+  actions = [
+    {
+      type  = "forward"
+      value = [cloudflare_email_routing_address.operator.email]
+    },
+  ]
+
+  depends_on = [cloudflare_email_routing_dns.cup_audio]
 }
 
 # Cloudflare Access in front of the operator API. The Worker validates the Access JWT against
