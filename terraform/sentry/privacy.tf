@@ -12,7 +12,9 @@ locals {
 
   organization_privacy_settings = jsonencode({
     scrubIPAddresses = true
-    relayPiiConfig   = jsonencode(local.organization_relay_pii_config)
+    # "Show Generative AI Features" off, so no member can send issue data to Sentry's AI features.
+    hideAiFeatures = true
+    relayPiiConfig = jsonencode(local.organization_relay_pii_config)
   })
   cup_worker_privacy_settings = jsonencode({
     relayPiiConfig = jsonencode(local.cup_worker_relay_pii_config)
@@ -77,6 +79,11 @@ check "organization_privacy_settings" {
   assert {
     condition     = try(jsondecode(data.http.organization.response_body).scrubIPAddresses, null) == true
     error_message = "The Sentry organisation stores IP addresses; apply this root to turn \"Prevent storing IP addresses\" back on."
+  }
+
+  assert {
+    condition     = try(jsondecode(data.http.organization.response_body).hideAiFeatures, null) == true
+    error_message = "The Sentry organisation shows generative AI features; apply this root to turn \"Show Generative AI Features\" back off."
   }
 
   assert {
