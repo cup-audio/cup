@@ -54,16 +54,30 @@ const jobSchema = deletionAttemptSchema.extend({
   stuckReported: z.boolean().default(false),
 });
 type DeletionJob = z.infer<typeof jobSchema>;
-const notificationSchema = z.object({
-  key: z.string(),
-  email: z.string(),
-  subject: z.string(),
-  text: z.string(),
-  firstAttemptMs: z.number().nullable(),
-  nextAttemptMs: z.number(),
-  attempts: z.number(),
-  state: z.enum(["pending", "sent", "failed", "expired", "canceled"]),
-});
+const noticeTypeSchema = z.enum(["scheduled", "completed"]);
+type NoticeType = z.infer<typeof noticeTypeSchema>;
+const notificationSchema = z.preprocess(
+  // A notice stored before it carried its type has the type only in its key, `<attemptId>:<type>`.
+  (value) =>
+    typeof value === "object" &&
+    value !== null &&
+    !("type" in value) &&
+    "key" in value &&
+    typeof value.key === "string"
+      ? { ...value, type: value.key.slice(value.key.lastIndexOf(":") + 1) }
+      : value,
+  z.object({
+    key: z.string(),
+    type: noticeTypeSchema,
+    email: z.string(),
+    subject: z.string(),
+    text: z.string(),
+    firstAttemptMs: z.number().nullable(),
+    nextAttemptMs: z.number(),
+    attempts: z.number(),
+    state: z.enum(["pending", "sent", "failed", "expired", "canceled"]),
+  }),
+);
 type Notification = z.infer<typeof notificationSchema>;
 
 /** Owns cleanup and notification intent independently of the account being erased. */
@@ -378,9 +392,10 @@ export class DeletionCoordinator {
       .onConflictDoUpdate({ target: deletionJobs.attemptId, set: { json: JSON.stringify(job) } })
       .run();
   }
-  private enqueue(attempt: DeletionAttempt, type: string, subject: string, text: string) {
+  private enqueue(attempt: DeletionAttempt, type: NoticeType, subject: string, text: string) {
     const notification: Notification = {
       key: `${attempt.attemptId}:${type}`,
+      type,
       email: attempt.email,
       subject,
       text,
@@ -561,10 +576,7 @@ function logUndeliveredNotice(attemptId: string, notification: Notification) {
     {
       attributes: {
         [TELEMETRY_ATTRIBUTES.ACCOUNT_DELETION_ATTEMPT_ID]: attemptId,
-        // The key is `<attemptId>:<type>`, as `enqueue` builds it.
-        [TELEMETRY_ATTRIBUTES.ACCOUNT_DELETION_NOTICE_TYPE]: notification.key.slice(
-          attemptId.length + 1,
-        ),
+        [TELEMETRY_ATTRIBUTES.ACCOUNT_DELETION_NOTICE_TYPE]: notification.type,
         [TELEMETRY_ATTRIBUTES.ACCOUNT_DELETION_NOTICE_STATE]: notification.state,
       },
     },
