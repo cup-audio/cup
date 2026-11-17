@@ -5,20 +5,25 @@ import path from "node:path";
 import url from "node:url";
 import { expect, test } from "vitest";
 
-import { deploy, type RunCommand } from "#scripts/deploy.ts";
+import { deploy, type RemoveDirectory, type RunCommand } from "#scripts/deploy.ts";
 
 const WORKER_DIRECTORY = url.fileURLToPath(new URL("..", import.meta.url));
 const WEB_APP_DIRECTORY = path.dirname(
   url.fileURLToPath(import.meta.resolve("@cup/web-app/package.json")),
 );
 
-test("checks Sentry auth, builds, uploads the web and Worker source maps, then deploys", async () => {
-  const { runCommand, commands } = recordCommands();
+test("checks Sentry auth, empties the build folders, builds, uploads the web and Worker source maps, then deploys", async () => {
+  const { runCommand, removeDirectory, commands } = recordCommands();
 
-  await deploy(runCommand);
+  await deploy(runCommand, removeDirectory);
 
   expect(commands).toEqual([
     "sentry-cli info",
+    `remove ${path.join(WEB_APP_DIRECTORY, "dist/web")}`,
+    `remove ${path.join(WEB_APP_DIRECTORY, "dist/source-maps")}`,
+    `remove ${path.join(WORKER_DIRECTORY, "dist/client")}`,
+    `remove ${path.join(WORKER_DIRECTORY, "dist/create_audiobook_from_url")}`,
+    `remove ${path.join(WORKER_DIRECTORY, "dist/source-maps")}`,
     "pnpm run build",
     `sentry-cli sourcemaps upload --project cup-app --strict ${path.join(WEB_APP_DIRECTORY, "dist/web")} ${path.join(WEB_APP_DIRECTORY, "dist/source-maps")}`,
     `sentry-cli sourcemaps upload --project cup-worker --strict ${path.join(WORKER_DIRECTORY, "dist/create_audiobook_from_url")} ${path.join(WORKER_DIRECTORY, "dist/source-maps")}`,
@@ -43,13 +48,17 @@ test.for([
     ],
   },
 ])("aborts before `wrangler deploy` when `$failing` fails", async ({ failing, ran }) => {
-  const { runCommand, commands } = recordCommands(failing);
+  const { runCommand, removeDirectory, commands } = recordCommands(failing);
 
-  await expect(deploy(runCommand)).rejects.toThrow(
+  await expect(deploy(runCommand, removeDirectory)).rejects.toThrow(
     new RegExp(`^\`${failing}[^\`]*\` failed with exit code 1\\. Nothing was deployed\\.$`),
   );
 
-  expect(commands.map((command) => command.split(" --strict")[0])).toEqual(ran);
+  expect(
+    commands
+      .filter((command) => !command.startsWith("remove "))
+      .map((command) => command.split(" --strict")[0]),
+  ).toEqual(ran);
 });
 
 test("aborts before building when Sentry CLI has no auth token", async ({ onTestFinished }) => {
@@ -63,7 +72,7 @@ test("aborts before building when Sentry CLI has no auth token", async ({ onTest
     SENTRY_URL: "http://127.0.0.1:9/",
     SENTRY_DISABLE_UPDATE_CHECK: "true",
   };
-  const { runCommand: recordCommand, commands } = recordCommands();
+  const { runCommand: recordCommand, removeDirectory, commands } = recordCommands();
 
   await expect(
     deploy(async (command, args) => {
@@ -72,7 +81,7 @@ test("aborts before building when Sentry CLI has no auth token", async ({ onTest
       }
       commands.push([command, ...args].join(" "));
       return runRealSentryCli(args, sentryCliEnvironment);
-    }),
+    }, removeDirectory),
   ).rejects.toThrow("`sentry-cli info` failed with exit code 1. Nothing was deployed.");
 
   expect(commands).toEqual(["sentry-cli info"]);
@@ -96,7 +105,10 @@ function recordCommands(failingCommand?: string) {
     commands.push(commandLine);
     return failingCommand !== undefined && commandLine.startsWith(failingCommand) ? 1 : 0;
   };
-  return { runCommand, commands };
+  const removeDirectory: RemoveDirectory = async (directory) => {
+    commands.push(`remove ${directory}`);
+  };
+  return { runCommand, removeDirectory, commands };
 }
 
 async function runRealSentryCli(args: string[], environment: Record<string, string | undefined>) {
