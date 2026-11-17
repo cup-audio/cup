@@ -24,6 +24,11 @@ const PLAYER = 'footer[aria-label="Player"]';
 const SKIP_MILLISECONDS = 15_000;
 /** How often the plugin saves the listening position while it plays, as the web player does. */
 const SAVE_INTERVAL_MILLISECONDS = 5_000;
+/**
+ * How long to wait for a save: one failed write and the plugin's retry 15 s later, since wrangler's
+ * local dev proxy can drop a request under load ("Network connection lost", 2026-11-17).
+ */
+const SAVE_WAIT_MILLISECONDS = 20_000;
 /** How far ExoPlayer's position may move after a seek in the MP3 track, a few frames of 26 ms. */
 const MP3_SEEK_TOLERANCE_MILLISECONDS = 100;
 /** How far the page's position, which follows ExoPlayer's reports, may lag behind or run ahead. */
@@ -622,7 +627,7 @@ function parsePositionSave(body: string | undefined): PositionSave {
 async function waitForSaveAfter(conversionId: string, saveCount: number): Promise<PositionSave> {
   await expect
     .poll(() => positionSaves(conversionId).length, {
-      timeout: 10_000,
+      timeout: SAVE_WAIT_MILLISECONDS,
       message: "The Worker received no listening-position save.",
     })
     .toBeGreaterThan(saveCount);
