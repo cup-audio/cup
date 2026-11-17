@@ -2,9 +2,10 @@ import { DurableObject } from "cloudflare:workers";
 import { Temporal } from "temporal-polyfill";
 
 import {
+  assertSynthesisAttempts,
   dispatchSegmentWorkflows,
   reconcileSegmentWorkflow,
-  type SegmentWorkflowParams,
+  type SynthesisWorkflowDispatcher,
   type TrialWorkflowParams,
   createConversionArtifactPrefix,
 } from "@cup/conversion-contracts";
@@ -14,7 +15,20 @@ import {
   type AudiobookReference,
   type ConversionMeasurements,
 } from "@cup/conversion-contracts";
+import { CupError } from "@cup/errors";
 import { RollingLimits } from "@cup/rolling-limits";
+import {
+  captureAlarmFailure,
+  captureStoppedWorkflow,
+  logAudioSegmentSettled,
+  logEvent,
+  logPreparationSettled,
+  reportStuckConversions,
+  setConversionScope,
+  withConversionScope,
+  type PreparationOutcome,
+} from "@cup/telemetry.cloudflare";
+import { TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
 
 import type {
   GrantConversions,
@@ -56,8 +70,12 @@ const CLEANUP_RETRY_CUTOFF_MS = 7 * 24 * 60 * 60 * 1_000;
 
 type ConversionGrantEnvironment = {
   CONVERSION_OWNER_LIMIT: string;
-  PREPARE_AUDIOBOOK_WORKFLOW: Workflow<TrialWorkflowParams>;
-  SYNTHESIZE_AUDIO_SEGMENT_WORKFLOW: Workflow<SegmentWorkflowParams>;
+  /** The methods of the Workflow binding the grant calls, so tests can control them. */
+  PREPARE_AUDIOBOOK_WORKFLOW: {
+    create(input: { id: string; params: TrialWorkflowParams }): Promise<unknown>;
+    get(id: string): Promise<{ status(): Promise<{ status: string }>; restart(): Promise<void> }>;
+  };
+  SYNTHESIZE_AUDIO_SEGMENT_WORKFLOW: SynthesisWorkflowDispatcher;
   AUDIO_BUCKET: R2Bucket;
   REGISTRY: GrantRegistry;
 };
@@ -86,7 +104,9 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
           existing.createdAtMs !== createdAtMs ||
           existing.expiresAtMs !== expiresAtMs
         ) {
-          throw new Error("Conversion grant initialization conflicts with authoritative identity");
+          throw new CupError(
+            "Conversion grant initialization conflicts with authoritative identity",
+          );
         }
         return createGrantRegistrySnapshot(existing);
       }
@@ -207,7 +227,7 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
       const startLimit = Number(this.env.CONVERSION_OWNER_LIMIT);
 
       if (!Number.isSafeInteger(startLimit) || startLimit <= 0) {
-        throw new Error("Invalid conversion rate limit");
+        throw new CupError("Invalid conversion rate limit");
       }
 
       // Records the attempt before checking grant state, so starts on closed grants count too.
@@ -232,6 +252,7 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
         createdAtMs: nowMs,
         status: "pending",
         lastStartedPhase: ConversionPhase.CONVERSION_START,
+        stageStartedAtMs: nowMs,
       };
       record.conversions.push(conversion);
       record.registrySnapshotRevision += 1;
@@ -248,6 +269,7 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
 
   /** Reserves the whole narration document before dispatching any segment; see ADR 0008. */
   async startSynthesis(conversionId: string, narrationTextCharactersBySegment: readonly number[]) {
+    setConversionScope({ conversionId });
     const reservation = await this.reserveMissingAudioSegments(
       conversionId,
       narrationTextCharactersBySegment,
@@ -266,7 +288,7 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
           {
             v: 3,
             conversionId,
-            owner: { kind: "trial", grantId: reservation.grantId },
+            owner: trialOwner(reservation.grantId),
             executionEpoch: 1,
           },
           reservation.sequences,
@@ -294,7 +316,7 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
       const record = await this.sqlite.requireRecord();
       const conversion = record.conversions.find((item) => item.conversionId === conversionId);
       if (conversion?.status !== "ready") {
-        throw new Error("Narration is not prepared");
+        throw new CupError("Narration is not prepared");
       }
 
       const reservation = this.reserveMissingSegments(
@@ -307,6 +329,9 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
       }
 
       if (reservation.hasChanged) {
+        // A reservation of any missing segment starts synthesis again.
+        conversion.stageStartedAtMs = Temporal.Now.instant().epochMilliseconds;
+        delete conversion.stuckReportedAtMs;
         record.registrySnapshotRevision += 1;
         await this.sqlite.save(record);
         await this.ctx.storage.setAlarm(
@@ -321,15 +346,22 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
     });
   }
 
-  async releaseAudioSegment(conversionId: string, sequence: number) {
-    await this.ctx.storage.transaction(async () => {
+  /**
+   * `attempts` is how many synthesis attempts the segment's Workflow made before it failed. Returns
+   * whether the segment had a reservation to release.
+   */
+  async releaseAudioSegment(conversionId: string, sequence: number, attempts?: number) {
+    setConversionScope({ conversionId });
+    assertSynthesisAttempts(attempts);
+    const releasedAtMs = Temporal.Now.instant().epochMilliseconds;
+    const isReleased = await this.ctx.storage.transaction(async () => {
       const releasedCount = this.sqlite.duration.releaseReservations(
         conversionId,
-        Temporal.Now.instant().epochMilliseconds,
+        releasedAtMs,
         sequence,
       );
       if (releasedCount === 0) {
-        return;
+        return false;
       }
       const record = await this.sqlite.requireRecord();
       record.registrySnapshotRevision += 1;
@@ -337,10 +369,16 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
       await this.ctx.storage.setAlarm(
         Temporal.Now.instant().epochMilliseconds + RECONCILIATION_RETRY_MS,
       );
+      return true;
     });
+    if (isReleased) {
+      await this.logAudioSegmentSettled(conversionId, sequence, "released", attempts, releasedAtMs);
+    }
+    return isReleased;
   }
 
   retryPreparation(conversionId: string) {
+    setConversionScope({ conversionId });
     return this.ctx.blockConcurrencyWhile(async () => {
       const previous = await this.getConversion(conversionId);
       if (previous?.status !== "failed") {
@@ -352,7 +390,7 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
           record.revokedAtMs !== undefined ||
           record.expiresAtMs <= Temporal.Now.instant().epochMilliseconds
         ) {
-          throw new Error("Trial preparation is blocked");
+          throw new CupError("Trial preparation is blocked");
         }
         const index = record.conversions.findIndex((item) => item.conversionId === conversionId);
         record.conversions[index] = {
@@ -362,6 +400,7 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
           createdAtMs: previous.createdAtMs,
           status: "pending",
           lastStartedPhase: ConversionPhase.CONVERSION_START,
+          stageStartedAtMs: Temporal.Now.instant().epochMilliseconds,
         };
         await this.sqlite.save(record);
         return record.grantId;
@@ -382,23 +421,32 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
     });
   }
 
-  async completeAudioSegment(conversionId: string, sequence: number, durationMilliseconds: number) {
+  /** `attempts` is how many synthesis attempts the segment's Workflow needed. */
+  async completeAudioSegment(
+    conversionId: string,
+    sequence: number,
+    durationMilliseconds: number,
+    attempts?: number,
+  ) {
+    setConversionScope({ conversionId });
+    assertSynthesisAttempts(attempts);
     if (!Number.isFinite(durationMilliseconds) || durationMilliseconds <= 0) {
-      throw new Error("Generated duration must be positive and finite");
+      throw new CupError("Generated duration must be positive and finite");
     }
     const actualMilliseconds = Math.ceil(durationMilliseconds);
     if (!Number.isSafeInteger(actualMilliseconds)) {
-      throw new Error("Generated duration exceeds supported precision");
+      throw new CupError("Generated duration exceeds supported precision");
     }
-    return this.ctx.storage.transaction(async () => {
-      const settlement = this.sqlite.duration.complete(
+    const settledAtMs = Temporal.Now.instant().epochMilliseconds;
+    const settlement = await this.ctx.storage.transaction(async () => {
+      const completion = this.sqlite.duration.complete(
         conversionId,
         sequence,
         actualMilliseconds,
-        Temporal.Now.instant().epochMilliseconds,
+        settledAtMs,
       );
-      if (settlement.result === "replayed") {
-        return settlement;
+      if (completion.result === "replayed") {
+        return completion;
       }
       const record = await this.sqlite.requireRecord();
       record.registrySnapshotRevision += 1;
@@ -407,6 +455,34 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
         Temporal.Now.instant().epochMilliseconds + RECONCILIATION_RETRY_MS,
       );
       return { result: "recorded" as const };
+    });
+    if (settlement.result === "recorded") {
+      await this.logAudioSegmentSettled(conversionId, sequence, "settled", attempts, settledAtMs);
+    }
+    return settlement;
+  }
+
+  private async logAudioSegmentSettled(
+    conversionId: string,
+    sequence: number,
+    outcome: "settled" | "released",
+    attempts: number | undefined,
+    settledAtMs: number,
+  ) {
+    const conversion = await this.getConversion(conversionId);
+    // The record must not fail the settlement that already happened.
+    if (conversion === undefined) {
+      return;
+    }
+    logAudioSegmentSettled({
+      conversionId,
+      sequence,
+      outcome,
+      reservedAtMs: this.sqlite.duration.reservedAtMs(conversionId, sequence),
+      attempts,
+      conversionCreatedAtMs: conversion.createdAtMs,
+      segmentStates: this.sqlite.duration.segments(conversionId).map((segment) => segment.state),
+      settledAtMs,
     });
   }
 
@@ -418,11 +494,12 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
     conversionId: string,
     nowMs = Temporal.Now.instant().epochMilliseconds,
   ): Promise<void> {
+    setConversionScope({ conversionId });
     await this.ctx.storage.transaction(async () => {
       const record = await this.sqlite.requireRecord();
       const conversion = record.conversions.find((item) => item.conversionId === conversionId);
       if (conversion === undefined) {
-        throw new Error("Conversion does not exist");
+        throw new CupError("Conversion does not exist");
       }
       conversion.workflowStartedAtMs ??= nowMs;
       await this.sqlite.save(record);
@@ -430,14 +507,15 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
   }
 
   async recordPhaseStarted(conversionId: string, phase: ConversionPhase): Promise<void> {
+    setConversionScope({ conversionId });
     await this.ctx.storage.transaction(async () => {
       const record = await this.sqlite.requireRecord();
       const conversion = record.conversions.find((item) => item.conversionId === conversionId);
       if (conversion === undefined) {
-        throw new Error("Conversion does not exist");
+        throw new CupError("Conversion does not exist");
       }
       if (conversion.status !== "pending") {
-        throw new Error("Only a pending conversion can start a phase");
+        throw new CupError("Only a pending conversion can start a phase");
       }
       conversion.lastStartedPhase = phase;
       await this.sqlite.save(record);
@@ -457,6 +535,7 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
     },
     narrationTextCharactersBySegment?: readonly number[],
   ): Promise<"recorded" | "replayed"> {
+    setConversionScope({ conversionId });
     return this.recordTerminal(
       conversionId,
       {
@@ -486,6 +565,7 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
       completedAtMs?: number;
     },
   ): Promise<"recorded" | "replayed"> {
+    setConversionScope({ conversionId });
     return this.recordTerminal(conversionId, {
       status: "failed",
       completedAtMs: input.completedAtMs ?? Temporal.Now.instant().epochMilliseconds,
@@ -504,7 +584,7 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
     nowMs = Temporal.Now.instant().epochMilliseconds,
   ) {
     if (!Number.isSafeInteger(allowanceMilliseconds) || allowanceMilliseconds < 1) {
-      throw new Error("Duration allowance must be a positive safe integer");
+      throw new CupError("Duration allowance must be a positive safe integer");
     }
     return this.ctx.storage.transaction(async () => {
       let record = await this.sqlite.requireRecord();
@@ -602,21 +682,21 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
     terminal: TerminalOutcome,
     narrationTextCharactersBySegment?: readonly number[],
   ): Promise<"recorded" | "replayed"> {
-    return this.ctx.storage.transaction(async () => {
+    const settlement = await this.ctx.storage.transaction(async () => {
       const record = await this.sqlite.requireRecord();
       const index = record.conversions.findIndex((item) => item.conversionId === conversionId);
       const existing = record.conversions[index];
       if (existing === undefined) {
-        throw new Error("Conversion does not exist");
+        throw new CupError("Conversion does not exist");
       }
       if (existing.status !== "pending") {
         const candidate = { ...existing, ...terminal };
         if (canonicalJson(existing) === canonicalJson(candidate)) {
-          return "replayed";
+          return undefined;
         }
         const isRecoveredWorkflow = existing.status === "failed" && terminal.status === "ready";
         if (!isRecoveredWorkflow) {
-          throw new Error("A terminal conversion outcome cannot be changed");
+          throw new CupError("A terminal conversion outcome cannot be changed");
         }
       }
       const identity = {
@@ -628,74 +708,138 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
         ...(existing.workflowStartedAtMs === undefined
           ? {}
           : { workflowStartedAtMs: existing.workflowStartedAtMs }),
+        stageStartedAtMs: existing.stageStartedAtMs,
+        ...(existing.stuckReportedAtMs === undefined
+          ? {}
+          : { stuckReportedAtMs: existing.stuckReportedAtMs }),
       };
-      record.conversions[index] =
+      const settled: GrantConversion =
         terminal.status === "ready" ? { ...identity, ...terminal } : { ...identity, ...terminal };
+      record.conversions[index] = settled;
       this.sqlite.duration.releaseReservations(
         conversionId,
         Temporal.Now.instant().epochMilliseconds,
       );
+      let outcome: PreparationOutcome =
+        terminal.status === "ready"
+          ? { outcome: "ready" }
+          : { outcome: "failed", failureCategory: terminal.failureCategory };
       // Reserving with the ready outcome leaves no moment in which a prepared conversion has
       // undecided reservations: afterwards a segment without one means the document did not fit.
       if (terminal.status === "ready" && narrationTextCharactersBySegment !== undefined) {
-        this.reserveMissingSegments(record, conversionId, narrationTextCharactersBySegment);
+        const reservation = this.reserveMissingSegments(
+          record,
+          conversionId,
+          narrationTextCharactersBySegment,
+        );
+        if (reservation.result !== "reserved") {
+          outcome = { outcome: "insufficient-duration" };
+        } else if (reservation.hasChanged) {
+          // Synthesis starts when the conversion becomes ready.
+          settled.stageStartedAtMs = terminal.completedAtMs;
+          delete settled.stuckReportedAtMs;
+        }
       }
       record.registrySnapshotRevision += 1;
       await this.sqlite.save(record);
       await this.ctx.storage.setAlarm(
         Temporal.Now.instant().epochMilliseconds + RECONCILIATION_RETRY_MS,
       );
-      return "recorded";
+      return { ...outcome, conversionCreatedAtMs: existing.createdAtMs };
     });
+    if (settlement === undefined) {
+      return "replayed";
+    }
+    logPreparationSettled({ ...settlement, conversionId, settledAtMs: terminal.completedAtMs });
+    return "recorded";
   }
 
   /** Reconciles stable Workflow startup, the Registry snapshot, and failed artifacts. */
   override async alarm(): Promise<void> {
+    await this.reconcile(Temporal.Now.instant().epochMilliseconds);
+  }
+
+  /**
+   * One alarm pass; only the stuck-conversion check reads `nowMs`, so tests can choose it. A step
+   * that throws fails the pass, which captures the error and lets the platform retry the alarm.
+   */
+  protected async reconcile(nowMs: number): Promise<void> {
+    await captureAlarmFailure(() => this.reconcilePass(nowMs));
+  }
+
+  private async reconcilePass(nowMs: number): Promise<void> {
     let record = await this.sqlite.requireRecord();
-    for (const conversion of record.conversions) {
-      if (
-        conversion.status !== "pending" ||
-        conversion.workflowStartedAtMs !== undefined ||
-        Temporal.Now.instant().epochMilliseconds - conversion.createdAtMs >=
-          RECONCILIATION_CUTOFF_MS
-      ) {
-        continue;
+    const { grantId } = record;
+    try {
+      for (const conversion of record.conversions) {
+        if (
+          conversion.status !== "pending" ||
+          conversion.workflowStartedAtMs !== undefined ||
+          Temporal.Now.instant().epochMilliseconds - conversion.createdAtMs >=
+            RECONCILIATION_CUTOFF_MS
+        ) {
+          continue;
+        }
+        const { conversionId } = conversion;
+        await withConversionScope({ conversionId, owner: trialOwner(grantId) }, async () => {
+          try {
+            const instance = await this.env.PREPARE_AUDIOBOOK_WORKFLOW.get(conversionId);
+            await instance.status();
+            await this.markWorkflowStarted(conversionId);
+          } catch {
+            // Expected, so not logged: a preparation whose dispatch never arrived has no instance.
+            try {
+              await this.env.PREPARE_AUDIOBOOK_WORKFLOW.create({
+                id: conversionId,
+                params: { sourceUrl: conversion.sourceUrl, grantId },
+              });
+              await this.markWorkflowStarted(conversionId);
+            } catch (error) {
+              // The same stable identity remains reserved when the platform result is ambiguous.
+              logDispatchFailure(
+                conversionId,
+                "A trial conversion's preparation Workflow could not be created; the next alarm retries it.",
+                error,
+              );
+            }
+          }
+        });
       }
-      try {
-        const instance = await this.env.PREPARE_AUDIOBOOK_WORKFLOW.get(conversion.conversionId);
-        await instance.status();
-        await this.markWorkflowStarted(conversion.conversionId);
-      } catch {
+
+      record = await this.sqlite.requireRecord();
+      if (record.registryConfirmedSnapshotRevision < record.registrySnapshotRevision) {
         try {
-          await this.env.PREPARE_AUDIOBOOK_WORKFLOW.create({
-            id: conversion.conversionId,
-            params: { sourceUrl: conversion.sourceUrl, grantId: record.grantId },
-          });
-          await this.markWorkflowStarted(conversion.conversionId);
-        } catch {
-          // The same stable identity remains reserved when the platform result is ambiguous.
+          const registry = this.env.REGISTRY.get(this.env.REGISTRY.idFromName("registry"));
+          await registry.applyGrantRegistrySnapshot(createGrantRegistrySnapshot(record));
+          await this.confirmRegistrySnapshot(record.registrySnapshotRevision);
+        } catch (error) {
+          // The registry snapshot is derived and safe to retry indefinitely.
+          logEvent(
+            "usage-projection-failed",
+            "The registry did not take the grant's usage projection; the next alarm pushes it again.",
+            { attributes: { [TELEMETRY_ATTRIBUTES.CONVERSION_GRANT_ID]: grantId }, error },
+          );
         }
       }
+
+      await this.reconcileGeneration(record);
+      await this.reconcileSynthesis(record);
+    } finally {
+      // Also after a step that threw, so a failing step cannot hide a stuck conversion.
+      await this.reportStuckConversions(nowMs);
     }
 
-    record = await this.sqlite.requireRecord();
-    if (record.registryConfirmedSnapshotRevision < record.registrySnapshotRevision) {
-      try {
-        const registry = this.env.REGISTRY.get(this.env.REGISTRY.idFromName("registry"));
-        await registry.applyGrantRegistrySnapshot(createGrantRegistrySnapshot(record));
-        await this.confirmRegistrySnapshot(record.registrySnapshotRevision);
-      } catch {
-        // The Registry snapshot is derived and safe to retry indefinitely.
-      }
-    }
-
-    await this.reconcileGeneration(record);
-    await this.reconcileSynthesis(record);
     record = await this.sqlite.requireRecord();
     await this.cleanupFailedArtifacts(record);
 
     record = await this.sqlite.requireRecord();
+    // The stuck-conversion check runs on this alarm, so a pending conversion keeps it armed until
+    // the check has reported it.
+    const hasUnreportedPreparation = record.conversions.some(
+      (conversion) => conversion.status === "pending" && conversion.stuckReportedAtMs === undefined,
+    );
     const hasDueMaintenance =
+      hasUnreportedPreparation ||
       record.registryConfirmedSnapshotRevision < record.registrySnapshotRevision ||
       record.segmentUsage.some((segment) => segment.state === "reserved") ||
       record.conversions.some(
@@ -712,9 +856,45 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
       );
       await this.ctx.storage.setAlarm(
         Temporal.Now.instant().epochMilliseconds +
-          (hasSynthesisInFlight ? RECONCILIATION_RETRY_MS : MAINTENANCE_RETRY_MS),
+          (hasSynthesisInFlight || hasUnreportedPreparation
+            ? RECONCILIATION_RETRY_MS
+            : MAINTENANCE_RETRY_MS),
       );
     }
+  }
+
+  /** Sends one Sentry event per stuck conversion and stage; see docs/architecture/conversion.md. */
+  private async reportStuckConversions(nowMs: number): Promise<void> {
+    await this.ctx.storage.transaction(async () => {
+      const record = await this.sqlite.requireRecord();
+      const reservedConversionIds = new Set(
+        record.segmentUsage
+          .filter((segment) => segment.state === "reserved")
+          .map((segment) => segment.conversionId),
+      );
+      const candidates = record.conversions
+        .filter((conversion) => conversion.stuckReportedAtMs === undefined)
+        .map((conversion) => ({
+          conversionId: conversion.conversionId,
+          status: conversion.status,
+          hasReservedSegment: reservedConversionIds.has(conversion.conversionId),
+          stageStartedAtMs: conversion.stageStartedAtMs,
+          lastStartedPhase: conversion.lastStartedPhase,
+        }));
+
+      const reported = new Set(
+        reportStuckConversions(candidates, trialOwner(record.grantId), nowMs),
+      );
+      if (reported.size === 0) {
+        return;
+      }
+      for (const conversion of record.conversions) {
+        if (reported.has(conversion.conversionId)) {
+          conversion.stuckReportedAtMs = nowMs;
+        }
+      }
+      await this.sqlite.save(record);
+    });
   }
 
   private async reconcileGeneration(record: GrantRecord): Promise<void> {
@@ -722,19 +902,30 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
       if (conversion.status !== "pending") {
         continue;
       }
-      try {
-        const instance = await this.env.PREPARE_AUDIOBOOK_WORKFLOW.get(conversion.conversionId);
-        const status = await instance.status();
-        if (status.status === "errored" || status.status === "terminated") {
-          await this.recordFailed(conversion.conversionId, {
-            failureCategory: "workflow-platform",
-            explanation: "Generation stopped. Unfinished segments did not consume allowance.",
-            cleanupState: "pending",
-          });
+      const { conversionId } = conversion;
+      const owner = trialOwner(record.grantId);
+      await withConversionScope({ conversionId, owner }, async () => {
+        try {
+          const instance = await this.env.PREPARE_AUDIOBOOK_WORKFLOW.get(conversionId);
+          const status = await instance.status();
+          if (status.status === "errored" || status.status === "terminated") {
+            // The instance stopped without recording a failed outcome, so nothing captured it.
+            await this.recordFailed(conversionId, {
+              failureCategory: "workflow-platform",
+              explanation: "Generation stopped. Unfinished segments did not consume allowance.",
+              diagnosticReference: captureStoppedWorkflow({ kind: "preparation", conversionId }),
+              cleanupState: "pending",
+            });
+          }
+        } catch (error) {
+          // An ambiguous platform result must not release reservations for work that might still be running.
+          logDispatchFailure(
+            conversionId,
+            "The status of a trial conversion's preparation Workflow could not be read; the next alarm retries it.",
+            error,
+          );
         }
-      } catch {
-        // An ambiguous platform result must not release reservations for work that might still be running.
-      }
+      });
     }
   }
 
@@ -744,21 +935,20 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
       if (segment.state !== "reserved") {
         continue;
       }
-      const result = await reconcileSegmentWorkflow(
-        this.env.SYNTHESIZE_AUDIO_SEGMENT_WORKFLOW,
-        {
-          v: 3,
-          conversionId: segment.conversionId,
-          owner: { kind: "trial", grantId: record.grantId },
-          executionEpoch: 1,
-          sequence: segment.sequence,
-        },
-        // Reserved work may finish after expiry or revocation, so a grant can always resume it.
-        { canResume: true },
-      );
-      if (result === "stopped") {
-        await this.releaseAudioSegment(segment.conversionId, segment.sequence);
-      }
+      const { conversionId, sequence } = segment;
+      const owner = trialOwner(record.grantId);
+      await withConversionScope({ conversionId, owner, sequence }, async () => {
+        const result = await reconcileSegmentWorkflow(
+          this.env.SYNTHESIZE_AUDIO_SEGMENT_WORKFLOW,
+          { v: 3, conversionId, owner, executionEpoch: 1, sequence },
+          // Reserved work may finish after expiry or revocation, so a grant can always resume it.
+          { canResume: true },
+        );
+        // The instance stopped without releasing the segment itself, so nothing captured it.
+        if (result === "stopped" && (await this.releaseAudioSegment(conversionId, sequence))) {
+          captureStoppedWorkflow({ kind: "audio-segment", conversionId, sequence });
+        }
+      });
     }
   }
 
@@ -810,7 +1000,7 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
         (candidate) => candidate.conversionId === conversionId,
       );
       if (conversion?.status !== "failed") {
-        throw new Error("Failed conversion cleanup state is unavailable");
+        throw new CupError("Failed conversion cleanup state is unavailable");
       }
       conversion.cleanupState = cleanupState;
       await this.sqlite.save(record);
@@ -837,4 +1027,16 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
       },
     );
   }
+}
+
+function trialOwner(grantId: string) {
+  return { kind: "trial" as const, grantId };
+}
+
+/** One pass of a trial conversion's preparation dispatch failed; the alarm retries it. */
+function logDispatchFailure(conversionId: string, message: string, error: unknown) {
+  logEvent("conversion-dispatch-failed", message, {
+    attributes: { [TELEMETRY_ATTRIBUTES.CONVERSION_ID]: conversionId },
+    error,
+  });
 }

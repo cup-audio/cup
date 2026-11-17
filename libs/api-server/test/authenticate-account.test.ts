@@ -1,9 +1,16 @@
+import type { captureException } from "@sentry/core";
 import { expect, test, vi } from "vitest";
 
 import type { AccountSnapshot } from "@cup/accounts";
 
 import { authenticateAccount } from "#src/use-cases/authenticate-account.ts";
 import type { AuthenticateAccountDependencies } from "#src/use-cases/authenticate-account.ts";
+
+// Records the captures; the Worker integration tests check what reaches Sentry.
+vi.mock(import("@sentry/core"), async (importOriginal) => ({
+  ...(await importOriginal()),
+  captureException: vi.fn<typeof captureException>(),
+}));
 
 function fixture() {
   const snapshot: AccountSnapshot = {
@@ -111,4 +118,21 @@ test("registry failures remain unavailable", async () => {
   const { dependencies } = fixture();
   dependencies.registry.findIdentity.mockRejectedValue(new Error("Storage unavailable"));
   expect(await authenticateAccount("subject", dependencies)).toEqual({ result: "unavailable" });
+});
+
+test("a failing registry answers unavailable and captures the error, since every caller answers 503", async () => {
+  const { dependencies } = fixture();
+  const failure = new Error("Registry unavailable");
+  dependencies.registry.findIdentity.mockRejectedValue(failure);
+  // Test files share loaded modules, so a copy loaded before the mock applied would capture for
+  // real; a fresh load sees the mocked capture.
+  vi.resetModules();
+  const sentry = await import("@sentry/core");
+  const useCase = await import("#src/use-cases/authenticate-account.ts");
+  vi.mocked(sentry.captureException).mockClear();
+
+  expect(await useCase.authenticateAccount("subject", dependencies)).toEqual({
+    result: "unavailable",
+  });
+  expect(vi.mocked(sentry.captureException).mock.calls).toEqual([[failure]]);
 });

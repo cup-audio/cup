@@ -6,7 +6,7 @@ import type {
 } from "cloudflare:workers";
 import path from "node:path";
 import { Temporal } from "temporal-polyfill";
-import { afterAll, beforeAll, expect, test, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, expect, test, vi } from "vitest";
 import { createTestHarness } from "wrangler";
 import { z } from "zod";
 
@@ -18,7 +18,18 @@ vi.mock("cloudflare:workers", () => ({
 vi.mock("cloudflare:workflows", () => ({
   NonRetryableError: class NonRetryableError extends Error {},
 }));
+// The Worker's failure tests check the event that reaches the Sentry stub.
+vi.mock(import("@sentry/core"), async (importOriginal) => ({
+  ...(await importOriginal()),
+  captureException: vi.fn<typeof captureException>(),
+}));
+// The helper itself is tested against the Sentry stub in @cup/telemetry.cloudflare.
+vi.mock(import("@cup/telemetry.cloudflare"), async (importOriginal) => ({
+  ...(await importOriginal()),
+  logEvent: vi.fn<typeof logEvent>(),
+}));
 
+import { captureException } from "@sentry/core";
 import { NonRetryableError } from "cloudflare:workflows";
 
 import type { AccountDurableObject } from "@cup/accounts";
@@ -36,6 +47,8 @@ import {
 } from "@cup/narration-source-analysis/fake";
 import type { CoverImageLoader, DeclaredLanguage } from "@cup/prepare-source-material";
 import { createControlledSourceMaterialPreparer } from "@cup/prepare-source-material/fake";
+import { logEvent } from "@cup/telemetry.cloudflare";
+import type { LogEventName } from "@cup/telemetry.core";
 
 import {
   runPrepareAudiobookWorkflow,
@@ -70,6 +83,11 @@ const harness = createTestHarness({
 });
 const worker = harness.getWorker<TestEnvironment>();
 let environment: TestEnvironment;
+
+beforeEach(() => {
+  vi.mocked(logEvent).mockClear();
+  vi.mocked(captureException).mockClear();
+});
 
 beforeAll(async () => {
   await harness.listen();
@@ -121,7 +139,7 @@ test.each(["trial", "account"] as const)(
     const step = createImmediateRetryStep();
     const runStep = step.do.bind(step);
     step.do = ((name: string, ...rest: unknown[]) =>
-      name === "start speech synthesis"
+      name === "finalization: start speech synthesis"
         ? Promise.reject(new Error("Dispatch unavailable"))
         : Reflect.apply(runStep, step, [name, ...rest])) as WorkflowStep["do"];
     await expect(
@@ -210,26 +228,22 @@ test.each([
     const audiobook = await loadAudiobook({ bucket: environment.AUDIO_BUCKET, audiobookReference });
     expect(audiobook).not.toHaveProperty("coverImage");
     expect(await owner.hasCoverImage(conversionId)).toBe(false);
+    expect(loggedEvents("cover-image-unavailable")).toHaveLength(1);
   },
 );
 
 test("a page declaring de-AT that the detector reads as de is narrated in de-DE, without a fallback warning", async () => {
   const { owner, grantId, accountId, conversionId } = await createOwnedConversion("account");
-  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-  try {
-    await runConversion(grantId, conversionId, accountId, false, undefined, undefined, {
-      declaredLanguage: { htmlLang: "de-AT" },
-      detectNarrationLanguage: createFakeNarrationLanguageDetector({ answer: "de" }),
-    });
+  await runConversion(grantId, conversionId, accountId, false, undefined, undefined, {
+    declaredLanguage: { htmlLang: "de-AT" },
+    detectNarrationLanguage: createFakeNarrationLanguageDetector({ answer: "de" }),
+  });
 
-    expect(await loadReadyAudiobook(owner, conversionId)).toMatchObject({
-      narrationLanguage: "de-DE",
-    });
-    expect(loggedWarnings(warn, "narration-language-fallback")).toEqual([]);
-  } finally {
-    warn.mockRestore();
-  }
+  expect(await loadReadyAudiobook(owner, conversionId)).toMatchObject({
+    narrationLanguage: "de-DE",
+  });
+  expect(loggedEvents("narration-language-fallback")).toEqual([]);
 });
 
 test.each(["account", "trial"] as const)(
@@ -250,15 +264,9 @@ test.each(["account", "trial"] as const)(
   "a %s conversion without a narration language stores none on its ready outcome",
   async (kind) => {
     const { owner, grantId, accountId, conversionId } = await createOwnedConversion(kind);
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-
-    try {
-      await runConversion(grantId, conversionId, accountId, false, undefined, undefined, {
-        detectNarrationLanguage: createFakeNarrationLanguageDetector({ answer: null }),
-      });
-    } finally {
-      warn.mockRestore();
-    }
+    await runConversion(grantId, conversionId, accountId, false, undefined, undefined, {
+      detectNarrationLanguage: createFakeNarrationLanguageDetector({ answer: null }),
+    });
 
     expect(await owner.getReadyAudiobookReference(conversionId)).toBeDefined();
     expect(await owner.readyNarrationLanguage(conversionId)).toBeUndefined();
@@ -272,36 +280,33 @@ test.each([
   "a conversion whose detector fails with declared language %j becomes ready narrated in %s and logs the fallback",
   async (declaredLanguage, narrationLanguage) => {
     const { owner, grantId, accountId, conversionId } = await createOwnedConversion("trial");
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    try {
-      await runConversion(grantId, conversionId, accountId, false, undefined, undefined, {
-        ...(declaredLanguage === undefined ? {} : { declaredLanguage }),
-        detectNarrationLanguage: createFakeNarrationLanguageDetector({
-          failure: new Error("Configured detection failure"),
-        }),
-      });
+    await runConversion(grantId, conversionId, accountId, false, undefined, undefined, {
+      ...(declaredLanguage === undefined ? {} : { declaredLanguage }),
+      detectNarrationLanguage: createFakeNarrationLanguageDetector({
+        failure: new Error("Configured detection failure"),
+      }),
+    });
 
-      expect((await owner.getConversion(conversionId))?.status).toBe("ready");
-      // A manifest without a narration language has no field at all, not a `null` sentinel.
-      const { narrationLanguage: storedLanguage = "(absent)" } = await loadReadyAudiobook(
-        owner,
-        conversionId,
-      );
-      expect(storedLanguage).toBe(narrationLanguage ?? "(absent)");
-      expect(loggedWarnings(warn, "narration-language-fallback")).toEqual([
-        {
-          event: "narration-language-fallback",
-          conversionId,
-          ...(declaredLanguage === undefined ? {} : { declaredLanguage }),
-          ...(narrationLanguage === undefined ? {} : { narrationLanguage }),
-          reason: "detector-error",
-          error: "Error: Configured detection failure",
+    expect((await owner.getConversion(conversionId))?.status).toBe("ready");
+    // A manifest without a narration language has no field at all, not a `null` sentinel.
+    const { narrationLanguage: storedLanguage = "(absent)" } = await loadReadyAudiobook(
+      owner,
+      conversionId,
+    );
+    expect(storedLanguage).toBe(narrationLanguage ?? "(absent)");
+    expect(loggedEvents("narration-language-fallback")).toEqual([
+      {
+        attributes: {
+          "cup.conversion.id": conversionId,
+          "cup.narration.declared_html_lang": declaredLanguage?.htmlLang,
+          "cup.narration.declared_og_locale": declaredLanguage?.ogLocale,
+          "cup.narration.language": narrationLanguage,
+          "cup.narration.language_fallback_reason": "detector-error",
         },
-      ]);
-    } finally {
-      warn.mockRestore();
-    }
+        error: new Error("Configured detection failure"),
+      },
+    ]);
   },
 );
 
@@ -354,16 +359,11 @@ test("a conversion of a page declaring no language that the detector reads as en
 test("a conversion without a narration language sends today's requests and records no synthesis language", async () => {
   const { owner, grantId, conversionId, artifactPrefix, segmentOwner } =
     await createOwnedConversion("trial");
-  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-  try {
-    await runConversion(grantId, conversionId, undefined, false, undefined, undefined, {
-      detectNarrationLanguage: createFakeNarrationLanguageDetector({
-        failure: new Error("Configured detection failure"),
-      }),
-    });
-  } finally {
-    warn.mockRestore();
-  }
+  await runConversion(grantId, conversionId, undefined, false, undefined, undefined, {
+    detectNarrationLanguage: createFakeNarrationLanguageDetector({
+      failure: new Error("Configured detection failure"),
+    }),
+  });
   const { ai, speechRequests } = createRecordingSpeechSynthesisAi();
 
   await runAllSegments(owner, conversionId, segmentOwner, ai);
@@ -375,29 +375,25 @@ test("a conversion without a narration language sends today's requests and recor
 test("a valid but unspeakable narration language is stored, left out of requests and logged as unspeakable", async () => {
   const { owner, grantId, accountId, conversionId, artifactPrefix, segmentOwner } =
     await createOwnedConversion("account");
-  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-  try {
-    await runConversion(grantId, conversionId, accountId, false, undefined, undefined, {
-      declaredLanguage: { htmlLang: "sv-SE" },
-      detectNarrationLanguage: createFakeNarrationLanguageDetector({ answer: "sv" }),
-    });
+  await runConversion(grantId, conversionId, accountId, false, undefined, undefined, {
+    declaredLanguage: { htmlLang: "sv-SE" },
+    detectNarrationLanguage: createFakeNarrationLanguageDetector({ answer: "sv" }),
+  });
 
-    expect(await loadReadyAudiobook(owner, conversionId)).toMatchObject({
-      narrationLanguage: "sv-SE",
-    });
-    expect(loggedWarnings(warn, "narration-language-unspeakable")).toEqual([
-      {
-        event: "narration-language-unspeakable",
-        conversionId,
-        narrationLanguage: "sv-SE",
-        provider: "google-ai-studio",
-        model: "gemini-3.8-flash-lite-tts",
+  expect(await loadReadyAudiobook(owner, conversionId)).toMatchObject({
+    narrationLanguage: "sv-SE",
+  });
+  expect(loggedEvents("narration-language-unspeakable")).toEqual([
+    {
+      attributes: {
+        "cup.conversion.id": conversionId,
+        "cup.narration.language": "sv-SE",
+        "gen_ai.provider.name": "google-ai-studio",
+        "gen_ai.request.model": "gemini-3.8-flash-lite-tts",
       },
-    ]);
-    expect(loggedWarnings(warn, "narration-language-fallback")).toEqual([]);
-  } finally {
-    warn.mockRestore();
-  }
+    },
+  ]);
+  expect(loggedEvents("narration-language-fallback")).toEqual([]);
   const { ai, speechRequests } = createRecordingSpeechSynthesisAi();
 
   await runAllSegments(owner, conversionId, segmentOwner, ai);
@@ -408,20 +404,15 @@ test("a valid but unspeakable narration language is stored, left out of requests
 
 test("a fallback to an unspeakable declared language logs both warnings", async () => {
   const { grantId, conversionId } = await createOwnedConversion("trial");
-  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-  try {
-    await runConversion(grantId, conversionId, undefined, false, undefined, undefined, {
-      declaredLanguage: { htmlLang: "fi" },
-      detectNarrationLanguage: createFakeNarrationLanguageDetector({ answer: null }),
-    });
+  await runConversion(grantId, conversionId, undefined, false, undefined, undefined, {
+    declaredLanguage: { htmlLang: "fi" },
+    detectNarrationLanguage: createFakeNarrationLanguageDetector({ answer: null }),
+  });
 
-    expect(loggedWarnings(warn, "narration-language-fallback")).toHaveLength(1);
-    expect(loggedWarnings(warn, "narration-language-unspeakable")).toMatchObject([
-      { conversionId, narrationLanguage: "fi" },
-    ]);
-  } finally {
-    warn.mockRestore();
-  }
+  expect(loggedEvents("narration-language-fallback")).toHaveLength(1);
+  expect(loggedEvents("narration-language-unspeakable")).toMatchObject([
+    { attributes: { "cup.conversion.id": conversionId, "cup.narration.language": "fi" } },
+  ]);
 });
 
 test("a retried segment uses the manifest's narration language after the detector's answer changes", async () => {
@@ -480,7 +471,7 @@ test.each([
   const runStep = step.do.bind(step);
   step.do = async (name: string, ...rest: unknown[]) => {
     const result: unknown = await Reflect.apply(runStep, step, [name, ...rest]);
-    if (name !== "store audiobook") {
+    if (name !== "audiobook-storage: store audiobook") {
       return result;
     }
     const key = `${artifactPrefix}audiobook.json`;
@@ -538,6 +529,109 @@ test("a stored segment whose synthesis language differs from the manifest is not
 
   expect(speechRequests()).toEqual([]);
   expect(await storedSynthesisLanguages(artifactPrefix)).toEqual(["de", undefined]);
+});
+
+test("a narration over the content limit logs one content-limit warning, also when the run is replayed", async () => {
+  const { grant, grantId, conversionId } = await createConversion();
+  const step = createReplayingStep();
+  const run = () =>
+    runPrepareAudiobookWorkflow({
+      env: environment,
+      event: {
+        workflowName: "provider-failure-test",
+        instanceId: conversionId,
+        payload: { grantId, sourceUrl: SOURCE_URL },
+        timestamp: new globalThis.Date(Temporal.Now.instant().epochMilliseconds),
+      },
+      step,
+      services: {
+        // More narration text than the content limit of 40,000 characters.
+        prepareSourceMaterial: createControlledSourceMaterialPreparer({
+          url: SOURCE_URL,
+          html: `<article><h1>Too long</h1><p>${"word ".repeat(9_000)}</p></article>`,
+        }),
+        loadCoverImage: async () => {
+          throw new Error("No cover image was declared");
+        },
+        selectNarrationContent: createFakeNarrationContentSelector(),
+        detectNarrationLanguage: createFakeNarrationLanguageDetector({ answer: "en" }),
+      },
+    });
+
+  await expect(run()).rejects.toThrow("Narration exceeds the conversion content ceiling");
+  // A replay reruns the code between steps and reuses each step's recorded result.
+  await expect(run()).rejects.toThrow("Narration exceeds the conversion content ceiling");
+
+  expect(await grant.getConversion(conversionId)).toMatchObject({
+    status: "failed",
+    failureCategory: "content-limit",
+  });
+  expect(loggedEvents("content-limit")).toHaveLength(1);
+});
+
+test.each([
+  ["is refused", async () => ({ result: "refused", reason: "unsupported-type" }) as const],
+  [
+    "cannot be loaded",
+    async () => {
+      throw new Error("Browser session unavailable");
+    },
+  ],
+] as const)(
+  "a replayed run logs the language warnings and a cover image that %s once each",
+  async (_description, loadCoverImage) => {
+    const { grantId, conversionId } = await createOwnedConversion("trial");
+    const step = createReplayingStep();
+    const run = () =>
+      runConversion(grantId, conversionId, undefined, false, step, loadCoverImage, {
+        declaredLanguage: { htmlLang: "fi" },
+        detectNarrationLanguage: createFakeNarrationLanguageDetector({ answer: null }),
+      });
+
+    await run();
+    // A replay reruns the code between steps and reuses each step's recorded result.
+    await run();
+
+    expect(loggedEvents("narration-language-fallback")).toHaveLength(1);
+    expect(loggedEvents("narration-language-unspeakable")).toHaveLength(1);
+    expect(loggedEvents("cover-image-unavailable")).toHaveLength(1);
+  },
+);
+
+test("a failed preparation is captured once, also when the run is replayed, under its diagnostic reference", async () => {
+  const { grant, grantId, conversionId } = await createConversion();
+  const step = createReplayingStep();
+  const run = () => runConversion(grantId, conversionId, undefined, true, step);
+
+  await expect(run()).rejects.toThrow("Configured preparation failure");
+  await expect(run()).rejects.toThrow("Configured preparation failure");
+
+  const conversion = await grant.getConversion(conversionId);
+  if (conversion?.status !== "failed") {
+    throw new Error("Expected a failed conversion");
+  }
+  expect(conversion.diagnosticReference).toMatch(/^[0-9a-f]{32}$/);
+  expect(vi.mocked(captureException).mock.calls).toEqual([
+    [
+      new Error("Configured preparation failure"),
+      {
+        event_id: conversion.diagnosticReference,
+        captureContext: { tags: { "cup.conversion.failure_category": "source-preparation" } },
+      },
+    ],
+  ]);
+});
+
+test("a failed preparation whose owner cannot record the failure is left to the owner's alarm to capture", async () => {
+  const { grantId } = await createConversion();
+  // The grant knows no such conversion, so it refuses every phase and outcome of the run.
+  const unknownConversionId = crypto.randomUUID();
+
+  await expect(runConversion(grantId, unknownConversionId, undefined, true)).rejects.toBeInstanceOf(
+    Error,
+  );
+
+  expect(captureException).not.toHaveBeenCalled();
 });
 
 test("a document exceeding the available duration reserves nothing", async () => {
@@ -970,13 +1064,12 @@ async function storedSynthesisLanguages(artifactPrefix: string) {
   );
 }
 
-function loggedWarnings(warn: { mock: { calls: unknown[][] } }, event: string) {
-  return warn.mock.calls
-    .map(([message]) => (typeof message === "string" ? (JSON.parse(message) as unknown) : message))
-    .filter(
-      (entry) =>
-        typeof entry === "object" && entry !== null && "event" in entry && entry.event === event,
-    );
+/** The details of each log record of one event since the test started. */
+function loggedEvents(event: LogEventName) {
+  return vi
+    .mocked(logEvent)
+    .mock.calls.filter(([name]) => name === event)
+    .map(([, , details]) => details);
 }
 
 function runConversion(
@@ -1046,6 +1139,34 @@ function createImmediateRetryStep(): WorkflowStep {
       throw new Error("Unexpected workflow event");
     },
   };
+}
+
+/**
+ * A step whose runs share recorded outcomes, as a replay of a Workflow run reuses them: a recorded
+ * step returns its result or rejects with its error again, without running its callback.
+ */
+function createReplayingStep(): WorkflowStep {
+  const outcomes = new Map<string, { result: unknown } | { error: unknown }>();
+  const step = createImmediateRetryStep();
+  const runStep = step.do.bind(step);
+  step.do = async (name: string, ...rest: unknown[]) => {
+    const recorded = outcomes.get(name);
+    if (recorded !== undefined) {
+      if ("error" in recorded) {
+        throw recorded.error;
+      }
+      return recorded.result;
+    }
+    try {
+      const result: unknown = await Reflect.apply(runStep, step, [name, ...rest]);
+      outcomes.set(name, { result });
+      return result;
+    } catch (error) {
+      outcomes.set(name, { error });
+      throw error;
+    }
+  };
+  return step;
 }
 
 async function doStep<T>(

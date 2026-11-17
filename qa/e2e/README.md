@@ -90,4 +90,4 @@ To stream the child Wrangler logs while a test runs, add `E2E_STREAM_WRANGLER=1`
 
 ## Cost and network boundary
 
-The [test Worker's cost and network boundary](../test-worker/README.md#cost-and-network-boundary) applies to this suite. In addition, the Playwright fixture rejects every browser request to a host other than the test Worker and the fake auth provider.
+The [test Worker's cost and network boundary](../test-worker/README.md#cost-and-network-boundary) applies to this suite. In addition, the Playwright fixture rejects every browser request to a host other than the test Worker and the fake auth provider, and the [telemetry request guard](../sentry-stub/README.md#telemetry-request-guard) fails any test whose page requests Sentry or the telemetry tunnel.

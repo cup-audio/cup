@@ -4,18 +4,21 @@ Start with the [glossary](GLOSSARY.md) for Cup's vocabulary and the [system over
 
 ## Understand the system
 
-| Page                                                               | What it explains                                                                                         |
-| ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
-| [Glossary](GLOSSARY.md)                                            | Canonical concepts, terminology, and rejected synonyms                                                   |
-| [System overview](architecture/README.md)                          | Runtime components, API definitions, storage ownership, external services, and development boundaries    |
-| [Authentication and authorization](architecture/authentication.md) | Google and Supabase sign-in, Cup account provisioning, media access, trials, and operator authentication |
-| [Durable Object schemas](architecture/durable-object-storage.md)   | SQLite tables, relationships, and naming conventions for all three Durable Object stores                 |
-| [R2 objects and key layout](architecture/r2-storage.md)            | Account and trial prefixes, stored objects, metadata, access, and cleanup                                |
-| [Conversion](architecture/conversion.md)                           | Source preparation through delivery, duration accounting, retries, and failure boundaries                |
-| [Playback](architecture/playback.md)                               | The web player and host, listening-position saves, and the system media controls                         |
-| [Account deletion](architecture/account-deletion.md)               | Fresh authentication, recovery, write fencing, cleanup, and notification retries                         |
-| [Conversion deletion](architecture/conversion-deletion.md)         | Fencing one conversion with a durable marker, releasing its open reservations, and its cleanup           |
-| [Web application screens](architecture/web-app.md)                 | Routes and redirects, Recents with its Add and account dialogs, account recovery, and the detail view    |
+| Page                                                                 | What it explains                                                                                                                |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| [Glossary](GLOSSARY.md)                                              | Canonical concepts, terminology, and rejected synonyms                                                                          |
+| [System overview](architecture/README.md)                            | Runtime components, API definitions, storage ownership, external services, and development boundaries                           |
+| [Authentication and authorization](architecture/authentication.md)   | Google and Supabase sign-in, Cup account provisioning, media access, trials, and operator authentication                        |
+| [Durable Object schemas](architecture/durable-object-storage.md)     | SQLite tables, relationships, and naming conventions for all three Durable Object stores                                        |
+| [R2 objects and key layout](architecture/r2-storage.md)              | Account and trial prefixes, stored objects, metadata, access, and cleanup                                                       |
+| [Conversion](architecture/conversion.md)                             | Source preparation through delivery, duration accounting, retries, and failure boundaries                                       |
+| [Playback](architecture/playback.md)                                 | The web player and host, listening-position saves, and the system media controls                                                |
+| [Account deletion](architecture/account-deletion.md)                 | Fresh authentication, recovery, write fencing, cleanup, and notification retries                                                |
+| [Conversion deletion](architecture/conversion-deletion.md)           | Fencing one conversion with a durable marker, releasing its open reservations, and its cleanup                                  |
+| [Web application screens](architecture/web-app.md)                   | Routes and redirects, Recents with its Add and account dialogs, account recovery, and the detail view                           |
+| [Observability](architecture/observability.md)                       | What the Worker sends to Sentry, the capture and correlation rules, privacy, alerts, and why nothing is sent outside production |
+| [Client observability](architecture/observability-clients.md)        | What the web app and the mobile shells send, crash reports and their switch, and the telemetry tunnel                           |
+| [Observability operations](architecture/observability-operations.md) | Stuck checks, log records, conversion durations, going-live checks, and build and release tracking                              |
 
 ## Operate and develop Cup
 
@@ -28,6 +31,7 @@ Start with the [glossary](GLOSSARY.md) for Cup's vocabulary and the [system over
 | [Worker development and integration tests](../apps/cloudflare-worker/AGENTS.md)      | Run the Worker locally and test it without external services                                                           |
 | [Application E2E tests](../qa/e2e/README.md)                                         | Run the complete local conversion path and update screenshots                                                          |
 | [Mobile E2E tests](../qa/mobile-e2e/README.md)                                       | Run the debug Android and iOS shells on their own emulator and simulator against a local test Worker                   |
+| [Sentry stub](../qa/sentry-stub/README.md)                                           | Record what a test would have sent to Sentry                                                                           |
 | [Test Worker](../qa/test-worker/README.md)                                           | The test-only Worker with deterministic fakes, its Wrangler harness, the fake auth provider, and the E2E cost boundary |
 | [Recorded source pages](../libs/prepare-source-material/test-e2e/fixtures/README.md) | Replay source-page fixtures in source-material E2E tests                                                               |
 | [Narration evals](../libs/narration-source-analysis/test/evals/README.md)            | Run the paid narration content selection and narration language detection evals                                        |
@@ -46,6 +50,7 @@ Start with the [glossary](GLOSSARY.md) for Cup's vocabulary and the [system over
 | [Validation gates](../tooling/validation-gates/README.md)                            | How the gate runner composes gates, runs them and prints the summary; the gates themselves are in AGENTS.md            |
 | [Toolchain key](../tooling/toolchain-key/README.md)                                  | Write the host toolchain versions an E2E suite runs on, for its cached Turbo task to hash                              |
 | [Brand assets](../tooling/brand-assets/README.md)                                    | Maintain generated application branding                                                                                |
+| [Source maps](../tooling/source-maps/README.md)                                      | Inject Sentry debug IDs into a build and move its source maps out of what is served                                    |
 | [Workspace checks](../qa/workspace-checks/README.md)                                 | Tests for invariants across all packages, such as the package export check                                             |
 | [Loading state recorder](../qa/loading-state-recorder/README.md)                     | Fail a Playwright test on a loading flash, however briefly it shows                                                    |
 | [Fidelity check](../qa/fidelity-check/README.md)                                     | Compare a rendered screen with the design's image                                                                      |

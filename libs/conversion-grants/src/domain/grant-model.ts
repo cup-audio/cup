@@ -31,6 +31,10 @@ export type PendingConversion = {
   lastStartedPhase: ConversionPhase;
   title?: string;
   workflowStartedAtMs?: number;
+  /** When the current stage started: preparation while pending, synthesis once ready. */
+  stageStartedAtMs: number;
+  /** When the stuck-conversion check reported the current stage; a stage start removes it. */
+  stuckReportedAtMs?: number;
 };
 export type ReadyConversion = Omit<PendingConversion, "status"> & {
   status: "ready";

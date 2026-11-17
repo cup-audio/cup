@@ -38,11 +38,13 @@
     "turbo:test": "pnpm run test"
   },
   "dependencies": {
+    "@cup/errors": "workspace:*",
     "parse5": "^8.0.1"
   },
   "devDependencies": {
     "@cup/config-oxlint": "workspace:*",
     "@cup/prepare-declaration-build": "workspace:*",
+    "@cup/sentry-stub": "workspace:*",
     "@cup/toolchain-key": "workspace:*",
     "@patricktree-stack/config-playwright": "workspace:*",
     "@patricktree-stack/config-typescript": "workspace:*",

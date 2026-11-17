@@ -21,6 +21,7 @@
     "turbo:test": "pnpm run test"
   },
   "dependencies": {
+    "@cup/sentry-stub": "workspace:*",
     "@cup/test-worker": "workspace:*",
     "@cup/toolchain-key": "workspace:*",
     "appium": "3.9.0",

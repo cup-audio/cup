@@ -252,6 +252,8 @@ List unfinished deletion cleanup and completed deletion receipts. Each receipt r
 pnpm operator account deletions
 ```
 
+The listing marks a [stuck account deletion](../../docs/GLOSSARY.md#stuck-account-deletion) as `overdue`: one still neither erased nor restored well after its recovery deadline. Sentry reports the same deletion once, with the attempt ID and whether the identity, the account or both are pending; see [stuck checks](../../docs/architecture/observability-operations.md#stuck-checks).
+
 Provider acceptance of a notification is not proof of inbox delivery. For recovery deadlines, cleanup retries, unresolved writers, and retained receipts, see [account deletion](../../docs/architecture/account-deletion.md). For the relationship between trial and account conversions, see [trial access](../../docs/architecture/authentication.md#trial-access).
 
 ## Use machine-readable output
@@ -262,7 +264,7 @@ Place `--json` before the grant, account, or conversion command to write one JSO
 pnpm operator --json grant list
 ```
 
-On failure, the CLI exits with status 1 and writes `{ "error": { "code": "...", "message": "..." } }` to standard error. When the API refuses a request, `code` and `message` are the API's own, such as `account-unavailable`. A code this CLI does not know, for example from a newer server, and an API response without an error code report `operational-error` with the API's message. Failures without an API error, such as an unreachable service, report `operator-error`.
+On failure, the CLI exits with status 1 and writes `{ "error": { "code": "...", "message": "..." } }` to standard error. When the API refuses a request, `code` and `message` are the API's own, such as `account-unavailable`, and `traceId` is the request's Sentry trace ID, which finds the request's trace in Sentry; human output prints it as `Trace ID:` below the error message. A code this CLI does not know, for example from a newer server, and an API response without an error code report `operational-error` with the API's message. Failures without an API error, such as an unreachable service, report `operator-error`.
 
 ## Troubleshoot access
 

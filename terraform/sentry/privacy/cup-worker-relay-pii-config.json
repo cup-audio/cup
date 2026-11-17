@@ -1,0 +1,11 @@
+{
+  "rules": {
+    "0": {
+      "type": "anything",
+      "redaction": { "method": "remove" }
+    }
+  },
+  "applications": {
+    "$user.geo.**": ["0"]
+  }
+}

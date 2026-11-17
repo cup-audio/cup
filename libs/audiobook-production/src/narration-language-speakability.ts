@@ -1,3 +1,5 @@
+import { CupError } from "@cup/errors";
+
 import { toLanguageSubtag } from "#src/language-tag.ts";
 import { GEMINI_SPEECH_CONFIG, type SpeechConfig } from "#src/speech-synthesis-config.ts";
 
@@ -131,7 +133,7 @@ export function getNarrationLanguageSupport(
   }
 
   if (speechConfig.model !== GEMINI_SPEECH_CONFIG.model) {
-    throw new Error(
+    throw new CupError(
       `No speakable languages are registered for the Gemini speech model ${speechConfig.model}`,
     );
   }

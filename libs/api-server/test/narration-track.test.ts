@@ -1,3 +1,4 @@
+import { captureException } from "@sentry/core";
 import { Temporal } from "temporal-polyfill";
 import { afterEach, expect, test, vi } from "vitest";
 
@@ -8,6 +9,7 @@ import {
   type SegmentUsage,
 } from "@cup/conversion-contracts";
 import type { GrantState } from "@cup/conversion-grants/contracts";
+import { logEvent } from "@cup/telemetry.cloudflare";
 
 import type { ApiServerEnvironment } from "#src/api-server-environment.ts";
 import { createApiServer } from "#src/api-server.ts";
@@ -16,6 +18,16 @@ import { signMediaUrl } from "#src/http/signed-media-url.ts";
 vi.mock("@cup/conversion-grants", async () => ({
   ...(await import("@cup/conversion-grants/contracts")),
   ...(await import("@cup/conversion-grants/session")),
+}));
+// The helper itself is tested against the Sentry stub in @cup/telemetry.cloudflare.
+vi.mock(import("@cup/telemetry.cloudflare"), async (importOriginal) => ({
+  ...(await importOriginal()),
+  logEvent: vi.fn<typeof logEvent>(),
+}));
+// Records the captures; the Worker integration tests check what reaches Sentry.
+vi.mock(import("@sentry/core"), async (importOriginal) => ({
+  ...(await importOriginal()),
+  captureException: vi.fn<typeof captureException>(),
 }));
 
 const SIGNING_KEY = "test-media-url-signing-key";
@@ -30,6 +42,12 @@ const accountOwner: ConversionOwner = { kind: "account", accountId };
 const SETTLED_DURATIONS = [48, 72, 24];
 
 afterEach(() => vi.restoreAllMocks());
+
+function recordLogEvents() {
+  const log = vi.mocked(logEvent);
+  log.mockClear();
+  return log;
+}
 
 type SegmentRow = Pick<SegmentUsage, "sequence" | "state" | "actualMilliseconds">;
 
@@ -291,24 +309,29 @@ test("If-Range serves the range when it matches and the whole track when it is s
   expect(new Uint8Array(await stale.arrayBuffer())).toEqual(trackBytes);
 });
 
-test("a first touched segment whose size differs from its settled duration fails with 500 and is logged", async () => {
+test("a first touched segment whose size differs from its settled duration fails with 500, is logged and captured", async () => {
   const { app, env, storedSegments } = fixture();
   const [firstKey] = storedSegments.keys();
   storedSegments.set(firstKey!, new Uint8Array(770));
-  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  const log = recordLogEvents();
+  const capture = vi.mocked(captureException);
+  capture.mockClear();
 
   const response = await app.request(await signTrackUrl(), {}, env);
 
   expect(response.status).toBe(500);
-  expect(log).toHaveBeenCalledWith(
-    JSON.stringify({
-      event: "narration-track-segment-mismatch",
-      conversionId,
-      sequence: 0,
-      expectedByteLength: 768,
-      storedByteLength: 770,
-    }),
-  );
+  expect(capture).toHaveBeenCalledTimes(1);
+  expect(capture).toHaveBeenCalledWith(expect.any(Error), {
+    tags: { "cup.audio_segment.sequence": "0" },
+  });
+  expect(log).toHaveBeenCalledWith("narration-track-segment-mismatch", expect.any(String), {
+    attributes: {
+      "cup.conversion.id": conversionId,
+      "cup.audio_segment.sequence": 0,
+      "cup.audio_segment.expected_byte_length": 768,
+      "cup.audio_segment.stored_byte_length": 770,
+    },
+  });
 });
 
 test("a later segment whose size differs or which is missing errors the stream and is logged", async () => {
@@ -320,7 +343,7 @@ test("a later segment whose size differs or which is missing errors the stream a
     } else {
       storedSegments.delete(lastKey);
     }
-    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const log = recordLogEvents();
 
     const response = await app.request(await signTrackUrl(), {}, env);
 
@@ -328,16 +351,14 @@ test("a later segment whose size differs or which is missing errors the stream a
     await expect(response.arrayBuffer()).rejects.toThrow(
       "Narration track segment 2 could not be read",
     );
-    expect(log).toHaveBeenCalledWith(
-      JSON.stringify({
-        event: "narration-track-segment-mismatch",
-        conversionId,
-        sequence: 2,
-        expectedByteLength: 384,
-        storedByteLength: replace === "mismatch" ? 100 : null,
-      }),
-    );
-    log.mockRestore();
+    expect(log).toHaveBeenCalledWith("narration-track-segment-mismatch", expect.any(String), {
+      attributes: {
+        "cup.conversion.id": conversionId,
+        "cup.audio_segment.sequence": 2,
+        "cup.audio_segment.expected_byte_length": 384,
+        "cup.audio_segment.stored_byte_length": replace === "mismatch" ? 100 : undefined,
+      },
+    });
   }
 });
 

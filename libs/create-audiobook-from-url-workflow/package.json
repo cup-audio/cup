@@ -39,6 +39,9 @@
     "@cup/narration-source-analysis": "workspace:*",
     "@cup/prepare-source-material": "workspace:*",
     "@cup/registry": "workspace:*",
+    "@cup/telemetry.cloudflare": "workspace:*",
+    "@cup/telemetry.core": "workspace:*",
+    "@sentry/core": "catalog:sentry-server",
     "temporal-polyfill": "^1.0.5",
     "zod": "^4.6.5"
   },

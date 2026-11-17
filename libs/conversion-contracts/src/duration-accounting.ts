@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { CupError } from "@cup/errors";
+
 const segmentUsageSchema = z
   .object({
     conversionId: z.string().min(1),
@@ -54,7 +56,7 @@ export function findNarrationTrackDurations(
   const segments = [...usage].sort((left, right) => left.sequence - right.sequence);
   // Reservations cover the whole narration document, so settled rows are never partial.
   if (segments.some((segment, index) => segment.sequence !== index)) {
-    throw new Error("Narration track segments must have consecutive sequences from 0");
+    throw new CupError("Narration track segments must have consecutive sequences from 0");
   }
 
   return segments.map((segment) => segment.actualMilliseconds);
@@ -79,12 +81,12 @@ export function layOutConsecutively(lengths: readonly number[]): {
 
 export function estimateAudioDuration(narrationTextCharacters: number): number {
   if (!Number.isSafeInteger(narrationTextCharacters) || narrationTextCharacters < 1) {
-    throw new Error("Narration character count must be a positive safe integer");
+    throw new CupError("Narration character count must be a positive safe integer");
   }
   // Reserve 70 seconds per 1,000 characters, with a one-second minimum (ADR 0022).
   const estimate = Math.max(1_000, narrationTextCharacters * 70);
   if (!Number.isSafeInteger(estimate)) {
-    throw new Error("Estimated duration exceeds supported precision");
+    throw new CupError("Estimated duration exceeds supported precision");
   }
   return estimate;
 }

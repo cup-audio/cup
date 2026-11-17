@@ -1,4 +1,5 @@
 import { createConversionArtifactPrefix } from "@cup/conversion-contracts";
+import { CupError } from "@cup/errors";
 
 import { AUDIO_FORMAT, AUDIOBOOK_CONTENT_TYPE } from "#src/audio-format.ts";
 import {
@@ -61,18 +62,18 @@ export function createAudioSegmentMetadata(
   narrationLanguage?: string,
 ): Record<string, string> {
   if ((durationMilliseconds === undefined) !== (crc32 === undefined)) {
-    throw new Error("Audio segment duration and CRC-32 metadata must be provided together");
+    throw new CupError("Audio segment duration and CRC-32 metadata must be provided together");
   }
 
   if (
     durationMilliseconds !== undefined &&
     (!Number.isFinite(durationMilliseconds) || durationMilliseconds <= 0)
   ) {
-    throw new Error("Audio segment duration metadata must be a positive finite number");
+    throw new CupError("Audio segment duration metadata must be a positive finite number");
   }
 
   if (crc32 !== undefined && (!Number.isSafeInteger(crc32) || crc32 < 0 || crc32 > 0xffff_ffff)) {
-    throw new Error("Audio segment CRC-32 metadata must be an unsigned 32-bit integer");
+    throw new CupError("Audio segment CRC-32 metadata must be an unsigned 32-bit integer");
   }
 
   const metadata = {
@@ -117,27 +118,27 @@ export function assertStoredAudioSegment(
   const customMetadata = audioObject.customMetadata ?? {};
 
   if (audioSegment.key !== expectedKey || audioObject.key !== expectedKey) {
-    throw new Error(
+    throw new CupError(
       `Audio segment key does not match conversion ${audioSegment.conversionId} sequence ${audioSegment.sequence}`,
     );
   }
 
   if (httpMetadata.contentType !== AUDIOBOOK_CONTENT_TYPE) {
-    throw new Error(
+    throw new CupError(
       `Audio segment has unexpected content type: ${audioObject.key} (${httpMetadata.contentType ?? "missing"})`,
     );
   }
 
   if (!hasExpectedFixedSynthesisMetadata(customMetadata, audioSegment.speechConfig)) {
-    throw new Error(`Audio segment has unexpected synthesis metadata: ${audioObject.key}`);
+    throw new CupError(`Audio segment has unexpected synthesis metadata: ${audioObject.key}`);
   }
 
   if (!hasNonEmptyNarrationText(customMetadata[SEGMENT_METADATA_KEYS.narrationText])) {
-    throw new Error(`Audio segment has empty narration text metadata: ${audioObject.key}`);
+    throw new CupError(`Audio segment has empty narration text metadata: ${audioObject.key}`);
   }
 
   if (audioObject.size !== audioSegment.byteLength) {
-    throw new Error(
+    throw new CupError(
       `Audio segment has unexpected size: ${audioObject.key} (expected ${audioSegment.byteLength}, got ${audioObject.size})`,
     );
   }
@@ -145,11 +146,11 @@ export function assertStoredAudioSegment(
   assertValidAudioSegmentByteLength(audioObject.size);
 
   if (getStoredAudioSegmentDuration(customMetadata) !== audioSegment.durationMilliseconds) {
-    throw new Error(`Audio segment has unexpected duration metadata: ${audioObject.key}`);
+    throw new CupError(`Audio segment has unexpected duration metadata: ${audioObject.key}`);
   }
 
   if (getStoredAudioSegmentCrc32(customMetadata) !== audioSegment.crc32) {
-    throw new Error(`Audio segment has unexpected CRC-32 metadata: ${audioObject.key}`);
+    throw new CupError(`Audio segment has unexpected CRC-32 metadata: ${audioObject.key}`);
   }
 }
 
@@ -165,7 +166,7 @@ export function assertMatchingAudioSegmentIdentity(
     httpMetadata.contentType !== AUDIOBOOK_CONTENT_TYPE ||
     !hasSameSynthesisMetadata(customMetadata, expectedMetadata)
   ) {
-    throw new Error(`Audio segment identity conflicts with existing object: ${audioObject.key}`);
+    throw new CupError(`Audio segment identity conflicts with existing object: ${audioObject.key}`);
   }
 
   assertValidAudioSegmentByteLength(audioObject.size);
@@ -194,7 +195,7 @@ function getStoredAudioSegmentDuration(metadata: Readonly<Record<string, string>
   const duration = Number(metadata[SEGMENT_METADATA_KEYS.durationMilliseconds]);
 
   if (!Number.isFinite(duration) || duration <= 0) {
-    throw new Error("Audio segment duration metadata must be a positive finite number");
+    throw new CupError("Audio segment duration metadata must be a positive finite number");
   }
 
   return duration;
@@ -204,7 +205,7 @@ function getStoredAudioSegmentCrc32(metadata: Readonly<Record<string, string>>):
   const value = metadata[SEGMENT_METADATA_KEYS.crc32];
 
   if (value === undefined || !/^[\da-f]{1,8}$/u.test(value)) {
-    throw new Error("Audio segment CRC-32 metadata must be a hexadecimal 32-bit value");
+    throw new CupError("Audio segment CRC-32 metadata must be a hexadecimal 32-bit value");
   }
 
   return Number.parseInt(value, 16);
@@ -244,7 +245,7 @@ function hasSameSynthesisMetadata(
 
 function assertValidAudioSegmentByteLength(byteLength: number): void {
   if (!Number.isSafeInteger(byteLength) || byteLength <= 0) {
-    throw new Error(`Audio segment byte length must be a positive safe integer: ${byteLength}`);
+    throw new CupError(`Audio segment byte length must be a positive safe integer: ${byteLength}`);
   }
 }
 
@@ -272,7 +273,7 @@ function assertR2MetadataFits(metadata: Readonly<Record<string, string>>): void 
   );
 
   if (byteLength > R2_OBJECT_METADATA_MAX_BYTE_LENGTH) {
-    throw new Error(
+    throw new CupError(
       `Audio segment synthesis metadata exceeds the R2 object metadata limit: ${byteLength} bytes`,
     );
   }
@@ -293,7 +294,7 @@ export function getStoredSpeechConfig(audioObject: StoredAudioSegment): SpeechCo
     !speechConfig.voice ||
     !speechConfig.policyVersion
   ) {
-    throw new Error(`Audio segment has invalid synthesis identity: ${audioObject.key}`);
+    throw new CupError(`Audio segment has invalid synthesis identity: ${audioObject.key}`);
   }
   return {
     ...speechConfig,

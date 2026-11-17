@@ -4,8 +4,8 @@
 //
 // It mirrors the production config (`wrangler.jsonc`) except for bindings that reach paid or external
 // services: `AI` (Workers AI) and `BROWSER` (Browser Rendering) are left out, so code that would call
-// them fails instead of incurring cost, and the Supabase, Cloudflare Access and Resend URLs point at
-// the discard port of 127.0.0.1. `wrangler-config.test.ts` checks that the remaining bindings match production.
+// them fails instead of incurring cost, and the Supabase, Cloudflare Access, Resend and Sentry URLs
+// point at the discard port of 127.0.0.1. `wrangler-config.test.ts` checks that the remaining bindings match production.
 {
   "$schema": "../node_modules/wrangler/config-schema.json",
   "name": "create-audiobook-from-url-test",
@@ -58,11 +58,19 @@
       "bucket_name": "create-audiobook-from-url-audio-test",
     },
   ],
+  "version_metadata": {
+    "binding": "CF_VERSION_METADATA",
+  },
   // The secrets of `secrets.required` in wrangler.jsonc come from `useWorker()` as dummy values.
   "vars": {
     "LOCAL_DEVELOPMENT": "false",
     "LOCAL_TEST_ACCOUNT_EMAIL": "",
     "LOCAL_TEST_ACCOUNT_PASSWORD": "",
+    // Sentry runs as in production, but sends to the discard port; `useWorker({ sentryDsn })`
+    // points it at a Sentry stub instead.
+    "SENTRY_DSN": "http://test@127.0.0.1:9/1",
+    // The telemetry tunnel forwards nothing; `useWorker({ vars })` allowlists a Sentry stub DSN.
+    "SENTRY_TUNNEL_DSNS": "",
     "SIGNUP_IP_LIMIT": "10",
     "CONVERSION_IP_LIMIT": "60",
     "CONVERSION_OWNER_LIMIT": "10",

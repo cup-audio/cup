@@ -1,3 +1,5 @@
+import { CupError } from "@cup/errors";
+
 import type { SpeechConfig } from "#src/speech-synthesis-config.ts";
 
 /** Minimal AI gateway operations required for speech synthesis. */
@@ -15,7 +17,7 @@ export type NarrationChunk = {
 };
 
 /** Identifies a provider failure that cannot succeed when repeated unchanged. */
-export class PermanentNarrationSynthesisError extends Error {
+export class PermanentNarrationSynthesisError extends CupError {
   constructor(message: string) {
     super(message);
     this.name = "PermanentNarrationSynthesisError";
@@ -23,7 +25,7 @@ export class PermanentNarrationSynthesisError extends Error {
 }
 
 /** Identifies a provider rate limit, which clears only after its per-minute window passes. */
-export class RateLimitedNarrationSynthesisError extends Error {
+export class RateLimitedNarrationSynthesisError extends CupError {
   constructor(message: string) {
     super(message);
     this.name = "RateLimitedNarrationSynthesisError";

@@ -1163,11 +1163,14 @@ test("adopting the duration ledger keeps a deployed grant's balance, segments, a
   const storage = await worker.getDurableObjectStorage("CONVERSION_GRANTS", { name });
   const conversionsBefore = await grant.listConversions();
 
-  // Revert the narration language migration that follows the adoption too, so both run again.
+  // Revert the narration language and stuck-check migrations that follow the adoption too, so
+  // all three run again.
+  await storage.exec("ALTER TABLE conversions DROP COLUMN stage_started_at_ms");
+  await storage.exec("ALTER TABLE conversions DROP COLUMN stuck_reported_at_ms");
   await storage.exec("ALTER TABLE conversions DROP COLUMN narration_language");
   await revertDurationLedgerAdoption(storage);
   await storage.exec(
-    "DELETE FROM __drizzle_migrations WHERE created_at IN (SELECT created_at FROM __drizzle_migrations ORDER BY created_at DESC LIMIT 2)",
+    "DELETE FROM __drizzle_migrations WHERE created_at IN (SELECT created_at FROM __drizzle_migrations ORDER BY created_at DESC LIMIT 3)",
   );
   await grant.migrate();
 

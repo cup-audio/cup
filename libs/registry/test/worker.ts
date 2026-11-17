@@ -1,8 +1,12 @@
+import * as Sentry from "@sentry/cloudflare";
 import { DurableObject } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/durable-sqlite";
 
 import { AccountDurableObject as BaseAccountDurableObject } from "@cup/accounts";
 import type { DeletionAttempt } from "@cup/accounts/lifecycle";
+import { ConversionGrantDurableObject as BaseConversionGrantDurableObject } from "@cup/conversion-grants";
+import { CupError } from "@cup/errors";
+import { createWorkerSentryOptions } from "@cup/telemetry.cloudflare";
 
 import { DeletionCoordinator } from "#src/account-deletion/deletion-coordinator.ts";
 import { RegistryDurableObject as BaseRegistryDurableObject } from "#src/index.ts";
@@ -64,13 +68,15 @@ export class AccountDispatchTestDurableObject extends BaseAccountDurableObject {
  * Workflow instances report no status, so the alarm treats them as unreachable, and record each
  * termination attempt, which fails once a test asks for it. An alarm the platform fires is only
  * counted: tests run the alarm with `reconcileForTest()`, so a pass never races the test. The
- * registry passes through, except that removing a conversion owner fails once when a test asks for
- * it.
+ * registry passes through, except that removing a conversion owner fails once, and applying a usage
+ * projection fails from then on, when a test asks for it. Reconciling an artifact writer, the alarm
+ * step that runs first, fails once a test asks for it.
  */
 export class AccountDurableObject extends BaseAccountDurableObject {
   private readonly workflows: WorkflowControl;
   private readonly registryControl: RegistryControl;
   private firedAlarms = 0;
+  private shouldWriterReconciliationFail = false;
 
   constructor(
     context: DurableObjectState,
@@ -82,6 +88,7 @@ export class AccountDurableObject extends BaseAccountDurableObject {
   ) {
     const registryControl: RegistryControl = {
       shouldNextOwnerRemovalFail: false,
+      shouldUsageProjectionFail: false,
       beforeNextOwnerBind: undefined,
     };
     const workflows: WorkflowControl = {
@@ -89,9 +96,13 @@ export class AccountDurableObject extends BaseAccountDurableObject {
       preparationCreations: [],
       terminations: [],
       shouldTerminationFail: false,
+      stoppedStatus: undefined,
     };
     const controlledInstance = (id: string) => ({
       status: async (): Promise<{ status: string }> => {
+        if (workflows.stoppedStatus !== undefined) {
+          return { status: workflows.stoppedStatus };
+        }
         throw new Error("Workflows are controlled by the test");
       },
       restart: async () => {
@@ -120,8 +131,12 @@ export class AccountDurableObject extends BaseAccountDurableObject {
             acceptDeletionAttempt: (attempt) => registry.acceptDeletionAttempt(attempt),
             removeAccountConversionOwners: (accountId) =>
               registry.removeAccountConversionOwners(accountId),
-            applyAccountUsageProjection: (projection) =>
-              registry.applyAccountUsageProjection(projection),
+            applyAccountUsageProjection: async (projection) => {
+              if (registryControl.shouldUsageProjectionFail) {
+                throw new Error("Usage projection failed");
+              }
+              return registry.applyAccountUsageProjection(projection);
+            },
             removeConversionOwner: async (conversionId) => {
               if (registryControl.shouldNextOwnerRemovalFail) {
                 registryControl.shouldNextOwnerRemovalFail = false;
@@ -165,6 +180,9 @@ export class AccountDurableObject extends BaseAccountDurableObject {
   restartForTest() {
     this.ctx.abort("Restarted by the test");
   }
+  failUsageProjectionsForTest() {
+    this.registryControl.shouldUsageProjectionFail = true;
+  }
   failNextOwnerRemovalForTest() {
     this.registryControl.shouldNextOwnerRemovalFail = true;
   }
@@ -187,13 +205,47 @@ export class AccountDurableObject extends BaseAccountDurableObject {
   failTerminationsForTest() {
     this.workflows.shouldTerminationFail = true;
   }
+  /** Every Workflow instance reports `terminated` from now on. */
+  stopWorkflowsForTest() {
+    this.workflows.stoppedStatus = "terminated";
+  }
+  failArtifactWriterReconciliationForTest() {
+    this.shouldWriterReconciliationFail = true;
+  }
+  override async reconcileArtifactWriter(writerId: string) {
+    if (this.shouldWriterReconciliationFail) {
+      throw new CupError("Artifact writer reconciliation failed");
+    }
+    return super.reconcileArtifactWriter(writerId);
+  }
   reconcileForTest() {
     return super.alarm();
+  }
+  /** Leaves every conversion as code from before the stage start wrote it, as after a rollback. */
+  forgetStageStartsForTest() {
+    this.ctx.storage.sql.exec("UPDATE account_conversions SET stage_started_at_ms = NULL");
+  }
+  /** Runs one alarm pass whose stuck-conversion check reads `nowMs` as the current time. */
+  reconcileAtForTest(nowMs: number) {
+    return super.reconcile(nowMs);
+  }
+  /**
+   * Runs one alarm pass like `reconcileAtForTest()` and returns the message of the error it threw:
+   * a rejection does not reach the test through the harness.
+   */
+  async failingReconcileAtForTest(nowMs: number) {
+    try {
+      await super.reconcile(nowMs);
+      return undefined;
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
   }
 }
 
 type RegistryControl = {
   shouldNextOwnerRemovalFail: boolean;
+  shouldUsageProjectionFail: boolean;
   beforeNextOwnerBind: ((conversionId: string) => Promise<void>) | undefined;
 };
 
@@ -202,6 +254,7 @@ type WorkflowControl = {
   preparationCreations: string[];
   terminations: string[];
   shouldTerminationFail: boolean;
+  stoppedStatus: string | undefined;
 };
 /** Simulates accounts that predate usage projections, so the alarm's backfill can be observed. */
 export class RegistryDurableObject extends BaseRegistryDurableObject {
@@ -220,6 +273,92 @@ export class RegistryDurableObject extends BaseRegistryDurableObject {
 }
 
 export { ConversionGrantDurableObject } from "@cup/conversion-grants";
+
+/**
+ * A grant whose preparation and synthesis dispatch is accepted but never runs, and whose Workflow
+ * instances report no status, so the alarm treats them as unreachable and changes nothing. Once a
+ * test stops the Workflows, every instance reports `terminated`; releasing a segment fails once a
+ * test asks for it. An alarm the platform fires does nothing: tests run the alarm with
+ * `reconcileAtForTest()`.
+ */
+export class ConversionGrantTestDurableObject extends BaseConversionGrantDurableObject {
+  private readonly workflowControl: { areStopped: boolean; shouldSegmentReleaseFail: boolean };
+
+  constructor(
+    context: DurableObjectState,
+    env: {
+      CONVERSION_OWNER_LIMIT: string;
+      REGISTRY: DurableObjectNamespace<RegistryDurableObject>;
+      AUDIO_BUCKET: R2Bucket;
+    },
+  ) {
+    const unreachableInstance = {
+      status: async (): Promise<{ status: string }> => {
+        throw new Error("Workflows are controlled by the test");
+      },
+      restart: async () => {},
+    };
+    const workflowControl = { areStopped: false, shouldSegmentReleaseFail: false };
+    const acceptingWorkflow = {
+      create: async () => {},
+      get: async () =>
+        workflowControl.areStopped
+          ? { status: async () => ({ status: "terminated" }), restart: async () => {} }
+          : unreachableInstance,
+    };
+    super(context, {
+      ...env,
+      PREPARE_AUDIOBOOK_WORKFLOW: acceptingWorkflow,
+      SYNTHESIZE_AUDIO_SEGMENT_WORKFLOW: acceptingWorkflow,
+    });
+    this.workflowControl = workflowControl;
+  }
+  override async alarm() {}
+  stopWorkflowsForTest() {
+    this.workflowControl.areStopped = true;
+  }
+  failSegmentReleaseForTest() {
+    this.workflowControl.shouldSegmentReleaseFail = true;
+  }
+  override async releaseAudioSegment(conversionId: string, sequence: number, attempts?: number) {
+    if (this.workflowControl.shouldSegmentReleaseFail) {
+      throw new CupError("Segment release failed");
+    }
+    return super.releaseAudioSegment(conversionId, sequence, attempts);
+  }
+  /** Leaves every conversion as code from before the stage start wrote it, as after a rollback. */
+  forgetStageStartsForTest() {
+    this.ctx.storage.sql.exec("UPDATE conversions SET stage_started_at_ms = NULL");
+  }
+  /** Runs one alarm pass whose stuck-conversion check reads `nowMs` as the current time. */
+  reconcileAtForTest(nowMs: number) {
+    return super.reconcile(nowMs);
+  }
+  /**
+   * Runs one alarm pass like `reconcileAtForTest()` and returns the message of the error it threw:
+   * a rejection does not reach the test through the harness.
+   */
+  async failingReconcileAtForTest(nowMs: number) {
+    try {
+      await super.reconcile(nowMs);
+      return undefined;
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
+  }
+}
+
+/** The account test object wrapped with Sentry as the Worker wraps its Durable Objects. */
+export const SentryAccountDurableObject = Sentry.instrumentDurableObjectWithSentry(
+  (env: object) => createWorkerSentryOptions(env, "account-durable-object"),
+  AccountDurableObject,
+);
+
+/** The grant test object wrapped with Sentry as the Worker wraps its Durable Objects. */
+export const SentryConversionGrantDurableObject = Sentry.instrumentDurableObjectWithSentry(
+  (env: object) => createWorkerSentryOptions(env, "conversion-grant-durable-object"),
+  ConversionGrantTestDurableObject,
+);
 
 export default {
   fetch(): Response {
@@ -316,3 +455,12 @@ export class DeletionTestDurableObject extends DurableObject<{
     this.accountHold?.release();
   }
 }
+
+/**
+ * The deletion coordinator test object wrapped with Sentry as production wraps the registry, so a
+ * test that points SENTRY_DSN at a Sentry stub sees what an alarm pass reports.
+ */
+export const SentryDeletionTestDurableObject = Sentry.instrumentDurableObjectWithSentry(
+  (env) => createWorkerSentryOptions(env, "registry-durable-object"),
+  DeletionTestDurableObject,
+);

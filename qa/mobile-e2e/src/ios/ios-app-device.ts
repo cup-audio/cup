@@ -23,6 +23,8 @@ const SAFARI_BUNDLE_ID = "com.apple.mobilesafari";
  * `-cupTestApiOrigin <origin>`, it lands in the arguments domain of Cup's defaults.
  */
 const API_ORIGIN_KEY = "cupTestApiOrigin";
+/** The defaults key the debug build's `TestSentryDsn` reads, passed the same way. */
+const SENTRY_DSN_KEY = "cupTestSentryDsn";
 /** Cup, its share extension, WebKit's processes and Safari: the processes a test involves. */
 const DEVICE_LOG_PREDICATE = [
   'process == "App"',
@@ -111,7 +113,13 @@ export class IosAppDevice implements AppDevice {
     await this.terminate();
     await this.driver.execute("mobile: launchApp", {
       bundleId: BUNDLE_ID,
-      arguments: [`-${API_ORIGIN_KEY}`, launchArguments.apiOrigin],
+      arguments: [
+        `-${API_ORIGIN_KEY}`,
+        launchArguments.apiOrigin,
+        ...(launchArguments.testSentryDsn === undefined
+          ? []
+          : [`-${SENTRY_DSN_KEY}`, launchArguments.testSentryDsn]),
+      ],
     });
   }
 
@@ -292,6 +300,30 @@ export class IosAppDevice implements AppDevice {
   async close(): Promise<void> {
     await Promise.all([...this.relays.keys()].map((port) => this.unexposeHostPort(port)));
     await this.driver.deleteSession();
+  }
+
+  /**
+   * Waits until Cup no longer runs, such as after a crash, once Sentry's crash handler has written
+   * the crash report that the next launch sends.
+   */
+  async waitForProcessExit(): Promise<void> {
+    await waitFor(
+      "Cup's process to exit",
+      async () => ((await this.appState("cup")) === "not running" ? true : undefined),
+      30_000,
+    );
+  }
+
+  /** The host path of Cup's data container on the simulator, which holds `Library/Caches`. */
+  async dataContainerPath(): Promise<string> {
+    const { stdout } = await run("xcrun", [
+      "simctl",
+      "get_app_container",
+      this.target.udid,
+      BUNDLE_ID,
+      "data",
+    ]);
+    return stdout.trim();
   }
 
   /**

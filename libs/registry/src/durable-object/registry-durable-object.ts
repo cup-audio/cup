@@ -17,7 +17,9 @@ import type {
   ProjectedGrantState,
   GrantRegistrySnapshot,
 } from "@cup/conversion-grants";
+import { CupError } from "@cup/errors";
 import { RollingLimits } from "@cup/rolling-limits";
+import { captureAlarmFailure } from "@cup/telemetry.cloudflare";
 
 import {
   DeletionCoordinator,
@@ -112,7 +114,7 @@ export class RegistryDurableObject extends DurableObject<RegistryEnvironment> {
       const existing = this.findIdentity(subject);
       if (existing !== undefined) {
         if (existing.phase === "deleting_identity") {
-          throw new Error("Identity deletion is pending");
+          throw new CupError("Identity deletion is pending");
         }
         return existing;
       }
@@ -133,7 +135,7 @@ export class RegistryDurableObject extends DurableObject<RegistryEnvironment> {
   ): Promise<AccountSnapshot> {
     const existing = this.findIdentity(subject);
     if (!existing && !(await verifySupabaseIdentity(this.env, subject))) {
-      throw new Error("Supabase identity no longer exists");
+      throw new CupError("Supabase identity no longer exists");
     }
     await this.ctx.storage.setAlarm(Temporal.Now.instant().epochMilliseconds + 60_000);
     const identity = this.reserveVerifiedIdentity(subject, nowMs);
@@ -153,12 +155,12 @@ export class RegistryDurableObject extends DurableObject<RegistryEnvironment> {
       createdAtMs: identity.createdAtMs,
     });
     if (!(await verifySupabaseIdentity(this.env, subject))) {
-      throw new Error("Supabase identity no longer exists");
+      throw new CupError("Supabase identity no longer exists");
     }
     this.database.transaction(() => {
       const current = this.findIdentity(subject);
       if (current?.accountId !== identity.accountId || current.phase === "deleting_identity") {
-        throw new Error("Account provisioning was fenced by identity deletion");
+        throw new CupError("Account provisioning was fenced by identity deletion");
       }
       this.database
         .update(identityAccounts)
@@ -178,7 +180,12 @@ export class RegistryDurableObject extends DurableObject<RegistryEnvironment> {
     return snapshot;
   }
 
+  /** A pass that throws captures the error and lets the platform retry the alarm. */
   override async alarm() {
+    await captureAlarmFailure(() => this.reconcilePass());
+  }
+
+  private async reconcilePass() {
     await this.ctx.storage.setAlarm(Temporal.Now.instant().epochMilliseconds + 60_000);
     const jobs = this.database
       .select({ subject: provisioningJobs.subject, attempts: provisioningJobs.attempts })
@@ -272,7 +279,7 @@ export class RegistryDurableObject extends DurableObject<RegistryEnvironment> {
       .regex(/^[a-f0-9]{64}$/)
       .parse(key);
     if (!this.findIdentity(subject) && !(await verifySupabaseIdentity(this.env, subject))) {
-      throw new Error("Identity unavailable");
+      throw new CupError("Identity unavailable");
     }
     await this.ctx.storage.setAlarm(Temporal.Now.instant().epochMilliseconds + 60_000);
     const retryAfter = this.database.transaction(() => {
@@ -302,7 +309,7 @@ export class RegistryDurableObject extends DurableObject<RegistryEnvironment> {
   async acceptDeletionAttempt(attempt: DeletionAttempt) {
     const identity = this.findIdentity(attempt.subject);
     if (identity?.accountId !== attempt.accountId) {
-      throw new Error("Deletion account identity mismatch");
+      throw new CupError("Deletion account identity mismatch");
     }
     const account = this.env.ACCOUNTS.get(this.env.ACCOUNTS.idFromName(attempt.accountId));
     if ((await account.deletionAttemptState(attempt.attemptId)) !== attempt.state) {
@@ -351,7 +358,7 @@ export class RegistryDurableObject extends DurableObject<RegistryEnvironment> {
         .where(eq(identityAccounts.accountId, parsed.accountId))
         .get();
       if (row === undefined) {
-        throw new Error("Registry account does not exist");
+        throw new CupError("Registry account does not exist");
       }
       const current = toAccountUsage(row);
       if (current !== undefined && parsed.revision < current.revision) {
@@ -360,7 +367,7 @@ export class RegistryDurableObject extends DurableObject<RegistryEnvironment> {
       const { accountId: _accountId, ...usage } = parsed;
       if (current !== undefined && parsed.revision === current.revision) {
         if (canonicalJson(current) !== canonicalJson(usage)) {
-          throw new Error("Conflicting account usage projection at the same revision");
+          throw new CupError("Conflicting account usage projection at the same revision");
         }
         return "replayed";
       }
@@ -431,7 +438,7 @@ export class RegistryDurableObject extends DurableObject<RegistryEnvironment> {
     this.database.transaction(() => {
       const identity = this.findIdentity(subject);
       if (identity?.accountId !== accountId) {
-        throw new Error("Identity ownership mismatch");
+        throw new CupError("Identity ownership mismatch");
       }
       this.database
         .update(identityAccounts)
@@ -446,7 +453,7 @@ export class RegistryDurableObject extends DurableObject<RegistryEnvironment> {
     const account = this.env.ACCOUNTS.get(this.env.ACCOUNTS.idFromName(accountId));
     const projection = await account.registryUsageProjection();
     if (projection.accountId !== accountId) {
-      throw new Error("Account usage projection identity mismatch");
+      throw new CupError("Account usage projection identity mismatch");
     }
     this.applyAccountUsageProjection(projection);
     await account.confirmRegistryUsage(projection.revision);
@@ -500,7 +507,7 @@ export class RegistryDurableObject extends DurableObject<RegistryEnvironment> {
       const existing = registry.grants.find((entry) => entry.requestId === requestId);
       if (existing !== undefined) {
         if (existing.label !== label) {
-          throw new Error("Provisioning request ID is already bound to a different label");
+          throw new CupError("Provisioning request ID is already bound to a different label");
         }
         return { entry: existing, created: false };
       }
@@ -528,7 +535,7 @@ export class RegistryDurableObject extends DurableObject<RegistryEnvironment> {
       const registry = await this.sqlite.load();
       const entry = registry.grants.find((item) => item.requestId === requestId);
       if (entry === undefined) {
-        throw new Error("Provisioning request does not exist");
+        throw new CupError("Provisioning request does not exist");
       }
       entry.phase = "active";
       entry.credentialIssued ||= credentialIssued;
@@ -545,7 +552,7 @@ export class RegistryDurableObject extends DurableObject<RegistryEnvironment> {
       const registry = await this.sqlite.load();
       const entry = registry.grants.find((item) => item.grantId === grantSnapshot.grantId);
       if (entry === undefined) {
-        throw new Error("Registry grant does not exist");
+        throw new CupError("Registry grant does not exist");
       }
       const result = applyGrantRegistrySnapshot(entry, grantSnapshot);
       await this.sqlite.save(registry);
@@ -600,11 +607,11 @@ export class RegistryDurableObject extends DurableObject<RegistryEnvironment> {
     await this.ctx.storage.transaction(async () => {
       const owner = await this.findConversionOwner(conversionId);
       if (owner !== undefined && (owner.kind !== "trial" || owner.grantId !== grantId)) {
-        throw new Error("Conversion identity is already bound to a different owner");
+        throw new CupError("Conversion identity is already bound to a different owner");
       }
       const registry = await this.sqlite.load();
       if (!registry.grants.some((entry) => entry.grantId === grantId)) {
-        throw new Error("Conversion grant is not registered");
+        throw new CupError("Conversion grant is not registered");
       }
 
       this.saveConversionOwner(conversionId, { kind: "trial", grantId });
@@ -622,7 +629,7 @@ export class RegistryDurableObject extends DurableObject<RegistryEnvironment> {
     await this.ctx.storage.transaction(async () => {
       const existing = await this.findConversionOwner(conversionId);
       if (existing !== undefined && JSON.stringify(existing) !== JSON.stringify(parsed)) {
-        throw new Error("Conversion identity is already bound to a different owner");
+        throw new CupError("Conversion identity is already bound to a different owner");
       }
       this.saveConversionOwner(conversionId, parsed);
     });

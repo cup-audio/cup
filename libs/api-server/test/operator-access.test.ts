@@ -15,6 +15,7 @@ import {
   listAccountsResponseSchema,
   type ListAccountDeletionsResponse,
 } from "@cup/operator-api.routes";
+import { logEvent } from "@cup/telemetry.cloudflare";
 
 import type { ApiServerEnvironment } from "#src/api-server-environment.ts";
 import { createApiServer } from "#src/api-server.ts";
@@ -26,6 +27,12 @@ vi.mock("@cup/conversion-grants", async () => ({
   createGrantSessionCookie: () => "",
   createRootCredential: () => "",
   getGrantSessionCookie: () => undefined,
+}));
+// The helper itself is tested against the Sentry stub in @cup/telemetry.cloudflare; the Worker's
+// Sentry test shows that the operator-mutation record carries the request's trace ID.
+vi.mock(import("@cup/telemetry.cloudflare"), async (importOriginal) => ({
+  ...(await importOriginal()),
+  logEvent: vi.fn<typeof logEvent>(),
 }));
 
 const accountId = "d1a52e64-3e4d-4a7f-a711-7fb11501e9af";
@@ -358,6 +365,39 @@ test("records account allowance adjustments and reports the resulting balance", 
     balance,
   });
   expect(adjustAllowance).toHaveBeenCalledWith(requestId, -60_000, "goodwill");
+});
+
+test("records an operator mutation by method, path and status, without the operator's email", async () => {
+  const { env } = fixture();
+  const app = createApiServer({ validateOperatorAccess: async () => true });
+  const log = vi.mocked(logEvent);
+  log.mockClear();
+
+  const response = await app.request(
+    adjustmentRequest({
+      requestId: "0b8d3e8c-7f43-4c56-8e57-30cbb1ad7b1e",
+      amountMilliseconds: 60_000,
+      reason: "refund",
+    }),
+    {},
+    { ...env, OPERATOR_EMAIL: "operator@example.test" },
+  );
+
+  expect(response.status).toBe(200);
+  expect(log.mock.calls).toEqual([
+    [
+      "operator-mutation",
+      expect.any(String),
+      {
+        attributes: {
+          "http.request.method": "POST",
+          "url.path": `/api/operator/accounts/${accountId}/allowance-adjustments`,
+          "http.response.status_code": 200,
+        },
+      },
+    ],
+  ]);
+  expect(JSON.stringify(log.mock.calls)).not.toContain("operator@example.test");
 });
 
 test("rejects account allowance adjustments for unknown accounts and invalid input", async () => {

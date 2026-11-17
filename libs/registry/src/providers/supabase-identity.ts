@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { CupError } from "@cup/errors";
+
 import type { ProviderRequest } from "#src/providers/provider-request.ts";
 
 export type SupabaseAdminEnvironment = {
@@ -23,11 +25,11 @@ export async function verifySupabaseIdentity(env: SupabaseAdminEnvironment, subj
   }
   if (!response.ok) {
     await response.body?.cancel();
-    throw new Error("Supabase identity verification unavailable");
+    throw new CupError("Supabase identity verification unavailable");
   }
   const user = z.object({ id: z.uuid() }).parse(await response.json());
   if (user.id !== subject) {
-    throw new Error("Supabase identity mismatch");
+    throw new CupError("Supabase identity mismatch");
   }
   return true;
 }
@@ -50,6 +52,6 @@ export async function deleteSupabaseIdentity(
   });
   await response.body?.cancel();
   if (!response.ok && response.status !== 404) {
-    throw new Error("Identity deletion unavailable");
+    throw new CupError("Identity deletion unavailable");
   }
 }

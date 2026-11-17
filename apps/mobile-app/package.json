@@ -17,6 +17,7 @@
     "lint": "turbo run turbo:lint",
     "lint:fix": "turbo run turbo:lint:fix",
     "native:sync": "cap sync android && cap sync ios",
+    "symbols:upload": "upload-shell-symbols --web-source-map-dir ../web-app/dist/source-maps --android-web-dir android/app/src/main/assets/public",
     "test": "node scripts/test-jvm.mts",
     "turbo:build": "tsc --build",
     "turbo:lint": "oxlint --type-aware --max-warnings 0 .",
@@ -30,11 +31,13 @@
     "@capacitor/core": "^8.5.3",
     "@capacitor/ios": "^8.5.3",
     "@capawesome/capacitor-google-sign-in": "0.1.4",
-    "@cup/web-app": "workspace:*"
+    "@cup/web-app": "workspace:*",
+    "@sentry/capacitor": "catalog:sentry-client"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.3",
     "@cup/config-oxlint": "workspace:*",
+    "@cup/source-maps": "workspace:*",
     "@patricktree-stack/config-typescript": "workspace:*",
     "@types/node": "catalog:",
     "@typescript/native": "catalog:",

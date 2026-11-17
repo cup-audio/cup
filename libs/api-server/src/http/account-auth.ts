@@ -1,3 +1,4 @@
+import { captureException } from "@sentry/core";
 import { createRemoteJWKSet, errors, jwtVerify } from "jose";
 import type { JWTVerifyGetKey } from "jose";
 
@@ -106,12 +107,12 @@ export async function authenticateAccountRequest(request: Request, env: ApiServe
       testAccountEmail: localTestAccount(env)?.email,
     });
   } catch (error) {
-    return {
-      result:
-        error instanceof errors.JOSEError && !(error instanceof errors.JWKSTimeout)
-          ? "unauthorized"
-          : "unavailable",
-    } as const;
+    if (error instanceof errors.JOSEError && !(error instanceof errors.JWKSTimeout)) {
+      return { result: "unauthorized" } as const;
+    }
+    // Every caller answers this result with a 503.
+    captureException(error);
+    return { result: "unavailable" } as const;
   }
   try {
     const accounts = env.ACCOUNTS;
@@ -121,7 +122,8 @@ export async function authenticateAccountRequest(request: Request, env: ApiServe
       getAccount: (accountId) => accounts.get(accounts.idFromName(accountId)),
     });
     return result.result === "authenticated" ? { ...result, identity } : result;
-  } catch {
+  } catch (error) {
+    captureException(error);
     return { result: "unavailable" } as const;
   }
 }

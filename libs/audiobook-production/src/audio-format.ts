@@ -1,3 +1,5 @@
+import { CupError } from "@cup/errors";
+
 /** MIME type of synthesized narration segments. */
 export const AUDIOBOOK_CONTENT_TYPE = "audio/mpeg";
 /** MIME type of the canonical audiobook manifest. */
@@ -26,7 +28,7 @@ export function getSegmentByteLength(durationMilliseconds: number): number {
   const frameCount = durationMilliseconds / FRAME_DURATION_MILLISECONDS;
 
   if (!Number.isInteger(frameCount) || frameCount < 0) {
-    throw new Error(
+    throw new CupError(
       `Segment duration must be a whole number of 24 ms frames: ${durationMilliseconds} ms`,
     );
   }
@@ -57,7 +59,7 @@ const MPEG_1_SAMPLE_RATES = [44_100, 48_000, 32_000] as const;
  */
 export function analyzeMp3(audio: Uint8Array): Mp3Analysis {
   if (audio.byteLength === 0) {
-    throw new Error("MP3 audio must contain at least one MPEG audio frame");
+    throw new CupError("MP3 audio must contain at least one MPEG audio frame");
   }
 
   const audioStart = getId3v2End(audio);
@@ -68,13 +70,13 @@ export function analyzeMp3(audio: Uint8Array): Mp3Analysis {
 
   while (offset < audioEnd) {
     if (audioEnd - offset < 4) {
-      throw new Error(`MP3 audio ends with an incomplete frame header at byte ${offset}`);
+      throw new CupError(`MP3 audio ends with an incomplete frame header at byte ${offset}`);
     }
 
     const header = readUint32BigEndian(audio, offset);
 
     if ((header & 0xffe0_0000) >>> 0 !== 0xffe0_0000) {
-      throw new Error(`MP3 audio contains non-frame data at byte ${offset}`);
+      throw new CupError(`MP3 audio contains non-frame data at byte ${offset}`);
     }
 
     const versionBits = (header >>> 19) & 0b11;
@@ -85,11 +87,11 @@ export function analyzeMp3(audio: Uint8Array): Mp3Analysis {
     const channelMode = (header >>> 6) & 0b11;
 
     if (versionBits === 0b01 || layerBits !== 0b01) {
-      throw new Error(`MP3 audio contains an unsupported MPEG frame at byte ${offset}`);
+      throw new CupError(`MP3 audio contains an unsupported MPEG frame at byte ${offset}`);
     }
 
     if (sampleRateIndex === 0b11) {
-      throw new Error(`MP3 audio contains an invalid sample-rate index at byte ${offset}`);
+      throw new CupError(`MP3 audio contains an invalid sample-rate index at byte ${offset}`);
     }
 
     const versionDivisor = versionBits === 0b11 ? 1 : versionBits === 0b10 ? 2 : 4;
@@ -98,7 +100,7 @@ export function analyzeMp3(audio: Uint8Array): Mp3Analysis {
     const bitrateKilobitsPerSecond = bitrateTable[bitrateIndex]!;
 
     if (bitrateKilobitsPerSecond === 0) {
-      throw new Error(`MP3 audio contains a free or invalid bit-rate frame at byte ${offset}`);
+      throw new CupError(`MP3 audio contains a free or invalid bit-rate frame at byte ${offset}`);
     }
 
     assertFrameMatchesAudioFormat({
@@ -115,7 +117,7 @@ export function analyzeMp3(audio: Uint8Array): Mp3Analysis {
     );
 
     if (offset + frameLength > audioEnd) {
-      throw new Error(`MP3 audio ends with an incomplete frame at byte ${offset}`);
+      throw new CupError(`MP3 audio ends with an incomplete frame at byte ${offset}`);
     }
 
     durationMilliseconds += (samplesPerFrame / sampleRate) * 1_000;
@@ -124,7 +126,7 @@ export function analyzeMp3(audio: Uint8Array): Mp3Analysis {
   }
 
   if (frameCount === 0) {
-    throw new Error("MP3 audio must contain at least one MPEG audio frame");
+    throw new CupError("MP3 audio must contain at least one MPEG audio frame");
   }
 
   return { audioStart, audioEnd, durationMilliseconds };
@@ -145,22 +147,22 @@ function assertFrameMatchesAudioFormat({
 }): void {
   // Only MPEG-2 encodes 24 kHz, so this check also rejects every other MPEG version
   if (sampleRate !== AUDIO_FORMAT.sampleRate) {
-    throw new Error(`MP3 audio has unexpected sample rate at byte ${offset}: ${sampleRate} Hz`);
+    throw new CupError(`MP3 audio has unexpected sample rate at byte ${offset}: ${sampleRate} Hz`);
   }
 
   if (AUDIO_FORMAT.channelCount === 1 && channelMode !== 0b11) {
-    throw new Error(`MP3 audio has unexpected channel mode at byte ${offset}`);
+    throw new CupError(`MP3 audio has unexpected channel mode at byte ${offset}`);
   }
 
   if (bitrateKilobitsPerSecond !== AUDIO_FORMAT.bitrateKilobitsPerSecond) {
-    throw new Error(
+    throw new CupError(
       `MP3 audio has unexpected bitrate at byte ${offset}: ${bitrateKilobitsPerSecond} kbps`,
     );
   }
 
   // `getSegmentByteLength` relies on every frame having the same length
   if (padding === 1) {
-    throw new Error(`MP3 audio contains a padded frame at byte ${offset}`);
+    throw new CupError(`MP3 audio contains a padded frame at byte ${offset}`);
   }
 }
 
@@ -173,7 +175,7 @@ function getId3v2End(audio: Uint8Array): number {
   const sizeBytes = audio.subarray(6, 10);
 
   if (sizeBytes.some((byte) => byte > 0x7f)) {
-    throw new Error("MP3 audio contains an invalid ID3v2 tag size");
+    throw new CupError("MP3 audio contains an invalid ID3v2 tag size");
   }
 
   const tagSize =
@@ -181,7 +183,7 @@ function getId3v2End(audio: Uint8Array): number {
   const tagEnd = 10 + tagSize + (flags & 0x10 ? 10 : 0);
 
   if (tagEnd > audio.byteLength) {
-    throw new Error("MP3 audio contains an incomplete ID3v2 tag");
+    throw new CupError("MP3 audio contains an incomplete ID3v2 tag");
   }
 
   return tagEnd;

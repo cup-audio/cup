@@ -19,8 +19,11 @@ export type RpcErrorDetails<Code extends string> = {
   status: number;
   /** Seconds to wait before retrying: the `Retry-After` header, or 60 when it is absent. */
   retryAfter: number;
-  /** The server's request ID from the error envelope, absent when the response carried none. */
-  requestId: string | undefined;
+  /**
+   * Sentry's trace ID of the request, from the error envelope; absent when the response carried
+   * none.
+   */
+  traceId: string | undefined;
 };
 
 /**
@@ -31,15 +34,15 @@ export class RpcError<Code extends string = string> extends Error {
   readonly code: Code;
   readonly status: number;
   readonly retryAfter: number;
-  readonly requestId: string | undefined;
+  readonly traceId: string | undefined;
 
-  constructor({ code, message, status, retryAfter, requestId }: RpcErrorDetails<Code>) {
+  constructor({ code, message, status, retryAfter, traceId }: RpcErrorDetails<Code>) {
     super(message);
     this.name = "RpcError";
     this.code = code;
     this.status = status;
     this.retryAfter = retryAfter;
-    this.requestId = requestId;
+    this.traceId = traceId;
   }
 }
 
@@ -77,7 +80,7 @@ export function createOkResponseParser<Code extends string>({
         message: body.message ?? "The request could not be completed.",
         status: response.status,
         retryAfter: Math.max(1, Number(response.headers.get("Retry-After")) || 60),
-        requestId: body.requestId,
+        traceId: body.traceId,
       });
     }
   };
@@ -103,13 +106,13 @@ function isParseResponseError(error: unknown): error is ParseResponseError {
 }
 
 /**
- * Reads the code, message, and request ID of an API error response body; other bodies yield none of
+ * Reads the code, message, and trace ID of an API error response body; other bodies yield none of
  * them.
  */
 function readErrorBody(error: ParseResponseError): {
   code?: string;
   message?: string;
-  requestId?: string;
+  traceId?: string;
 } {
   const detailData =
     typeof error.detail === "object" && error.detail !== null && "data" in error.detail
@@ -126,8 +129,6 @@ function readErrorBody(error: ParseResponseError): {
   return {
     ...("code" in body && typeof body.code === "string" ? { code: body.code } : {}),
     ...("message" in body && typeof body.message === "string" ? { message: body.message } : {}),
-    ...("requestId" in body && typeof body.requestId === "string"
-      ? { requestId: body.requestId }
-      : {}),
+    ...("traceId" in body && typeof body.traceId === "string" ? { traceId: body.traceId } : {}),
   };
 }

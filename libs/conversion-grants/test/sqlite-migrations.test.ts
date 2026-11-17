@@ -309,6 +309,34 @@ test("adding the narration language leaves existing conversions without one", ()
   }
 });
 
+test("the stuck-conversion check starts existing conversions' stages at completion or acceptance", () => {
+  const database = new sqlite.DatabaseSync(":memory:");
+  try {
+    const { key, earlierKeys } = findMigration("conversion_stuck_check");
+    applyMigrations(database, earlierKeys);
+    database.exec(`INSERT INTO conversions
+      (conversion_id, idempotency_key, source_url, created_at_ms, status, last_started_phase, completed_at_ms, title, audiobook_reference_json)
+      VALUES
+      ('pending', 'key-pending', 'https://example.com/p', 1, 'pending', 'conversion-start', NULL, NULL, NULL),
+      ('ready', 'key-ready', 'https://example.com/r', 2, 'ready', 'finalization', 3, 'Ready', '{}')`);
+
+    applyMigrations(database, [key]);
+
+    expect(
+      database
+        .prepare(
+          "SELECT conversion_id, stage_started_at_ms, stuck_reported_at_ms FROM conversions ORDER BY created_at_ms",
+        )
+        .all(),
+    ).toEqual([
+      { conversion_id: "pending", stage_started_at_ms: 1, stuck_reported_at_ms: null },
+      { conversion_id: "ready", stage_started_at_ms: 3, stuck_reported_at_ms: null },
+    ]);
+  } finally {
+    database.close();
+  }
+});
+
 /**
  * Finds a migration by its journal tag without its number prefix, so renumbering it after a rebase
  * keeps the test valid; also returns the keys of all migrations that run before it.

@@ -31,6 +31,8 @@ const MAIN_ACTIVITY = `${APP_PACKAGE}/.MainActivity`;
 const API_ORIGIN_EXTRA = "cupTestApiOrigin";
 /** Read only by the debug build's `DebugApplication`. */
 const REAL_GOOGLE_SIGN_IN_EXTRA = "cupTestRealGoogleSignIn";
+/** Read only by the debug build's `TestSentryDsn`. */
+const SENTRY_DSN_EXTRA = "cupTestSentryDsn";
 /** Read only by the debug build's `TestPlaybackTimings`. */
 const SIGNED_URL_LIFETIME_EXTRA = "cupTestSignedUrlLifetimeSeconds";
 /** Read only by the debug build's `TestPlaybackTimings`. */
@@ -540,6 +542,41 @@ export class AndroidAppDevice implements AppDevice {
     await this.driver.deleteSession();
   }
 
+  /**
+   * Waits until Cup's process has exited, such as after a crash, when Sentry's crash handler has
+   * sent or stored the crash before handing it on to Android's, which ends the process.
+   */
+  async waitForProcessExit(): Promise<void> {
+    await waitFor(
+      "Cup's process to exit",
+      async () => {
+        // `pidof` exits with 1 once no process has the name.
+        const { exitCode } = await run(
+          this.target.adb,
+          ["-s", this.target.serial, "shell", "pidof", APP_PACKAGE],
+          { successExitCodes: [0, 1] },
+        );
+        return exitCode === 1 ? true : undefined;
+      },
+      30_000,
+    );
+  }
+
+  /** The ID of Cup's running process, which tells a recreated activity from a restarted app. */
+  async processId(): Promise<string> {
+    const { stdout } = await this.adb(["shell", "pidof", APP_PACKAGE]);
+    return stdout.trim();
+  }
+
+  /**
+   * Every file and folder in Cup's private data directory, as paths relative to it, such as
+   * `./files/INSTALLATION`. The debug build is debuggable, so `run-as` reads it.
+   */
+  async appDataPaths(): Promise<string[]> {
+    const { stdout } = await this.adb(["shell", "run-as", APP_PACKAGE, "find", "."]);
+    return stdout.split("\n").filter((line) => line !== "");
+  }
+
   /** Opens the notification shade for `act` and closes it again. */
   private async inNotificationShade<Result>(act: () => Promise<Result>): Promise<Result> {
     await this.driver.switchContext("NATIVE_APP");
@@ -583,6 +620,9 @@ function launchArgumentExtras(launchArguments: AndroidLaunchArguments): string[]
     ...(launchArguments.realGoogleSignIn === true
       ? ["--ez", REAL_GOOGLE_SIGN_IN_EXTRA, "true"]
       : []),
+    ...(launchArguments.testSentryDsn === undefined
+      ? []
+      : ["--es", SENTRY_DSN_EXTRA, launchArguments.testSentryDsn]),
     ...(launchArguments.signedUrlLifetimeSeconds === undefined
       ? []
       : ["--ei", SIGNED_URL_LIFETIME_EXTRA, String(launchArguments.signedUrlLifetimeSeconds)]),

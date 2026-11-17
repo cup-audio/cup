@@ -21,6 +21,7 @@ import {
 } from "#src/contracts.ts";
 
 const UUID = "b4ad28a8-bbd7-46af-a17c-59527becd745";
+const TRACE_ID = "0af7651916cd43dd8448eb211c80319c";
 const ACCEPTED_AT = "2026-08-28T12:00:00.000Z";
 const DURATION = { availableMilliseconds: 4, reservedMilliseconds: 0, spentMilliseconds: 1 };
 const ACCOUNT_SNAPSHOT = {
@@ -251,10 +252,10 @@ describe("listener API transport contracts", () => {
       name: "error",
       schema: errorResponseSchema,
       response: {
-        error: { code: "grant-expired", message: "Expired.", requestId: UUID, newField: true },
+        error: { code: "grant-expired", message: "Expired.", traceId: TRACE_ID, newField: true },
         newField: true,
       },
-      expected: { error: { code: "grant-expired", message: "Expired.", requestId: UUID } },
+      expected: { error: { code: "grant-expired", message: "Expired.", traceId: TRACE_ID } },
     },
   ])("drops unknown fields in the $name response", ({ schema, response, expected }) => {
     expect(schema.parse(response)).toStrictEqual(expected);
@@ -334,12 +335,22 @@ describe("listener API transport contracts", () => {
   test("requires stable error envelopes", () => {
     expect(
       errorResponseSchema.safeParse({
-        error: { code: "grant-expired", message: "Expired.", requestId: UUID },
+        error: { code: "grant-expired", message: "Expired.", traceId: TRACE_ID },
       }).success,
     ).toBe(true);
     expect(
       errorResponseSchema.safeParse({
-        error: { code: "GrantExpired", message: "Expired.", requestId: UUID },
+        error: { code: "grant-expired", message: "Expired.", requestId: UUID },
+      }).success,
+    ).toBe(false);
+    expect(
+      errorResponseSchema.safeParse({
+        error: { code: "grant-expired", message: "Expired.", traceId: UUID },
+      }).success,
+    ).toBe(false);
+    expect(
+      errorResponseSchema.safeParse({
+        error: { code: "GrantExpired", message: "Expired.", traceId: TRACE_ID },
       }).success,
     ).toBe(false);
   });

@@ -1,0 +1,159 @@
+diff --git a/dist/build/nativeOptions.js b/dist/build/nativeOptions.js
+index dcd3acd9e8e9eb24f27918d450c30fb3dbe35491..30e15105c2db38c21adacf9edc6da82fded4f9f9 100644
+--- a/dist/build/nativeOptions.js
++++ b/dist/build/nativeOptions.js
+@@ -19,6 +19,8 @@ function FilterNativeOptions(options) {
+         dist: options.dist,
+         dsn: options.dsn,
+         enabled: options.enabled,
++        // Patched by Cup: forwarded so that `false` also reaches Cocoa, which reads no manifest.
++        enableAutoSessionTracking: options.enableAutoSessionTracking,
+         enableNdkScopeSync: options.enableNdkScopeSync,
+         enableWatchdogTerminationTracking: options.enableWatchdogTerminationTracking,
+         environment: options.environment,
+@@ -46,6 +48,8 @@ function iOSParameters(options) {
+         ? {
+             enableAppHangTracking: options.enableAppHangTracking,
+             appHangTimeoutInterval: options.appHangTimeoutInterval,
++            // Patched by Cup: Cocoa options the iOS plugin applies, from plain values only.
++            cocoaOptions: options.cocoaOptions,
+         }
+         : {};
+ }
+diff --git a/dist/build/options.d.ts b/dist/build/options.d.ts
+index 5e234b52e78f2d1adf959b9da09cec1d7a99c9bd..a0cb0170209f01e0bdc844ecee8623568c01c950 100644
+--- a/dist/build/options.d.ts
++++ b/dist/build/options.d.ts
+@@ -59,6 +59,29 @@ export interface BaseCapacitorOptions {
+      * @default 2
+      */
+     appHangTimeoutInterval?: number;
++    /**
++     * Patched by Cup: Cocoa options the iOS plugin applies after the others, each named as in the
++     * Cocoa SDK's `Options`; unset ones keep Cocoa's default. iOS only.
++     */
++    cocoaOptions?: {
++        /** Cocoa's own `tracesSampleRate`, apart from the JavaScript layer's sampling. */
++        tracesSampleRate?: number;
++        enableAutoPerformanceTracing?: boolean;
++        enableUIViewControllerTracing?: boolean;
++        enableNetworkTracking?: boolean;
++        enableFileIOTracing?: boolean;
++        enableCoreDataTracing?: boolean;
++        enableUserInteractionTracing?: boolean;
++        enableNetworkBreadcrumbs?: boolean;
++        enableMetricKit?: boolean;
++        enableMetricKitRawPayload?: boolean;
++        attachAllThreads?: boolean;
++        enableSigtermReporting?: boolean;
++        attachScreenshot?: boolean;
++        attachViewHierarchy?: boolean;
++        /** Cocoa's `experimental.enableUnhandledCPPExceptionsV2`. */
++        enableUnhandledCPPExceptionsV2?: boolean;
++    };
+     /**
+      * If set to `true`, the SDK will only continue a trace if the `organization ID` of the incoming trace found in the
+      * `baggage` header matches the `organization ID` of the current Sentry client.
+diff --git a/dist/esm/nativeOptions.js b/dist/esm/nativeOptions.js
+index 1d7095586b9dcb6da9385210c6141e2709118c2a..bc59f35900cebd429abf85928e7c2a84c7e5a91e 100644
+--- a/dist/esm/nativeOptions.js
++++ b/dist/esm/nativeOptions.js
+@@ -16,6 +16,8 @@ export function FilterNativeOptions(options) {
+         dist: options.dist,
+         dsn: options.dsn,
+         enabled: options.enabled,
++        // Patched by Cup: forwarded so that `false` also reaches Cocoa, which reads no manifest.
++        enableAutoSessionTracking: options.enableAutoSessionTracking,
+         enableNdkScopeSync: options.enableNdkScopeSync,
+         enableWatchdogTerminationTracking: options.enableWatchdogTerminationTracking,
+         environment: options.environment,
+@@ -43,6 +45,8 @@ function iOSParameters(options) {
+         ? {
+             enableAppHangTracking: options.enableAppHangTracking,
+             appHangTimeoutInterval: options.appHangTimeoutInterval,
++            // Patched by Cup: Cocoa options the iOS plugin applies, from plain values only.
++            cocoaOptions: options.cocoaOptions,
+         }
+         : {};
+ }
+diff --git a/dist/esm/options.d.ts b/dist/esm/options.d.ts
+index 5e234b52e78f2d1adf959b9da09cec1d7a99c9bd..a0cb0170209f01e0bdc844ecee8623568c01c950 100644
+--- a/dist/esm/options.d.ts
++++ b/dist/esm/options.d.ts
+@@ -59,6 +59,29 @@ export interface BaseCapacitorOptions {
+      * @default 2
+      */
+     appHangTimeoutInterval?: number;
++    /**
++     * Patched by Cup: Cocoa options the iOS plugin applies after the others, each named as in the
++     * Cocoa SDK's `Options`; unset ones keep Cocoa's default. iOS only.
++     */
++    cocoaOptions?: {
++        /** Cocoa's own `tracesSampleRate`, apart from the JavaScript layer's sampling. */
++        tracesSampleRate?: number;
++        enableAutoPerformanceTracing?: boolean;
++        enableUIViewControllerTracing?: boolean;
++        enableNetworkTracking?: boolean;
++        enableFileIOTracing?: boolean;
++        enableCoreDataTracing?: boolean;
++        enableUserInteractionTracing?: boolean;
++        enableNetworkBreadcrumbs?: boolean;
++        enableMetricKit?: boolean;
++        enableMetricKitRawPayload?: boolean;
++        attachAllThreads?: boolean;
++        enableSigtermReporting?: boolean;
++        attachScreenshot?: boolean;
++        attachViewHierarchy?: boolean;
++        /** Cocoa's `experimental.enableUnhandledCPPExceptionsV2`. */
++        enableUnhandledCPPExceptionsV2?: boolean;
++    };
+     /**
+      * If set to `true`, the SDK will only continue a trace if the `organization ID` of the incoming trace found in the
+      * `baggage` header matches the `organization ID` of the current Sentry client.
+diff --git a/ios/Sources/SentryCapacitorPlugin/SentryCapacitorPlugin.swift b/ios/Sources/SentryCapacitorPlugin/SentryCapacitorPlugin.swift
+index 9649d044046d5eedad08fbd3733505f1b5e1c83f..197b2dba817ff8656eedfdab124c13362f068346 100644
+--- a/ios/Sources/SentryCapacitorPlugin/SentryCapacitorPlugin.swift
++++ b/ios/Sources/SentryCapacitorPlugin/SentryCapacitorPlugin.swift
+@@ -194,9 +194,42 @@ public class SentryCapacitorPlugin: CAPPlugin, CAPBridgedPlugin {
+             options.sendDefaultPii = sendDefaultPii
+         }
+ 
++        // Patched by Cup.
++        if let cocoaOptions = dict["cocoaOptions"] as? [String: Any] {
++            applyCocoaOptions(cocoaOptions, to: options)
++        }
++
+         return options
+     }
+ 
++    /// Patched by Cup: applies the JavaScript layer's `cocoaOptions`, each named as in Cocoa's `Options`.
++    private func applyCocoaOptions(_ dict: [String: Any], to options: Options) {
++        if let tracesSampleRate = dict["tracesSampleRate"] as? Double {
++            options.tracesSampleRate = NSNumber(value: tracesSampleRate)
++        }
++        let flags: [(String, (Bool) -> Void)] = [
++            ("enableAutoPerformanceTracing", { options.enableAutoPerformanceTracing = $0 }),
++            ("enableUIViewControllerTracing", { options.enableUIViewControllerTracing = $0 }),
++            ("enableNetworkTracking", { options.enableNetworkTracking = $0 }),
++            ("enableFileIOTracing", { options.enableFileIOTracing = $0 }),
++            ("enableCoreDataTracing", { options.enableCoreDataTracing = $0 }),
++            ("enableUserInteractionTracing", { options.enableUserInteractionTracing = $0 }),
++            ("enableNetworkBreadcrumbs", { options.enableNetworkBreadcrumbs = $0 }),
++            ("enableMetricKit", { options.enableMetricKit = $0 }),
++            ("enableMetricKitRawPayload", { options.enableMetricKitRawPayload = $0 }),
++            ("attachAllThreads", { options.attachAllThreads = $0 }),
++            ("enableSigtermReporting", { options.enableSigtermReporting = $0 }),
++            ("attachScreenshot", { options.attachScreenshot = $0 }),
++            ("attachViewHierarchy", { options.attachViewHierarchy = $0 }),
++            ("enableUnhandledCPPExceptionsV2", { options.experimental.enableUnhandledCPPExceptionsV2 = $0 }),
++        ]
++        for (key, apply) in flags {
++            if let value = dict[key] as? Bool {
++                apply(value)
++            }
++        }
++    }
++
+     @objc func captureEnvelope(_ call: CAPPluginCall) {
+         guard let base64Bytes = call.getString("envelope") else {
+             print("Cannot parse the envelope data")

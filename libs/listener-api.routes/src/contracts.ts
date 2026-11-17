@@ -58,6 +58,9 @@ export const uuidV4Schema = z
   .string()
   .regex(LOWERCASE_UUID_V4_PATTERN, "Must be a lowercase UUIDv4");
 
+/** The health endpoint's answer while the Worker runs. */
+export const healthResponseSchema = z.object({ status: z.literal("ok") });
+
 export const authConfigResponseSchema = z.object({
   supabaseUrl: z.string(),
   publishableKey: z.string().min(1),
@@ -249,11 +252,16 @@ export const ERROR_CODE = {
 } as const;
 export type ErrorCode = (typeof ERROR_CODE)[keyof typeof ERROR_CODE];
 
+/** Sentry's trace ID of the request, which finds the request's trace in Sentry's search. */
+const traceIdSchema = z
+  .string()
+  .regex(/^[0-9a-f]{32}$/, "Must be a 32-character lowercase hex trace ID");
+
 export const errorResponseSchema = z.object({
   error: z.object({
     code: z.enum(ERROR_CODE),
     message: z.string().min(1),
-    requestId: uuidV4Schema,
+    traceId: traceIdSchema,
   }),
 });
 export type ErrorResponse = z.infer<typeof errorResponseSchema>;

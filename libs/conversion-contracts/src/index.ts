@@ -1,6 +1,8 @@
 import pMap from "p-map";
 import { z } from "zod";
 
+import { CupError } from "@cup/errors";
+
 export const conversionFailureCategories = [
   "workflow-start",
   "source-preparation",
@@ -81,6 +83,16 @@ export type SynthesisWorkflowDispatcher = {
 
 export function createSegmentWorkflowId(conversionId: string, sequence: number) {
   return `segment-${conversionId}-${sequence}`;
+}
+
+/**
+ * Checks the synthesis attempt count that a segment Workflow passes to its owner with the segment's
+ * outcome: absent after a replay of the run, otherwise a positive safe integer.
+ */
+export function assertSynthesisAttempts(attempts: number | undefined): void {
+  if (attempts !== undefined && (!Number.isSafeInteger(attempts) || attempts < 1)) {
+    throw new CupError("Synthesis attempts must be a positive safe integer");
+  }
 }
 
 // Bounds how many creation requests one dispatch has in flight. This does not enforce the

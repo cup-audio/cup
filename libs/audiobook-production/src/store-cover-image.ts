@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { createConversionArtifactPrefix } from "@cup/conversion-contracts";
+import { CupError } from "@cup/errors";
 
 const COVER_IMAGE_CONTENT_TYPES = [
   "image/jpeg",
@@ -57,7 +58,7 @@ export async function storeCoverImage({
   const storedImage = await bucket.put(key, bytes, { httpMetadata: { contentType } });
 
   if (!storedImage) {
-    throw new Error(`Cover image upload did not produce an object: ${key}`);
+    throw new CupError(`Cover image upload did not produce an object: ${key}`);
   }
 
   // The account artifact writer answers a repeated write with the object it already stored, so

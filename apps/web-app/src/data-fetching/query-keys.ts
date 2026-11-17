@@ -9,4 +9,6 @@ export const QUERY_KEYS = {
   accountHistory: (subject: string) => [...QUERY_KEYS.account(subject), "history"] as const,
   audiobook: (conversionId: string) => ["audiobook", conversionId] as const,
   grant: (grantId: string) => ["conversion-grant", grantId] as const,
+  /** The shell's "Send crash reports" switch, kept on the device. */
+  crashReports: () => ["crash-reports"] as const,
 };

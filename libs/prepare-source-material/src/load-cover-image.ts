@@ -1,3 +1,5 @@
+import { CupError } from "@cup/errors";
+
 import {
   assertPublicSourceUrl,
   type CoverImageDeclaration,
@@ -114,7 +116,7 @@ export async function loadCoverImage({
     });
 
     if (!response) {
-      throw new Error("Expected cover-image navigation to return an HTTP response");
+      throw new CupError("Expected cover-image navigation to return an HTTP response");
     }
 
     // Request interception does not see redirect hops, so they are checked once the chain is known.
@@ -210,7 +212,7 @@ async function rejectAfterTimeout<Value>(
       promise,
       new Promise<never>((_resolve, reject) => {
         timeoutId = setTimeout(() => {
-          reject(new Error(`Cover image was not received within ${timeoutMilliseconds} ms`));
+          reject(new CupError(`Cover image was not received within ${timeoutMilliseconds} ms`));
         }, timeoutMilliseconds);
       }),
     ]);

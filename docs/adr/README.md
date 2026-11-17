@@ -33,5 +33,7 @@ ADRs preserve decisions, alternatives, rationale, and consequences. Read them al
 | [0027](0027-flow-narration-across-segment-boundaries-with-overlap-and-cut.md)                                       | Flow narration across segment boundaries with overlap and cut (superseded by 0028)                      |
 | [0028](0028-withdraw-overlap-and-cut.md)                                                                            | Withdraw overlap and cut                                                                                |
 | [0029](0029-play-the-narration-track-in-the-android-app-with-a-native-media3-exoplayer.md)                          | Play the narration track in the Android app with a native Media3 ExoPlayer                              |
+| [0030](0030-observe-production-with-sentrys-own-sdks-and-turn-cloudflares-observability-off.md)                     | Observe production with Sentry's own SDKs and turn Cloudflare's observability off                       |
+| [0031](0031-capture-native-crashes-in-the-shells-without-consent-keeping-no-installation-id-on-the-device.md)       | Capture native crashes in the shells without consent, keeping no installation ID on the device          |
 
 Each decision's frontmatter records its status. For a substantive reversal, add a superseding ADR and link it from the previous decision while retaining the old rationale. The [wiki schema](../agents/domain.md#record-decisions-and-evidence) describes how decisions, implementation gaps, and research relate.

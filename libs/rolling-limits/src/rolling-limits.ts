@@ -2,6 +2,8 @@ import { and, asc, eq, gt, lte, min } from "drizzle-orm";
 import { drizzle, type DrizzleSqliteDODatabase } from "drizzle-orm/durable-sqlite";
 import { z } from "zod";
 
+import { CupError } from "@cup/errors";
+
 import { rateEvents } from "#src/rate-limit-schema.ts";
 
 /** A serialized rolling window, with no fixed-window boundary burst. */
@@ -47,7 +49,7 @@ export class RollingLimits {
       .get();
     // An aggregate without GROUP BY always yields one row, even for an empty table.
     if (row === undefined) {
-      throw new Error("Required SQLite row is missing");
+      throw new CupError("Required SQLite row is missing");
     }
     return row.next;
   }

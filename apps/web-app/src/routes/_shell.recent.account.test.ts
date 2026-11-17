@@ -143,3 +143,11 @@ test("the account still loading is marked as a loading state", async ({ mount, p
   const dialog = page.getByRole("dialog", { name: "Account settings" });
   await expect(dialog.getByText("Loading account…")).toHaveAttribute("data-loading-state", "");
 });
+
+test("in the browser, the account dialog has no crash reports switch", async ({ mount, page }) => {
+  await mount("routes/_shell.recent.account/ActiveAccount");
+  const dialog = page.getByRole("dialog", { name: "Account settings" });
+  await expect(dialog.getByRole("button", { name: "Delete account…" })).toBeVisible();
+
+  await expect(dialog.getByRole("switch")).toHaveCount(0);
+});

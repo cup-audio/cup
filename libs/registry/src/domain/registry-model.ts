@@ -1,4 +1,5 @@
 import type { ProjectedGrantState, GrantRegistrySnapshot } from "@cup/conversion-grants";
+import { CupError } from "@cup/errors";
 
 import { canonicalJson, decodeBase64Url, encodeBase64Url } from "#src/encoding.ts";
 import { toIsoString } from "#src/time.ts";
@@ -31,7 +32,7 @@ export function applyGrantRegistrySnapshot(
     grantSnapshot.revision === entry.grantSnapshot.revision
   ) {
     if (canonicalJson(entry.grantSnapshot) !== canonicalJson(grantSnapshot)) {
-      throw new Error("Conflicting Registry snapshot at the same revision");
+      throw new CupError("Conflicting Registry snapshot at the same revision");
     }
     return "replayed";
   }
@@ -120,11 +121,11 @@ function decodeKeysetCursor(
   try {
     const decoded = decodeBase64Url(cursor);
     if (encodeBase64Url(decoded) !== cursor) {
-      throw new Error();
+      throw new CupError();
     }
     const value: unknown = JSON.parse(new TextDecoder().decode(decoded));
     if (!isRecord(value)) {
-      throw new Error();
+      throw new CupError();
     }
     const id = value[idKey];
     if (
@@ -134,11 +135,11 @@ function decodeKeysetCursor(
       !Number.isSafeInteger(value["createdAtMs"]) ||
       typeof id !== "string"
     ) {
-      throw new Error();
+      throw new CupError();
     }
     return { createdAtMs: value["createdAtMs"], id };
   } catch {
-    throw new Error("Invalid Registry cursor");
+    throw new CupError("Invalid Registry cursor");
   }
 }
 

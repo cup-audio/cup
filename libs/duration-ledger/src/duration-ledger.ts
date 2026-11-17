@@ -3,6 +3,7 @@ import { drizzle, type DrizzleSqliteDODatabase } from "drizzle-orm/durable-sqlit
 import { z } from "zod";
 
 import { estimateAudioDuration, type SegmentUsage } from "@cup/conversion-contracts";
+import { CupError } from "@cup/errors";
 
 import {
   creditBalances,
@@ -114,7 +115,7 @@ export class DurationLedger {
           return [{ sequence, characters, estimate: estimateAudioDuration(characters) }];
         }
         if (segment.narrationTextCharacters !== characters) {
-          throw new Error("Segment reservation conflicts with synthesis identity");
+          throw new CupError("Segment reservation conflicts with synthesis identity");
         }
         return [];
       });
@@ -172,16 +173,16 @@ export class DurationLedger {
     return this.database.transaction(() => {
       const segment = this.segment(conversionId, sequence);
       if (!segment) {
-        throw new Error("Audio segment has no duration reservation");
+        throw new CupError("Audio segment has no duration reservation");
       }
       if (segment.state === "settled") {
         if (segment.actualMilliseconds !== actual) {
-          throw new Error("Conflicting audio duration settlement");
+          throw new CupError("Conflicting audio duration settlement");
         }
         return { result: "replayed" as const };
       }
       if (segment.state !== "reserved") {
-        throw new Error("Audio segment reservation was released");
+        throw new CupError("Audio segment reservation was released");
       }
       const balance = this.rawBalance();
       const charged = Math.min(actual, balance.available + balance.reserved);
@@ -246,6 +247,22 @@ export class DurationLedger {
     });
   }
 
+  /** When the segment's current reservation was taken, or `undefined` for a segment without one. */
+  reservedAtMs(conversionId: string, sequence: number): number | undefined {
+    return this.database
+      .select({ createdAtMs: creditLedger.createdAtMs })
+      .from(this.segmentsTable)
+      .innerJoin(
+        creditLedger,
+        and(
+          eq(creditLedger.operationId, this.segmentsTable.operationId),
+          eq(creditLedger.eventKind, "reserve"),
+        ),
+      )
+      .where(this.segmentKey(conversionId, sequence))
+      .get()?.createdAtMs;
+  }
+
   segments(conversionId: string): SegmentUsage[] {
     return this.segmentRows(conversionId).map(toSegmentUsage);
   }
@@ -281,12 +298,12 @@ export class DurationLedger {
         .get();
       if (existing) {
         if (existing.delta !== amount || existing.cause !== cause) {
-          throw new Error("Allowance adjustment idempotency conflict");
+          throw new CupError("Allowance adjustment idempotency conflict");
         }
         return;
       }
       if (amount < 0 && -amount > this.balance().available) {
-        throw new Error("Allowance adjustment exceeds available duration");
+        throw new CupError("Allowance adjustment exceeds available duration");
       }
       this.database
         .insert(creditOperations)
@@ -318,7 +335,7 @@ export class DurationLedger {
     );
     const balance = this.rawBalance();
     if (balance.available !== totals.available || balance.reserved !== totals.reserved) {
-      throw new Error("Duration balance does not match its credit ledger");
+      throw new CupError("Duration balance does not match its credit ledger");
     }
     return {
       balance: this.balance(),
@@ -449,7 +466,7 @@ function toSegmentUsage(row: AudioSegmentsTable["$inferSelect"]): SegmentUsage {
 /** Preserves the fail-fast behavior of storage cursors for required rows. */
 function requireRow<T>(row: T | undefined): T {
   if (row === undefined) {
-    throw new Error("Required SQLite row is missing");
+    throw new CupError("Required SQLite row is missing");
   }
   return row;
 }

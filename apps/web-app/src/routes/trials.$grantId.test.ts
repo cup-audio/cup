@@ -57,6 +57,8 @@ test("renders grant-load-error", { tag: VISUAL_TAG }, async ({ mount, page }) =>
   await expect(
     component.getByRole("heading", { name: "The trial link could not be opened." }),
   ).toBeVisible();
+  // The server's trace ID, which the operator pastes into Sentry's search.
+  await expect(component.getByText("Reference: 0af7651916cd43dd8448eb211c80319c")).toBeVisible();
   await expect(component).toHaveScreenshot("grant-load-error.png");
 
   await expectTryAgainToReloadTheTrialWithoutItsCredential(page, async () => {

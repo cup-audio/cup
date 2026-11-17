@@ -225,6 +225,23 @@ catalogs:
     hono:
       specifier: ^4.13.13
       version: 4.13.13
+  sentry-client:
+    '@sentry/capacitor':
+      specifier: 4.5.0
+      version: 4.5.0
+    '@sentry/cli':
+      specifier: ^3.8.2
+      version: 3.8.2
+    '@sentry/react':
+      specifier: 10.76.2
+      version: 10.76.2
+  sentry-server:
+    '@sentry/cloudflare':
+      specifier: 11.10.0
+      version: 11.10.0
+    '@sentry/core':
+      specifier: 11.10.0
+      version: 11.10.0
   web-app:
     '@cloudflare/vite-plugin':
       specifier: 1.62.2
@@ -255,6 +272,9 @@ catalogs:
       version: 8.3.4
 
 packageExtensionsChecksum: sha256-wm7Z6yYv4Ixokkzs7DiTig2uN8gDSvTustMipx0iYZs=
+
+patchedDependencies:
+  '@sentry/capacitor@4.5.0': e79bcf58a13c35f6cb9a50f5747b9d08777a22238b10cffcb7ca12b813b21d23
 
 importers:
 
@@ -517,25 +537,46 @@ importers:
       '@cup/registry':
         specifier: workspace:*
         version: link:../../libs/registry
+      '@cup/telemetry.cloudflare':
+        specifier: workspace:*
+        version: link:../../libs/telemetry.cloudflare
       '@cup/web-app':
         specifier: workspace:*
         version: link:../web-app
+      '@sentry/cloudflare':
+        specifier: catalog:sentry-server
+        version: 11.10.0(vite@8.3.4(@types/node@26.6.5))(wrangler@4.144.0(@types/node@26.6.5))
     devDependencies:
       '@cloudflare/vite-plugin':
         specifier: catalog:web-app
         version: 1.62.2(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5))(wrangler@4.144.0(@types/node@26.6.5))
+      '@cup/audiobook-production':
+        specifier: workspace:*
+        version: link:../../libs/audiobook-production
       '@cup/config-oxlint':
         specifier: workspace:*
         version: link:../../tooling/config-oxlint
       '@cup/listener-api.routes':
         specifier: workspace:*
         version: link:../../libs/listener-api.routes
+      '@cup/narration-document-creation':
+        specifier: workspace:*
+        version: link:../../libs/narration-document-creation
       '@cup/operator-api.routes':
         specifier: workspace:*
         version: link:../../libs/operator-api.routes
       '@cup/prepare-declaration-build':
         specifier: workspace:*
         version: link:../../tooling/prepare-declaration-build
+      '@cup/sentry-stub':
+        specifier: workspace:*
+        version: link:../../qa/sentry-stub
+      '@cup/source-maps':
+        specifier: workspace:*
+        version: link:../../tooling/source-maps
+      '@cup/telemetry.core':
+        specifier: workspace:*
+        version: link:../../libs/telemetry.core
       '@patricktree-stack/config-typescript':
         specifier: workspace:*
         version: link:../../.patricktree-stack/tooling/config-typescript
@@ -545,6 +586,9 @@ importers:
       '@patricktree-stack/utils-ecma':
         specifier: workspace:*
         version: link:../../.patricktree-stack/libs/utils-ecma
+      '@sentry/cli':
+        specifier: catalog:sentry-client
+        version: 3.8.2
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.5
@@ -557,6 +601,9 @@ importers:
       oxlint-tsgolint:
         specifier: 'catalog:'
         version: 7.0.2004
+      temporal-polyfill:
+        specifier: ^1.0.5
+        version: 1.0.5
       typescript:
         specifier: 'catalog:'
         version: '@typescript/typescript6@6.0.2'
@@ -596,6 +643,9 @@ importers:
       '@cup/web-app':
         specifier: workspace:*
         version: link:../web-app
+      '@sentry/capacitor':
+        specifier: catalog:sentry-client
+        version: 4.5.0(patch_hash=e79bcf58a13c35f6cb9a50f5747b9d08777a22238b10cffcb7ca12b813b21d23)(@capacitor/core@8.5.3)
     devDependencies:
       '@capacitor/cli':
         specifier: ^8.5.3
@@ -603,6 +653,9 @@ importers:
       '@cup/config-oxlint':
         specifier: workspace:*
         version: link:../../tooling/config-oxlint
+      '@cup/source-maps':
+        specifier: workspace:*
+        version: link:../../tooling/source-maps
       '@patricktree-stack/config-typescript':
         specifier: workspace:*
         version: link:../../.patricktree-stack/tooling/config-typescript
@@ -706,6 +759,9 @@ importers:
       '@cup/listener-api.routes':
         specifier: workspace:*
         version: link:../../libs/listener-api.routes
+      '@cup/telemetry.browser':
+        specifier: workspace:*
+        version: link:../../libs/telemetry.browser
       '@fontsource-variable/inter':
         specifier: ^5.3.0
         version: 5.3.0
@@ -718,6 +774,12 @@ importers:
       '@patricktree-stack/utils-ecma':
         specifier: workspace:*
         version: link:../../.patricktree-stack/libs/utils-ecma
+      '@sentry/capacitor':
+        specifier: catalog:sentry-client
+        version: 4.5.0(patch_hash=e79bcf58a13c35f6cb9a50f5747b9d08777a22238b10cffcb7ca12b813b21d23)(@capacitor/core@8.5.3)(@sentry/react@10.76.2(react@19.3.0))
+      '@sentry/react':
+        specifier: catalog:sentry-client
+        version: 10.76.2(react@19.3.0)
       '@supabase/supabase-js':
         specifier: ^2.117.3
         version: 2.117.3
@@ -764,6 +826,9 @@ importers:
       '@cup/prepare-declaration-build':
         specifier: workspace:*
         version: link:../../tooling/prepare-declaration-build
+      '@cup/source-maps':
+        specifier: workspace:*
+        version: link:../../tooling/source-maps
       '@patricktree-stack/config-playwright':
         specifier: workspace:*
         version: link:../../.patricktree-stack/tooling/config-playwright
@@ -842,6 +907,12 @@ importers:
       '@cup/rolling-limits':
         specifier: workspace:*
         version: link:../rolling-limits
+      '@cup/telemetry.cloudflare':
+        specifier: workspace:*
+        version: link:../telemetry.cloudflare
+      '@cup/telemetry.core':
+        specifier: workspace:*
+        version: link:../telemetry.core
       drizzle-orm:
         specifier: ^0.45.4
         version: 0.45.4
@@ -955,6 +1026,15 @@ importers:
       '@cup/registry':
         specifier: workspace:*
         version: link:../registry
+      '@cup/telemetry.cloudflare':
+        specifier: workspace:*
+        version: link:../telemetry.cloudflare
+      '@cup/telemetry.core':
+        specifier: workspace:*
+        version: link:../telemetry.core
+      '@sentry/core':
+        specifier: catalog:sentry-server
+        version: 11.10.0
       hono:
         specifier: catalog:hono
         version: 4.13.13
@@ -1010,6 +1090,9 @@ importers:
       '@cup/conversion-contracts':
         specifier: workspace:*
         version: link:../conversion-contracts
+      '@cup/errors':
+        specifier: workspace:*
+        version: link:../errors
       '@cup/mp3-encoding':
         specifier: workspace:*
         version: link:../mp3-encoding
@@ -1065,6 +1148,9 @@ importers:
 
   libs/conversion-contracts:
     dependencies:
+      '@cup/errors':
+        specifier: workspace:*
+        version: link:../errors
       p-map:
         specifier: ^7.1.0
         version: 7.1.0
@@ -1120,6 +1206,12 @@ importers:
       '@cup/rolling-limits':
         specifier: workspace:*
         version: link:../rolling-limits
+      '@cup/telemetry.cloudflare':
+        specifier: workspace:*
+        version: link:../telemetry.cloudflare
+      '@cup/telemetry.core':
+        specifier: workspace:*
+        version: link:../telemetry.core
       drizzle-orm:
         specifier: ^0.45.4
         version: 0.45.4
@@ -1205,6 +1297,15 @@ importers:
       '@cup/registry':
         specifier: workspace:*
         version: link:../registry
+      '@cup/telemetry.cloudflare':
+        specifier: workspace:*
+        version: link:../telemetry.cloudflare
+      '@cup/telemetry.core':
+        specifier: workspace:*
+        version: link:../telemetry.core
+      '@sentry/core':
+        specifier: catalog:sentry-server
+        version: 11.10.0
       temporal-polyfill:
         specifier: ^1.0.5
         version: 1.0.5
@@ -1257,6 +1358,9 @@ importers:
       '@cup/conversion-contracts':
         specifier: workspace:*
         version: link:../conversion-contracts
+      '@cup/errors':
+        specifier: workspace:*
+        version: link:../errors
       drizzle-orm:
         specifier: ^0.45.4
         version: 0.45.4
@@ -1439,6 +1543,10 @@ importers:
         version: 4.1.11(@types/node@26.6.5)(@vitest/coverage-v8@4.1.11)(vite@8.3.4(@types/node@26.6.5))
 
   libs/mp3-encoding:
+    dependencies:
+      '@cup/errors':
+        specifier: workspace:*
+        version: link:../errors
     devDependencies:
       '@cup/config-oxlint':
         specifier: workspace:*
@@ -1479,6 +1587,9 @@ importers:
 
   libs/narration-document-creation:
     dependencies:
+      '@cup/errors':
+        specifier: workspace:*
+        version: link:../errors
       parse5:
         specifier: ^8.0.1
         version: 8.0.1
@@ -1525,6 +1636,9 @@ importers:
 
   libs/narration-source-analysis:
     dependencies:
+      '@cup/errors':
+        specifier: workspace:*
+        version: link:../errors
       '@cup/prepare-source-material':
         specifier: workspace:*
         version: link:../prepare-source-material
@@ -1684,6 +1798,9 @@ importers:
 
   libs/prepare-source-material:
     dependencies:
+      '@cup/errors':
+        specifier: workspace:*
+        version: link:../errors
       parse5:
         specifier: ^8.0.1
         version: 8.0.1
@@ -1694,6 +1811,9 @@ importers:
       '@cup/prepare-declaration-build':
         specifier: workspace:*
         version: link:../../tooling/prepare-declaration-build
+      '@cup/sentry-stub':
+        specifier: workspace:*
+        version: link:../../qa/sentry-stub
       '@cup/toolchain-key':
         specifier: workspace:*
         version: link:../../tooling/toolchain-key
@@ -1748,9 +1868,18 @@ importers:
       '@cup/conversion-grants':
         specifier: workspace:*
         version: link:../conversion-grants
+      '@cup/errors':
+        specifier: workspace:*
+        version: link:../errors
       '@cup/rolling-limits':
         specifier: workspace:*
         version: link:../rolling-limits
+      '@cup/telemetry.cloudflare':
+        specifier: workspace:*
+        version: link:../telemetry.cloudflare
+      '@cup/telemetry.core':
+        specifier: workspace:*
+        version: link:../telemetry.core
       drizzle-orm:
         specifier: ^0.45.4
         version: 0.45.4
@@ -1773,12 +1902,18 @@ importers:
       '@cup/resend-stub':
         specifier: workspace:*
         version: link:../../qa/resend-stub
+      '@cup/sentry-stub':
+        specifier: workspace:*
+        version: link:../../qa/sentry-stub
       '@patricktree-stack/config-typescript':
         specifier: workspace:*
         version: link:../../.patricktree-stack/tooling/config-typescript
       '@patricktree-stack/config-vitest':
         specifier: workspace:*
         version: link:../../.patricktree-stack/tooling/config-vitest
+      '@sentry/cloudflare':
+        specifier: catalog:sentry-server
+        version: 11.10.0(vite@8.3.4(@types/node@26.6.5))(wrangler@4.144.0(@types/node@26.6.5))
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.5
@@ -1809,6 +1944,9 @@ importers:
 
   libs/rolling-limits:
     dependencies:
+      '@cup/errors':
+        specifier: workspace:*
+        version: link:../errors
       drizzle-orm:
         specifier: ^0.45.4
         version: 0.45.4
@@ -1844,7 +1982,154 @@ importers:
         specifier: 'catalog:'
         version: 4.144.0(@types/node@26.6.5)
 
+  libs/telemetry.browser:
+    dependencies:
+      '@cup/telemetry.core':
+        specifier: workspace:*
+        version: link:../telemetry.core
+      '@sentry/capacitor':
+        specifier: catalog:sentry-client
+        version: 4.5.0(patch_hash=e79bcf58a13c35f6cb9a50f5747b9d08777a22238b10cffcb7ca12b813b21d23)(@capacitor/core@8.5.3)(@sentry/react@10.76.2(react@19.3.0))
+      '@sentry/react':
+        specifier: catalog:sentry-client
+        version: 10.76.2(react@19.3.0)
+    devDependencies:
+      '@capacitor/core':
+        specifier: ^8.5.3
+        version: 8.5.3
+      '@cup/config-oxlint':
+        specifier: workspace:*
+        version: link:../../tooling/config-oxlint
+      '@cup/prepare-declaration-build':
+        specifier: workspace:*
+        version: link:../../tooling/prepare-declaration-build
+      '@patricktree-stack/config-typescript':
+        specifier: workspace:*
+        version: link:../../.patricktree-stack/tooling/config-typescript
+      '@patricktree-stack/config-vitest':
+        specifier: workspace:*
+        version: link:../../.patricktree-stack/tooling/config-vitest
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+      '@typescript/native':
+        specifier: 'catalog:'
+        version: typescript@7.0.2
+      oxlint:
+        specifier: 'catalog:'
+        version: 1.87.0(oxlint-tsgolint@7.0.2004)
+      oxlint-tsgolint:
+        specifier: 'catalog:'
+        version: 7.0.2004
+      react:
+        specifier: catalog:web-app
+        version: 19.3.0
+      typescript:
+        specifier: 'catalog:'
+        version: '@typescript/typescript6@6.0.2'
+      vite:
+        specifier: 'catalog:'
+        version: 8.3.4(@types/node@26.6.5)
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.11(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5))
+
+  libs/telemetry.cloudflare:
+    dependencies:
+      '@cup/conversion-contracts':
+        specifier: workspace:*
+        version: link:../conversion-contracts
+      '@cup/errors':
+        specifier: workspace:*
+        version: link:../errors
+      '@cup/telemetry.core':
+        specifier: workspace:*
+        version: link:../telemetry.core
+      '@sentry/cloudflare':
+        specifier: catalog:sentry-server
+        version: 11.10.0(vite@8.3.4(@types/node@26.6.5))
+      '@sentry/core':
+        specifier: catalog:sentry-server
+        version: 11.10.0
+    devDependencies:
+      '@cup/config-oxlint':
+        specifier: workspace:*
+        version: link:../../tooling/config-oxlint
+      '@cup/prepare-declaration-build':
+        specifier: workspace:*
+        version: link:../../tooling/prepare-declaration-build
+      '@cup/sentry-stub':
+        specifier: workspace:*
+        version: link:../../qa/sentry-stub
+      '@patricktree-stack/config-typescript':
+        specifier: workspace:*
+        version: link:../../.patricktree-stack/tooling/config-typescript
+      '@patricktree-stack/config-vitest':
+        specifier: workspace:*
+        version: link:../../.patricktree-stack/tooling/config-vitest
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+      '@typescript/native':
+        specifier: 'catalog:'
+        version: typescript@7.0.2
+      oxlint:
+        specifier: 'catalog:'
+        version: 1.87.0(oxlint-tsgolint@7.0.2004)
+      oxlint-tsgolint:
+        specifier: 'catalog:'
+        version: 7.0.2004
+      typescript:
+        specifier: 'catalog:'
+        version: '@typescript/typescript6@6.0.2'
+      vite:
+        specifier: 'catalog:'
+        version: 8.3.4(@types/node@26.6.5)
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.11(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5))
+
+  libs/telemetry.core:
+    devDependencies:
+      '@cup/config-oxlint':
+        specifier: workspace:*
+        version: link:../../tooling/config-oxlint
+      '@cup/prepare-declaration-build':
+        specifier: workspace:*
+        version: link:../../tooling/prepare-declaration-build
+      '@patricktree-stack/config-typescript':
+        specifier: workspace:*
+        version: link:../../.patricktree-stack/tooling/config-typescript
+      '@patricktree-stack/config-vitest':
+        specifier: workspace:*
+        version: link:../../.patricktree-stack/tooling/config-vitest
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+      '@typescript/native':
+        specifier: 'catalog:'
+        version: typescript@7.0.2
+      oxlint:
+        specifier: 'catalog:'
+        version: 1.87.0(oxlint-tsgolint@7.0.2004)
+      oxlint-tsgolint:
+        specifier: 'catalog:'
+        version: 7.0.2004
+      typescript:
+        specifier: 'catalog:'
+        version: '@typescript/typescript6@6.0.2'
+      vite:
+        specifier: 'catalog:'
+        version: 8.3.4(@types/node@26.6.5)
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.11(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5))
+
   libs/time-stretching:
+    dependencies:
+      '@cup/errors':
+        specifier: workspace:*
+        version: link:../errors
     devDependencies:
       '@cup/config-oxlint':
         specifier: workspace:*
@@ -1904,6 +2189,9 @@ importers:
       '@cup/loading-state-recorder':
         specifier: workspace:*
         version: link:../loading-state-recorder
+      '@cup/sentry-stub':
+        specifier: workspace:*
+        version: link:../sentry-stub
       '@cup/toolchain-key':
         specifier: workspace:*
         version: link:../../tooling/toolchain-key
@@ -2019,6 +2307,9 @@ importers:
 
   qa/mobile-e2e:
     dependencies:
+      '@cup/sentry-stub':
+        specifier: workspace:*
+        version: link:../sentry-stub
       '@cup/test-worker':
         specifier: workspace:*
         version: link:../test-worker
@@ -2087,6 +2378,45 @@ importers:
       '@patricktree-stack/config-vitest':
         specifier: workspace:*
         version: link:../../.patricktree-stack/tooling/config-vitest
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+      '@typescript/native':
+        specifier: 'catalog:'
+        version: typescript@7.0.2
+      oxlint:
+        specifier: 'catalog:'
+        version: 1.87.0(oxlint-tsgolint@7.0.2004)
+      oxlint-tsgolint:
+        specifier: 'catalog:'
+        version: 7.0.2004
+      typescript:
+        specifier: 'catalog:'
+        version: '@typescript/typescript6@6.0.2'
+      vite:
+        specifier: 'catalog:'
+        version: 8.3.4(@types/node@26.6.5)
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.11(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5))
+
+  qa/sentry-stub:
+    devDependencies:
+      '@cup/config-oxlint':
+        specifier: workspace:*
+        version: link:../../tooling/config-oxlint
+      '@cup/prepare-declaration-build':
+        specifier: workspace:*
+        version: link:../../tooling/prepare-declaration-build
+      '@patricktree-stack/config-typescript':
+        specifier: workspace:*
+        version: link:../../.patricktree-stack/tooling/config-typescript
+      '@patricktree-stack/config-vitest':
+        specifier: workspace:*
+        version: link:../../.patricktree-stack/tooling/config-vitest
+      '@playwright/test':
+        specifier: 'catalog:'
+        version: 1.65.0
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.5
@@ -2398,6 +2728,52 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.1.11(@types/node@26.6.5)(@vitest/coverage-v8@4.1.11)(vite@8.3.4(@types/node@26.6.5))
+
+  tooling/source-maps:
+    dependencies:
+      '@commander-js/extra-typings':
+        specifier: ^15.0.0
+        version: 15.0.0(commander@15.0.0)
+      '@sentry/cli':
+        specifier: catalog:sentry-client
+        version: 3.8.2
+      commander:
+        specifier: ^15.0.0
+        version: 15.0.0
+    devDependencies:
+      '@cup/config-oxlint':
+        specifier: workspace:*
+        version: link:../config-oxlint
+      '@cup/prepare-declaration-build':
+        specifier: workspace:*
+        version: link:../prepare-declaration-build
+      '@patricktree-stack/config-typescript':
+        specifier: workspace:*
+        version: link:../../.patricktree-stack/tooling/config-typescript
+      '@patricktree-stack/config-vitest':
+        specifier: workspace:*
+        version: link:../../.patricktree-stack/tooling/config-vitest
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+      '@typescript/native':
+        specifier: 'catalog:'
+        version: typescript@7.0.2
+      oxlint:
+        specifier: 'catalog:'
+        version: 1.87.0(oxlint-tsgolint@7.0.2004)
+      oxlint-tsgolint:
+        specifier: 'catalog:'
+        version: 7.0.2004
+      typescript:
+        specifier: 'catalog:'
+        version: '@typescript/typescript6@6.0.2'
+      vite:
+        specifier: 'catalog:'
+        version: 8.3.4(@types/node@26.6.5)
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.11(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5))
 
   tooling/toolchain-key:
     dependencies:
@@ -3991,6 +4367,10 @@ packages:
   '@open-draft/until@3.0.1':
     resolution: {integrity: sha512-s7/9ELP4aP9YZtW7RJaa0Xf3RISaRH9+EFN18FtykJYRHGNrl8f9ymvoNXzjhrjmftFvkQudtuDU9RYhk0xs3A==}
 
+  '@opentelemetry/api@1.10.0':
+    resolution: {integrity: sha512-lMkyes8iHrG+mk6WH7X70MdCLI2RS0FwNBY1PyQ8UemaijE2m5mv5A0Niy3HtbYTFrgkUEQjFMXmSAk2hQDuPQ==}
+    engines: {node: '>=8.0.0'}
+
   '@oxc-parser/binding-android-arm-eabi@0.131.0':
     resolution: {integrity: sha512-t2xicr9pfzkSRYx5aPqZqlLaayIwJTqgQ81Jor31Xep2nGyL2Aq3d0K5wOfeR7VevaSdxaS9dzSQP9xDwn8fDg==}
     engines: {node: ^20.19.0 || >=22.12.0}
@@ -4878,6 +5258,144 @@ packages:
 
   '@rolldown/pluginutils@1.0.1':
     resolution: {integrity: sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==}
+
+  '@sentry/browser-utils@10.76.2':
+    resolution: {integrity: sha512-onALxAdvLWyK+0erbrv7LVzh1zX9sErOM21eCz1dpNUIQadrR9tmd5J1kL9a2Wagq1RyIWRmy/YtpwOK4myZaQ==}
+    engines: {node: '>=18'}
+
+  '@sentry/browser@10.76.2':
+    resolution: {integrity: sha512-dFyuWYjDs0/LetQZqK5IHj0/wIC8sBYADyMjU5Fo0nt2vzT11CPPG2AKeITIQcoRRs9IZ8ahtDMqWMvBPfDs1w==}
+    engines: {node: '>=18'}
+
+  '@sentry/capacitor@4.5.0':
+    resolution: {integrity: sha512-f/rH3ImHnYfNC6Y76C3pzKTWtkCLpVw+oEAGWzADfRJd3eSmnFnDP0NCfyMzyIi+hfI+BpFnaHgC3KdUxD0Mcw==}
+    peerDependencies:
+      '@capacitor/core': '>=6.0.0'
+      '@sentry/angular': 10.76.2
+      '@sentry/react': 10.76.2
+      '@sentry/vue': 10.76.2
+    peerDependenciesMeta:
+      '@sentry/angular':
+        optional: true
+      '@sentry/react':
+        optional: true
+      '@sentry/vue':
+        optional: true
+
+  '@sentry/cli-darwin@3.8.2':
+    resolution: {integrity: sha512-S9xIhtpPk5uU0J0dMLz5VCtlBn+OHjG7En8HkZNGYsleNACQOwcG5wcfAnGuq+7x643KrEOubtd1VPtGfrBHsQ==}
+    engines: {node: '>=18'}
+    os: [darwin]
+
+  '@sentry/cli-linux-arm64@3.8.2':
+    resolution: {integrity: sha512-sWKkGTSOqRmGW8d2Q6ir1gBEkvfXWNbDxcf/dF0MJt8q9p594k+04GOm5mZ/VAePKGzs9W8fXE1xfmZ/UNCLcQ==}
+    engines: {node: '>=18'}
+    cpu: [arm64]
+    os: [linux, freebsd, android]
+
+  '@sentry/cli-linux-arm@3.8.2':
+    resolution: {integrity: sha512-maj9TXsnyWqNKs+UTHc+/gpsvXPVlCbheH+QHaBx8FD9u0B56REVDfxKUSCzeC9eTGDf0eKAFxbxWiMXKG4B5Q==}
+    engines: {node: '>=18'}
+    cpu: [arm]
+    os: [linux, freebsd, android]
+
+  '@sentry/cli-linux-i686@3.8.2':
+    resolution: {integrity: sha512-6aOKjTWGl5XEYCOOha4GO3aq5C7ISmYB8QECec8mFLWx0L3QoXdKtaNQoLUYslsSN0jEmFeOgA0U27Tp5OEBww==}
+    engines: {node: '>=18'}
+    cpu: [x86, ia32]
+    os: [linux, freebsd, android]
+
+  '@sentry/cli-linux-x64@3.8.2':
+    resolution: {integrity: sha512-icx2NoqaxuE4H5khIoRCB/MDX76/kKbDZFvJe/UYloGp9aucxi6c7mk8oDxFvskMFqLfbprQ6RzKH7iILmODQg==}
+    engines: {node: '>=18'}
+    cpu: [x64]
+    os: [linux, freebsd, android]
+
+  '@sentry/cli-win32-arm64@3.8.2':
+    resolution: {integrity: sha512-lSzj1ywih1madjyMrTHSjJKPhvErozSsSrG7QF6yIt7dMLYX4Qh9X3puVReh1YB5mOPCX8MJPtur67YJmR1S+w==}
+    engines: {node: '>=18'}
+    cpu: [arm64]
+    os: [win32]
+
+  '@sentry/cli-win32-i686@3.8.2':
+    resolution: {integrity: sha512-k4dPGNNliNY46G/4hSeJygHlMoyMoL292IO+YP3MasBqyqPEy9hz6Py3FjUVW/Ckso52eoAVtGgb6DntFBjIWA==}
+    engines: {node: '>=18'}
+    cpu: [x86, ia32]
+    os: [win32]
+
+  '@sentry/cli-win32-x64@3.8.2':
+    resolution: {integrity: sha512-IBX5W2M3Zckpg3zOXfnNoayWTKhVlZN/b7ifO7dRArkOsNRzVa2lNB5M7L28O0/ZYu/8V+SnzCoHVGN9bxRdwg==}
+    engines: {node: '>=18'}
+    cpu: [x64]
+    os: [win32]
+
+  '@sentry/cli@3.8.2':
+    resolution: {integrity: sha512-JbB/UTBPRQREkI6CaxD8Cs0ppNc3YT8CROgRV7WeaqPn7mZOAgTYqtcxiW/OF7OquOIHUd0u6gu2vL+g5ITdHQ==}
+    engines: {node: '>= 18'}
+    hasBin: true
+
+  '@sentry/cloudflare@11.10.0':
+    resolution: {integrity: sha512-S9x1ZFHnM1BLh2FVzCKO+2QLG0rCtLsZjYn3ZhHfyT6RN3jwh73So1RT/gE1dsAZj+xq8lr2ptTPmv/ATsYc7w==}
+    engines: {node: '>=20.19.0 <22.0.0 || >=22.12.0 <23.0.0 || >=23.2.0'}
+    peerDependencies:
+      '@cloudflare/workers-types': ^4.x || ^5.x
+      vite: ^6.1.0 || ^7.0.0 || ^8.0.0
+      wrangler: ^4.x
+    peerDependenciesMeta:
+      '@cloudflare/workers-types':
+        optional: true
+      vite:
+        optional: true
+      wrangler:
+        optional: true
+
+  '@sentry/conventions@0.16.0':
+    resolution: {integrity: sha512-fO9PLmHdVURcSPUpWCItWAtgKiMwGdJHbovoSEyLplX5sxs2ugvI4CBPTrkkgqhObnZOD0CnWBKDzSVQYBKEyQ==}
+    engines: {node: '>=14'}
+
+  '@sentry/conventions@0.29.0':
+    resolution: {integrity: sha512-kYq9/HJ/l6MYP/srIc20dy1W4mWyJfCF0OWFF+RhBGZwyr/wCmtabRFKyw7kqM+DTwZXQOjSTSZUcJhDowcInQ==}
+    engines: {node: '>=14'}
+
+  '@sentry/core@10.76.2':
+    resolution: {integrity: sha512-vndrQalRiwYatTkjlLWvyf69KocXIb9TKJ4A9oiyWguL8PJYtqIRTlRe4OpkpjLrxS18fvRdV0jEm29c/9p3hQ==}
+    engines: {node: '>=18'}
+
+  '@sentry/core@11.10.0':
+    resolution: {integrity: sha512-l/OtTo1v+TQgZtHG2Q5N4IX+gFdAE1tZ27K/P21UCzJglWk54TPEm+d9T2lulPqMK06kZcLwDgRAhE2GO4YS5w==}
+    engines: {node: '>=20.19.0 <22.0.0 || >=22.12.0 <23.0.0 || >=23.2.0'}
+
+  '@sentry/feedback@10.76.2':
+    resolution: {integrity: sha512-w8T7+LfAXjPPg/CpIcXHzPfeMHXR+61WhfYCwKNFK4mUQknYK4m0Kbt28dte9fSsijo4hKvHZ+tJc591SaD4ig==}
+    engines: {node: '>=18'}
+
+  '@sentry/opentelemetry@11.10.0':
+    resolution: {integrity: sha512-YMV4ZgaRlW7QPCcMScVpSBvYOdvDlY+alqRT3KOTcmPKFZtf8O2hXHWFhl/M33kKDEfqOk2XtEVeHs3mZFOCaw==}
+    engines: {node: '>=20.19.0 <22.0.0 || >=22.12.0 <23.0.0 || >=23.2.0'}
+    peerDependencies:
+      '@opentelemetry/api': ^1.9.0
+
+  '@sentry/react@10.76.2':
+    resolution: {integrity: sha512-ylW0pGg6LA8iPEPjoLXi/6IxzPSTo92pqwVMPAGRhS04he904jsIV4oMt97irDfyGEUUdZFdm/tpWO40Xuu4RQ==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      react: ^16.14.0 || 17.x || 18.x || 19.x
+
+  '@sentry/replay-canvas@10.76.2':
+    resolution: {integrity: sha512-mx7/pXIS7CpuduN5TFI36pBoe62CeTQ4IMQJ+MEJXAhxMmYFZQunc24dNltcs6hjzrhtZqGBYSAV1J+iCKFwdg==}
+    engines: {node: '>=18'}
+
+  '@sentry/replay@10.76.2':
+    resolution: {integrity: sha512-xMNFEZ7KuEvfj9j1cKmcH+p6u5t3NZs1vcrj+sBW5+S9C327ASOAvcR23ZoM0UhTXr9j7j+Dozs/NYHW2EYjpw==}
+    engines: {node: '>=18'}
+
+  '@sentry/server-utils@11.10.0':
+    resolution: {integrity: sha512-m/MVCvPzQJJZZCTFlVPCrTuoncT7SR80+QKg1K7ul25AsL0byABr5KsHCbXVpOYXLVz04Omk+pOOR5Cv2IAlrA==}
+    engines: {node: '>=20.19.0 <22.0.0 || >=22.12.0 <23.0.0 || >=23.2.0'}
+
+  '@sentry/types@10.76.2':
+    resolution: {integrity: sha512-UliOKWPE5t+T3E1cAbCzQyGoThfx930CoILEnkQfeyqvIk39ykYv+l9XWh47OxG5W5R/2cDKhIPX3o0qmnk1Yg==}
+    engines: {node: '>=18'}
 
   '@sidvind/better-ajv-errors@5.0.0':
     resolution: {integrity: sha512-FeI/V2KGtOaDX+r0akidCGYy79lVR4YnAqk1GFgZFuHADErCAEmtZL4+IdCAcDXHqfZsII3fs9DrfC1pIR+19w==}
@@ -7872,6 +8390,10 @@ packages:
     resolution: {integrity: sha512-cdGef/drWFoydD1JsMzuFf8100nZl+GT+yacc2bEced5f9Rjk4z+WtFUTBu9PhOi9j/jfmBPu0mMEY4wIdAF8A==}
     engines: {node: '>= 0.6.0'}
 
+  progress@2.0.3:
+    resolution: {integrity: sha512-7PiHtLll5LdnKIMw100I+8xJXR5gW2QwWYkT6iJva0bXitZKa/XMrSbdmg3r2Xnaidz9Qumd0VPaMrZlF9V9sA==}
+    engines: {node: '>=0.4.0'}
+
   prompts@2.4.2:
     resolution: {integrity: sha512-NxNv/kLguCA7p3jE8oL2aEBsrJWgAakBpgmgK6lpPWV+WuOmY6r2/zbAVnP+T8bQlA0nzHXSJSJW0Hq7ylaD2Q==}
     engines: {node: '>= 6'}
@@ -7888,6 +8410,9 @@ packages:
     peerDependenciesMeta:
       kerberos:
         optional: true
+
+  proxy-from-env@1.1.0:
+    resolution: {integrity: sha512-D+zkORCbA9f1tdWRK0RaCR3GPv50cMxcrz4X8k5LTSUD1Dkw47mKJEZQNunItRTkWwgtaUSo1RVFRIG9ZXiFYg==}
 
   proxy-from-env@2.1.0:
     resolution: {integrity: sha512-cJ+oHTW1VAEa8cJslgmUZrc+sjRKgAKl3Zyse6+PV38hZe/V6Z14TbCuXcan9F9ghlz4QrFr2c92TNF82UkYHA==}
@@ -8468,6 +8993,10 @@ packages:
 
   undici-types@8.9.0:
     resolution: {integrity: sha512-KTDyRTYX8sWmKXAikPHHSyc63CRPETMctyjKFupcC6OBLXT3xsN0e9aF7m+mIXutFWpUXuedtowG7iLOzp0kQg==}
+
+  undici@6.29.1:
+    resolution: {integrity: sha512-EvRlUt/QqAEvXdQeRMYUfwOQsfzpDztykrG2owGEE/rBOBoYv9uF39ZzsNDh4lTFHhTr2XOZjKkYgueD12ZmGA==}
+    engines: {node: '>=18.17'}
 
   undici@7.29.1:
     resolution: {integrity: sha512-RYONW2MeafgYlkVOKYKkA/Ag7BmXqgIWCa8t1m0JcxrQg9pI9lEqRhAOruOBCbAohOa/gkCF+iPi9hrgvTzu6Q==}
@@ -10138,6 +10667,8 @@ snapshots:
 
   '@open-draft/until@3.0.1': {}
 
+  '@opentelemetry/api@1.10.0': {}
+
   '@oxc-parser/binding-android-arm-eabi@0.131.0':
     optional: true
 
@@ -10591,6 +11122,148 @@ snapshots:
     optional: true
 
   '@rolldown/pluginutils@1.0.1': {}
+
+  '@sentry/browser-utils@10.76.2':
+    dependencies:
+      '@sentry/conventions': 0.16.0
+      '@sentry/core': 10.76.2
+
+  '@sentry/browser@10.76.2':
+    dependencies:
+      '@sentry/browser-utils': 10.76.2
+      '@sentry/conventions': 0.16.0
+      '@sentry/core': 10.76.2
+      '@sentry/feedback': 10.76.2
+      '@sentry/replay': 10.76.2
+      '@sentry/replay-canvas': 10.76.2
+
+  '@sentry/capacitor@4.5.0(patch_hash=e79bcf58a13c35f6cb9a50f5747b9d08777a22238b10cffcb7ca12b813b21d23)(@capacitor/core@8.5.3)':
+    dependencies:
+      '@capacitor/core': 8.5.3
+      '@sentry/browser': 10.76.2
+      '@sentry/core': 10.76.2
+      '@sentry/types': 10.76.2
+
+  '@sentry/capacitor@4.5.0(patch_hash=e79bcf58a13c35f6cb9a50f5747b9d08777a22238b10cffcb7ca12b813b21d23)(@capacitor/core@8.5.3)(@sentry/react@10.76.2(react@19.3.0))':
+    dependencies:
+      '@capacitor/core': 8.5.3
+      '@sentry/browser': 10.76.2
+      '@sentry/core': 10.76.2
+      '@sentry/types': 10.76.2
+    optionalDependencies:
+      '@sentry/react': 10.76.2(react@19.3.0)
+
+  '@sentry/cli-darwin@3.8.2':
+    optional: true
+
+  '@sentry/cli-linux-arm64@3.8.2':
+    optional: true
+
+  '@sentry/cli-linux-arm@3.8.2':
+    optional: true
+
+  '@sentry/cli-linux-i686@3.8.2':
+    optional: true
+
+  '@sentry/cli-linux-x64@3.8.2':
+    optional: true
+
+  '@sentry/cli-win32-arm64@3.8.2':
+    optional: true
+
+  '@sentry/cli-win32-i686@3.8.2':
+    optional: true
+
+  '@sentry/cli-win32-x64@3.8.2':
+    optional: true
+
+  '@sentry/cli@3.8.2':
+    dependencies:
+      progress: 2.0.3
+      proxy-from-env: 1.1.0
+      undici: 6.29.1
+      which: 2.0.2
+    optionalDependencies:
+      '@sentry/cli-darwin': 3.8.2
+      '@sentry/cli-linux-arm': 3.8.2
+      '@sentry/cli-linux-arm64': 3.8.2
+      '@sentry/cli-linux-i686': 3.8.2
+      '@sentry/cli-linux-x64': 3.8.2
+      '@sentry/cli-win32-arm64': 3.8.2
+      '@sentry/cli-win32-i686': 3.8.2
+      '@sentry/cli-win32-x64': 3.8.2
+
+  '@sentry/cloudflare@11.10.0(vite@8.3.4(@types/node@26.6.5))':
+    dependencies:
+      '@opentelemetry/api': 1.10.0
+      '@sentry/conventions': 0.29.0
+      '@sentry/core': 11.10.0
+      '@sentry/opentelemetry': 11.10.0(@opentelemetry/api@1.10.0)
+      '@sentry/server-utils': 11.10.0
+      magic-string: 0.30.21
+    optionalDependencies:
+      vite: 8.3.4(@types/node@26.6.5)
+
+  '@sentry/cloudflare@11.10.0(vite@8.3.4(@types/node@26.6.5))(wrangler@4.144.0(@types/node@26.6.5))':
+    dependencies:
+      '@opentelemetry/api': 1.10.0
+      '@sentry/conventions': 0.29.0
+      '@sentry/core': 11.10.0
+      '@sentry/opentelemetry': 11.10.0(@opentelemetry/api@1.10.0)
+      '@sentry/server-utils': 11.10.0
+      magic-string: 0.30.21
+    optionalDependencies:
+      vite: 8.3.4(@types/node@26.6.5)
+      wrangler: 4.144.0(@types/node@26.6.5)
+
+  '@sentry/conventions@0.16.0': {}
+
+  '@sentry/conventions@0.29.0': {}
+
+  '@sentry/core@10.76.2':
+    dependencies:
+      '@sentry/conventions': 0.16.0
+
+  '@sentry/core@11.10.0':
+    dependencies:
+      '@sentry/conventions': 0.29.0
+
+  '@sentry/feedback@10.76.2':
+    dependencies:
+      '@sentry/core': 10.76.2
+
+  '@sentry/opentelemetry@11.10.0(@opentelemetry/api@1.10.0)':
+    dependencies:
+      '@opentelemetry/api': 1.10.0
+      '@sentry/conventions': 0.29.0
+      '@sentry/core': 11.10.0
+
+  '@sentry/react@10.76.2(react@19.3.0)':
+    dependencies:
+      '@sentry/browser': 10.76.2
+      '@sentry/conventions': 0.16.0
+      '@sentry/core': 10.76.2
+      react: 19.3.0
+
+  '@sentry/replay-canvas@10.76.2':
+    dependencies:
+      '@sentry/core': 10.76.2
+      '@sentry/replay': 10.76.2
+
+  '@sentry/replay@10.76.2':
+    dependencies:
+      '@sentry/browser-utils': 10.76.2
+      '@sentry/core': 10.76.2
+
+  '@sentry/server-utils@11.10.0':
+    dependencies:
+      '@opentelemetry/api': 1.10.0
+      '@sentry/conventions': 0.29.0
+      '@sentry/core': 11.10.0
+
+  '@sentry/types@10.76.2':
+    dependencies:
+      '@sentry/core': 10.76.2
 
   '@sidvind/better-ajv-errors@5.0.0(ajv@8.20.0)':
     dependencies:
@@ -13700,6 +14373,8 @@ snapshots:
 
   process@0.11.10: {}
 
+  progress@2.0.3: {}
+
   prompts@2.4.2:
     dependencies:
       kleur: 3.0.3
@@ -13711,6 +14386,8 @@ snapshots:
       ipaddr.js: 1.9.1
 
   proxy-agent-negotiate@1.1.0: {}
+
+  proxy-from-env@1.1.0: {}
 
   proxy-from-env@2.1.0: {}
 
@@ -14501,6 +15178,8 @@ snapshots:
   undici-types@6.21.0: {}
 
   undici-types@8.9.0: {}
+
+  undici@6.29.1: {}
 
   undici@7.29.1: {}
 

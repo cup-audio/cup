@@ -247,7 +247,7 @@ const deleteConversionRoute = createRoute({
 
 type OperatorApiEnvironment<Bindings extends object> = {
   Bindings: Bindings;
-  Variables: { requestId: string };
+  Variables: { traceId: string };
 };
 type OperatorApiRouteHandler<Route, Bindings extends object> = Route extends Parameters<
   typeof createRoute
@@ -288,7 +288,7 @@ export function createOperatorApi<Bindings extends object>(
             error: {
               code: "account-unavailable",
               message: "Account unavailable.",
-              requestId: context.get("requestId"),
+              traceId: context.get("traceId"),
             },
           },
           404,
@@ -343,7 +343,7 @@ export function createOperatorOpenApiDocument(): OpenApiDocument {
 function defaultHook(
   result: { success: boolean; error?: { issues: Array<{ message: string }> } },
   context: {
-    get(name: "requestId"): string;
+    get(name: "traceId"): string;
     json(value: unknown, status: 400): Response;
   },
 ) {
@@ -354,7 +354,7 @@ function defaultHook(
           error: {
             code: "invalid-input",
             message: result.error?.issues[0]?.message ?? "Request validation failed.",
-            requestId: context.get("requestId"),
+            traceId: context.get("traceId"),
           },
         },
         400,

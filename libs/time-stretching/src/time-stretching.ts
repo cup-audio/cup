@@ -1,3 +1,5 @@
+import { CupError } from "@cup/errors";
+
 const PCM_SAMPLE_BYTE_LENGTH = 2;
 // Must match the capacity compiled into the narrow Sonic bridge.
 const CHUNK_SAMPLE_COUNT = 4_608;
@@ -28,17 +30,17 @@ type StretcherExports = {
 /** Time-stretches mono signed 16-bit little-endian PCM, keeping its pitch. */
 export async function stretchPcm(pcm: Uint8Array, options: StretchOptions): Promise<Uint8Array> {
   if (!Number.isInteger(options.sampleRate) || options.sampleRate <= 0) {
-    throw new Error(`PCM sample rate must be a positive integer: ${options.sampleRate}`);
+    throw new CupError(`PCM sample rate must be a positive integer: ${options.sampleRate}`);
   }
 
   if (!Number.isFinite(options.speedFactor) || options.speedFactor <= 0) {
-    throw new Error(
+    throw new CupError(
       `Time-stretch speed factor must be a finite number greater than zero: ${options.speedFactor}`,
     );
   }
 
   if (pcm.byteLength === 0 || pcm.byteLength % PCM_SAMPLE_BYTE_LENGTH !== 0) {
-    throw new Error(
+    throw new CupError(
       `PCM audio byte length must contain complete signed 16-bit samples: ${pcm.byteLength}`,
     );
   }
@@ -50,7 +52,7 @@ export async function stretchPcm(pcm: Uint8Array, options: StretchOptions): Prom
   const stretcher = wasm.stretcher_create(options.sampleRate, options.speedFactor);
 
   if (stretcher === 0) {
-    throw new Error("Sonic time stretcher initialization failed");
+    throw new CupError("Sonic time stretcher initialization failed");
   }
 
   try {
@@ -71,7 +73,7 @@ async function instantiateStretcher(): Promise<StretcherExports> {
   const { memory } = exports;
 
   if (!(memory instanceof WebAssembly.Memory)) {
-    throw new Error("Sonic time stretcher does not export WebAssembly memory");
+    throw new CupError("Sonic time stretcher does not export WebAssembly memory");
   }
 
   const wasm = {
@@ -113,7 +115,7 @@ function stretch(
   const bufferPointer = wasm.stretcher_get_pcm(stretcher);
 
   if (bufferPointer === 0) {
-    throw new Error("Sonic time stretcher did not provide a PCM buffer");
+    throw new CupError("Sonic time stretcher did not provide a PCM buffer");
   }
 
   // Sonic's flush squeezes the pitch periods it still holds back and fades them into silence,
@@ -158,7 +160,7 @@ function stretch(
   const stretchedSegmentByteLength = stretchedSampleCount * PCM_SAMPLE_BYTE_LENGTH;
 
   if (stretchedByteLength < stretchedSegmentByteLength) {
-    throw new Error(
+    throw new CupError(
       `Sonic time stretcher returned ${stretchedByteLength / PCM_SAMPLE_BYTE_LENGTH} samples, fewer than the segment's stretched length of ${stretchedSampleCount}`,
     );
   }
@@ -199,7 +201,7 @@ function readStretchedChunks(
 
     // Do not expose adjacent WASM memory if the bridge ever violates its buffer capacity.
     if (sampleCount < 0 || sampleCount > CHUNK_SAMPLE_COUNT) {
-      throw new Error(`Sonic time stretcher reading failed with status ${sampleCount}`);
+      throw new CupError(`Sonic time stretcher reading failed with status ${sampleCount}`);
     }
 
     const chunkByteLength = sampleCount * PCM_SAMPLE_BYTE_LENGTH;
@@ -211,13 +213,13 @@ function readStretchedChunks(
 
 function assertSuccessStatus(status: number, operation: string): void {
   if (status !== 0) {
-    throw new Error(`Sonic time stretcher ${operation} failed with status ${status}`);
+    throw new CupError(`Sonic time stretcher ${operation} failed with status ${status}`);
   }
 }
 
 function assertWithinRange(value: number, range: { min: number; max: number }, name: string): void {
   if (value < range.min || value > range.max) {
-    throw new Error(
+    throw new CupError(
       `${name} is outside Sonic's supported range of ${range.min} to ${range.max}: ${value}`,
     );
   }
@@ -231,13 +233,13 @@ function callNumberExport(
   const exportedFunction = exports[name];
 
   if (typeof exportedFunction !== "function") {
-    throw new Error(`Sonic time stretcher does not export function ${name}`);
+    throw new CupError(`Sonic time stretcher does not export function ${name}`);
   }
 
   const result: unknown = exportedFunction(...parameters);
 
   if (typeof result !== "number") {
-    throw new Error(`Sonic time stretcher function ${name} did not return a number`);
+    throw new CupError(`Sonic time stretcher function ${name} did not return a number`);
   }
 
   return result;
@@ -247,7 +249,7 @@ function callVoidExport(exports: WebAssembly.Exports, name: string, ...parameter
   const exportedFunction = exports[name];
 
   if (typeof exportedFunction !== "function") {
-    throw new Error(`Sonic time stretcher does not export function ${name}`);
+    throw new CupError(`Sonic time stretcher does not export function ${name}`);
   }
 
   exportedFunction(...parameters);

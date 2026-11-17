@@ -1,5 +1,8 @@
+import { captureException, getActiveSpan, getCurrentScope } from "@sentry/core";
 import { Hono, type Context, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
+import { cors } from "hono/cors";
+import { HTTPException } from "hono/http-exception";
 import { NONCE, secureHeaders } from "hono/secure-headers";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { Temporal } from "temporal-polyfill";
@@ -14,7 +17,7 @@ import {
   toGrantConversionSnapshot,
   type ConversionGrantDurableObject,
 } from "@cup/conversion-grants";
-import { assertUnreachable, findRootCauseDescription, findRootCauseMessage } from "@cup/errors";
+import { CupError, assertUnreachable } from "@cup/errors";
 import {
   createListenerApi,
   type Audiobook,
@@ -31,6 +34,12 @@ import {
   type OperatorApiHandlers,
 } from "@cup/operator-api.routes";
 import type { RegistryDurableObject } from "@cup/registry";
+import {
+  handleTelemetryTunnelRequest,
+  logEvent,
+  setConversionScope,
+} from "@cup/telemetry.cloudflare";
+import { TELEMETRY_TUNNEL_PATH } from "@cup/telemetry.core";
 
 import { resolveConversionDispatch } from "#src/adapters/conversion-dispatch.ts";
 import { resolveConversionReader } from "#src/adapters/conversion-reader.ts";
@@ -70,6 +79,7 @@ import { startAudiobookConversion } from "#src/use-cases/start-audiobook-convers
 
 type GrantStub = DurableObjectStub<ConversionGrantDurableObject>;
 type RegistryStub = DurableObjectStub<RegistryDurableObject>;
+
 const accessKeySets = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
 type ApiServerDependencies = {
   validateOperatorAccess(request: Request, env: ApiServerEnvironment): Promise<boolean>;
@@ -85,7 +95,7 @@ const productionDependencies: ApiServerDependencies = {
 
 const validateAccountLifecycleRequest: MiddlewareHandler<{
   Bindings: ApiServerEnvironment;
-  Variables: { requestId: string };
+  Variables: { traceId: string };
 }> = async (context, next) => {
   if (!["POST", "DELETE"].includes(context.req.method)) {
     return next();
@@ -97,7 +107,7 @@ const validateAccountLifecycleRequest: MiddlewareHandler<{
     (origin && ![new URL(context.req.url).origin, "https://localhost"].includes(origin))
   ) {
     return jsonError(
-      context.get("requestId"),
+      context.get("traceId"),
       "origin-blocked",
       "The request origin is not allowed.",
       403,
@@ -110,19 +120,19 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
   async deletionChallenge(context) {
     const auth = await authenticateAccountRequest(context.req.raw, context.env);
     if (auth.result !== "authenticated") {
-      return accountAuthError(auth.result, context.get("requestId"));
+      return accountAuthError(auth.result, context.get("traceId"));
     }
     return context.json(toDeletionChallengeResponse(await auth.account.deletionChallenge()), 200);
   },
   async scheduleDeletion(context) {
     const auth = await authenticateAccountRequest(context.req.raw, context.env);
     if (auth.result !== "authenticated") {
-      return accountAuthError(auth.result, context.get("requestId"));
+      return accountAuthError(auth.result, context.get("traceId"));
     }
     const input = context.req.valid("json");
     if (!auth.identity.email || !auth.identity.authenticatedAtSeconds) {
       return jsonError(
-        context.get("requestId"),
+        context.get("traceId"),
         "fresh-auth-required",
         "Fresh Google sign-in is required.",
         400,
@@ -135,7 +145,7 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
     });
     if (result.result === "conflict") {
       return jsonError(
-        context.get("requestId"),
+        context.get("traceId"),
         "confirmation-unavailable",
         "Confirm deletion with a fresh sign-in using the same Google account.",
         409,
@@ -169,12 +179,12 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
   async restoreAccount(context) {
     const auth = await authenticateAccountRequest(context.req.raw, context.env);
     if (auth.result !== "authenticated") {
-      return accountAuthError(auth.result, context.get("requestId"));
+      return accountAuthError(auth.result, context.get("traceId"));
     }
     const input = context.req.valid("json");
     if (!auth.identity.authenticatedAtSeconds) {
       return jsonError(
-        context.get("requestId"),
+        context.get("traceId"),
         "fresh-auth-required",
         "Fresh Google sign-in is required.",
         400,
@@ -186,13 +196,16 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
     );
     if (result.result === "conflict") {
       return jsonError(
-        context.get("requestId"),
+        context.get("traceId"),
         "confirmation-unavailable",
         "Recovery is unavailable. Use the same Google account before the recovery deadline.",
         409,
       );
     }
     return context.json(toAccountSnapshotResponse(result.account), 200);
+  },
+  health(context) {
+    return context.json({ status: "ok" as const }, 200);
   },
   authConfig(context) {
     const testAccount = localTestAccount(context.env);
@@ -211,10 +224,10 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
   async getHistory(context) {
     const auth = await authenticateAccountRequest(context.req.raw, context.env);
     if (auth.result !== "authenticated") {
-      return accountAuthError(auth.result, context.get("requestId"));
+      return accountAuthError(auth.result, context.get("traceId"));
     }
     if (auth.snapshot.state !== "active") {
-      return accountAuthError("blocked", context.get("requestId"));
+      return accountAuthError("blocked", context.get("traceId"));
     }
     const cursor = context.req.valid("query").cursor;
     const split = cursor?.split(":");
@@ -235,21 +248,21 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
   async getAccount(context) {
     const auth = await authenticateAccountRequest(context.req.raw, context.env);
     if (auth.result !== "authenticated") {
-      return accountAuthError(auth.result, context.get("requestId"));
+      return accountAuthError(auth.result, context.get("traceId"));
     }
     return context.json(toAccountSnapshotResponse(auth.snapshot), 200);
   },
   async startAccountConversion(context) {
-    const validation = validateSessionMutationRequest(context.req.raw, context.get("requestId"));
+    const validation = validateSessionMutationRequest(context.req.raw, context.get("traceId"));
     if (validation.result === "invalid") {
       return validation.response;
     }
     const auth = await authenticateAccountRequest(context.req.raw, context.env);
     if (auth.result !== "authenticated") {
-      return accountAuthError(auth.result, context.get("requestId"));
+      return accountAuthError(auth.result, context.get("traceId"));
     }
     if (auth.snapshot.state !== "active") {
-      return accountAuthError("blocked", context.get("requestId"));
+      return accountAuthError("blocked", context.get("traceId"));
     }
     try {
       const result = await auth.account.startConversion({
@@ -258,7 +271,7 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
       });
       if (result.result === "rate-limited") {
         return jsonError(
-          context.get("requestId"),
+          context.get("traceId"),
           "rate-limited",
           "Too many conversion requests. Please wait before retrying.",
           429,
@@ -267,19 +280,23 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
       }
       if (!result.conversion) {
         return jsonError(
-          context.get("requestId"),
+          context.get("traceId"),
           "credits-unavailable",
           "No conversion credits are available.",
           409,
         );
       }
+      setConversionScope({
+        conversionId: result.conversion.conversionId,
+        owner: { kind: "account", accountId: auth.snapshot.accountId },
+      });
       return context.json(
         { conversionId: result.conversion.conversionId },
         result.result === "created" ? 202 : 200,
       );
     } catch {
       return jsonError(
-        context.get("requestId"),
+        context.get("traceId"),
         "account-start-conflict",
         "The conversion request could not be accepted. Retry the same request.",
         409,
@@ -288,31 +305,36 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
   },
   /** Acts only on the caller's own account, so another account's or a trial conversion is not found. */
   async deleteAccountConversion(context) {
-    const validation = validateSessionMutationRequest(context.req.raw, context.get("requestId"));
+    const validation = validateSessionMutationRequest(context.req.raw, context.get("traceId"));
     if (validation.result === "invalid") {
       return validation.response;
     }
     const auth = await authenticateAccountRequest(context.req.raw, context.env);
     if (auth.result !== "authenticated") {
-      return accountAuthError(auth.result, context.get("requestId"));
+      return accountAuthError(auth.result, context.get("traceId"));
     }
     if (auth.snapshot.state !== "active") {
-      return accountAuthError("blocked", context.get("requestId"));
+      return accountAuthError("blocked", context.get("traceId"));
     }
-    const { result } = await auth.account.deleteConversion(context.req.valid("param").conversionId);
+    const { conversionId } = context.req.valid("param");
+    setConversionScope({
+      conversionId,
+      owner: { kind: "account", accountId: auth.snapshot.accountId },
+    });
+    const { result } = await auth.account.deleteConversion(conversionId);
     if (result === "marked" || result === "already-marked") {
       return context.body(null, 204);
     }
     if (result === "not-found") {
-      return jsonError(context.get("requestId"), "audiobook-not-found", "Track not found.", 404);
+      return jsonError(context.get("traceId"), "audiobook-not-found", "Track not found.", 404);
     }
     if (result === "account-unavailable") {
-      return accountAuthError("blocked", context.get("requestId"));
+      return accountAuthError("blocked", context.get("traceId"));
     }
     return assertUnreachable(result);
   },
   async exchangeSession(context) {
-    const validation = validateSessionMutationRequest(context.req.raw, context.get("requestId"));
+    const validation = validateSessionMutationRequest(context.req.raw, context.get("traceId"));
     if (validation.result === "invalid") {
       return validation.response;
     }
@@ -323,7 +345,7 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
       );
       if (result.result === "invalid-credential") {
         return jsonError(
-          context.get("requestId"),
+          context.get("traceId"),
           "invalid-credential",
           "This trial link is invalid.",
           401,
@@ -331,7 +353,7 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
       }
       if (result.result === "grant-revoked") {
         return jsonError(
-          context.get("requestId"),
+          context.get("traceId"),
           "grant-revoked",
           "This trial link was revoked.",
           403,
@@ -343,14 +365,15 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
     } catch (error) {
       if (error instanceof Error && error.message.includes("not initialized")) {
         return jsonError(
-          context.get("requestId"),
+          context.get("traceId"),
           "invalid-credential",
           "This trial link is invalid.",
           401,
         );
       }
+      captureException(error);
       return jsonError(
-        context.get("requestId"),
+        context.get("traceId"),
         "dependency-unavailable",
         "The trial link service is temporarily unavailable.",
         503,
@@ -367,7 +390,7 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
     );
     if (authenticated.result === "missing") {
       return jsonError(
-        context.get("requestId"),
+        context.get("traceId"),
         "grant-session-required",
         "A grant session is required.",
         401,
@@ -375,7 +398,7 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
     }
     if (authenticated.result === "invalid") {
       return jsonError(
-        context.get("requestId"),
+        context.get("traceId"),
         "grant-session-invalid",
         "This browser no longer has access. Open the original trial link again.",
         401,
@@ -384,7 +407,7 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
     }
     if (authenticated.result === "operational-error") {
       return jsonError(
-        context.get("requestId"),
+        context.get("traceId"),
         "operational-error",
         "The grant could not be loaded.",
         500,
@@ -396,7 +419,7 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
   },
 
   async startTrialConversion(context) {
-    const validation = validateSessionMutationRequest(context.req.raw, context.get("requestId"));
+    const validation = validateSessionMutationRequest(context.req.raw, context.get("traceId"));
     if (validation.result === "invalid") {
       return validation.response;
     }
@@ -408,7 +431,7 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
     );
     if (authenticated.result === "missing") {
       return jsonError(
-        context.get("requestId"),
+        context.get("traceId"),
         "grant-session-required",
         "A grant session is required.",
         401,
@@ -416,7 +439,7 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
     }
     if (authenticated.result === "invalid") {
       return jsonError(
-        context.get("requestId"),
+        context.get("traceId"),
         "grant-session-invalid",
         "This browser no longer has access. Open the original trial link again.",
         401,
@@ -425,7 +448,7 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
     }
     if (authenticated.result === "operational-error") {
       return jsonError(
-        context.get("requestId"),
+        context.get("traceId"),
         "operational-error",
         "The grant could not be loaded.",
         500,
@@ -444,13 +467,14 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
         grant,
         registry: getRegistryStub(context.env),
         createWorkflow: async (conversionId, params) => {
+          setConversionScope({ conversionId, owner: { kind: "trial", grantId } });
           await context.env.PREPARE_AUDIOBOOK_WORKFLOW.create({ id: conversionId, params });
         },
       },
     );
     if (result.result === "rate-limited") {
       return jsonError(
-        context.get("requestId"),
+        context.get("traceId"),
         "start-rate-limited",
         "Wait briefly and try again.",
         429,
@@ -461,7 +485,7 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
     }
     if (result.result === "idempotency-conflict") {
       return jsonError(
-        context.get("requestId"),
+        context.get("traceId"),
         "idempotency-conflict",
         "This request key is already bound to a different source URL.",
         409,
@@ -469,7 +493,7 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
     }
     if (result.result === "temporarily-full") {
       return jsonError(
-        context.get("requestId"),
+        context.get("traceId"),
         "grant-temporarily-full",
         "No audio duration is currently available. Try again when generation finishes.",
         409,
@@ -477,7 +501,7 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
     }
     if (result.result === "exhausted") {
       return jsonError(
-        context.get("requestId"),
+        context.get("traceId"),
         "grant-exhausted",
         "The audio duration allowance has been used.",
         409,
@@ -485,7 +509,7 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
     }
     if (result.result === "expired") {
       return jsonError(
-        context.get("requestId"),
+        context.get("traceId"),
         "grant-expired",
         "This conversion grant has expired.",
         403,
@@ -493,7 +517,7 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
     }
     if (result.result === "revoked") {
       return jsonError(
-        context.get("requestId"),
+        context.get("traceId"),
         "grant-revoked",
         "This conversion grant was revoked.",
         403,
@@ -515,12 +539,12 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
     const { conversionId } = context.req.valid("param");
     const owner = await getRegistryStub(context.env).findConversionOwner(conversionId);
     if (!owner) {
-      return jsonError(context.get("requestId"), "audiobook-not-found", "Track not found.", 404);
+      return jsonError(context.get("traceId"), "audiobook-not-found", "Track not found.", 404);
     }
     const reader = resolveConversionReader(context.env, conversionId, owner);
     const conversion = await reader.getConversion();
     if (!conversion) {
-      return jsonError(context.get("requestId"), "audiobook-not-found", "Track not found.", 404);
+      return jsonError(context.get("traceId"), "audiobook-not-found", "Track not found.", 404);
     }
     const canGenerate =
       owner.kind === "account" ||
@@ -550,7 +574,7 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
     }
     const audiobook = await loadReadyAudiobookFromEnvironment(context.env, conversionId, reader);
     if (!audiobook) {
-      return jsonError(context.get("requestId"), "audiobook-not-found", "Track not found.", 404);
+      return jsonError(context.get("traceId"), "audiobook-not-found", "Track not found.", 404);
     }
     // The ownership middleware admitted this request for the owner alone.
     const signMediaUrl = createMediaUrlSigner(context, owner);
@@ -622,13 +646,13 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
 
   async retryConversion(context) {
     const { conversionId } = context.req.valid("param");
-    const denied = requireBrowserMutation(context.req.raw, context.get("requestId"));
+    const denied = requireBrowserMutation(context.req.raw, context.get("traceId"));
     if (denied) {
       return denied;
     }
     const owner = await getRegistryStub(context.env).findConversionOwner(conversionId);
     if (!owner) {
-      return jsonError(context.get("requestId"), "audiobook-not-found", "Track not found.", 404);
+      return jsonError(context.get("traceId"), "audiobook-not-found", "Track not found.", 404);
     }
     if (owner.kind === "trial") {
       if (
@@ -636,7 +660,7 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
           .result !== "valid"
       ) {
         return jsonError(
-          context.get("requestId"),
+          context.get("traceId"),
           "grant-session-required",
           "Open the original trial link to retry.",
           401,
@@ -670,7 +694,7 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
     }
     if (result.result === "expired" || result.result === "revoked") {
       return jsonError(
-        context.get("requestId"),
+        context.get("traceId"),
         `grant-${result.result}`,
         "This trial no longer permits new speech generation.",
         403,
@@ -681,7 +705,7 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
 
   async savePosition(context) {
     const { conversionId } = context.req.valid("param");
-    const denied = requireBrowserMutation(context.req.raw, context.get("requestId"));
+    const denied = requireBrowserMutation(context.req.raw, context.get("traceId"));
     if (denied) {
       return denied;
     }
@@ -689,7 +713,7 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
       context.env,
       context.req.raw,
       conversionId,
-      context.get("requestId"),
+      context.get("traceId"),
     );
     if (listener.result === "denied") {
       return listener.response;
@@ -697,19 +721,14 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
     const position = context.req.valid("json");
     const audiobook = await loadReadyAudiobookFromEnvironment(context.env, conversionId);
     if (!audiobook) {
-      return jsonError(
-        context.get("requestId"),
-        "audiobook-not-found",
-        "Audiobook not found.",
-        404,
-      );
+      return jsonError(context.get("traceId"), "audiobook-not-found", "Audiobook not found.", 404);
     }
     if (
       !audiobook.narrationDocument.synchronizationUnits.some(
         (unit) => unit.id === position.synchronizationUnitId,
       )
     ) {
-      return jsonError(context.get("requestId"), "invalid-input", "Segment not found.", 400);
+      return jsonError(context.get("traceId"), "invalid-input", "Segment not found.", 400);
     }
     await listener.account.savePlaybackPosition(conversionId, position);
     return context.body(null, 204);
@@ -717,21 +736,11 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
 
   async getNarrationTrack(context) {
     const { conversionId } = context.req.valid("param");
-    return serveNarrationTrack(
-      context.env,
-      context.req.raw,
-      conversionId,
-      context.get("requestId"),
-    );
+    return serveNarrationTrack(context.env, context.req.raw, conversionId, context.get("traceId"));
   },
   async headNarrationTrack(context) {
     const { conversionId } = context.req.valid("param");
-    return serveNarrationTrack(
-      context.env,
-      context.req.raw,
-      conversionId,
-      context.get("requestId"),
-    );
+    return serveNarrationTrack(context.env, context.req.raw, conversionId, context.get("traceId"));
   },
   async getCoverImage(context) {
     const { conversionId } = context.req.valid("param");
@@ -740,7 +749,7 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
       context.req.raw,
       conversionId,
       false,
-      context.get("requestId"),
+      context.get("traceId"),
     );
   },
   async headCoverImage(context) {
@@ -750,7 +759,7 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
       context.req.raw,
       conversionId,
       true,
-      context.get("requestId"),
+      context.get("traceId"),
     );
   },
 };
@@ -784,7 +793,7 @@ const operatorApiHandlers: OperatorApiHandlers<ApiServerEnvironment> = {
     const searchParameters = new URL(context.req.url).searchParams;
     if (["phase", "limit", "cursor"].some((name) => searchParameters.getAll(name).length > 1)) {
       return jsonError(
-        context.get("requestId"),
+        context.get("traceId"),
         "invalid-input",
         "Query parameters cannot be repeated.",
         400,
@@ -822,14 +831,15 @@ const operatorApiHandlers: OperatorApiHandlers<ApiServerEnvironment> = {
     } catch (error) {
       if (error instanceof Error && error.message.includes("Invalid Registry cursor")) {
         return jsonError(
-          context.get("requestId"),
+          context.get("traceId"),
           "invalid-cursor",
           "The Registry cursor is invalid.",
           400,
         );
       }
+      captureException(error);
       return jsonError(
-        context.get("requestId"),
+        context.get("traceId"),
         "operational-error",
         "The Registry could not be read.",
         500,
@@ -840,7 +850,7 @@ const operatorApiHandlers: OperatorApiHandlers<ApiServerEnvironment> = {
     const { accountId } = context.req.valid("param");
     const { requestId, amountMilliseconds, reason } = context.req.valid("json");
     if ((await getRegistryStub(context.env).findAccount(accountId)) === undefined) {
-      return jsonError(context.get("requestId"), "account-not-found", "Account not found.", 404);
+      return jsonError(context.get("traceId"), "account-not-found", "Account not found.", 404);
     }
     const account = context.env.ACCOUNTS.get(context.env.ACCOUNTS.idFromName(accountId));
     try {
@@ -852,11 +862,12 @@ const operatorApiHandlers: OperatorApiHandlers<ApiServerEnvironment> = {
         ({ thrownMessage }) => error instanceof Error && error.message.includes(thrownMessage),
       );
       if (conflict !== undefined) {
-        return jsonError(context.get("requestId"), conflict.code, conflict.message, 409);
+        return jsonError(context.get("traceId"), conflict.code, conflict.message, 409);
       }
+      captureException(error);
       // Retrying with the same request ID replays a recorded adjustment, so failures stay safe to retry.
       return jsonError(
-        context.get("requestId"),
+        context.get("traceId"),
         "operational-error",
         "The allowance adjustment could not be confirmed.",
         500,
@@ -896,12 +907,13 @@ const operatorApiHandlers: OperatorApiHandlers<ApiServerEnvironment> = {
   async deleteConversion(context) {
     const { conversionId } = context.req.valid("param");
     const owner = await getRegistryStub(context.env).findConversionOwner(conversionId);
+    setConversionScope({ conversionId, ...(owner ? { owner } : {}) });
     if (owner === undefined) {
-      return conversionNotFound(context.get("requestId"));
+      return conversionNotFound(context.get("traceId"));
     }
     if (owner.kind === "trial") {
       return jsonError(
-        context.get("requestId"),
+        context.get("traceId"),
         "conversion-not-account-owned",
         "The conversion belongs to a conversion grant, not an account.",
         409,
@@ -916,11 +928,11 @@ const operatorApiHandlers: OperatorApiHandlers<ApiServerEnvironment> = {
       );
     }
     if (result === "not-found") {
-      return conversionNotFound(context.get("requestId"));
+      return conversionNotFound(context.get("traceId"));
     }
     if (result === "account-unavailable") {
       return jsonError(
-        context.get("requestId"),
+        context.get("traceId"),
         "account-unavailable",
         "The account is being deleted.",
         404,
@@ -970,21 +982,15 @@ const operatorApiHandlers: OperatorApiHandlers<ApiServerEnvironment> = {
     } catch (error) {
       if (error instanceof Error && error.message.includes("different label")) {
         return jsonError(
-          context.get("requestId"),
+          context.get("traceId"),
           "idempotency-conflict",
           "The request ID is already bound to another label.",
           409,
         );
       }
-      console.error(
-        JSON.stringify({
-          event: "grant-creation-failed",
-          requestId: context.get("requestId"),
-          error: findRootCauseMessage(error),
-        }),
-      );
+      captureException(error);
       return jsonError(
-        context.get("requestId"),
+        context.get("traceId"),
         "operational-error",
         "The conversion grant could not be created.",
         500,
@@ -1001,7 +1007,7 @@ const operatorApiHandlers: OperatorApiHandlers<ApiServerEnvironment> = {
         )
       ) {
         return jsonError(
-          context.get("requestId"),
+          context.get("traceId"),
           "invalid-input",
           "Query parameters cannot be repeated.",
           400,
@@ -1020,14 +1026,15 @@ const operatorApiHandlers: OperatorApiHandlers<ApiServerEnvironment> = {
     } catch (error) {
       if (error instanceof Error && error.message === "Invalid Registry cursor") {
         return jsonError(
-          context.get("requestId"),
+          context.get("traceId"),
           "invalid-cursor",
           "The Registry cursor is invalid.",
           400,
         );
       }
+      captureException(error);
       return jsonError(
-        context.get("requestId"),
+        context.get("traceId"),
         "operational-error",
         "The Registry could not be read.",
         500,
@@ -1040,7 +1047,7 @@ const operatorApiHandlers: OperatorApiHandlers<ApiServerEnvironment> = {
     const entry = await getRegistryStub(context.env).getGrant(grantId);
     if (entry === undefined) {
       return jsonError(
-        context.get("requestId"),
+        context.get("traceId"),
         "grant-not-found",
         "Conversion grant not found.",
         404,
@@ -1073,7 +1080,7 @@ const operatorApiHandlers: OperatorApiHandlers<ApiServerEnvironment> = {
     const { allowanceMilliseconds } = context.req.valid("json");
     if ((await getRegistryStub(context.env).getGrant(grantId)) === undefined) {
       return jsonError(
-        context.get("requestId"),
+        context.get("traceId"),
         "grant-not-found",
         "Conversion grant not found.",
         404,
@@ -1084,7 +1091,7 @@ const operatorApiHandlers: OperatorApiHandlers<ApiServerEnvironment> = {
     );
     if (result.result === "below-used-duration") {
       return jsonError(
-        context.get("requestId"),
+        context.get("traceId"),
         "allowance-below-used-duration",
         "Allowance cannot be lower than reserved and spent duration.",
         409,
@@ -1101,7 +1108,7 @@ const operatorApiHandlers: OperatorApiHandlers<ApiServerEnvironment> = {
     const { grantId } = context.req.valid("param");
     if ((await getRegistryStub(context.env).getGrant(grantId)) === undefined) {
       return jsonError(
-        context.get("requestId"),
+        context.get("traceId"),
         "grant-not-found",
         "Conversion grant not found.",
         404,
@@ -1116,7 +1123,7 @@ const operatorApiHandlers: OperatorApiHandlers<ApiServerEnvironment> = {
     const { grantId } = context.req.valid("param");
     if ((await getRegistryStub(context.env).getGrant(grantId)) === undefined) {
       return jsonError(
-        context.get("requestId"),
+        context.get("traceId"),
         "grant-not-found",
         "Conversion grant not found.",
         404,
@@ -1155,12 +1162,18 @@ const operatorApiHandlers: OperatorApiHandlers<ApiServerEnvironment> = {
 
 export type ApiServerHonoEnvironment = {
   Bindings: ApiServerEnvironment;
-  Variables: { requestId: string };
+  Variables: { traceId: string };
 };
 
 /** Creates the HTTP server for the web application and operator interfaces. */
 export function createApiServer(dependencies: ApiServerDependencies = productionDependencies) {
   const app = new Hono<ApiServerHonoEnvironment>();
+  // First, so that every error body carries the trace ID, also one of an error that a later
+  // middleware throws and `onError` answers.
+  app.use("*", async (context, next) => {
+    context.set("traceId", readTraceId());
+    await next();
+  });
   app.use("*", async (context, next) => {
     await next();
     if (!context.res.headers.has("Cache-Control")) {
@@ -1178,7 +1191,7 @@ export function createApiServer(dependencies: ApiServerDependencies = production
     maxSize: 4_096,
     onError: (context) =>
       jsonError(
-        context.get("requestId"),
+        context.get("traceId"),
         "request-too-large",
         "JSON request bodies are limited to 4 KiB.",
         413,
@@ -1207,11 +1220,10 @@ export function createApiServer(dependencies: ApiServerDependencies = production
     })(context, next),
   );
   app.use("*", async (context, next) => {
-    context.set("requestId", crypto.randomUUID());
     const allowedMethods = allowedMethodsForApiPath(context.req.path);
     if (allowedMethods !== undefined && !allowedMethods.includes(context.req.method)) {
       context.res = jsonError(
-        context.get("requestId"),
+        context.get("traceId"),
         "method-not-allowed",
         "The request method is not allowed for this API route.",
         405,
@@ -1220,7 +1232,6 @@ export function createApiServer(dependencies: ApiServerDependencies = production
     } else {
       await next();
     }
-    context.header("X-Request-Id", context.get("requestId"));
     return context.res;
   });
 
@@ -1241,7 +1252,7 @@ export function createApiServer(dependencies: ApiServerDependencies = production
     const key = await ingressIdentity(context.req.raw, context.env.LOCAL_DEVELOPMENT === "true");
     if (!key) {
       return jsonError(
-        context.get("requestId"),
+        context.get("traceId"),
         "ingress-unavailable",
         "Request ingress metadata is unavailable.",
         503,
@@ -1252,7 +1263,7 @@ export function createApiServer(dependencies: ApiServerDependencies = production
     ).consumeIngressRequest(key);
     if (retryAfter) {
       return jsonError(
-        context.get("requestId"),
+        context.get("traceId"),
         "rate-limited",
         "Too many requests. Please wait before retrying.",
         429,
@@ -1280,15 +1291,16 @@ export function createApiServer(dependencies: ApiServerDependencies = production
     try {
       conversionId = decodeURIComponent(rawConversionId);
     } catch {
-      return jsonError(context.get("requestId"), "invalid-input", "Invalid conversion ID.", 400);
+      return jsonError(context.get("traceId"), "invalid-input", "Invalid conversion ID.", 400);
     }
     const owner = await getRegistryStub(context.env).findConversionOwner(conversionId);
+    setConversionScope({ conversionId, ...(owner ? { owner } : {}) });
     if (owner?.kind === "trial") {
       const denied = await requireActiveTrialAudiobookSession(
         context.env,
         owner.grantId,
         context.req.header("Cookie"),
-        context.get("requestId"),
+        context.get("traceId"),
       );
       if (denied) {
         return denied;
@@ -1303,18 +1315,13 @@ export function createApiServer(dependencies: ApiServerDependencies = production
     }
     const auth = await authenticateAccountRequest(context.req.raw, context.env);
     if (auth.result !== "authenticated") {
-      return accountAuthError(auth.result, context.get("requestId"));
+      return accountAuthError(auth.result, context.get("traceId"));
     }
     if (auth.snapshot.state !== "active") {
-      return accountAuthError("blocked", context.get("requestId"));
+      return accountAuthError("blocked", context.get("traceId"));
     }
     if (auth.snapshot.accountId !== owner.accountId) {
-      return jsonError(
-        context.get("requestId"),
-        "audiobook-not-found",
-        "Audiobook not found.",
-        404,
-      );
+      return jsonError(context.get("traceId"), "audiobook-not-found", "Audiobook not found.", 404);
     }
     await next();
     if (!isApplicationOrigin(origin)) {
@@ -1334,15 +1341,16 @@ export function createApiServer(dependencies: ApiServerDependencies = production
       try {
         conversionId = decodeURIComponent(context.req.path.split("/")[4] ?? "");
       } catch {
-        return jsonError(context.get("requestId"), "invalid-input", "Invalid conversion ID.", 400);
+        return jsonError(context.get("traceId"), "invalid-input", "Invalid conversion ID.", 400);
       }
       const owner = await getRegistryStub(context.env).findConversionOwner(conversionId);
+      setConversionScope({ conversionId, ...(owner ? { owner } : {}) });
       const denied = await requireSignedMediaUrl(
         context.env,
         context.req.url,
         conversionId,
         owner,
-        context.get("requestId"),
+        context.get("traceId"),
       );
       if (denied) {
         return denied;
@@ -1356,7 +1364,7 @@ export function createApiServer(dependencies: ApiServerDependencies = production
   app.use("/api/operator/*", async (context, next) => {
     if (!(await dependencies.validateOperatorAccess(context.req.raw, context.env))) {
       return jsonError(
-        context.get("requestId"),
+        context.get("traceId"),
         "operator-unauthorized",
         "Cloudflare Access authorization is required.",
         401,
@@ -1368,7 +1376,7 @@ export function createApiServer(dependencies: ApiServerDependencies = production
       context.req.header("Content-Type") !== "application/json"
     ) {
       return jsonError(
-        context.get("requestId"),
+        context.get("traceId"),
         "unsupported-media-type",
         "Content-Type must be application/json.",
         415,
@@ -1376,23 +1384,43 @@ export function createApiServer(dependencies: ApiServerDependencies = production
     }
     await next();
     if (context.req.method !== "GET" && context.req.method !== "HEAD") {
-      console.info(
-        JSON.stringify({
-          event: "operator-mutation",
-          operatorEmail: context.env.OPERATOR_EMAIL,
-          method: context.req.method,
-          path: context.req.path,
-          requestId: context.get("requestId"),
-          status: context.res.status,
-        }),
-      );
+      // No operator email: no log record carries an email address. Like every Sentry log record, it
+      // carries the trace ID of the request, the one error bodies carry.
+      logEvent("operator-mutation", "The operator changed something through the Operator API.", {
+        attributes: {
+          "http.request.method": context.req.method,
+          "url.path": context.req.path,
+          "http.response.status_code": context.res.status,
+        },
+      });
     }
     return context.res;
   });
 
+  // The telemetry tunnel: the client SDK posts its envelopes here, on Cup's own domain, past ad
+  // blockers. It is not part of the Listener API, and its path avoids "sentry" so filter lists miss it.
+  // Same-origin in the browser; the shells post from their own origins without credentials.
+  app.use(
+    TELEMETRY_TUNNEL_PATH,
+    cors({
+      origin: ["capacitor://localhost", "https://localhost"],
+      allowMethods: ["POST"],
+      // The client SDK reads its rate limits from these.
+      exposeHeaders: ["Retry-After", "X-Sentry-Rate-Limits"],
+    }),
+  );
+  app.post(TELEMETRY_TUNNEL_PATH, (context) => {
+    // `cf` is typed as incoming or outgoing request properties, which leaves `country` unknown.
+    const country = context.req.raw.cf?.country;
+    return handleTelemetryTunnelRequest(context.req.raw, {
+      tunnelDsns: context.env.SENTRY_TUNNEL_DSNS,
+      country: typeof country === "string" ? country : undefined,
+    });
+  });
+
   app.notFound(async (context) => {
     if (context.req.path === "/api" || context.req.path.startsWith("/api/")) {
-      return jsonError(context.get("requestId"), "not-found", "API route not found.", 404);
+      return jsonError(context.get("traceId"), "not-found", "API route not found.", 404);
     }
 
     if (context.req.method !== "GET" && context.req.method !== "HEAD") {
@@ -1428,27 +1456,30 @@ export function createApiServer(dependencies: ApiServerDependencies = production
       response = await context.env.ASSETS.fetch(new Request(url, context.req.raw));
     }
     if (!response.headers.get("Content-Type")?.startsWith("text/html")) {
-      return response;
+      // An asset response's headers are immutable; the secure headers middleware and the
+      // Cache-Control middleware set headers on the response this handler returns.
+      return new Response(response.body, response);
     }
 
     const nonce = context.get("secureHeadersNonce");
     if (nonce === undefined) {
-      throw new Error("Expected the secure headers middleware to set a nonce.");
+      throw new CupError("Expected the secure headers middleware to set a nonce.");
     }
     return applyWebAppCspNonce(response, nonce);
   });
 
   app.onError((error, context) => {
-    console.error(
-      JSON.stringify({
-        event: "request-failed",
-        requestId: context.get("requestId"),
-        route: context.req.routePath,
-        error: findRootCauseDescription(error),
-      }),
-    );
+    // Hono's own 4xx, such as the validator's answer to a malformed JSON body, is the client's
+    // fault: it keeps its status and opens no issue.
+    if (error instanceof HTTPException && error.status < 500) {
+      return error.status === 400
+        ? jsonError(context.get("traceId"), "invalid-input", "The request could not be read.", 400)
+        : error.getResponse();
+    }
+    // Hono hands the error here instead of rethrowing it, so Sentry's handler wrapper never sees it.
+    captureException(error);
     return jsonError(
-      context.get("requestId"),
+      context.get("traceId"),
       "operational-error",
       "The request could not be completed.",
       500,
@@ -1461,6 +1492,17 @@ export function createApiServer(dependencies: ApiServerDependencies = production
   return app
     .route("/", createListenerApi(listenerApiHandlers))
     .route("/", createOperatorApi(operatorApiHandlers));
+}
+
+/**
+ * The Sentry trace ID of the request, which error bodies carry so that a reported reference finds
+ * the request's trace. Sentry's request wrapper makes the request's span active; without one, as in
+ * tests that call the app directly, the scope's propagation context still holds a trace ID.
+ */
+function readTraceId(): string {
+  return (
+    getActiveSpan()?.spanContext().traceId ?? getCurrentScope().getPropagationContext().traceId
+  );
 }
 
 /** Whether the path is one of the media routes that a signed media URL authorizes. */
@@ -1573,8 +1615,8 @@ function getGrantStub(env: ApiServerEnvironment, grantId: string): GrantStub {
   return env.CONVERSION_GRANTS.get(env.CONVERSION_GRANTS.idFromName(grantId));
 }
 
-function conversionNotFound(requestId: string) {
-  return jsonError(requestId, "conversion-not-found", "Conversion not found.", 404);
+function conversionNotFound(traceId: string) {
+  return jsonError(traceId, "conversion-not-found", "Conversion not found.", 404);
 }
 
 function getRegistryStub(env: ApiServerEnvironment): RegistryStub {
@@ -1595,7 +1637,9 @@ async function authenticateGrant(
     return result.result === "valid"
       ? { result: "valid" as const, token, snapshot: result.snapshot }
       : { result: "invalid" as const };
-  } catch {
+  } catch (error) {
+    // Every caller answers this result with a 500.
+    captureException(error);
     return { result: "operational-error" as const };
   }
 }
@@ -1604,24 +1648,24 @@ async function requireActiveTrialAudiobookSession(
   env: ApiServerEnvironment,
   grantId: string,
   cookieHeader: string | undefined,
-  requestId: string,
+  traceId: string,
 ): Promise<Response | undefined> {
   const auth = await authenticateGrant(env, grantId, cookieHeader);
   if (auth.result === "operational-error") {
-    return jsonError(requestId, "operational-error", "The grant could not be loaded.", 500);
+    return jsonError(traceId, "operational-error", "The grant could not be loaded.", 500);
   }
   if (auth.result !== "valid") {
     return jsonError(
-      requestId,
+      traceId,
       "grant-session-required",
       "Open the original trial link to access this audiobook.",
       401,
     );
   }
-  return requireAccessibleGrantState(auth.snapshot.state, requestId);
+  return requireAccessibleGrantState(auth.snapshot.state, traceId);
 }
 
-function requireBrowserMutation(request: Request, requestId: string): Response | undefined {
+function requireBrowserMutation(request: Request, traceId: string): Response | undefined {
   const origin = request.headers.get("Origin");
   if (
     request.headers.get("X-Create-Audiobook-From-URL-Request") !== "1" ||
@@ -1629,7 +1673,7 @@ function requireBrowserMutation(request: Request, requestId: string): Response |
     (origin &&
       ![new URL(request.url).origin, "https://localhost", APPLICATION_ORIGIN].includes(origin))
   ) {
-    return jsonError(requestId, "origin-blocked", "The request origin is not allowed.", 403);
+    return jsonError(traceId, "origin-blocked", "The request origin is not allowed.", 403);
   }
   return undefined;
 }
@@ -1640,13 +1684,13 @@ type SessionMutationRequestValidation =
 
 function validateSessionMutationRequest(
   request: Request,
-  requestId: string,
+  traceId: string,
 ): SessionMutationRequestValidation {
   if (request.headers.get("Content-Type") !== "application/json") {
     return {
       result: "invalid",
       response: jsonError(
-        requestId,
+        traceId,
         "unsupported-media-type",
         "Content-Type must be application/json.",
         415,
@@ -1663,7 +1707,7 @@ function validateSessionMutationRequest(
   ) {
     return {
       result: "invalid",
-      response: jsonError(requestId, "origin-forbidden", "The request origin is not allowed.", 403),
+      response: jsonError(traceId, "origin-forbidden", "The request origin is not allowed.", 403),
     };
   }
 
@@ -1672,7 +1716,7 @@ function validateSessionMutationRequest(
     return {
       result: "invalid",
       response: jsonError(
-        requestId,
+        traceId,
         "request-too-large",
         "JSON request bodies are limited to 4 KiB.",
         413,

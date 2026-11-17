@@ -49,6 +49,10 @@
     "CONVERSION_OWNER_LIMIT": "10",
     "QA_SCENARIO": "success",
     "LOCAL_DEVELOPMENT": "true",
+    /* Local development sends nothing to Sentry; test/wrangler-config.test.ts pins these values. A suite
+       allowlists a Sentry stub DSN for the telemetry tunnel with `--var`. */
+    "SENTRY_DSN": "",
+    "SENTRY_TUNNEL_DSNS": "",
     "SUPABASE_URL": "http://127.0.0.1:54321",
     /* An unreachable discard port, so that deletion notices never reach Resend. */
     "RESEND_BASE_URL": "http://127.0.0.1:9",

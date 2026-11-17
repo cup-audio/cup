@@ -1,0 +1,5 @@
+# Sentry CLI defaults for the source map upload in the Worker's deploy (docs/production-configuration.md#deploy).
+# Never add a token here: `sentry-cli login` keeps the upload token in ~/.sentryclirc.
+[defaults]
+org=cupaudio
+url=https://de.sentry.io/

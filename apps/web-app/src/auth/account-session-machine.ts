@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/react";
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
 import {
   assertEvent,
@@ -634,10 +635,14 @@ function rejectAll(replies: readonly Reply<void>[], error: unknown) {
   }
 }
 
-/** Logs the failure of an effect that nothing awaits, so its rejection stays observable. */
+/**
+ * Captures the failure of an effect that nothing awaits, so its rejection stays observable. The
+ * machine's own copy of `reportFailure` in `#src/report-failure.js`: its tests load this module
+ * under Node, which resolves no `.js` import of the app.
+ */
 function reportFailure(message: string) {
   return (error: unknown) => {
-    console.error(message, error);
+    Sentry.captureException(new Error(message, { cause: error }));
   };
 }
 

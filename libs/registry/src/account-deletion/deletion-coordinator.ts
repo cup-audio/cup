@@ -4,6 +4,9 @@ import { Temporal } from "temporal-polyfill";
 import { z } from "zod";
 
 import { deletionAttemptSchema, type DeletionAttempt } from "@cup/accounts/lifecycle";
+import { CupError } from "@cup/errors";
+import { logEvent, reportStuckCases } from "@cup/telemetry.cloudflare";
+import { TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
 
 import type { ProviderRequest } from "#src/providers/provider-request.ts";
 import { sendResendEmail, type ResendEnvironment } from "#src/providers/resend-email.ts";
@@ -35,24 +38,49 @@ export type DeletionEnvironment = SupabaseAdminEnvironment &
 export type DeletionProviderOptions = Partial<ProviderRequest>;
 const PROVIDER_TIMEOUT_MS = 10_000;
 const DAY = 86_400_000;
+/**
+ * How long after its recovery deadline an unfinished deletion counts as stuck: the alarm reports it
+ * to Sentry once, and the operator API's `overdue` field is true for it.
+ */
+const STUCK_AFTER_DEADLINE_MS = 3_600_000;
 const jobSchema = deletionAttemptSchema.extend({
   googleRevocation: z.enum(["unavailable", "revoked", "failed"]).default("unavailable"),
   identityDone: z.boolean(),
   accountDone: z.boolean(),
   failures: z.number().int(),
   nextAttemptMs: z.number(),
+  /**
+   * Whether the alarm has reported this job as stuck. Jobs stored before the check lack it, and
+   * code from before the check drops it when it saves a job during a rollback; the job then reads
+   * as unreported, so the worst case is one more report of the same attempt.
+   */
+  isStuckReported: z.boolean().default(false),
 });
 type DeletionJob = z.infer<typeof jobSchema>;
-const notificationSchema = z.object({
-  key: z.string(),
-  email: z.string(),
-  subject: z.string(),
-  text: z.string(),
-  firstAttemptMs: z.number().nullable(),
-  nextAttemptMs: z.number(),
-  attempts: z.number(),
-  state: z.enum(["pending", "sent", "failed", "expired", "canceled"]),
-});
+const noticeTypeSchema = z.enum(["scheduled", "completed"]);
+type NoticeType = z.infer<typeof noticeTypeSchema>;
+const notificationSchema = z.preprocess(
+  // A notice stored before it carried its type has the type only in its key, `<attemptId>:<type>`.
+  (value) =>
+    typeof value === "object" &&
+    value !== null &&
+    !("type" in value) &&
+    "key" in value &&
+    typeof value.key === "string"
+      ? { ...value, type: value.key.slice(value.key.lastIndexOf(":") + 1) }
+      : value,
+  z.object({
+    key: z.string(),
+    type: noticeTypeSchema,
+    email: z.string(),
+    subject: z.string(),
+    text: z.string(),
+    firstAttemptMs: z.number().nullable(),
+    nextAttemptMs: z.number(),
+    attempts: z.number(),
+    state: z.enum(["pending", "sent", "failed", "expired", "canceled"]),
+  }),
+);
 type Notification = z.infer<typeof notificationSchema>;
 
 /** Owns cleanup and notification intent independently of the account being erased. */
@@ -95,11 +123,11 @@ export class DeletionCoordinator {
           existing.subject !== attempt.subject ||
           existing.deadlineMs !== attempt.deadlineMs)
       ) {
-        throw new Error("Deletion attempt identity conflict");
+        throw new CupError("Deletion attempt identity conflict");
       }
       if (attempt.state === "restored") {
         if (existing?.state === "deleting") {
-          throw new Error("Deletion cleanup has started");
+          throw new CupError("Deletion cleanup has started");
         }
         this.database
           .insert(canceledDeletionAttempts)
@@ -124,6 +152,7 @@ export class DeletionCoordinator {
           accountDone: false,
           failures: 0,
           nextAttemptMs: attempt.deadlineMs,
+          isStuckReported: false,
         });
         this.enqueue(
           attempt,
@@ -193,8 +222,13 @@ export class DeletionCoordinator {
             await deleteSupabaseIdentity(this.env, job.subject, this.provider);
             job.identityDone = true;
             this.save(job);
-          } catch {
-            /* Retry exact identity on the durable alarm. */
+          } catch (error) {
+            // The durable alarm retries the exact identity.
+            logEvent(
+              "account-deletion-identity-failed",
+              "An account deletion pass could not delete the Supabase identity; the alarm retries it.",
+              { attributes: deletionAttributes(job), error },
+            );
           }
         }
         if (!job.accountDone) {
@@ -202,8 +236,13 @@ export class DeletionCoordinator {
             await account.eraseAccount(job.attemptId);
             job.accountDone = true;
             this.save(job);
-          } catch {
-            /* Writers or storage outages remain pending. */
+          } catch (error) {
+            // Undrained writers or a storage outage leave the account pending; the alarm retries it.
+            logEvent(
+              "account-deletion-erasure-failed",
+              "An account deletion pass could not erase the account; the alarm retries it.",
+              { attributes: deletionAttributes(job), error },
+            );
           }
         }
         if (job.identityDone && job.accountDone) {
@@ -217,7 +256,7 @@ export class DeletionCoordinator {
             "Your Cup account and its private conversions have been deleted. Original trial conversions remain separate. You can create a new Cup account at https://cup.audio/app.",
           );
         } else {
-          throw new Error("Deletion dependencies are pending");
+          throw new CupError("Deletion dependencies are pending");
         }
       } catch {
         // A restore accepted while the failed call was pending supersedes this attempt.
@@ -234,6 +273,7 @@ export class DeletionCoordinator {
       }
     }
     await this.sendNotifications();
+    this.reportStuckAttempts();
     for (const row of this.database.select({ json: deletionJobs.json }).from(deletionJobs).all()) {
       const job = jobSchema.parse(JSON.parse(row.json));
       if (job.state === "erased") {
@@ -307,7 +347,7 @@ export class DeletionCoordinator {
           identityDone: job.identityDone,
           accountDone: job.accountDone,
           failures: job.failures,
-          overdue: Temporal.Now.instant().epochMilliseconds >= job.deadlineMs + DAY,
+          overdue: isStuck(job, Temporal.Now.instant().epochMilliseconds),
         };
       });
   }
@@ -329,6 +369,29 @@ export class DeletionCoordinator {
     this.save({ ...job, googleRevocation: outcome });
   }
 
+  /** Reports each stuck attempt once, whether or not this pass retried it. */
+  private reportStuckAttempts() {
+    const unreportedJobs = this.database
+      .select({ json: deletionJobs.json })
+      .from(deletionJobs)
+      .all()
+      .map((row) => jobSchema.parse(JSON.parse(row.json)))
+      .filter((job) => !job.isStuckReported);
+    const reportedAttemptIds = new Set(
+      reportStuckCases(unreportedJobs, Temporal.Now.instant().epochMilliseconds, {
+        idOf: (job) => job.attemptId,
+        startedAtMsOf: (job) => job.deadlineMs,
+        isStuck: (job, msSinceDeadline) => isStuckAfter(job, msSinceDeadline),
+        toEvent: stuckEvent,
+      }),
+    );
+
+    for (const job of unreportedJobs) {
+      if (reportedAttemptIds.has(job.attemptId)) {
+        this.save({ ...job, isStuckReported: true });
+      }
+    }
+  }
   private job(attemptId: string) {
     const row = this.database
       .select({ json: deletionJobs.json })
@@ -344,9 +407,10 @@ export class DeletionCoordinator {
       .onConflictDoUpdate({ target: deletionJobs.attemptId, set: { json: JSON.stringify(job) } })
       .run();
   }
-  private enqueue(attempt: DeletionAttempt, type: string, subject: string, text: string) {
+  private enqueue(attempt: DeletionAttempt, type: NoticeType, subject: string, text: string) {
     const notification: Notification = {
       key: `${attempt.attemptId}:${type}`,
+      type,
       email: attempt.email,
       subject,
       text,
@@ -392,7 +456,7 @@ export class DeletionCoordinator {
 
   private async sendNotifications() {
     for (const row of this.database
-      .select({ json: deletionNotifications.json })
+      .select({ attemptId: deletionNotifications.attemptId, json: deletionNotifications.json })
       .from(deletionNotifications)
       .where(
         and(
@@ -420,6 +484,7 @@ export class DeletionCoordinator {
       ) {
         notification.state = "expired";
         this.saveNotification(notification);
+        logUndeliveredNotice(row.attemptId, notification);
         continue;
       }
       notification.firstAttemptMs ??= nowMs;
@@ -461,6 +526,9 @@ export class DeletionCoordinator {
         notification.firstAttemptMs + 23 * 3_600_000,
       );
       this.saveNotification(notification);
+      if (notification.state === "failed") {
+        logUndeliveredNotice(row.attemptId, notification);
+      }
     }
   }
 
@@ -505,4 +573,55 @@ export class DeletionCoordinator {
       this.database.delete(deletionJobs).where(eq(deletionJobs.attemptId, job.attemptId)).run();
     });
   }
+}
+
+/** The opaque IDs of a deletion's log records; never its subject or email address. */
+function deletionAttributes(job: DeletionJob) {
+  return {
+    [TELEMETRY_ATTRIBUTES.ACCOUNT_ID]: job.accountId,
+    [TELEMETRY_ATTRIBUTES.ACCOUNT_DELETION_ATTEMPT_ID]: job.attemptId,
+  };
+}
+
+/** A notice that ended `failed` or `expired`, by its type and attempt; never its address. */
+function logUndeliveredNotice(attemptId: string, notification: Notification) {
+  logEvent(
+    "account-deletion-notice-undelivered",
+    "An account deletion notice ended without being delivered.",
+    {
+      attributes: {
+        [TELEMETRY_ATTRIBUTES.ACCOUNT_DELETION_ATTEMPT_ID]: attemptId,
+        [TELEMETRY_ATTRIBUTES.ACCOUNT_DELETION_NOTICE_TYPE]: notification.type,
+        [TELEMETRY_ATTRIBUTES.ACCOUNT_DELETION_NOTICE_STATE]: notification.state,
+      },
+    },
+  );
+}
+
+/** An attempt still not erased, nor restored, an hour after its recovery deadline. */
+function isStuck(job: DeletionJob, nowMs: number) {
+  return isStuckAfter(job, nowMs - job.deadlineMs);
+}
+
+function isStuckAfter(job: DeletionJob, msSinceDeadline: number) {
+  return (
+    (job.state === "scheduled" || job.state === "deleting") &&
+    msSinceDeadline >= STUCK_AFTER_DEADLINE_MS
+  );
+}
+
+/** The error event of a stuck attempt; all group into one Sentry issue. Never the email address. */
+function stuckEvent(job: DeletionJob) {
+  // A scheduled job has not fenced the account yet, which counts as account cleanup.
+  const pending =
+    !job.identityDone && !job.accountDone ? "both" : job.identityDone ? "account" : "identity";
+  return {
+    message: `Account deletion attempt ${job.attemptId} is still not erased 1 h after its recovery deadline`,
+    fingerprint: ["account-deletion-stuck"],
+    tags: {
+      [TELEMETRY_ATTRIBUTES.ACCOUNT_ID]: job.accountId,
+      [TELEMETRY_ATTRIBUTES.ACCOUNT_DELETION_ATTEMPT_ID]: job.attemptId,
+      [TELEMETRY_ATTRIBUTES.ACCOUNT_DELETION_PENDING]: pending,
+    },
+  };
 }

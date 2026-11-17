@@ -1,3 +1,5 @@
+import { captureException } from "@sentry/core";
+
 import {
   createAudioSegmentKey,
   createCoverImageKey,
@@ -6,7 +8,10 @@ import {
   type Audiobook,
 } from "@cup/audiobook-production";
 import { findNarrationTrackDurations, layOutConsecutively } from "@cup/conversion-contracts";
+import { CupError } from "@cup/errors";
 import type { RegistryDurableObject } from "@cup/registry";
+import { logEvent } from "@cup/telemetry.cloudflare";
+import { TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
 
 import { resolveConversionReader, type ConversionReader } from "#src/adapters/conversion-reader.ts";
 import type { ApiServerEnvironment } from "#src/api-server-environment.ts";
@@ -46,19 +51,19 @@ export async function serveNarrationTrack(
   env: ApiServerEnvironment,
   request: Request,
   conversionId: string,
-  requestId: string,
+  traceId: string,
 ): Promise<Response> {
   const owner = await getRegistryStub(env).findConversionOwner(conversionId);
   if (!owner) {
-    return narrationTrackNotFound(requestId);
+    return narrationTrackNotFound(traceId);
   }
   const reader = resolveConversionReader(env, conversionId, owner);
   if ((await reader.getReadyAudiobookReference()) === undefined) {
-    return narrationTrackNotFound(requestId);
+    return narrationTrackNotFound(traceId);
   }
   const durations = findNarrationTrackDurations(await reader.listAudioSegments());
   if (durations === undefined) {
-    return narrationTrackNotFound(requestId);
+    return narrationTrackNotFound(traceId);
   }
 
   const { segments, totalByteLength } = layOutNarrationTrack(durations);
@@ -85,7 +90,7 @@ export async function serveNarrationTrack(
   if (isRangeRequest) {
     const parsed = parseRange(range, totalByteLength);
     if (parsed === undefined) {
-      return rangeNotSatisfiable(requestId, totalByteLength);
+      return rangeNotSatisfiable(traceId, totalByteLength);
     }
     served = parsed;
   }
@@ -96,14 +101,14 @@ export async function serveNarrationTrack(
   const firstPart = parts[0];
   // A valid range lies within the track, and a narration track has at least one segment.
   if (firstPart === undefined) {
-    throw new Error(
+    throw new CupError(
       `Narration track byte range ${served.start}-${served.end} of ${totalByteLength} bytes selects no segment`,
     );
   }
   // The first part is read before headers are sent, so a missing object yields an error status.
   const firstBody = await readPart(firstPart);
   if (firstBody === undefined) {
-    return jsonError(requestId, "operational-error", "The narration track could not be read.", 500);
+    return jsonError(traceId, "operational-error", "The narration track could not be read.", 500);
   }
 
   const servedByteLength = served.end - served.start + 1;
@@ -123,23 +128,23 @@ export async function serveCoverImage(
   request: Request,
   conversionId: string,
   isHead: boolean,
-  requestId: string,
+  traceId: string,
 ): Promise<Response> {
   const owner = await getRegistryStub(env).findConversionOwner(conversionId);
   if (!owner) {
-    return coverImageNotFound(requestId);
+    return coverImageNotFound(traceId);
   }
   const reader = resolveConversionReader(env, conversionId, owner);
   const audiobook = await loadReadyAudiobookFromEnvironment(env, conversionId, reader);
   // The manifest decides: an object left by an earlier preparation attempt is not served.
   if (audiobook?.coverImage === undefined) {
-    return coverImageNotFound(requestId);
+    return coverImageNotFound(traceId);
   }
 
   const key = createCoverImageKey(conversionId, reader.artifactPrefix);
   const object = await env.AUDIO_BUCKET.get(key);
   if (object === null) {
-    return coverImageNotFound(requestId);
+    return coverImageNotFound(traceId);
   }
 
   // Its signed media URL changes once per UTC day, so the browser keeps a cover for that long
@@ -245,15 +250,20 @@ async function readTrackPart(
   }
 
   await object?.body.cancel();
-  console.error(
-    JSON.stringify({
-      event: "narration-track-segment-mismatch",
-      conversionId,
-      sequence: part.sequence,
-      expectedByteLength: part.segmentByteLength,
-      storedByteLength: object?.size ?? null,
-    }),
-  );
+  // A fault the operator must look at, so an issue as well as the error log record with its sizes.
+  const mismatch =
+    "A stored audio segment is missing or its size differs from its settled duration.";
+  captureException(new CupError(mismatch), {
+    tags: { [TELEMETRY_ATTRIBUTES.AUDIO_SEGMENT_SEQUENCE]: String(part.sequence) },
+  });
+  logEvent("narration-track-segment-mismatch", mismatch, {
+    attributes: {
+      [TELEMETRY_ATTRIBUTES.CONVERSION_ID]: conversionId,
+      [TELEMETRY_ATTRIBUTES.AUDIO_SEGMENT_SEQUENCE]: part.sequence,
+      [TELEMETRY_ATTRIBUTES.AUDIO_SEGMENT_EXPECTED_BYTE_LENGTH]: part.segmentByteLength,
+      [TELEMETRY_ATTRIBUTES.AUDIO_SEGMENT_STORED_BYTE_LENGTH]: object?.size,
+    },
+  });
   return undefined;
 }
 
@@ -289,7 +299,7 @@ function createTrackStream(
           const body = await readPart(nextPart);
           if (body === undefined) {
             current = undefined;
-            throw new Error(`Narration track segment ${nextPart.sequence} could not be read`);
+            throw new CupError(`Narration track segment ${nextPart.sequence} could not be read`);
           }
           current = body.getReader();
         }
@@ -343,9 +353,9 @@ function matchesIfNoneMatch(header: string | null, etag: string): boolean {
     .some((tag) => tag === "*" || tag === etag);
 }
 
-function rangeNotSatisfiable(requestId: string, size: number): Response {
+function rangeNotSatisfiable(traceId: string, size: number): Response {
   return jsonError(
-    requestId,
+    traceId,
     "range-not-satisfiable",
     "The requested byte range is not satisfiable.",
     416,
@@ -353,10 +363,10 @@ function rangeNotSatisfiable(requestId: string, size: number): Response {
   );
 }
 
-function narrationTrackNotFound(requestId: string): Response {
-  return jsonError(requestId, "narration-track-not-found", "Narration track not found.", 404);
+function narrationTrackNotFound(traceId: string): Response {
+  return jsonError(traceId, "narration-track-not-found", "Narration track not found.", 404);
 }
 
-function coverImageNotFound(requestId: string): Response {
-  return jsonError(requestId, "cover-image-not-found", "Cover image not found.", 404);
+function coverImageNotFound(traceId: string): Response {
+  return jsonError(traceId, "cover-image-not-found", "Cover image not found.", 404);
 }

@@ -1,7 +1,9 @@
+import { captureException } from "@sentry/core";
 import { Temporal } from "temporal-polyfill";
 
 import { conversionOwnerSchema, type ConversionOwner } from "@cup/conversion-contracts";
 import type { GrantState } from "@cup/conversion-grants";
+import { CupError } from "@cup/errors";
 
 import type { ApiServerEnvironment } from "#src/api-server-environment.ts";
 import { accountAuthError, jsonError, requireAccessibleGrantState } from "#src/http/http-errors.ts";
@@ -186,7 +188,7 @@ export async function requireSignedMediaUrl(
   requestUrl: string,
   conversionId: string,
   owner: ConversionOwner | undefined,
-  requestId: string,
+  traceId: string,
 ): Promise<Response | undefined> {
   const token = await verifyMediaUrlToken({
     requestUrl,
@@ -197,7 +199,7 @@ export async function requireSignedMediaUrl(
   });
   if (token.result !== "valid") {
     return jsonError(
-      requestId,
+      traceId,
       "media-url-invalid",
       "The media URL is invalid or expired. Reload the audiobook.",
       401,
@@ -206,7 +208,7 @@ export async function requireSignedMediaUrl(
   if (!owner) {
     return undefined;
   }
-  return requireSignedMediaAccess(env, owner, token.principal, requestId);
+  return requireSignedMediaAccess(env, owner, token.principal, traceId);
 }
 
 type SignedPositionUrlVerification =
@@ -268,22 +270,22 @@ async function requireSignedMediaAccess(
   env: ApiServerEnvironment,
   owner: ConversionOwner,
   principal: MediaUrlPrincipal,
-  requestId: string,
+  traceId: string,
 ): Promise<Response | undefined> {
   if (owner.kind === "account") {
     if (principal.kind !== "account" || principal.accountId !== owner.accountId) {
-      return jsonError(requestId, "audiobook-not-found", "Audiobook not found.", 404);
+      return jsonError(traceId, "audiobook-not-found", "Audiobook not found.", 404);
     }
     const account = env.ACCOUNTS.get(env.ACCOUNTS.idFromName(owner.accountId));
     if ((await account.inspect()).state !== "active") {
-      return accountAuthError("blocked", requestId);
+      return accountAuthError("blocked", traceId);
     }
     return undefined;
   }
 
   if (principal.kind !== "trial" || principal.grantId !== owner.grantId) {
     return jsonError(
-      requestId,
+      traceId,
       "grant-session-required",
       "Open the original trial link to access this audiobook.",
       401,
@@ -294,10 +296,11 @@ async function requireSignedMediaAccess(
     grantState = (
       await env.CONVERSION_GRANTS.get(env.CONVERSION_GRANTS.idFromName(owner.grantId)).inspect()
     ).state;
-  } catch {
-    return jsonError(requestId, "operational-error", "The grant could not be loaded.", 500);
+  } catch (error) {
+    captureException(error);
+    return jsonError(traceId, "operational-error", "The grant could not be loaded.", 500);
   }
-  return requireAccessibleGrantState(grantState, requestId);
+  return requireAccessibleGrantState(grantState, traceId);
 }
 
 type MediaUrlTokenVerification =
@@ -374,7 +377,7 @@ async function verifyMediaUrlToken({
 
 function importSigningKey(signingKey: string): Promise<CryptoKey> {
   if (signingKey === "") {
-    throw new Error("MEDIA_URL_SIGNING_KEY must not be empty.");
+    throw new CupError("MEDIA_URL_SIGNING_KEY must not be empty.");
   }
   return crypto.subtle.importKey(
     "raw",
@@ -395,7 +398,7 @@ function encodeBase64Url(bytes: Uint8Array): string {
 /** Throws for input that is not base64url. */
 function decodeBase64Url(value: string): Uint8Array<ArrayBuffer> {
   if (!/^[A-Za-z0-9_-]*$/.test(value)) {
-    throw new Error("Invalid base64url value");
+    throw new CupError("Invalid base64url value");
   }
   const binary = atob(value.replaceAll("-", "+").replaceAll("_", "/"));
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));

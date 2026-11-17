@@ -1,6 +1,8 @@
 import { parseFragment, serialize } from "parse5";
 import type { DefaultTreeAdapterMap } from "parse5";
 
+import { CupError } from "@cup/errors";
+
 import {
   collectMetadata,
   extractNodeText,
@@ -233,7 +235,7 @@ export async function prepareSourceMaterial({
 /** Applies production cleanup and title selection to an already loaded source page. */
 export function prepareLoadedSourcePage(sourcePage: LoadedSourcePage): SourceMaterial {
   if (sourcePage.responseStatus < 200 || sourcePage.responseStatus >= 300) {
-    throw new Error(`Source page responded with HTTP ${sourcePage.responseStatus}`);
+    throw new CupError(`Source page responded with HTTP ${sourcePage.responseStatus}`);
   }
 
   const documentFragment = parseFragment(sourcePage.bodyHtml);
@@ -246,7 +248,7 @@ export function prepareLoadedSourcePage(sourcePage: LoadedSourcePage): SourceMat
   );
 
   if (title.length === 0) {
-    throw new Error("Expected the source page to have a title");
+    throw new CupError("Expected the source page to have a title");
   }
 
   if (visibleHeadline) {
@@ -282,7 +284,7 @@ function removeElement(element: HtmlElement): void {
   const { parentNode } = element;
 
   if (!parentNode) {
-    throw new Error("Expected the source subtitle element to have a parent node");
+    throw new CupError("Expected the source subtitle element to have a parent node");
   }
 
   parentNode.childNodes.splice(parentNode.childNodes.indexOf(element), 1);
@@ -313,7 +315,7 @@ export async function loadPublicSourcePage({
     const response = await page.goto(url, { waitUntil: "domcontentloaded" });
 
     if (!response) {
-      throw new Error("Expected source-page navigation to return an HTTP response");
+      throw new CupError("Expected source-page navigation to return an HTTP response");
     }
 
     if (javaScriptEnabled) {
@@ -527,7 +529,7 @@ function selectBetterSourceMaterial(sourceMaterials: readonly SourceMaterial[]):
   const [firstSourceMaterial, ...remainingSourceMaterials] = sourceMaterials;
 
   if (!firstSourceMaterial) {
-    throw new Error("Expected at least one prepared source material candidate");
+    throw new CupError("Expected at least one prepared source material candidate");
   }
 
   return remainingSourceMaterials.reduce(
@@ -580,7 +582,7 @@ export function cleanAudiobookSourceMaterialHtml(html: string): string {
 export function assertPublicSourceUrl(value: string): void {
   const url = new URL(value);
   if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new Error("Source URL must use HTTP or HTTPS");
+    throw new CupError("Source URL must use HTTP or HTTPS");
   }
   const hostname = url.hostname
     .toLowerCase()
@@ -594,7 +596,7 @@ export function assertPublicSourceUrl(value: string): void {
     isPrivateIpv4(hostname) ||
     isPrivateIpv6(hostname)
   ) {
-    throw new Error("Source destination is not public");
+    throw new CupError("Source destination is not public");
   }
 }
 

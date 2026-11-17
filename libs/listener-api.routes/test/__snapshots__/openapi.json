@@ -121,15 +121,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -192,15 +192,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -263,15 +263,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -334,15 +334,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -405,15 +405,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -476,15 +476,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -547,15 +547,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -685,15 +685,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -756,15 +756,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -827,15 +827,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -898,15 +898,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -969,15 +969,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -1040,15 +1040,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -1111,15 +1111,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -1299,15 +1299,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -1370,15 +1370,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -1441,15 +1441,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -1512,15 +1512,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -1583,15 +1583,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -1654,15 +1654,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -1725,15 +1725,113 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "The Worker runs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ok"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Operational error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "account-blocked",
+                            "account-session-required",
+                            "account-setup-pending",
+                            "account-start-conflict",
+                            "audiobook-not-found",
+                            "confirmation-unavailable",
+                            "cover-image-not-found",
+                            "credits-unavailable",
+                            "dependency-unavailable",
+                            "fresh-auth-required",
+                            "grant-exhausted",
+                            "grant-expired",
+                            "grant-revoked",
+                            "grant-session-invalid",
+                            "grant-session-required",
+                            "grant-temporarily-full",
+                            "idempotency-conflict",
+                            "ingress-unavailable",
+                            "invalid-credential",
+                            "invalid-input",
+                            "media-url-invalid",
+                            "method-not-allowed",
+                            "narration-track-not-found",
+                            "not-found",
+                            "operational-error",
+                            "origin-blocked",
+                            "origin-forbidden",
+                            "position-url-invalid",
+                            "range-not-satisfiable",
+                            "rate-limited",
+                            "request-too-large",
+                            "start-rate-limited",
+                            "unsupported-media-type"
+                          ]
+                        },
+                        "message": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "traceId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{32}$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "traceId"
                       ]
                     }
                   },
@@ -1846,15 +1944,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -2066,15 +2164,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -2137,15 +2235,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -2208,15 +2306,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -2279,15 +2377,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -2433,15 +2531,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -2504,15 +2602,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -2575,15 +2673,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -2646,15 +2744,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -2717,15 +2815,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -2868,15 +2966,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -2939,15 +3037,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -3010,15 +3108,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -3081,15 +3179,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -3183,15 +3281,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -3254,15 +3352,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -3325,15 +3423,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -3396,15 +3494,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -3467,15 +3565,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -3538,15 +3636,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -3609,15 +3707,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -3794,15 +3892,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -3865,15 +3963,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -3936,15 +4034,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -4007,15 +4105,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -4078,15 +4176,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -4233,15 +4331,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -4304,15 +4402,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -4375,15 +4473,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -4892,15 +4990,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -4963,15 +5061,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -5034,15 +5132,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -5105,15 +5203,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -5176,15 +5274,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -5247,15 +5345,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -6073,15 +6171,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -6144,15 +6242,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -6215,15 +6313,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -6376,15 +6474,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -6447,15 +6545,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -6518,15 +6616,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -6589,15 +6687,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -6660,15 +6758,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -6796,15 +6894,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -6867,15 +6965,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -6938,15 +7036,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -7009,15 +7107,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -7080,15 +7178,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -7201,15 +7299,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -7272,15 +7370,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -7343,15 +7441,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -7414,15 +7512,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -7485,15 +7583,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -7556,15 +7654,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -7675,15 +7773,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -7746,15 +7844,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -7817,15 +7915,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -7888,15 +7986,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -7959,15 +8057,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -8030,15 +8128,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -8164,15 +8262,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -8235,15 +8333,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -8306,15 +8404,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -8377,15 +8475,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -8509,15 +8607,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -8580,15 +8678,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -8651,15 +8749,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },
@@ -8722,15 +8820,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },

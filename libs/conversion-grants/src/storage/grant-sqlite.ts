@@ -4,6 +4,7 @@ import { Temporal } from "temporal-polyfill";
 
 import { conversionPhaseSchema } from "@cup/conversion-contracts";
 import { DurationLedger } from "@cup/duration-ledger";
+import { CupError } from "@cup/errors";
 
 import type { GrantConversion, GrantRecord } from "#src/domain/grant-model.ts";
 import {
@@ -67,7 +68,7 @@ export class ConversionGrantSqlite {
       conversions,
     };
     if (!isGrantRecord(parsed)) {
-      throw new Error("Conversion grant storage is corrupt");
+      throw new CupError("Conversion grant storage is corrupt");
     }
     return parsed;
   }
@@ -75,7 +76,7 @@ export class ConversionGrantSqlite {
   async requireRecord(): Promise<GrantRecord> {
     const record = await this.load();
     if (record === undefined) {
-      throw new Error("Conversion grant is not initialized");
+      throw new CupError("Conversion grant is not initialized");
     }
     return record;
   }
@@ -124,6 +125,12 @@ function conversionRowToUnknown(row: ConversionRow): unknown {
     createdAtMs: row.createdAtMs,
     ...(row.workflowStartedAtMs === null ? {} : { workflowStartedAtMs: row.workflowStartedAtMs }),
     lastStartedPhase: row.lastStartedPhase,
+    /*
+     * Code from before migration 0005 writes no stage start, so a row it wrote during a rollback
+     * has none. Such a row reads the way the migration backfilled the rows it found.
+     */
+    stageStartedAtMs: row.stageStartedAtMs ?? row.completedAtMs ?? row.createdAtMs,
+    ...(row.stuckReportedAtMs === null ? {} : { stuckReportedAtMs: row.stuckReportedAtMs }),
   };
   if (row.status === "pending") {
     return { ...base, status: "pending" };
@@ -205,6 +212,8 @@ function conversionToRow(conversion: GrantConversion): typeof conversionTable.$i
     sourceUrl: conversion.sourceUrl,
     createdAtMs: conversion.createdAtMs,
     workflowStartedAtMs: conversion.workflowStartedAtMs ?? null,
+    stageStartedAtMs: conversion.stageStartedAtMs,
+    stuckReportedAtMs: conversion.stuckReportedAtMs ?? null,
     status: conversion.status,
     ...values,
   };
@@ -233,6 +242,7 @@ function isGrantConversion(value: unknown): value is GrantConversion {
     typeof value["idempotencyKey"] !== "string" ||
     typeof value["sourceUrl"] !== "string" ||
     typeof value["createdAtMs"] !== "number" ||
+    typeof value["stageStartedAtMs"] !== "number" ||
     !conversionPhaseSchema.safeParse(value["lastStartedPhase"]).success
   ) {
     return false;

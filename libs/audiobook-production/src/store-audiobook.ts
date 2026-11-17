@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { createConversionArtifactPrefix } from "@cup/conversion-contracts";
+import { CupError } from "@cup/errors";
 import { SYNCHRONIZATION_UNIT_SCHEMA } from "@cup/narration-document-creation";
 import type { NarrationDocument } from "@cup/narration-document-creation";
 
@@ -125,7 +126,7 @@ export async function storeAudiobook({
   });
 
   if (!storedManifest) {
-    throw new Error(`Audiobook manifest upload did not produce an object: ${key}`);
+    throw new CupError(`Audiobook manifest upload did not produce an object: ${key}`);
   }
 
   return {
@@ -144,7 +145,7 @@ export async function loadAudiobook({
   const storedManifest = await bucket.get(audiobookReference.key);
 
   if (!storedManifest) {
-    throw new Error(`Audiobook manifest was not found in storage: ${audiobookReference.key}`);
+    throw new CupError(`Audiobook manifest was not found in storage: ${audiobookReference.key}`);
   }
 
   if (
@@ -152,7 +153,7 @@ export async function loadAudiobook({
     storedManifest.size !== audiobookReference.byteLength ||
     storedManifest.etag !== audiobookReference.etag
   ) {
-    throw new Error(
+    throw new CupError(
       `Stored audiobook manifest does not match its reference: ${audiobookReference.key}`,
     );
   }

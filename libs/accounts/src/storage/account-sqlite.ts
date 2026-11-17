@@ -1,6 +1,5 @@
 import { and, desc, eq, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { drizzle, type DrizzleSqliteDODatabase } from "drizzle-orm/durable-sqlite";
-import { Temporal } from "temporal-polyfill";
 import { z } from "zod";
 
 import {
@@ -12,6 +11,7 @@ import {
   derivePreparedConversionStatus,
 } from "@cup/conversion-contracts";
 import { DurationLedger } from "@cup/duration-ledger";
+import { CupError } from "@cup/errors";
 import { RollingLimits } from "@cup/rolling-limits";
 
 import {
@@ -49,6 +49,17 @@ import {
 import { rateEvents } from "#src/storage/rate-limit-schema.ts";
 import { migrateAccount } from "#src/storage/sqlite-migrations.ts";
 import { requireRow } from "#src/storage/sqlite-row.ts";
+
+/** How far a conversion's current stage has come: what the stuck-conversion check reads of it. */
+type ConversionStageProgress = {
+  conversionId: string;
+  status: "pending" | "ready" | "failed";
+  lastStartedPhase: ConversionPhase;
+  /** Whether a segment of the conversion still holds a duration reservation. */
+  hasReservedSegment: boolean;
+  /** When the current stage started: preparation while pending, synthesis once ready. */
+  stageStartedAtMs: number;
+};
 
 const WELCOME_ALLOWANCE_MILLISECONDS = 30 * 60 * 1_000;
 
@@ -109,7 +120,7 @@ export class AccountSqlite {
             createdAtMs: existing.createdAtMs,
           })
         ) {
-          throw new Error("Account initialization conflicts with its existing identity");
+          throw new CupError("Account initialization conflicts with its existing identity");
         }
         return this.snapshot();
       }
@@ -137,7 +148,7 @@ export class AccountSqlite {
   snapshot(): AccountSnapshot {
     const identity = this.readIdentity();
     if (identity === undefined) {
-      throw new Error("Account is not initialized");
+      throw new CupError("Account is not initialized");
     }
     return { ...identity, balance: { unit: "audio-millisecond", ...this.duration.balance() } };
   }
@@ -203,7 +214,7 @@ export class AccountSqlite {
         .get();
       if (existing !== undefined) {
         if (existing.sourceUrl !== request.sourceUrl) {
-          throw new Error("Conversion idempotency conflict");
+          throw new CupError("Conversion idempotency conflict");
         }
         return { result: "replayed", conversion: existing };
       }
@@ -221,6 +232,7 @@ export class AccountSqlite {
           createdAtMs: nowMs,
           status: "pending",
           lastStartedPhase: ConversionPhase.CONVERSION_START,
+          stageStartedAtMs: nowMs,
         })
         .run();
       this.database
@@ -245,12 +257,23 @@ export class AccountSqlite {
     });
   }
 
+  /** A reservation of any missing segment starts synthesis again. */
   reserveMissingAudioSegments(
     conversionId: string,
     narrationTextCharactersBySegment: readonly number[],
     nowMs: number,
   ) {
-    return this.duration.reserveMissing(conversionId, narrationTextCharactersBySegment, nowMs);
+    return this.database.transaction(() => {
+      const reservation = this.duration.reserveMissing(
+        conversionId,
+        narrationTextCharactersBySegment,
+        nowMs,
+      );
+      if (reservation.result === "reserved" && reservation.hasChanged) {
+        this.startStage(conversionId, nowMs);
+      }
+      return reservation;
+    });
   }
 
   reservedAudioSegments() {
@@ -266,7 +289,7 @@ export class AccountSqlite {
     return this.duration.complete(conversionId, sequence, durationMilliseconds, nowMs);
   }
 
-  retryPreparation(conversionId: string) {
+  retryPreparation(conversionId: string, nowMs: number) {
     this.requireActive();
     this.database
       .update(accountConversions)
@@ -275,6 +298,8 @@ export class AccountSqlite {
         lastStartedPhase: ConversionPhase.CONVERSION_START,
         completedAtMs: null,
         ...EMPTY_OUTCOME_COLUMNS,
+        stageStartedAtMs: nowMs,
+        stuckReportedAtMs: null,
       })
       .where(
         and(
@@ -300,12 +325,13 @@ export class AccountSqlite {
       .run();
   }
 
-  releaseAudioSegment(conversionId: string, sequence: number) {
-    this.duration.releaseReservations(
-      conversionId,
-      Temporal.Now.instant().epochMilliseconds,
-      sequence,
-    );
+  /** Returns whether the segment had a reservation to release. */
+  releaseAudioSegment(conversionId: string, sequence: number, nowMs: number): boolean {
+    return this.duration.releaseReservations(conversionId, nowMs, sequence) > 0;
+  }
+
+  audioSegmentReservedAtMs(conversionId: string, sequence: number): number | undefined {
+    return this.duration.reservedAtMs(conversionId, sequence);
   }
 
   getPlaybackPosition(conversionId: string): PlaybackPosition | null {
@@ -329,7 +355,7 @@ export class AccountSqlite {
   savePlaybackPosition(conversionId: string, position: PlaybackPosition) {
     this.requireActive();
     if (this.isMarkedForDeletion(conversionId)) {
-      throw new Error("Account conversion does not exist");
+      throw new CupError("Account conversion does not exist");
     }
     const parsed = playbackPositionSchema.parse(position);
     this.database
@@ -444,14 +470,16 @@ export class AccountSqlite {
     nowMs: number,
     executionEpoch?: number,
     narrationTextCharactersBySegment?: readonly number[],
-  ): void {
+  ):
+    | { result: "recorded"; conversionCreatedAtMs: number; isInsufficientDuration: boolean }
+    | { result: "replayed" } {
     z.number().int().nonnegative().safe().parse(nowMs);
     z.uuidv4().parse(conversionId);
     const parsed = accountOutcomeSchema.parse(outcome);
-    this.database.transaction(() => {
+    return this.database.transaction(() => {
       const account = this.snapshot();
       if (executionEpoch !== undefined && account.executionEpoch !== executionEpoch) {
-        throw new Error("Account execution epoch mismatch");
+        throw new CupError("Account execution epoch mismatch");
       }
       const deadline = requireRow(
         this.database
@@ -464,17 +492,17 @@ export class AccountSqlite {
         account.state === "deleting" ||
         (account.state === "deletion_scheduled" && (deadline === null || nowMs >= deadline))
       ) {
-        throw new Error("Account blocks conversion settlement");
+        throw new CupError("Account blocks conversion settlement");
       }
       const conversion = this.getConversion(conversionId);
       if (conversion === undefined) {
-        throw new Error("Account conversion does not exist");
+        throw new CupError("Account conversion does not exist");
       }
       if (conversion.status !== "pending") {
         if (canonicalJson(conversion.outcome) !== canonicalJson(parsed)) {
-          throw new Error("Conflicting conversion settlement");
+          throw new CupError("Conflicting conversion settlement");
         }
-        return;
+        return { result: "replayed" as const };
       }
       if (
         parsed.status === "ready" &&
@@ -485,7 +513,7 @@ export class AccountSqlite {
           }),
         )
       ) {
-        throw new Error("Private audiobook reference is outside its conversion prefix");
+        throw new CupError("Private audiobook reference is outside its conversion prefix");
       }
       this.database
         .update(accountConversions)
@@ -493,16 +521,30 @@ export class AccountSqlite {
         .where(eq(accountConversions.conversionId, conversionId))
         .run();
       this.duration.releaseReservations(conversionId, nowMs);
+      let isInsufficientDuration = false;
       // Reserving with the ready outcome leaves no moment in which a prepared conversion has
       // undecided reservations: afterwards a segment without one means the document did not fit.
       if (parsed.status === "ready" && narrationTextCharactersBySegment !== undefined) {
-        this.duration.reserveMissing(conversionId, narrationTextCharactersBySegment, nowMs);
+        const reservation = this.duration.reserveMissing(
+          conversionId,
+          narrationTextCharactersBySegment,
+          nowMs,
+        );
+        isInsufficientDuration = reservation.result !== "reserved";
+        if (reservation.result === "reserved" && reservation.hasChanged) {
+          this.startStage(conversionId, nowMs);
+        }
       }
       this.database
         .update(pendingJobs)
         .set({ state: "delivered" })
         .where(eq(pendingJobs.conversionId, conversionId))
         .run();
+      return {
+        result: "recorded" as const,
+        conversionCreatedAtMs: conversion.createdAtMs,
+        isInsufficientDuration,
+      };
     });
   }
 
@@ -605,6 +647,34 @@ export class AccountSqlite {
       .map((row) => accountConversionDeletionSchema.parse(row));
   }
 
+  /** The marked conversions the stuck-conversion-deletion check has not reported. */
+  unreportedConversionDeletions(): AccountConversionDeletion[] {
+    return this.database
+      .select({
+        conversionId: accountConversions.conversionId,
+        deletingSinceMs: accountConversions.deletingSinceMs,
+      })
+      .from(accountConversions)
+      .where(
+        and(
+          isNotNull(accountConversions.deletingSinceMs),
+          isNull(accountConversions.deletionStuckReportedAtMs),
+        ),
+      )
+      .orderBy(accountConversions.deletingSinceMs, accountConversions.conversionId)
+      .all()
+      .map((row) => accountConversionDeletionSchema.parse(row));
+  }
+
+  /** Records that the stuck-conversion-deletion check reported the marked conversion. */
+  markDeletionStuckReported(conversionId: string, nowMs: number): void {
+    this.database
+      .update(accountConversions)
+      .set({ deletionStuckReportedAtMs: nowMs })
+      .where(eq(accountConversions.conversionId, conversionId))
+      .run();
+  }
+
   /** A conversion marked for deletion reads as missing, which also fences its execution. */
   getConversion(conversionId: string):
     | (AccountConversion & {
@@ -637,11 +707,67 @@ export class AccountSqlite {
     };
   }
 
+  /**
+   * The conversions whose current stage the stuck-conversion check has not reported, without those
+   * marked for deletion.
+   */
+  conversionsWithUnreportedStage(): ConversionStageProgress[] {
+    const reservedConversionIds = new Set(
+      this.duration.reservedSegments().map((segment) => segment.conversionId),
+    );
+    return this.database
+      .select({
+        conversionId: accountConversions.conversionId,
+        status: accountConversions.status,
+        lastStartedPhase: accountConversions.lastStartedPhase,
+        stageStartedAtMs: accountConversions.stageStartedAtMs,
+        createdAtMs: accountConversions.createdAtMs,
+        completedAtMs: accountConversions.completedAtMs,
+      })
+      .from(accountConversions)
+      .where(
+        and(
+          isNull(accountConversions.deletingSinceMs),
+          isNull(accountConversions.stuckReportedAtMs),
+        ),
+      )
+      .all()
+      .map((row) => ({
+        conversionId: row.conversionId,
+        status: row.status,
+        lastStartedPhase: row.lastStartedPhase,
+        hasReservedSegment: reservedConversionIds.has(row.conversionId),
+        /*
+         * Code from before migration 0011 writes no stage start, so a row it wrote during a
+         * rollback has none. Such a row reads the way the migration backfilled the rows it found.
+         */
+        stageStartedAtMs: row.stageStartedAtMs ?? row.completedAtMs ?? row.createdAtMs,
+      }));
+  }
+
+  /** Records that the stuck-conversion check reported the conversion's current stage. */
+  markStuckReported(conversionId: string, nowMs: number): void {
+    this.database
+      .update(accountConversions)
+      .set({ stuckReportedAtMs: nowMs })
+      .where(eq(accountConversions.conversionId, conversionId))
+      .run();
+  }
+
   markDispatched(conversionId: string): void {
     this.database
       .update(pendingJobs)
       .set({ state: "delivered" })
       .where(eq(pendingJobs.conversionId, conversionId))
+      .run();
+  }
+
+  /** Starts the conversion's stage again, so the stuck-conversion check may report it once more. */
+  private startStage(conversionId: string, nowMs: number): void {
+    this.database
+      .update(accountConversions)
+      .set({ stageStartedAtMs: nowMs, stuckReportedAtMs: null })
+      .where(eq(accountConversions.conversionId, conversionId))
       .run();
   }
 
@@ -676,7 +802,7 @@ export class AccountSqlite {
   private requireActive(): AccountSnapshot {
     const account = this.snapshot();
     if (account.state !== "active") {
-      throw new Error("Account is not active");
+      throw new CupError("Account is not active");
     }
     return account;
   }

@@ -26,7 +26,7 @@ node tooling/env-setup/src/cli.ts setup --from /absolute/path/to/existing.env
 pnpm install
 ```
 
-Use an existing credentials file or another checkout’s env file as the source. Alternatively, export `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_KEY` and run setup without `--from`. Setup preserves existing files; both files are ignored by Git. Setup, which postinstall runs when needed, also moves an `.env.evals` left at the library's former path `libs/narration-content-selection/`. Use Node for this bootstrap step because pnpm can trigger installation before setup. `pnpm env:check` checks that both files are configured and match; postinstall and every validation gate also run it. This checks local configuration without making paid API calls.
+Use an existing credentials file or another checkout’s env file as the source. Alternatively, export `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_KEY` and run setup without `--from`. Setup preserves existing files; both files are ignored by Git. Setup, which postinstall runs when needed, also moves an `.env.evals` left at the library's former path `libs/narration-content-selection/`. Use Node for this bootstrap step because pnpm can trigger installation before setup. `pnpm env:check` checks that both files are configured, match, and hold no `SENTRY_AUTH_TOKEN` (the Sentry upload token lives only in `~/.sentryclirc`); postinstall and every validation gate also run it. This checks local configuration without making paid API calls.
 
 ## Validation
 
@@ -63,6 +63,8 @@ Test suites can run concurrently in several checkouts. Each run starts its own s
 Tests are never retried: leave Vitest `retry` and Playwright `retries` at their default of 0 in configs and individual tests (an explicit 0 is fine), and fix a flaky test instead of retrying it.
 
 Tests that exercise Resend use the [Resend stub](qa/resend-stub/README.md). Its live contract test, `pnpm test:resend-live`, sends real email, so only the operator runs it.
+
+Tests that exercise Sentry use the [Sentry stub](qa/sentry-stub/README.md). No test, and no local development, sends to the real Sentry ([on/off rules](docs/architecture/observability.md#nothing-is-sent-outside-production)).
 
 Use `pnpm test:e2e:app` or `pnpm test:e2e:source-material` to rerun a single E2E suite; each builds what the suite needs through Turbo and replays a cached pass, and `--force` runs it fresh. `pnpm test:e2e` runs both. `pnpm test:e2e:mobile` runs the mobile suite the same way, Android and iOS in parallel as two cached tasks; `pnpm test:e2e:mobile:android` and `pnpm test:e2e:mobile:ios` run one platform. `pnpm test:e2e:mobile:clean` removes emulators and simulators that killed mobile runs left behind; each run also does that first. Builds use checked-in brand assets; after changing their sources, run `pnpm brand-assets:sync` and review the generated changes. `pnpm brand-assets:check` reports stale files without modifying them. `pnpm screenshots:update` refreshes the web app component screenshot baselines and the app E2E baselines and runs no other check; afterwards, run the gate you are at.
 

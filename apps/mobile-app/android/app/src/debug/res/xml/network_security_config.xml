@@ -1,7 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Debug builds only: the mobile E2E suite's test Worker and fake auth provider serve plain HTTP on localhost. -->
+<!--
+    Debug builds only: the mobile E2E suite's test Worker and fake auth provider serve plain HTTP on
+    localhost, and its Sentry stub, which the native Sentry SDK sends to, on 127.0.0.1.
+-->
 <network-security-config>
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">127.0.0.1</domain>
     </domain-config>
 </network-security-config>

@@ -1,3 +1,5 @@
+import { CupError } from "@cup/errors";
+
 import { AUDIO_FORMAT } from "#src/audio-format.ts";
 import {
   PermanentNarrationSynthesisError,
@@ -54,7 +56,7 @@ export async function synthesizeElevenLabsAudio({
       throw new RateLimitedNarrationSynthesisError(message);
     }
     if (response.status === 408 || response.status >= 500) {
-      throw new Error(message);
+      throw new CupError(message);
     }
     throw new PermanentNarrationSynthesisError(message);
   }
@@ -69,7 +71,7 @@ export async function synthesizeElevenLabsAudio({
 
   const audio = new Uint8Array(await response.arrayBuffer());
   if (audio.byteLength === 0 || audio.byteLength % 2 !== 0) {
-    throw new Error("ElevenLabs narration synthesis returned empty or incomplete 16-bit PCM");
+    throw new CupError("ElevenLabs narration synthesis returned empty or incomplete 16-bit PCM");
   }
   return audio;
 }

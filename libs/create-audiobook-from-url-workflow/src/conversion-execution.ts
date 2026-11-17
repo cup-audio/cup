@@ -25,8 +25,14 @@ export type ConversionExecution = {
   startSynthesis(narrationTextCharactersBySegment: readonly number[]): Promise<void>;
   /** Reservations are taken for the whole document by the owner; a segment only checks its own. */
   getAudioSegmentState(sequence: number): Promise<SegmentUsage["state"] | undefined>;
-  completeAudioSegment(sequence: number, durationMilliseconds: number): Promise<void>;
-  releaseAudioSegment(sequence: number): Promise<void>;
+  /** `attempts` counts the run's synthesis attempts, for the owner's outcome event. */
+  completeAudioSegment(
+    sequence: number,
+    durationMilliseconds: number,
+    attempts: number,
+  ): Promise<void>;
+  /** `attempts` is absent when the run cannot tell, such as after a replay. */
+  releaseAudioSegment(sequence: number, attempts: number | undefined): Promise<void>;
 };
 
 /** Captures ownership and epoch; execution checks remain in the owner RPCs and artifact writer. */
@@ -100,11 +106,17 @@ export function resolveConversionExecution(
           (segment) => segment.sequence === sequence,
         )?.state;
       },
-      completeAudioSegment: async (sequence, duration) => {
-        await account.completeAudioSegment(conversionId, sequence, duration, executionEpoch);
+      completeAudioSegment: async (sequence, duration, attempts) => {
+        await account.completeAudioSegment(
+          conversionId,
+          sequence,
+          duration,
+          executionEpoch,
+          attempts,
+        );
       },
-      releaseAudioSegment: (sequence) =>
-        account.releaseAudioSegment(conversionId, sequence, executionEpoch),
+      releaseAudioSegment: (sequence, attempts) =>
+        account.releaseAudioSegment(conversionId, sequence, executionEpoch, attempts),
     };
   }
 
@@ -126,9 +138,11 @@ export function resolveConversionExecution(
     getAudioSegmentState: async (sequence) =>
       (await grant.listAudioSegments(conversionId)).find((segment) => segment.sequence === sequence)
         ?.state,
-    completeAudioSegment: async (sequence, duration) => {
-      await grant.completeAudioSegment(conversionId, sequence, duration);
+    completeAudioSegment: async (sequence, duration, attempts) => {
+      await grant.completeAudioSegment(conversionId, sequence, duration, attempts);
     },
-    releaseAudioSegment: (sequence) => grant.releaseAudioSegment(conversionId, sequence),
+    releaseAudioSegment: async (sequence, attempts) => {
+      await grant.releaseAudioSegment(conversionId, sequence, attempts);
+    },
   };
 }

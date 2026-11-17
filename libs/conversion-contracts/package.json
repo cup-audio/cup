@@ -28,6 +28,7 @@
     "turbo:test": "pnpm run test"
   },
   "dependencies": {
+    "@cup/errors": "workspace:*",
     "p-map": "^7.1.0",
     "zod": "^4.6.5"
   },

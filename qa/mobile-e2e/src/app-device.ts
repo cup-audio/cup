@@ -6,6 +6,12 @@ export type MobilePlatform = "android" | "ios";
 export type LaunchArguments = {
   /** The test Worker's origin, always `http://localhost:<port>`. */
   readonly apiOrigin: string;
+  /**
+   * The Sentry stub's `cup-app` DSN, `http://<key>@127.0.0.1:<port>/<project>`: the debug build
+   * then reports to it, its JS events through the test Worker's telemetry tunnel. Without it, the
+   * debug build sends nothing to Sentry.
+   */
+  readonly testSentryDsn?: string;
 };
 
 /**
