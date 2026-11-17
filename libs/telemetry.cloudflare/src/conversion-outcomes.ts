@@ -1,3 +1,4 @@
+import type { ConversionFailureCategory } from "@cup/conversion-contracts";
 import { TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
 
 import { logEvent } from "#src/log-event.ts";
@@ -5,7 +6,7 @@ import { logEvent } from "#src/log-event.ts";
 /** How a preparation ended, as the owner recorded it. */
 export type PreparationOutcome =
   | { outcome: "ready" | "insufficient-duration" }
-  | { outcome: "failed"; failureCategory: string };
+  | { outcome: "failed"; failureCategory: ConversionFailureCategory };
 
 /** Sends `conversion-preparation-settled` once a conversion owner recorded a preparation outcome. */
 export function logPreparationSettled(
@@ -56,7 +57,7 @@ export function logAudioSegmentSettled(input: {
         [TELEMETRY_ATTRIBUTES.CONVERSION_ID]: input.conversionId,
         [TELEMETRY_ATTRIBUTES.AUDIO_SEGMENT_SEQUENCE]: input.sequence,
         [TELEMETRY_ATTRIBUTES.AUDIO_SEGMENT_OUTCOME]: input.outcome,
-        [TELEMETRY_ATTRIBUTES.AUDIO_SEGMENT_SYNTHESIS_MS]:
+        [TELEMETRY_ATTRIBUTES.AUDIO_SEGMENT_RESERVED_MS]:
           input.reservedAtMs === undefined ? undefined : input.settledAtMs - input.reservedAtMs,
         [TELEMETRY_ATTRIBUTES.AUDIO_SEGMENT_ATTEMPTS]: input.attempts,
       },

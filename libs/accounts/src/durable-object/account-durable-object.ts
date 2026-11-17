@@ -589,8 +589,13 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
       const registry = this.env.REGISTRY;
       await registry.get(registry.idFromName("registry")).applyAccountUsageProjection(projection);
       this.sqlite.confirmRegistryUsage(projection.revision);
-    } catch {
-      /* The alarm retries until the registry confirms this or a later revision. */
+    } catch (error) {
+      // The alarm retries until the registry confirms this or a later revision.
+      logEvent(
+        "usage-projection-failed",
+        "The registry did not take the account's usage projection; the next alarm pushes it again.",
+        { attributes: { [TELEMETRY_ATTRIBUTES.ACCOUNT_ID]: projection.accountId }, error },
+      );
     }
   }
 

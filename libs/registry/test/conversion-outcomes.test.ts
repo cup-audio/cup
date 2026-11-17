@@ -97,7 +97,7 @@ test(
         "cup.audio_segment.attempts": { value: 2 },
       },
     });
-    expect(settled?.attributes["cup.audio_segment.synthesis_ms"]?.value).toBeGreaterThanOrEqual(0);
+    expect(settled?.attributes["cup.audio_segment.reserved_ms"]?.value).toBeGreaterThanOrEqual(0);
     expect(released).toMatchObject({
       attributes: {
         "cup.audio_segment.sequence": { value: 1 },
@@ -375,6 +375,56 @@ test(
 
     await waitForLogs("conversion-dispatch-failed", conversionId, 1);
     expect(logs("conversion-dispatch-failed", conversionId)[0]).toMatchObject({
+      level: "warn",
+      attributes: { "exception.type": { value: "Error" } },
+    });
+  },
+  TEST_TIMEOUT_MS,
+);
+
+test(
+  "a trial conversion whose preparation Workflow cannot be reached logs a warning on the alarm pass",
+  async () => {
+    const { grant } = await createGrant();
+    const nowMs = Temporal.Now.instant().epochMilliseconds;
+    const conversionId = await startGrantConversion(grant, nowMs);
+
+    // The test object's Workflow instances report no status.
+    await grant.reconcileAtForTest(nowMs);
+
+    await waitForLogs("conversion-dispatch-failed", conversionId, 1);
+    expect(logs("conversion-dispatch-failed", conversionId)[0]).toMatchObject({
+      level: "warn",
+      attributes: { "exception.type": { value: "Error" } },
+    });
+  },
+  TEST_TIMEOUT_MS,
+);
+
+test(
+  "an account whose usage projection the registry refuses logs a warning on the alarm pass",
+  async () => {
+    const { account, accountId } = await createAccount();
+    await account.failUsageProjectionsForTest();
+    await account.adjustAllowance(
+      crypto.randomUUID(),
+      60_000,
+      "conversion-outcome-test",
+      Temporal.Now.instant().epochMilliseconds,
+    );
+
+    await account.reconcileForTest();
+
+    const usageProjectionLogs = () =>
+      stub
+        .logs("cup-worker")
+        .filter(
+          (log) =>
+            log.attributes["event.name"]?.value === "usage-projection-failed" &&
+            log.attributes["cup.account.id"]?.value === accountId,
+        );
+    await stub.waitFor("the usage-projection-failed log", () => usageProjectionLogs().length > 0);
+    expect(usageProjectionLogs()[0]).toMatchObject({
       level: "warn",
       attributes: { "exception.type": { value: "Error" } },
     });

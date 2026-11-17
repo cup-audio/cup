@@ -37,8 +37,10 @@ export const LOG_EVENTS = {
   "cover-image-unavailable": "warn",
   /** A deleted conversion's Workflow instance could not be terminated; it is tried once. */
   "conversion-workflow-termination-failed": "warn",
-  /** One pass of an account conversion's preparation dispatch failed; the account alarm retries it. */
+  /** One pass of a conversion's preparation dispatch failed; its owner's alarm retries it. */
   "conversion-dispatch-failed": "warn",
+  /** The registry did not take an owner's usage projection; the owner's alarm pushes it again. */
+  "usage-projection-failed": "warn",
   /** One pass of a marked conversion's cleanup failed; the account alarm retries it. */
   "conversion-deletion-cleanup-failed": "warn",
   /** One pass of an account deletion could not delete the Supabase identity; it is retried. */

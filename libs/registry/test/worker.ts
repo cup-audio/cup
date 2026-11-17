@@ -68,9 +68,9 @@ export class AccountDispatchTestDurableObject extends BaseAccountDurableObject {
  * Workflow instances report no status, so the alarm treats them as unreachable, and record each
  * termination attempt, which fails once a test asks for it. An alarm the platform fires is only
  * counted: tests run the alarm with `reconcileForTest()`, so a pass never races the test. The
- * registry passes through, except that removing a conversion owner fails once when a test asks for
- * it. Reconciling an artifact writer, the alarm step that runs first, fails once a test asks for
- * it.
+ * registry passes through, except that removing a conversion owner fails once, and applying a usage
+ * projection fails from then on, when a test asks for it. Reconciling an artifact writer, the alarm
+ * step that runs first, fails once a test asks for it.
  */
 export class AccountDurableObject extends BaseAccountDurableObject {
   private readonly workflows: WorkflowControl;
@@ -88,6 +88,7 @@ export class AccountDurableObject extends BaseAccountDurableObject {
   ) {
     const registryControl: RegistryControl = {
       shouldNextOwnerRemovalFail: false,
+      shouldUsageProjectionFail: false,
       beforeNextOwnerBind: undefined,
     };
     const workflows: WorkflowControl = {
@@ -130,8 +131,12 @@ export class AccountDurableObject extends BaseAccountDurableObject {
             acceptDeletionAttempt: (attempt) => registry.acceptDeletionAttempt(attempt),
             removeAccountConversionOwners: (accountId) =>
               registry.removeAccountConversionOwners(accountId),
-            applyAccountUsageProjection: (projection) =>
-              registry.applyAccountUsageProjection(projection),
+            applyAccountUsageProjection: async (projection) => {
+              if (registryControl.shouldUsageProjectionFail) {
+                throw new Error("Usage projection failed");
+              }
+              return registry.applyAccountUsageProjection(projection);
+            },
             removeConversionOwner: async (conversionId) => {
               if (registryControl.shouldNextOwnerRemovalFail) {
                 registryControl.shouldNextOwnerRemovalFail = false;
@@ -174,6 +179,9 @@ export class AccountDurableObject extends BaseAccountDurableObject {
   /** Resets the object; the next call constructs it again, as after an eviction. */
   restartForTest() {
     this.ctx.abort("Restarted by the test");
+  }
+  failUsageProjectionsForTest() {
+    this.registryControl.shouldUsageProjectionFail = true;
   }
   failNextOwnerRemovalForTest() {
     this.registryControl.shouldNextOwnerRemovalFail = true;
@@ -237,6 +245,7 @@ export class AccountDurableObject extends BaseAccountDurableObject {
 
 type RegistryControl = {
   shouldNextOwnerRemovalFail: boolean;
+  shouldUsageProjectionFail: boolean;
   beforeNextOwnerBind: ((conversionId: string) => Promise<void>) | undefined;
 };
 

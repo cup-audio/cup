@@ -17,14 +17,15 @@ The [`@cup/telemetry.cloudflare` guide](../../libs/telemetry.cloudflare/README.m
 Every Worker log record goes through `logEvent` of [`@cup/telemetry.cloudflare`](../../libs/telemetry.cloudflare/README.md#use), which writes it to Sentry's logs; no Worker source writes to the console, and outside production a record goes nowhere. Each record has a stable event name from the [catalogue](../../libs/telemetry.core/src/log-events.ts), which states its one fixed severity and when it is written, its details as attributes with opaque IDs only, and for a logged error its root cause with the chain of wrapper types.
 
 - **Severity says who acts**: `error` means the operator must look, `warn` degraded but handled, `info` lifecycle events and outcomes, and `debug` is never sent. An expected outcome is a warning, not an issue.
-- **Per-pass warnings carry the root cause.** The cleanup warnings of [conversion deletion](conversion-deletion.md) and [account deletion](account-deletion.md#fencing-and-cleanup) name the conversion or account, so a stalled deletion can be investigated by its ID.
+- **Per-pass warnings carry the root cause.** The cleanup warnings of [conversion deletion](conversion-deletion.md) and [account deletion](account-deletion.md#fencing-and-cleanup) name the conversion or account, so a stalled deletion can be investigated by its ID. Both owners' alarms also warn when a pass cannot dispatch a preparation or cannot push the owner's [usage projection](../GLOSSARY.md#usage-projection) to the registry; the next pass retries either.
+- **A Workflow run logs inside a step.** The engine can replay a run, which runs the code between steps again and reuses each step's recorded result, so a record written in a step is written once.
 
 ## Conversion durations
 
 The operator sees how long conversions take and how they end from three `info` [log records](#log-records) and from the Workflow step spans. The owning account or conversion grant Durable Object sends each record when it records the outcome, so a replayed outcome sends nothing; each carries the conversion ID, and the [outcome records](../../libs/telemetry.cloudflare/src/conversion-outcomes.ts) define their attributes.
 
 - **Preparation settled**: the [conversion outcome](../GLOSSARY.md#conversion-outcome), with the time since the conversion was created, which after a retry includes the failed preparation and the wait before the retry.
-- **Audio segment settled**: settled or released, with the segment's synthesis time and, when its Workflow run recorded it, its synthesis attempts.
+- **Audio segment settled**: settled or released, with how long the segment held its duration reservation and, when its Workflow run recorded it, its synthesis attempts. The reservation time is more than the synthesis took: it includes the wait for dispatch, retries and rate-limit waits.
 - **Synthesis settled**: sent with the segment record that leaves no segment of the conversion reserved, with the count of released segments and, when none failed, the time until the narration track existed. A retry that reserves segments again sends it again.
 
 Sentry's Workflow wrapper makes every step a span named after the step, and each step's name starts with its [conversion phase](../GLOSSARY.md#conversion-phase), so a trace shows the time each phase takes. Cloudflare Workflows keys a step's stored result by its name: a deploy that renames a step makes an instance running at that moment run the step again.

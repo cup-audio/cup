@@ -25,8 +25,11 @@ export const TELEMETRY_ATTRIBUTES = {
   CONVERSION_FAILED_SEGMENTS: "cup.conversion.failed_segments",
   /** How an audio segment settled: `settled` with audio, or `released` after a failure. */
   AUDIO_SEGMENT_OUTCOME: "cup.audio_segment.outcome",
-  /** Milliseconds from the segment's duration reservation until it settled or was released. */
-  AUDIO_SEGMENT_SYNTHESIS_MS: "cup.audio_segment.synthesis_ms",
+  /**
+   * Milliseconds the segment held its duration reservation, until it settled or was released. More
+   * than its synthesis took: it includes the wait for dispatch, retries and rate-limit waits.
+   */
+  AUDIO_SEGMENT_RESERVED_MS: "cup.audio_segment.reserved_ms",
   /** The synthesis attempts of the segment's Workflow run, rate-limited ones included. */
   AUDIO_SEGMENT_ATTEMPTS: "cup.audio_segment.attempts",
   /** `preparation` or `synthesis`: the stage a stuck conversion hangs in. */

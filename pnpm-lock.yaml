@@ -1209,6 +1209,9 @@ importers:
       '@cup/telemetry.cloudflare':
         specifier: workspace:*
         version: link:../telemetry.cloudflare
+      '@cup/telemetry.core':
+        specifier: workspace:*
+        version: link:../telemetry.core
       drizzle-orm:
         specifier: ^0.45.4
         version: 0.45.4

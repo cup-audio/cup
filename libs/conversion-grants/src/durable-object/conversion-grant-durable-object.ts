@@ -21,12 +21,14 @@ import {
   captureAlarmFailure,
   captureStoppedWorkflow,
   logAudioSegmentSettled,
+  logEvent,
   logPreparationSettled,
   reportStuckConversions,
   setConversionScope,
   withConversionScope,
   type PreparationOutcome,
 } from "@cup/telemetry.cloudflare";
+import { TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
 
 import type {
   GrantConversions,
@@ -286,7 +288,7 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
           {
             v: 3,
             conversionId,
-            owner: { kind: "trial", grantId: reservation.grantId },
+            owner: trialOwner(reservation.grantId),
             executionEpoch: 1,
           },
           reservation.sequences,
@@ -779,20 +781,26 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
           continue;
         }
         const { conversionId } = conversion;
-        await withConversionScope({ conversionId, owner: { kind: "trial", grantId } }, async () => {
+        await withConversionScope({ conversionId, owner: trialOwner(grantId) }, async () => {
           try {
             const instance = await this.env.PREPARE_AUDIOBOOK_WORKFLOW.get(conversionId);
             await instance.status();
             await this.markWorkflowStarted(conversionId);
           } catch {
+            // Expected, so not logged: a preparation whose dispatch never arrived has no instance.
             try {
               await this.env.PREPARE_AUDIOBOOK_WORKFLOW.create({
                 id: conversionId,
                 params: { sourceUrl: conversion.sourceUrl, grantId },
               });
               await this.markWorkflowStarted(conversionId);
-            } catch {
+            } catch (error) {
               // The same stable identity remains reserved when the platform result is ambiguous.
+              logDispatchFailure(
+                conversionId,
+                "A trial conversion's preparation Workflow could not be created; the next alarm retries it.",
+                error,
+              );
             }
           }
         });
@@ -804,8 +812,13 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
           const registry = this.env.REGISTRY.get(this.env.REGISTRY.idFromName("registry"));
           await registry.applyGrantRegistrySnapshot(createGrantRegistrySnapshot(record));
           await this.confirmRegistrySnapshot(record.registrySnapshotRevision);
-        } catch {
-          // The Registry snapshot is derived and safe to retry indefinitely.
+        } catch (error) {
+          // The registry snapshot is derived and safe to retry indefinitely.
+          logEvent(
+            "usage-projection-failed",
+            "The registry did not take the grant's usage projection; the next alarm pushes it again.",
+            { attributes: { [TELEMETRY_ATTRIBUTES.CONVERSION_GRANT_ID]: grantId }, error },
+          );
         }
       }
 
@@ -870,7 +883,7 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
         }));
 
       const reported = new Set(
-        reportStuckConversions(candidates, { kind: "trial", grantId: record.grantId }, nowMs),
+        reportStuckConversions(candidates, trialOwner(record.grantId), nowMs),
       );
       if (reported.size === 0) {
         return;
@@ -890,7 +903,7 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
         continue;
       }
       const { conversionId } = conversion;
-      const owner = { kind: "trial" as const, grantId: record.grantId };
+      const owner = trialOwner(record.grantId);
       await withConversionScope({ conversionId, owner }, async () => {
         try {
           const instance = await this.env.PREPARE_AUDIOBOOK_WORKFLOW.get(conversionId);
@@ -904,8 +917,13 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
               cleanupState: "pending",
             });
           }
-        } catch {
+        } catch (error) {
           // An ambiguous platform result must not release reservations for work that might still be running.
+          logDispatchFailure(
+            conversionId,
+            "The status of a trial conversion's preparation Workflow could not be read; the next alarm retries it.",
+            error,
+          );
         }
       });
     }
@@ -918,7 +936,7 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
         continue;
       }
       const { conversionId, sequence } = segment;
-      const owner = { kind: "trial" as const, grantId: record.grantId };
+      const owner = trialOwner(record.grantId);
       await withConversionScope({ conversionId, owner, sequence }, async () => {
         const result = await reconcileSegmentWorkflow(
           this.env.SYNTHESIZE_AUDIO_SEGMENT_WORKFLOW,
@@ -1009,4 +1027,16 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
       },
     );
   }
+}
+
+function trialOwner(grantId: string) {
+  return { kind: "trial" as const, grantId };
+}
+
+/** One pass of a trial conversion's preparation dispatch failed; the alarm retries it. */
+function logDispatchFailure(conversionId: string, message: string, error: unknown) {
+  logEvent("conversion-dispatch-failed", message, {
+    attributes: { [TELEMETRY_ATTRIBUTES.CONVERSION_ID]: conversionId },
+    error,
+  });
 }
