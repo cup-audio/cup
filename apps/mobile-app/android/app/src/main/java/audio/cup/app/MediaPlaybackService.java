@@ -3,6 +3,7 @@ package audio.cup.app;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.os.Bundle;
 import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -12,7 +13,11 @@ import androidx.media3.session.CommandButton;
 import androidx.media3.session.MediaNotification;
 import androidx.media3.session.MediaSession;
 import androidx.media3.session.MediaSessionService;
+import androidx.media3.session.SessionCommand;
+import androidx.media3.session.SessionResult;
 import com.google.common.collect.ImmutableList;
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
 
 /**
  * The {@code mediaPlayback} foreground service that holds Cup's media session around the
@@ -24,11 +29,15 @@ import com.google.common.collect.ImmutableList;
  * runs it in the foreground while the player plays, and for its grace after a pause or the end,
  * after which it leaves the foreground and keeps the notification. Swiping Cup from recents keeps a
  * playing session and ends a paused one ({@link TaskRemoval}); swiping the notification away, possible
- * only after the grace, ends it too. The service releases the player when it stops.
+ * only after the grace, ends it too, and so does its Close button at any time. The service releases
+ * the player when it stops.
  */
 @UnstableApi
 public class MediaPlaybackService extends MediaSessionService {
     private static final String TAG = "CupMediaPlayback";
+
+    /** The notification's and lock screen's Close button, which ends the session. */
+    private static final SessionCommand CLOSE = new SessionCommand("audio.cup.app.CLOSE", Bundle.EMPTY);
 
     /** The engine's player, handed over before the engine starts the service. */
     @Nullable
@@ -130,7 +139,10 @@ public class MediaPlaybackService extends MediaSessionService {
         super.onDestroy();
     }
 
-    /** Back 15 s, play/pause and forward 15 s; Media3 adds play/pause, and there is no stop button. */
+    /**
+     * Back 15 s, play/pause, forward 15 s and Close; Media3 adds play/pause. Close is a session
+     * command rather than stop, which the session player handles as pause for cars and watches.
+     */
     private ImmutableList<CommandButton> notificationButtons() {
         return ImmutableList.of(
             new CommandButton.Builder(CommandButton.ICON_SKIP_BACK_15)
@@ -142,11 +154,52 @@ public class MediaPlaybackService extends MediaSessionService {
                 .setDisplayName(getString(R.string.media_session_forward))
                 .setPlayerCommand(Player.COMMAND_SEEK_FORWARD)
                 .setSlots(CommandButton.SLOT_FORWARD)
+                .build(),
+            new CommandButton.Builder(CommandButton.ICON_UNDEFINED)
+                .setCustomIconResId(R.drawable.ic_media_close)
+                .setDisplayName(getString(R.string.media_session_close))
+                .setSessionCommand(CLOSE)
+                .setSlots(CommandButton.SLOT_OVERFLOW)
                 .build()
         );
     }
 
     private final class SessionCallback implements MediaSession.Callback {
+        /**
+         * Media3's default session commands, plus Close for every controller, among them System UI's.
+         * The player commands stay the builder's defaults: the default result's would leave the
+         * session without play, pause and the skips.
+         */
+        @NonNull
+        @Override
+        public MediaSession.ConnectionResult onConnect(
+            @NonNull MediaSession mediaSession,
+            @NonNull MediaSession.ControllerInfo controllerInfo
+        ) {
+            MediaSession.ConnectionResult result = MediaSession.Callback.super.onConnect(mediaSession, controllerInfo);
+            if (!result.isAccepted) {
+                return result;
+            }
+            return new MediaSession.ConnectionResult.AcceptedResultBuilder(mediaSession)
+                .setAvailableSessionCommands(result.availableSessionCommands.buildUpon().add(CLOSE).build())
+                .build();
+        }
+
+        @NonNull
+        @Override
+        public ListenableFuture<SessionResult> onCustomCommand(
+            @NonNull MediaSession mediaSession,
+            @NonNull MediaSession.ControllerInfo controllerInfo,
+            @NonNull SessionCommand customCommand,
+            @NonNull Bundle args
+        ) {
+            if (!customCommand.customAction.equals(CLOSE.customAction)) {
+                return Futures.immediateFuture(new SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED));
+            }
+            PlaybackEngine.get(MediaPlaybackService.this).stopNatively(PlaybackEngine.ClosedReason.CLOSED);
+            return Futures.immediateFuture(new SessionResult(SessionResult.RESULT_SUCCESS));
+        }
+
         /**
          * Swiping the notification away arrives as stop, which the session player handles as pause;
          * the notification would then come back. It ends the session instead.

@@ -7,4 +7,5 @@
     <!-- The media notification and lock screen buttons, as in Cup's player. -->
     <string name="media_session_back">Back 15 seconds</string>
     <string name="media_session_forward">Forward 15 seconds</string>
+    <string name="media_session_close">Close</string>
 </resources>

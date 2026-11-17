@@ -61,6 +61,8 @@ final class PlaybackEngine {
         TASK_REMOVED("taskRemoved"),
         /** The listener swiped the notification away, after the service left the foreground. */
         NOTIFICATION_DISMISSED("notificationDismissed"),
+        /** The listener pressed Close on the notification or the lock screen. */
+        CLOSED("closed"),
         /** The URLs expired while paused, or the server refused the track URL. */
         TRACK_URL_EXPIRED("trackUrlExpired"),
         /** Android stopped the service for another reason. */
@@ -224,6 +226,8 @@ final class PlaybackEngine {
             .setMediaMetadata(
                 new MediaMetadata.Builder()
                     .setTitle(request.title)
+                    // Without an artist, System UI on Android 17 shows "null" under the title.
+                    .setArtist(context.getString(R.string.app_name))
                     .setArtworkUri(request.artworkUrl == null ? null : Uri.parse(request.artworkUrl))
                     .setDurationMs(request.durationMilliseconds)
                     .build()

@@ -25,6 +25,8 @@ export type NativeClosedReason =
   | "taskRemoved"
   /** The listener swiped the notification away, after the service left the foreground. */
   | "notificationDismissed"
+  /** The listener pressed Close on the notification or the lock screen. */
+  | "closed"
   /** The URLs expired while paused, or the server refused the track URL. */
   | "trackUrlExpired"
   /** Android stopped the service for another reason. */

@@ -63,10 +63,13 @@ test("the first Play starts a foreground media session that shows the audiobook 
   expect(await cupMediaPlaybackService(device)).toMatch(
     /\bisForeground=true\b.*\btypes=0x00000002\b/u,
   );
-  // The notification carries the cover image, which the session loaded from its signed URL.
-  expect(await cupMediaNotification(device)).toMatch(
-    /\bandroid\.largeIcon=Icon \(Icon\(typ=BITMAP/u,
-  );
+  // The notification carries the cover image, which the session loads from its signed URL after
+  // it first posts the notification.
+  await expect
+    .poll(() => cupMediaNotification(device), { timeout: 10_000 })
+    .toMatch(/\bandroid\.largeIcon=Icon \(Icon\(typ=BITMAP/u);
+  // Under the title the notification names Cup, since System UI shows a missing artist as "null".
+  expect(await cupMediaNotification(device)).toMatch(/\bandroid\.text=String \(Cup\)/u);
 
   // ExoPlayer plays on, also under the emulator's `-no-audio`, from where the skip left it.
   await expect
@@ -137,6 +140,27 @@ test("media keys and the notification's buttons and seek bar act on the player w
   ).toBeGreaterThan(0);
   // None of the controls started playback.
   await waitForPlayButton(webView, "Play");
+});
+
+test("Close in the notification ends a playing session, which saves the position, and the page keeps it", async () => {
+  const device = asAndroidAppDevice(app.device);
+  const { webView, conversionId } = await openNewAudiobook(device);
+  await webView.$(`${PLAYER} button[aria-label="Play"]`).click();
+  await waitForCupMediaSession(device, "PLAYING");
+  await expect.poll(() => readPosition(webView), { timeout: 15_000 }).toBeGreaterThan(3_000);
+
+  const saveCount = positionSaves(conversionId).length;
+  await device.tapMediaControl("Close");
+  await waitForSessionToEnd(device, 15_000);
+  await waitForSaveAfter(conversionId, saveCount);
+
+  // The page keeps the audiobook where it stopped, and Play loads it into a new session.
+  const page = await device.webView();
+  await waitForPlayButton(page, "Play");
+  const keptAt = await readPosition(page);
+  expect(keptAt).toBeGreaterThan(3_000);
+  await page.$(`${PLAYER} button[aria-label="Play"]`).click();
+  await waitForCupMediaSession(device, "PLAYING");
 });
 
 test(
