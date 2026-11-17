@@ -35,7 +35,7 @@ The conversion ID is the join key: every error, span and log of a conversion car
 
 ## Error references
 
-Every error body of the Listener API and the Operator API carries `traceId`, the request's Sentry trace ID. Pasted into Sentry's search, it lands on the request's trace and on the error event of a 500. The web app shows it as "Reference" on its error screen and in a server failure's toast, and the [Operator CLI](../../apps/operator/README.md#use-machine-readable-output) prints it with each API failure. Every Worker log record carries the same trace ID, so a record needs no request ID of its own. Outside production the ID is still well formed and matches nothing.
+Every error body of the Listener API and the Operator API carries `traceId`, the request's Sentry trace ID, which the API server's first middleware reads, so an error thrown by a later middleware carries it too. Pasted into Sentry's search, it lands on the request's trace and on the error event of a 500. The web app shows it as "Reference" on its error screen and in a server failure's toast, and the [Operator CLI](../../apps/operator/README.md#use-machine-readable-output) prints it with each API failure. Every Worker log record carries the same trace ID, so a record needs no request ID of its own. Outside production the ID is still well formed and matches nothing.
 
 ## Sampling
 

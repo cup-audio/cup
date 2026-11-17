@@ -1175,6 +1175,12 @@ export type ApiServerHonoEnvironment = {
 /** Creates the HTTP server for the web application and operator interfaces. */
 export function createApiServer(dependencies: ApiServerDependencies = productionDependencies) {
   const app = new Hono<ApiServerHonoEnvironment>();
+  // First, so that every error body carries the trace ID, also one of an error that a later
+  // middleware throws and `onError` answers.
+  app.use("*", async (context, next) => {
+    context.set("traceId", readTraceId());
+    await next();
+  });
   app.use("*", async (context, next) => {
     await next();
     if (!context.res.headers.has("Cache-Control")) {
@@ -1221,7 +1227,6 @@ export function createApiServer(dependencies: ApiServerDependencies = production
     })(context, next),
   );
   app.use("*", async (context, next) => {
-    context.set("traceId", readTraceId());
     const allowedMethods = allowedMethodsForApiPath(context.req.path);
     if (allowedMethods !== undefined && !allowedMethods.includes(context.req.method)) {
       context.res = jsonError(

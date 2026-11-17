@@ -65,3 +65,14 @@ test("a malformed JSON body answers 400 and captures nothing", async () => {
   expect(await response.json()).toMatchObject({ error: { code: "invalid-input" } });
   expect(captureException).not.toHaveBeenCalled();
 });
+
+test("an error thrown before the routes, in the security headers, answers 500 with the trace ID", async () => {
+  // Without `SUPABASE_URL` the content security policy cannot be built.
+  const response = await createApiServer().request("https://cup.audio/api/health", {}, {});
+
+  expect(response.status).toBe(500);
+  expect(await response.json()).toMatchObject({
+    error: { code: "operational-error", traceId: expect.stringMatching(/^[0-9a-f]{32}$/) },
+  });
+  expect(captureException).toHaveBeenCalledTimes(1);
+});
