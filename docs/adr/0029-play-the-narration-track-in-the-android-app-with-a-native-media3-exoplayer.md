@@ -31,8 +31,8 @@ The web player's media session port (built in [#395](https://github.com/patrickt
 
 - **The WebView's `<audio>` with a mirroring Media3 session** (ADR 0029's first version, [#396](https://github.com/patricktree/cup/issues/396)). Rejected after [#397](https://github.com/patricktree/cup/issues/397): commands from the session get lost once the WebView suspends the hidden page, and every command took a round trip through the page, so the notification's play and pause lagged.
 - **A Trusted Web Activity.** Rejected: it runs in whatever browser the listener has, with the same background limits and no native session of Cup's own.
-- **Capawesome's Audio Player and Media Session plugins.** Rejected: paid and closed source, so their manifests cannot be audited before buying, and they tie Cup to a subscription.
-- **`@capgo/capacitor-media-session`.** Rejected: it lacks `FOREGROUND_SERVICE_MEDIA_PLAYBACK`, handles neither headphone disconnects nor focus, and writes `MPNowPlayingInfoCenter` on iOS.
+- **Capawesome's Audio Player and Media Session plugins** (compared in the [plugin research](../research/capacitor-media-playback-options.md), 2026-11-14). Rejected: paid and closed source, so their manifests cannot be audited before buying, and they tie Cup to a subscription.
+- **`@capgo/capacitor-media-session`** (same [research](../research/capacitor-media-playback-options.md)). Rejected: it lacks `FOREGROUND_SERVICE_MEDIA_PLAYBACK`, handles neither headphone disconnects nor focus, and writes `MPNowPlayingInfoCenter` on iOS.
 - **The page saving positions on Android.** Rejected: a suspended page saves nothing, and its saves would race the plugin's ([#425](https://github.com/patricktree/cup/issues/425)).
 
 ## Relationship to existing decisions
@@ -41,7 +41,7 @@ This supersedes three bullets of [ADR 0011](0011-serve-one-narration-track-and-p
 
 ## Consequences
 
-- The track and the position saves no longer depend on the page's JavaScript running, so playback, system controls and saves continue with the screen locked or in another app while the service runs.
+- The track and the position saves no longer depend on the page's JavaScript running, and the `mediaPlayback` foreground service keeps Cup unfrozen and online in the background, as the [foreground service probe](../research/android-foreground-service-playback.md) showed on the emulator on 2026-11-14. So playback, system controls and saves continue with the screen locked or in another app while the service runs.
 - Android has a second engine behind the same `Player` port, with its own rules for the end, errors and renewal, which the native-backed player and the plugin must keep in line with the browser's.
 - A call longer than the foreground grace may need a manual Play afterwards; that is accepted. Whether an earbud Play after the grace starts ExoPlayer under Android 15's focus rule is checked on the Pixel.
 - The Appium suite cannot reproduce the background network cut, because loopback is exempt from it; it shows the unfrozen process that keeps network access. A checked-in manual protocol on the operator's Pixel 10 Pro complements it for earbuds, headphone disconnects, real focus changes and a locked listen of over an hour against production, run as CUP-41's acceptance check and again when the plugin's native code, its Media3 version or the target Android version changes.
@@ -50,3 +50,5 @@ This supersedes three bullets of [ADR 0011](0011-serve-one-narration-track-and-p
 ### Implementation status
 
 As of 2026-11-16 on the spec's integration branch, [#432](https://github.com/patricktree/cup/issues/432) built the engine: the `createPlayer` seam and the native-backed player, the plugin's commands and `state` events, the session with its buttons, stop as pause, focus and headphone handling, start on the first Play, close from the page, the playback error, the debug-only focus probe, and E2E cases for the session, system controls, a locked listen and focus. It reworked #396's plugin, removed the mirroring player and its command path, and replaced this ADR's first version. [#433](https://github.com/patricktree/cup/issues/433) then built URL expiry and the `403` stop, `closed` reports, adoption of a running session, the JVM tests and the review gate's prerequisites, and [#434](https://github.com/patricktree/cup/issues/434) the native position saves through the signed position URL. The [playback architecture](../architecture/playback.md#in-the-mobile-apps) describes what runs.
+
+On 2026-11-17 [PR #401](https://github.com/patricktree/cup/pull/401) merged the spec's slices to `main` as `c5a5fd8b`.
