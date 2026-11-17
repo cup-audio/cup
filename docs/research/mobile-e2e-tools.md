@@ -1,6 +1,8 @@
 # Mobile E2E tools for the Capacitor shells
 
 > Historical research, incorporated 2026-11-10 by [ADR 0018](../adr/0018-test-the-mobile-apps-with-appium-through-webdriverio-on-host-owned-emulators-and-simulators.md). Cup adopted its recommendation, Appium through WebdriverIO, run by Vitest in `qa/mobile-e2e` ([cup-audio/cup#184](https://github.com/cup-audio/cup/issues/184)). It pinned Appium 3.9 with the UiAutomator2 8.x and XCUITest 12.x drivers rather than the newest driver majors this page lists, and stayed off Appium 4. Driving `CupShare` through Safari's Share Sheet, marked _unverified_ here, was confirmed by the [spike](https://github.com/cup-audio/cup/issues/186) and is covered by the suite. External claims have not been reverified.
+>
+> 2026-11-17: the suite moved to Appium 4 with the UiAutomator2 9.x and XCUITest 13.x drivers ([ADR 0018 notes](../adr/0018-test-the-mobile-apps-with-appium-through-webdriverio-on-host-owned-emulators-and-simulators.md#notes)).
 
 [Original investigation](https://github.com/cup-audio/cup/blob/7c2407d48fc41687130f5e0c48c538887ad7d83f/docs/research/mobile-e2e-tools.md).
 

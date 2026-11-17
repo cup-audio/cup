@@ -16,5 +16,5 @@ ext {
     cordovaAndroidVersion = '14.0.1'
     // Must equal the `io.sentry:sentry-android` version that @sentry/capacitor brings; the app's
     // build checks it, because the in-memory installation ID reaches into this exact version.
-    sentryAndroidVersion = '8.61.0'
+    sentryAndroidVersion = '8.64.0'
 }

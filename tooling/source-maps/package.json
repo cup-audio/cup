@@ -28,9 +28,9 @@
     "turbo:test": "pnpm run test"
   },
   "dependencies": {
-    "@commander-js/extra-typings": "^15.0.0",
+    "@commander-js/extra-typings": "^15.1.0",
     "@sentry/cli": "catalog:sentry-client",
-    "commander": "^15.0.0"
+    "commander": "^15.1.0"
   },
   "devDependencies": {
     "@cup/config-oxlint": "workspace:*",

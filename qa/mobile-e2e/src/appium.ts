@@ -17,8 +17,8 @@ export type AppiumAppState = "not running" | "background" | "foreground";
 
 /** Appium drivers the suite uses, pinned exactly. */
 const APPIUM_DRIVERS = {
-  uiautomator2: "appium-uiautomator2-driver@8.7.3",
-  xcuitest: "appium-xcuitest-driver@12.22.8",
+  uiautomator2: "appium-uiautomator2-driver@9.2.1",
+  xcuitest: "appium-xcuitest-driver@13.1.1",
 } as const;
 
 export type AppiumDriverName = keyof typeof APPIUM_DRIVERS;
