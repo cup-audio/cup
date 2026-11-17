@@ -28,6 +28,8 @@ pnpm install
 
 Use an existing credentials file or another checkout’s env file as the source. Alternatively, export `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_KEY` and run setup without `--from`. Setup preserves existing files; both files are ignored by Git. Setup, which postinstall runs when needed, also moves an `.env.evals` left at the library's former path `libs/narration-content-selection/`. Use Node for this bootstrap step because pnpm can trigger installation before setup. `pnpm env:check` checks that both files are configured, match, and hold no `SENTRY_AUTH_TOKEN` (the Sentry upload token lives only in `~/.sentryclirc`); postinstall and every validation gate also run it. This checks local configuration without making paid API calls.
 
+In a linked worktree, postinstall also copies the Android upload keystore from the main checkout when the main checkout has one and the worktree doesn't. The key is optional: only the operator's Android release builds need it, and neither `env:check` nor any validation gate looks for it ([release builds](apps/mobile-app/README.md#release-builds)).
+
 ## Validation
 
 Git hooks run no validation, so deciding when to validate is up to you. Prefer the narrowest check that covers a change while iterating, such as one package's tests, lint, or typecheck, or `pnpm docs:check` for documentation-only edits. The only hook is pre-push, which rejects pushed commits that move a submodule pointer backwards (see the [submodule check](.patricktree-stack/tooling/submodule-check/README.md)).

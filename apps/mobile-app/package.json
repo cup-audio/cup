@@ -11,14 +11,20 @@
     }
   },
   "scripts": {
+    "android:release": "node scripts/android-release.mts",
     "android:run": "node scripts/android-run.mts",
+    "android:upload-key:create": "node scripts/android-upload-key-create.mts",
     "build": "turbo run turbo:build && pnpm run native:sync",
     "jvm:check": "node scripts/jvm-toolchain.mts",
     "lint": "turbo run turbo:lint",
     "lint:fix": "turbo run turbo:lint:fix",
     "native:sync": "cap sync android && cap sync ios",
     "symbols:upload": "upload-shell-symbols --web-source-map-dir ../web-app/dist/source-maps --android-web-dir android/app/src/main/assets/public",
-    "test": "node scripts/test-jvm.mts",
+    "test": "pnpm run test:scripts && pnpm run test:jvm",
+    "test:jvm": "node scripts/test-jvm.mts",
+    "test:scripts": "vitest run",
+    "test:scripts:coverage": "vitest run --coverage",
+    "test:scripts:watch": "vitest",
     "turbo:build": "tsc --build",
     "turbo:lint": "oxlint --type-aware --max-warnings 0 .",
     "turbo:lint:fix": "pnpm run turbo:lint --fix",
@@ -26,23 +32,30 @@
   },
   "dependencies": {
     "@aparajita/capacitor-secure-storage": "8.0.1",
-    "@capacitor/android": "^8.5.3",
+    "@capacitor/android": "^8.6.2",
     "@capacitor/app": "^8.1.2",
-    "@capacitor/core": "^8.5.3",
-    "@capacitor/ios": "^8.5.3",
+    "@capacitor/core": "^8.6.2",
+    "@capacitor/ios": "^8.6.2",
     "@capawesome/capacitor-google-sign-in": "0.1.4",
     "@cup/web-app": "workspace:*",
     "@sentry/capacitor": "catalog:sentry-client"
   },
   "devDependencies": {
-    "@capacitor/cli": "^8.5.3",
+    "@capacitor/cli": "^8.6.2",
     "@cup/config-oxlint": "workspace:*",
     "@cup/source-maps": "workspace:*",
+    "@googleapis/androidpublisher": "^42.3.1",
     "@patricktree-stack/config-typescript": "workspace:*",
+    "@patricktree-stack/config-vitest": "workspace:*",
     "@types/node": "catalog:",
     "@typescript/native": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "google-auth-library": "^11.3.4",
     "oxlint": "catalog:",
     "oxlint-tsgolint": "catalog:",
-    "typescript": "catalog:"
+    "temporal-polyfill": "^1.0.5",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
   }
 }

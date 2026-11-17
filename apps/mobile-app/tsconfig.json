@@ -1,14 +1,8 @@
 {
-  /* just for IDE support for capacitor.config.ts; the scripts in scripts/ have their own project */
-
-  "extends": [
-    "@patricktree-stack/config-typescript/tsconfig.defaults.json",
-    "@patricktree-stack/config-typescript/tsconfig.capacitor.json"
-  ],
-  "compilerOptions": {
-    /* Modules */
-    "types": ["node"]
-  },
-  "include": ["capacitor.config.ts"],
-  "references": [{ "path": "./tsconfig.scripts.json" }]
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.capacitor.json" },
+    { "path": "./tsconfig.scripts.json" },
+    { "path": "./tsconfig.tests.json" }
+  ]
 }

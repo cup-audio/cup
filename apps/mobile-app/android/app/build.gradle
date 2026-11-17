@@ -1,4 +1,16 @@
+import com.android.build.api.artifact.SingleArtifact
+import java.nio.ByteBuffer
+import java.security.MessageDigest
+
 apply plugin: 'com.android.application'
+
+// `android:release` (scripts/android-release.mts) passes the release version (ADR 0032) as these
+// properties and the upload key as these environment variables; the password is no `-P` argument,
+// which would show it in the process list. Release tasks fail without all four.
+def releaseVersionCode = findProperty("cupVersionCode")
+def releaseVersionName = findProperty("cupVersionName")
+def uploadKeystorePath = System.getenv("CUP_UPLOAD_KEYSTORE_PATH")
+def uploadKeystorePassword = System.getenv("CUP_UPLOAD_KEYSTORE_PASSWORD")
 
 android {
     namespace = "audio.cup.app"
@@ -7,8 +19,10 @@ android {
         applicationId "audio.cup.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
+        // Debug builds keep these fixed, so local `adb` builds and the mobile E2E suite's Turbo cache
+        // keys stay stable; release builds replace them in `androidComponents` below.
         versionCode 1
-        versionName "1.0"
+        versionName "0.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,18 +30,140 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
-    buildTypes {
-        release {
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+    signingConfigs {
+        upload {
+            // Left empty without the environment; `checkCupReleaseInputs` then stops release tasks.
+            if (uploadKeystorePath && uploadKeystorePassword) {
+                storeFile file(uploadKeystorePath)
+                // PKCS12 uses one password for the store and the key (scripts/android-upload-key-create.mts).
+                storePassword uploadKeystorePassword
+                keyAlias "upload"
+                keyPassword uploadKeystorePassword
+            }
         }
     }
+    buildTypes {
+        release {
+            // R8 shrinks code and resources, and AGP embeds its mapping file in the bundle for Play's
+            // crash reports. Capacitor core's consumer rules keep every plugin class, so
+            // `proguard-rules.pro` holds no rules of its own (decision: issue #437; mobile app README).
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.upload
+        }
+    }
+}
+
+androidComponents {
+    onVariants(selector().withBuildType("release")) { variant ->
+        // Invalid or missing values stop the build in `checkCupReleaseInputs`, so only valid ones are applied.
+        if (releaseVersionCode?.toString()?.isInteger() && releaseVersionName) {
+            variant.outputs.each { output ->
+                output.versionCode.set(releaseVersionCode.toString().toInteger())
+                output.versionName.set(releaseVersionName.toString())
+            }
+        }
+
+        // Sentry matches an event's obfuscated Java frames to R8's mapping file through this UUID,
+        // which the SDK reads from the asset; `symbols:upload` uploads the mapping file under it.
+        def sentryDebugMeta = tasks.register(
+            "generate${variant.name.capitalize()}SentryDebugMeta",
+            GenerateSentryDebugMetaTask,
+        ) {
+            mappingFile.set(variant.artifacts.get(SingleArtifact.OBFUSCATION_MAPPING_FILE.INSTANCE))
+        }
+        variant.sources.assets.addGeneratedSourceDirectory(sentryDebugMeta) { it.outputDirectory }
+    }
+}
+
+/**
+ * Writes `sentry-debug-meta.properties` with the R8 mapping file's ProGuard UUID, which is what
+ * `sentry-cli proguard uuid` computes: a UUIDv5 of the file's bytes in the namespace that is the
+ * UUIDv5 of "guardsquare.com" in the DNS namespace.
+ */
+abstract class GenerateSentryDebugMetaTask extends DefaultTask {
+    private static final UUID DNS_NAMESPACE = UUID.fromString("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
+
+    @InputFile
+    abstract RegularFileProperty getMappingFile()
+
+    @OutputDirectory
+    abstract DirectoryProperty getOutputDirectory()
+
+    @TaskAction
+    void generate() {
+        def proguardNamespace = uuidV5(DNS_NAMESPACE, "guardsquare.com".getBytes("UTF-8"))
+        def uuid = uuidV5(proguardNamespace, mappingFile.get().asFile.bytes)
+        def output = outputDirectory.get().asFile
+        output.mkdirs()
+        new File(output, "sentry-debug-meta.properties").text = "io.sentry.ProguardUuids=${uuid}\n"
+    }
+
+    private static UUID uuidV5(UUID namespace, byte[] name) {
+        def digest = MessageDigest.getInstance("SHA-1")
+        digest.update(toBytes(namespace))
+        byte[] hash = digest.digest(name)
+        hash[6] = (byte) ((hash[6] & 0x0f) | 0x50)
+        hash[8] = (byte) ((hash[8] & 0x3f) | 0x80)
+        long most = 0
+        long least = 0
+        for (int i = 0; i < 8; i++) {
+            most = (most << 8) | (hash[i] & 0xff)
+            least = (least << 8) | (hash[i + 8] & 0xff)
+        }
+        return new UUID(most, least)
+    }
+
+    private static byte[] toBytes(UUID uuid) {
+        def buffer = ByteBuffer.allocate(16)
+        buffer.putLong(uuid.mostSignificantBits)
+        buffer.putLong(uuid.leastSignificantBits)
+        return buffer.array()
+    }
+}
+
+def checkCupReleaseInputs = tasks.register("checkCupReleaseInputs") {
+    description = "Fails unless the release version and the upload key were passed, as android:release does."
+    doLast {
+        def problems = []
+        if (!releaseVersionCode?.toString()?.isInteger()) {
+            problems << "the Gradle property cupVersionCode is missing or not an integer"
+        }
+        if (!releaseVersionName) {
+            problems << "the Gradle property cupVersionName is missing"
+        }
+        if (!uploadKeystorePath) {
+            problems << "the environment variable CUP_UPLOAD_KEYSTORE_PATH is missing"
+        }
+        if (!uploadKeystorePassword) {
+            problems << "the environment variable CUP_UPLOAD_KEYSTORE_PASSWORD is missing"
+        }
+        if (!problems.isEmpty()) {
+            throw new GradleException(
+                "A release build needs the release version and the upload key, but ${problems.join('; ')}. " +
+                "Build releases with `pnpm --filter '@cup/mobile-app' android:release`; see the mobile app README's \"Release builds\"."
+            )
+        }
+    }
+}
+// `preReleaseBuild` runs first in every release variant task, such as `bundleRelease` and `assembleRelease`.
+tasks.matching { it.name == "preReleaseBuild" }.configureEach {
+    dependsOn checkCupReleaseInputs
 }
 
 repositories {
     flatDir{
         dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
     }
+}
+
+// Sentry's NDK integration is off (`io.sentry.ndk.enable=false` in the manifest, ADR 0031), and native
+// crashes reach Sentry as Android tombstones through sentry-android-core. Its modules only add native
+// libraries, which the bundle safety check refuses (mobile app README, "Bundle safety check").
+configurations.configureEach {
+    exclude group: "io.sentry", module: "sentry-android-ndk"
+    exclude group: "io.sentry", module: "sentry-native-ndk"
 }
 
 dependencies {

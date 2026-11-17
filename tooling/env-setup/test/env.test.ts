@@ -196,3 +196,60 @@ test("invalid command arguments fail before creating files", async (t) => {
     await assert.rejects(fs.stat(path.join(root, file)), { code: "ENOENT" });
   }
 });
+
+const UPLOAD_KEYSTORE = "apps/mobile-app/android/upload-keystore.jks";
+
+async function mainCheckoutWithUploadKeystore(t: TestContext, content: string | null) {
+  const mainCheckout = await fs.mkdtemp(path.join(os.tmpdir(), "env-setup-main-"));
+  t.onTestFinished(() => fs.rm(mainCheckout, { recursive: true, force: true }));
+  if (content !== null) {
+    await fs.mkdir(path.join(mainCheckout, path.dirname(UPLOAD_KEYSTORE)), { recursive: true });
+    await fs.writeFile(path.join(mainCheckout, UPLOAD_KEYSTORE), content);
+  }
+  return mainCheckout;
+}
+
+test("copy-upload-key copies the main checkout's upload keystore into a worktree without one", async (t) => {
+  const { root, run } = await fixture(t);
+  const mainCheckout = await mainCheckoutWithUploadKeystore(t, "main keystore");
+
+  const result = await run(["copy-upload-key", "--from", mainCheckout], {});
+
+  assert.equal(result.status, 0);
+  assert.ok(result.stdout.includes(`Copied ${UPLOAD_KEYSTORE}`));
+  const copy = path.join(root, UPLOAD_KEYSTORE);
+  assert.equal(await fs.readFile(copy, "utf8"), "main keystore");
+  assert.equal((await fs.stat(copy)).mode & 0o777, 0o600);
+});
+
+test("copy-upload-key leaves a worktree's own upload keystore alone", async (t) => {
+  const { root, run } = await fixture(t);
+  const mainCheckout = await mainCheckoutWithUploadKeystore(t, "main keystore");
+  await fs.mkdir(path.join(root, path.dirname(UPLOAD_KEYSTORE)), { recursive: true });
+  await fs.writeFile(path.join(root, UPLOAD_KEYSTORE), "worktree keystore");
+
+  const result = await run(["copy-upload-key", "--from", mainCheckout], {});
+
+  assert.equal(result.status, 0);
+  assert.ok(!result.stdout.includes("Copied"));
+  assert.equal(await fs.readFile(path.join(root, UPLOAD_KEYSTORE), "utf8"), "worktree keystore");
+});
+
+test("copy-upload-key succeeds without copying when the main checkout has no upload keystore", async (t) => {
+  const { root, run } = await fixture(t);
+  const mainCheckout = await mainCheckoutWithUploadKeystore(t, null);
+
+  const result = await run(["copy-upload-key", "--from", mainCheckout], {});
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  await assert.rejects(fs.stat(path.join(root, UPLOAD_KEYSTORE)), { code: "ENOENT" });
+});
+
+test("check passes without an upload keystore", async (t) => {
+  const { root, run } = await fixture(t);
+  assert.equal((await run(["setup"])).status, 0);
+
+  assert.equal((await run(["check"])).status, 0);
+  await assert.rejects(fs.stat(path.join(root, UPLOAD_KEYSTORE)), { code: "ENOENT" });
+});

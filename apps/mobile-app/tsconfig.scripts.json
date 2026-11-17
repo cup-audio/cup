@@ -9,5 +9,6 @@
     /* Modules */
     "rootDir": "./scripts"
   },
-  "include": ["scripts/**/*"]
+  "include": ["scripts/**/*"],
+  "exclude": ["scripts/**/*.test.mts"]
 }

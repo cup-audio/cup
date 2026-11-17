@@ -11,6 +11,12 @@ const FILES = ["apps/cloudflare-worker/.env.local", EVALS_FILE];
  * pull. Remove an entry once checkouts have had time to run setup.
  */
 const RELOCATIONS = [{ from: "libs/narration-content-selection/.env.evals", to: EVALS_FILE }];
+/**
+ * The Android upload key, created once with `android:upload-key:create` in `@cup/mobile-app`. Only
+ * `android:release` needs it, so it is optional here: `check` never looks for it. Keep the path in
+ * step with `KEYSTORE_PATH` in `apps/mobile-app/scripts/release/upload-key.mts`.
+ */
+const UPLOAD_KEYSTORE = "apps/mobile-app/android/upload-keystore.jks";
 const KEYS = ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_KEY"] as const;
 /** Sentry's upload token stays out of every checkout (docs/production-configuration.md#deploy). */
 const SENTRY_AUTH_TOKEN = "SENTRY_AUTH_TOKEN";
@@ -46,6 +52,14 @@ export async function runCli(
     .command("check")
     .description("Check that both environment files are configured and match")
     .action(async () => run("check"));
+
+  program
+    .command("copy-upload-key")
+    .description(
+      "Copy the Android upload keystore from another checkout when it has one and this checkout doesn't",
+    )
+    .requiredOption("--from <checkout>", "root of the checkout to copy the upload keystore from")
+    .action(async (options) => copyUploadKey(options.from));
 
   try {
     await program.parseAsync(args, { from: "user" });
@@ -102,6 +116,19 @@ export async function runCli(
       }
     }
     output.log("Environment files are configured and match.");
+  }
+
+  async function copyUploadKey(from: string) {
+    const source = path.join(path.resolve(from), UPLOAD_KEYSTORE);
+    const target = path.join(root, UPLOAD_KEYSTORE);
+    if (!(await exists(source)) || (await exists(target))) {
+      return;
+    }
+
+    await fs.mkdir(path.dirname(target), { recursive: true });
+    await fs.copyFile(source, target, fs.constants.COPYFILE_EXCL);
+    await fs.chmod(target, 0o600);
+    output.log(`Copied ${UPLOAD_KEYSTORE} from ${path.resolve(from)}`);
   }
 
   async function relocate() {

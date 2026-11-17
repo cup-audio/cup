@@ -74,6 +74,91 @@ adb shell am start -n audio.cup.app/.MainActivity --es cupTestApiOrigin http://l
 
 JS events go through the test Worker's telemetry tunnel, which must allowlist the DSN in `SENTRY_TUNNEL_DSNS`; native events go straight to the DSN, so its port needs `adb reverse` too.
 
+## Release builds
+
+Android test builds for Google Play are signed with Cup's upload key; Play re-signs them with its app signing key before testers install them. Only the operator needs the upload key, and only to release: installs, `env:check` and the [validation gates](../../AGENTS.md#validation-gates) succeed without it.
+
+### Create the upload key
+
+Run this once, on the operator's Mac, with `JAVA_HOME` set as for [Android locally](#android-locally):
+
+```sh
+pnpm --filter '@cup/mobile-app' android:upload-key:create
+```
+
+It generates a random password, stores it in the macOS Keychain as the generic-password item with service `cup-android-upload-key` and the macOS user as account, and creates the PKCS12 keystore `apps/mobile-app/android/upload-keystore.jks` with the key `upload` (RSA 4096, valid for 10,000 days, `CN=Cup`), which uses that one password for the store and the key. It never prints the password. It prints the certificate's SHA-1 and SHA-256 fingerprints, and names the keystore file and the Keychain item. It refuses, naming what exists and changing nothing, when the keystore or the Keychain item already exists.
+
+Right after creating the key, store the keystore file and its password as one entry in your password manager; `security find-generic-password -s cup-android-upload-key -a "$(id -un)" -w` prints the password. Losing both means asking Google for an [upload key reset](../../docs/production-configuration.md#upload-key-reset).
+
+Git ignores the keystore (`*.jks` in `android/.gitignore`). In a linked worktree, `pnpm install` copies it from the main checkout when the main checkout has one and the worktree doesn't, as it does for `.env.local`; the Keychain item is shared by every checkout on the Mac.
+
+### Build a release
+
+On the operator's Mac, with `JAVA_HOME` set as for [Android locally](#android-locally), build a release-signed Android App Bundle from the checked-out commit and [upload it](#upload-to-the-internal-testing-track) to Google Play's internal testing track:
+
+```sh
+pnpm --filter '@cup/mobile-app' android:release
+```
+
+The command runs `env:check`, checks the release preconditions, builds the web app, syncs Capacitor for Android, runs Gradle's `bundleRelease`, runs the [bundle safety check](#bundle-safety-check), uploads the release's symbols to Sentry, and uploads the bundle to Google Play. It prints the bundle's path, `android/app/build/outputs/bundle/release/app-release.aab`, and the release name. No [validation gate](../../AGENTS.md#validation-gates) runs; pick the one that fits the moment yourself.
+
+With `--skip-upload`, the command stops after the bundle safety check, prints the bundle's path, the release name and the `symbols:upload` command for this build, and touches nothing in Sentry or Google Play. Run that command before uploading the bundle to a store by hand. Use it to inspect a build, or for the [first upload](#first-upload-by-hand), which Google requires to be made by hand in the Play Console:
+
+```sh
+pnpm --filter '@cup/mobile-app' android:release --skip-upload
+```
+
+Each build's version comes from its UTC build time ([ADR 0032](../../docs/adr/0032-derive-mobile-build-versions-from-the-utc-build-time.md)): `versionCode` is the whole minutes since `2026-01-01T00:00Z` and `versionName` the date as `YYYY.MM.DD`. The release name is `<versionName> (<7-character short SHA>)`, for example `2026.11.14 (8e5c815)`; use it as the Play release name, so that you can tell which commit a tester runs. Debug builds keep `versionCode 1` and `versionName "0.0.0"`.
+
+Release builds are shrunk by R8, with resource shrinking and the optimizing default rules (`proguard-android-optimize.txt`), ([decision](https://github.com/patricktree/cup/issues/437)). Measured with a throwaway upload key when R8 was turned on ([#444](https://github.com/patricktree/cup/issues/444)), the bundle shrank from 4.51 MB to 2.57 MB and `classes.dex` from 8.9 MB to 1.16 MB; Play's download size was not measured. Cup adds no keep rules of its own: Capacitor core's rules keep every plugin class by name, including `AndroidSharePlugin`, so `proguard-rules.pro` stays empty. R8 prints warnings about invalid stack map tables in `play-services-auth`; they don't fail the build. AGP embeds the R8 mapping file in the bundle at `BUNDLE-METADATA/com.android.tools.build.obfuscation/proguard.map`, so Play deobfuscates crash reports with no separate upload. Sentry has no access to the bundle, so the release build also writes the mapping file's ProGuard UUID into a `sentry-debug-meta.properties` asset, and `android:release` uploads the mapping file to Sentry under it ([upload](#upload-to-the-internal-testing-track)). Debug builds, which the mobile E2E suite runs, are not shrunk, so only a release build on a device exercises R8.
+
+Before Gradle starts, the command refuses, listing every failure at once and pointing here, when:
+
+- tracked files have changes (ignored and untracked files don't count), so the release name would not describe what testers run;
+- `HEAD` is on no remote-tracking branch, so the commit might become unreachable; any pushed branch, including a feature branch, is fine;
+- the upload keystore `android/upload-keystore.jks` is missing;
+- the Keychain item `cup-android-upload-key` is missing, or looking it up fails, such as on a locked Keychain.
+
+The command reads the password from the Keychain, where macOS may ask to allow access, and hands it and the keystore's path to Gradle as the environment variables `CUP_UPLOAD_KEYSTORE_PASSWORD` and `CUP_UPLOAD_KEYSTORE_PATH`, and the version as the Gradle properties `cupVersionCode` and `cupVersionName`. A release task run directly, such as `./gradlew bundleRelease`, fails without any of the four and points to `android:release`, so Gradle never produces an unsigned or unversioned release bundle. Debug tasks need none of them.
+
+Check that a bundle is signed with the upload key with `keytool -printcert -jarfile <bundle>`, whose certificate owner is `CN=Cup`, or `jarsigner -verify <bundle>`.
+
+### Bundle safety check
+
+After `bundleRelease`, before any upload, the command checks that the bundle carries none of the [debug launch arguments'](#debug-launch-arguments) hooks and no native code ([#438](https://github.com/patricktree/cup/issues/438)). It reads the merged release manifest Gradle writes as plain XML, `android/app/build/intermediates/packaged_manifests/release/processReleaseManifestForPackage/AndroidManifest.xml`, because the bundle holds the manifest as protobuf, and reads the bundle's zip entries in Node, with no extra tools. It refuses the bundle, listing every violation at once and pointing here, when:
+
+- the manifest's `<application>` sets `android:debuggable="true"`;
+- it sets any `android:networkSecurityConfig`, which the debug source set uses to allow plain HTTP to `localhost`;
+- it sets `android:usesCleartextTraffic="true"`;
+- its application class is `DebugApplication`;
+- any `.dex` entry contains the class descriptor of a class in the debug source set (`android/app/src/debug/java`, one class per Java or Kotlin file, named after the file), such as the sign-in fake `FakeGoogleSignInPlugin`, the test-origin classes `TestApiOrigin` and `TestApiOriginPlugin`, or the Sentry DSN override `TestSentryDsn`;
+- R8's mapping file in the bundle, `BUNDLE-METADATA/com.android.tools.build.obfuscation/proguard.map`, lists one of those classes under its original name, which catches a class R8 renamed, such as `TestApiOrigin`, which no keep rule covers;
+- the bundle contains any `.so` entry, so that a dependency bringing native code is noticed before Google Play's 16 KB page-size rule can block an update ([#436](https://github.com/patricktree/cup/issues/436)).
+
+A debug class name in any other entry doesn't count. A refused bundle stays at its path for inspection, but the command uploads nothing.
+
+### Upload to the internal testing track
+
+Without `--skip-upload`, once the bundle safety check passes, the command first uploads the release's symbols to Sentry with `symbols:upload android` ([native release](../../docs/production-configuration.md#native-release)): R8's mapping file, under the ProGuard UUID the build embedded in its `sentry-debug-meta.properties` asset, and the source maps of the packed web bundle. It needs the Sentry upload token of the [deploy](../../docs/production-configuration.md#deploy), and a failure stops the release before Google Play sees it. Then it uploads the bundle to Google Play's internal testing track in one Play edit ([#363](https://github.com/patricktree/cup/issues/363)): it opens the edit, uploads the bundle, replaces the track's releases with one release of the bundle's `versionCode`, named with the release name and rolled out as `completed` to every invited tester, and commits the edit. Play applies nothing until the commit, so when any step before it fails, the command abandons the edit, reports the error, and Play stays as it was. It checks no higher `versionCode` on Play and adds no release notes; testers get the build as a normal Play update within minutes.
+
+The upload authenticates as the uploader service account `play-publisher@cup-production.iam.gserviceaccount.com`, impersonated through the operator's application-default credentials, so no service account key exists. Sign in once with `gcloud auth application-default login`. Without those credentials, or without a working Sentry upload token (`sentry-cli info` fails), the command fails before Gradle starts. The account, its impersonation and its Play Console invitation are described in [Google Play uploads](../../docs/production-configuration.md#google-play-uploads).
+
+The internal testing track holds one release, so a build cut from a feature branch replaces every tester's build until a later build from `main` replaces it in turn; upload `main` again once you are done checking the branch.
+
+Agents run `android:release` without `--skip-upload` only when the operator asks for an upload in the session, because an upload replaces every tester's build. `--skip-upload` uploads nothing, so agents may run it freely.
+
+### First upload, by hand
+
+Google requires the first bundle of an app to be uploaded in the Play Console; that upload enrolls the app in Play App Signing ([#356](https://github.com/patricktree/cup/issues/356)). It is a one-time step for the operator, tracked in [#447](https://github.com/patricktree/cup/issues/447), and needs the [Play developer account and the app record](../../docs/production-configuration.md#google-play-developer-account-and-app-record):
+
+1. Run `pnpm --filter '@cup/mobile-app' android:release --skip-upload` on a clean, pushed `main` commit, note the bundle's path and the release name it prints, and run the `symbols:upload` command it prints.
+2. In the Play Console, open the app's internal testing track and create a release.
+3. Accept Play App Signing with a Google-generated app signing key; the upload key that signed the bundle stays the upload key.
+4. Upload the bundle, name the release with the printed release name, `<versionName> (<short SHA>)`, and roll it out. The app may still be in Draft. If Play asks for App content declarations, fill in only what blocks the internal release, and note which ones it asked for.
+5. Copy every app signing SHA-1 from the Play app signing page into a new Android OAuth client each, as [Android OAuth clients](../../docs/production-configuration.md#android-oauth-clients) describes, so that Play-installed builds can sign in with Google.
+
+Every later upload is `android:release` without `--skip-upload`.
+
 ## iOS
 
 After building, open `apps/mobile-app/ios/App/App.xcodeproj` in Xcode and choose a simulator or a device. The project uses Swift Package Manager, matching Content Relay. Both targets, `App` and `CupShare`, sign automatically with the Apple Developer team `4GQ2V3WJW8`, which owns both bundle identifiers; signing for a device or the App Store needs an Xcode account in that team.
@@ -156,7 +241,7 @@ The mobile app declares `@sentry/capacitor`, and imports it in the Capacitor con
 
 - **No installation ID on the device.** [`InMemoryInstallation`](android/app/src/main/java/io/sentry/android/core/InMemoryInstallation.java), in Sentry's own package `io.sentry.android.core`, sets Sentry's package-private installation ID to a random value per process. `MainActivity.onCreate` calls it before `super.onCreate`, before the page can start the SDK, so the SDK never writes or reads its `INSTALLATION` file.
 - **A pinned native core.** The helper depends on the exact version of `io.sentry:sentry-android-core`, which `variables.gradle` pins as `sentryAndroidVersion`. Every Gradle build fails when the pin differs from the `io.sentry:sentry-android` version that `@sentry/capacitor`'s native plugin declares. After a `@sentry/capacitor` update, move the pin, check that `Installation` still has `deviceId` and `staticLock`, and run the [mobile E2E telemetry test](../../qa/mobile-e2e/README.md#telemetry).
-- **Manifest settings** in [`AndroidManifest.xml`](android/app/src/main/AndroidManifest.xml): no automatic init (the page starts the SDK), no session tracking and no scope persistence, and no NDK, because sentry-native stores an installation ID of its own. Native crashes arrive as tombstones, without the raw tombstone and without reports from before the first launch; ANRs with thread dumps and fingerprinting, without historical reports; the memory limiter on, without historical reports; no external storage context and no root check. Traces at 1.0 with activity tracing and frames tracking, without user-interaction tracing. No screenshots, view hierarchies, feedback, replay or profiling. `attachThreads` comes from the JS options.
+- **Manifest settings** in [`AndroidManifest.xml`](android/app/src/main/AndroidManifest.xml): no automatic init (the page starts the SDK), no session tracking and no scope persistence, and no NDK, because sentry-native stores an installation ID of its own. The app's `build.gradle` also leaves Sentry's NDK modules, `sentry-android-ndk` and `sentry-native-ndk`, out of every build, so no Sentry native library reaches a bundle and the [bundle safety check](#bundle-safety-check) passes; `sentry-android-core` reads the tombstones without them. Native crashes arrive as tombstones, without the raw tombstone and without reports from before the first launch; ANRs with thread dumps and fingerprinting, without historical reports; the memory limiter on, without historical reports; no external storage context and no root check. Traces at 1.0 with activity tracing and frames tracking, without user-interaction tracing. No screenshots, view hierarchies, feedback, replay or profiling. `attachThreads` comes from the JS options.
 - The Sentry SDK still creates its cache folder under `cache/sentry/`, with options, an outbox and an empty breadcrumb queue, but no file holding an ID.
 
 ### iOS Sentry setup
@@ -211,11 +296,20 @@ What the web app does with a share, such as repeat shares, `cup.audio` links and
 The rest stays manual on physical devices with release-signed builds, listed in [CUP-44](https://linear.app/cup-audio/issue/CUP-44/test-the-android-and-ios-apps-native-functionality-on-physical-devices):
 
 1. Playback through a locked device, lock-screen, notification and headset controls, and audio focus: on iOS, with the narration track's signed URL from the shell's origin; on Android, what the emulator cannot show, such as earbuds, headphone disconnects, other apps taking focus and a long locked listen against production, was checked by hand on the operator's Pixel as CUP-41's acceptance check ([#435](https://github.com/patricktree/cup/issues/435)), with no checked-in protocol.
-2. Release-signed builds: install and run, reach `https://cup.audio` through `CapacitorHttp`, and carry no debug override, cleartext exception or sign-in fake.
+2. Release-signed builds: install and run, reach `https://cup.audio` through `CapacitorHttp`, and carry no debug override, cleartext exception or sign-in fake. On Android, R8 shrinks only these builds, so Google sign-in, Secure Storage after a restart, sharing text into the app and the back button need checking on them.
 3. Real Google sign-in: the Android account picker with a real account, switching accounts after signing out, and on iOS Google's page in the sign-in sheet, which the tests replace with the fake auth provider's redirect.
 4. Sharing from real apps: Cup in the Android Sharesheet, sharing from Safari and from Chrome on iOS, and the `CupShare` handoff on a physical iPhone after each iOS update, each starting the conversion signed in without a further tap, with Cup started by the share and running.
 5. App shell: icons and splash screen, and a tapped `cup.audio` link opening the browser, not the app.
 6. Navigation without loading flashes.
+
+CUP-44's Android pass runs on builds from Google Play's [internal testing track](#upload-to-the-internal-testing-track), the only release-signed Android builds that can sign in with Google, and records the release name of each build it tests. The Android acceptance check of the [test builds spec](https://github.com/patricktree/cup/issues/439), first run in [#448](https://github.com/patricktree/cup/issues/448), uses such a build on a physical Android device:
+
+1. An invited tester installs Cup through the opt-in link.
+2. Signing in with Google lands on Recents.
+3. After force-stopping and reopening Cup, the tester is still signed in.
+4. Sharing a page from Chrome into Cup starts its conversion.
+5. The Android back button on a detail view returns to Recents.
+6. The version Play shows matches the release name `<versionName> (<short SHA>)`.
 
 ## Brand assets
 

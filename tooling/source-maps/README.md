@@ -18,19 +18,20 @@ The injection needs no Sentry token and sends nothing. Its executable runs direc
 
 ## upload-shell-symbols
 
-The mobile app's `symbols:upload` runs this second CLI after a release archive of a shell and before its store upload; the [native release guide](../../docs/production-configuration.md#native-release) describes the release steps.
+The mobile app's `symbols:upload` runs this second CLI after a release build of a shell and before its store upload, and `android:release` runs it for Android; the [native release guide](../../docs/production-configuration.md#native-release) describes the release steps.
 
 ```sh
 upload-shell-symbols --web-source-map-dir <dir> --android-web-dir <dir> ios <archive.xcarchive>
-upload-shell-symbols --web-source-map-dir <dir> --android-web-dir <dir> android
+upload-shell-symbols --web-source-map-dir <dir> --android-web-dir <dir> \
+  --android-mapping <mapping.txt> --android-proguard-uuid <uuid> android
 ```
 
 The packed web bundle is the archive's `Products/Applications/<app>.app/public` for iOS and the `--android-web-dir` for Android. The CLI:
 
 1. fails unless the debug ID of every source map in `--web-source-map-dir` is in a chunk of the packed web bundle, so the maps belong to the bundle the release ships;
-2. for iOS, fails when the archive's `dSYMs` folder holds no dSYM;
+2. for iOS, fails when the archive's `dSYMs` folder holds no dSYM; for Android, computes the ProGuard UUID of `--android-mapping` offline with `sentry-cli proguard upload --no-upload --write-properties` and fails unless it equals `--android-proguard-uuid`, the UUID the release build embedded, so the mapping file belongs to the bundle;
 3. runs `sentry-cli info`, which fails without the upload token;
-4. for iOS, runs `sentry-cli debug-files upload --project cup-app --wait` on the archive's `dSYMs`;
+4. for iOS, runs `sentry-cli debug-files upload --project cup-app --wait` on the archive's `dSYMs`; for Android, runs `sentry-cli proguard upload --project cup-app --require-one` on the mapping file;
 5. runs `sentry-cli sourcemaps upload --project cup-app --strict` on the packed bundle and the source maps.
 
 The first failing step ends it with exit code 1 and a message saying not to upload the build to the store. Sentry CLI runs with the caller's environment, so it reads the upload token from `~/.sentryclirc` and the organisation and region from the committed `.sentryclirc`. The tests run it with a fake token against a local server that fails every upload, in an empty home directory.

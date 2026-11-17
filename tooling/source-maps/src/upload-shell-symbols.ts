@@ -1,5 +1,6 @@
 import childProcess from "node:child_process";
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import url from "node:url";
 
@@ -21,6 +22,10 @@ export type ShellSymbolsTarget =
       packedWebDir: string;
       /** The web build's source maps, `apps/web-app/dist/source-maps`. */
       webSourceMapDir: string;
+      /** R8's mapping file of the release build. */
+      mappingFile: string;
+      /** The ProGuard UUID the build embedded in its `sentry-debug-meta.properties` asset. */
+      proguardUuid: string;
     };
 
 const SENTRY_CLI = url.fileURLToPath(import.meta.resolve("@sentry/cli/bin/sentry-cli"));
@@ -28,9 +33,10 @@ const SENTRY_PROJECT = "cup-app";
 const DEBUG_ID_COMMENT = /\n\/\/# debugId=([0-9a-f-]{36})\s*$/;
 
 /**
- * Uploads what Sentry needs to symbolicate a shell release: the iOS archive's dSYMs and the source
- * maps of the web bundle packed into the build. Any failure throws before the operator uploads the
- * build to the store; debug IDs, not releases, match the files to events, so no release is named.
+ * Uploads what Sentry needs to symbolicate a shell release: the iOS archive's dSYMs or the Android
+ * build's R8 mapping file, and the source maps of the web bundle packed into the build. Any failure
+ * throws before the operator uploads the build to the store; debug IDs and ProGuard UUIDs, not
+ * releases, match the files to events, so no release is named.
  */
 export async function uploadShellSymbols(
   target: ShellSymbolsTarget,
@@ -46,6 +52,17 @@ export async function uploadShellSymbols(
     await assertHasDsym(dsymDir);
     // `--wait` waits until Sentry has processed the files, so a processing error fails the step too.
     steps.push(["debug-files", "upload", "--project", SENTRY_PROJECT, "--wait", dsymDir]);
+  } else {
+    await assertMappingMatchesBuild(target.mappingFile, target.proguardUuid, runSentryCli);
+    // Sentry CLI uploads the file under the UUID it derives from the content, which the check matched.
+    steps.push([
+      "proguard",
+      "upload",
+      "--project",
+      SENTRY_PROJECT,
+      "--require-one",
+      target.mappingFile,
+    ]);
   }
   steps.push([
     "sourcemaps",
@@ -100,6 +117,40 @@ async function findPackedWebDir(archive: string) {
     );
   }
   return path.join(applicationsDir, apps[0]!, "public");
+}
+
+/**
+ * Sentry deobfuscates an Android event only with the mapping file whose UUID the app carries, so
+ * check that this mapping file is the one the build embedded. Sentry CLI computes the UUID offline:
+ * `--no-upload` writes it into a properties file without contacting Sentry.
+ */
+async function assertMappingMatchesBuild(
+  mappingFile: string,
+  proguardUuid: string,
+  runSentryCli: RunSentryCli,
+) {
+  const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "proguard-uuid-"));
+  try {
+    const propertiesFile = path.join(workDir, "sentry-debug-meta.properties");
+    const args = ["proguard", "upload", "--no-upload", "--write-properties", propertiesFile];
+    const exitCode = await runSentryCli([...args, mappingFile]);
+    if (exitCode !== 0) {
+      throw new Error(
+        `\`sentry-cli ${[...args, mappingFile].join(" ")}\` failed with exit code ${exitCode}. Do not upload this build to the store.`,
+      );
+    }
+
+    const mappingUuid = (await fs.readFile(propertiesFile, "utf8")).match(
+      /^io\.sentry\.ProguardUuids=([0-9a-f-]{36})\s*$/m,
+    )?.[1];
+    if (mappingUuid !== proguardUuid) {
+      throw new Error(
+        `The mapping file ${mappingFile} has the ProGuard UUID ${mappingUuid ?? "(none)"}, but the build embedded ${proguardUuid}, so they belong to different builds. Upload the symbols of the build you upload to the store.`,
+      );
+    }
+  } finally {
+    await fs.rm(workDir, { recursive: true, force: true });
+  }
 }
 
 async function assertHasDsym(dsymDir: string) {
