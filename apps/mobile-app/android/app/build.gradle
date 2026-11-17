@@ -98,6 +98,14 @@ repositories {
     }
 }
 
+// Sentry's NDK integration is off (`io.sentry.ndk.enable=false` in the manifest, ADR 0031), and native
+// crashes reach Sentry as Android tombstones through sentry-android-core. Its modules only add native
+// libraries, which the bundle safety check refuses (mobile app README, "Bundle safety check").
+configurations.configureEach {
+    exclude group: "io.sentry", module: "sentry-android-ndk"
+    exclude group: "io.sentry", module: "sentry-native-ndk"
+}
+
 dependencies {
     implementation fileTree(include: ['*.jar'], dir: 'libs')
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
