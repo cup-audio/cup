@@ -1,4 +1,4 @@
-import { captureException } from "@sentry/core";
+import { captureException, uuid4 } from "@sentry/core";
 import type { WorkflowEvent, WorkflowStep, WorkflowStepConfig } from "cloudflare:workers";
 import { NonRetryableError } from "cloudflare:workflows";
 import { Temporal } from "temporal-polyfill";
@@ -128,7 +128,7 @@ export async function runPrepareAudiobookWorkflow({
     executionEpoch: "v" in params ? params.executionEpoch : 1,
   });
   const { artifactPrefix, artifactBucket: bucket } = execution;
-  let stage: ConversionFailureCategory = "source-preparation";
+  let failureCategory: ConversionFailureCategory = "source-preparation";
 
   // Assigned once source preparation has finished; it never rejects.
   let coverImagePromise: Promise<CoverImage | undefined> | undefined;
@@ -159,7 +159,7 @@ export async function runPrepareAudiobookWorkflow({
         step,
       });
 
-      stage = "content-selection";
+      failureCategory = "content-selection";
       await step.do(
         phaseStepName(
           ConversionPhase.NARRATION_CONTENT_SELECTION,
@@ -205,7 +205,7 @@ export async function runPrepareAudiobookWorkflow({
         narrationTextCharacters > MAX_NARRATION_TEXT_CHARACTERS ||
         synchronizationUnits.length > MAX_NARRATION_CHUNKS
       ) {
-        stage = "content-limit";
+        failureCategory = "content-limit";
         throw new ContentLimitError(narrationTextCharacters, synchronizationUnits.length);
       }
 
@@ -268,11 +268,10 @@ export async function runPrepareAudiobookWorkflow({
         phaseStepName(ConversionPhase.FINALIZATION, "create failed conversion outcome"),
         PROCESSING_STEP_CONFIG,
         async () => {
-          // A content limit is an expected outcome, which the `content-limit` warning records. Any
-          // other failure is captured. Both happen first in this step, which never retries: a replay
-          // of the run reuses the step's result instead of reporting again, and an owner that cannot
-          // record the phase or the outcome still leaves the failure reported.
-          let diagnosticReference: string | undefined;
+          // A content limit is an expected outcome, which the `content-limit` warning records, inside
+          // this step, which never retries: a replay of the run reuses the step's result instead of
+          // logging again. Any other failure is captured once its outcome is recorded, under the
+          // event ID chosen here, so that the outcome can carry it as its diagnostic reference.
           if (error instanceof ContentLimitError) {
             logEvent(
               "content-limit",
@@ -285,19 +284,15 @@ export async function runPrepareAudiobookWorkflow({
                 },
               },
             );
-          } else {
-            diagnosticReference = captureException(originalStepError(error), {
-              tags: { [TELEMETRY_ATTRIBUTES.CONVERSION_FAILURE_CATEGORY]: stage },
-            });
           }
           await execution.phaseStarted(ConversionPhase.FINALIZATION);
           return {
-            failureCategory: stage,
+            failureCategory,
             explanation:
               error instanceof ContentLimitError
                 ? "The source content exceeds the narration limit of 40,000 characters or 200 chunks."
                 : "Preparation failed. Retry to load this track.",
-            ...(diagnosticReference === undefined ? {} : { diagnosticReference }),
+            ...(error instanceof ContentLimitError ? {} : { diagnosticReference: uuid4() }),
             cleanupState: "pending" as const,
             completedAtMs: Temporal.Now.instant().epochMilliseconds,
           };
@@ -309,6 +304,19 @@ export async function runPrepareAudiobookWorkflow({
         TERMINAL_STATE_STEP_CONFIG,
         async () => {
           await execution.recordFailed(failedOutcome);
+          // Last in the step, so only a run whose owner recorded the failure reports it, and a
+          // replay of the run reuses the recorded step instead of capturing again. A run that
+          // cannot record its failure stops, and the owner's alarm captures the stopped Workflow.
+          if (failedOutcome.diagnosticReference !== undefined) {
+            captureException(originalStepError(error), {
+              event_id: failedOutcome.diagnosticReference,
+              captureContext: {
+                tags: {
+                  [TELEMETRY_ATTRIBUTES.CONVERSION_FAILURE_CATEGORY]: failedOutcome.failureCategory,
+                },
+              },
+            });
+          }
         },
       );
       throw error;
@@ -373,6 +381,7 @@ async function storeDeclaredCoverImage({
     return undefined;
   }
 
+  let missingCause: MissingCoverImageCause;
   try {
     const outcome = await step.do(
       // Runs beside content selection; it keeps an image the source material declares.
@@ -402,11 +411,21 @@ async function storeDeclaredCoverImage({
       return outcome.coverImage;
     }
 
-    logMissingCoverImage(conversionId, { reason: outcome.reason });
+    missingCause = { reason: outcome.reason };
   } catch (error) {
-    logMissingCoverImage(conversionId, { error });
+    missingCause = { error };
   }
 
+  try {
+    await logOnce(
+      step,
+      ConversionPhase.SOURCE_MATERIAL_PREPARATION,
+      "log missing cover image",
+      () => logMissingCoverImage(conversionId, missingCause),
+    );
+  } catch {
+    // A log step the engine could not run must not fail the conversion: this never rejects.
+  }
   return undefined;
 }
 
@@ -415,7 +434,8 @@ async function storeDeclaredCoverImage({
  * retries are exhausted, or the answer is unusable, it falls back to the declared language or to
  * none, and the fallback is logged. A narration language the speech model cannot speak stays the
  * narration language and is logged on its own, also when it came from a fallback; a speech provider
- * that ignores the narration language, such as ElevenLabs, logs nothing.
+ * that ignores the narration language, such as ElevenLabs, logs nothing. Both warnings are logged
+ * in one step, so a replay of the run does not log them again.
  */
 async function detectNarrationLanguage({
   conversionId,
@@ -438,49 +458,76 @@ async function detectNarrationLanguage({
       ),
   });
 
-  if (result.fallbackReason !== undefined) {
-    logEvent(
-      "narration-language-fallback",
-      "Narration language detection fell back to the declared language or to none.",
-      {
-        attributes: {
-          [TELEMETRY_ATTRIBUTES.CONVERSION_ID]: conversionId,
-          [TELEMETRY_ATTRIBUTES.DECLARED_HTML_LANG]: input.declaredLanguage?.htmlLang,
-          [TELEMETRY_ATTRIBUTES.DECLARED_OG_LOCALE]: input.declaredLanguage?.ogLocale,
-          [TELEMETRY_ATTRIBUTES.NARRATION_LANGUAGE]: result.narrationLanguage,
-          [TELEMETRY_ATTRIBUTES.NARRATION_LANGUAGE_FALLBACK_REASON]: result.fallbackReason,
-        },
-        ...(result.fallbackReason === "detector-error" ? { error: result.detectorError } : {}),
-      },
-    );
+  const { fallbackReason, narrationLanguage } = result;
+  const isUnspeakable =
+    narrationLanguage !== undefined &&
+    getNarrationLanguageSupport(narrationLanguage, SPEECH_CONFIG) === "unspeakable";
+  if (fallbackReason === undefined && !isUnspeakable) {
+    return result;
   }
 
-  if (
-    result.narrationLanguage !== undefined &&
-    getNarrationLanguageSupport(result.narrationLanguage, SPEECH_CONFIG) === "unspeakable"
-  ) {
-    logEvent(
-      "narration-language-unspeakable",
-      "The narration language is one the speech model cannot speak.",
-      {
-        attributes: {
-          [TELEMETRY_ATTRIBUTES.CONVERSION_ID]: conversionId,
-          [TELEMETRY_ATTRIBUTES.NARRATION_LANGUAGE]: result.narrationLanguage,
-          "gen_ai.provider.name": SPEECH_CONFIG.provider,
-          "gen_ai.request.model": SPEECH_CONFIG.model,
-        },
-      },
-    );
-  }
-
+  await logOnce(
+    step,
+    ConversionPhase.NARRATION_DOCUMENT_CREATION,
+    "log narration language warnings",
+    () => {
+      if (fallbackReason !== undefined) {
+        logEvent(
+          "narration-language-fallback",
+          "Narration language detection fell back to the declared language or to none.",
+          {
+            attributes: {
+              [TELEMETRY_ATTRIBUTES.CONVERSION_ID]: conversionId,
+              [TELEMETRY_ATTRIBUTES.DECLARED_HTML_LANG]: input.declaredLanguage?.htmlLang,
+              [TELEMETRY_ATTRIBUTES.DECLARED_OG_LOCALE]: input.declaredLanguage?.ogLocale,
+              [TELEMETRY_ATTRIBUTES.NARRATION_LANGUAGE]: narrationLanguage,
+              [TELEMETRY_ATTRIBUTES.NARRATION_LANGUAGE_FALLBACK_REASON]: fallbackReason,
+            },
+            ...(fallbackReason === "detector-error" ? { error: result.detectorError } : {}),
+          },
+        );
+      }
+      if (isUnspeakable) {
+        logEvent(
+          "narration-language-unspeakable",
+          "The narration language is one the speech model cannot speak.",
+          {
+            attributes: {
+              [TELEMETRY_ATTRIBUTES.CONVERSION_ID]: conversionId,
+              [TELEMETRY_ATTRIBUTES.NARRATION_LANGUAGE]: narrationLanguage,
+              "gen_ai.provider.name": SPEECH_CONFIG.provider,
+              "gen_ai.request.model": SPEECH_CONFIG.model,
+            },
+          },
+        );
+      }
+    },
+  );
   return result;
 }
 
+/**
+ * Runs `log` in a step of its own, which never retries. Code between steps runs again whenever the
+ * engine replays the run, so a log record written there repeats; a replay reuses this step's
+ * recorded result instead, so the record is written once.
+ */
+function logOnce(
+  step: WorkflowStep,
+  phase: ConversionPhase,
+  description: string,
+  log: () => void,
+): Promise<void> {
+  return step.do(phaseStepName(phase, description), PROCESSING_STEP_CONFIG, async () => {
+    log();
+  });
+}
+
 /** Either the loader's refusal reason or the error that ended the cover image step. */
-function logMissingCoverImage(
-  conversionId: string,
-  cause: { reason: string; error?: never } | { reason?: never; error: unknown },
-) {
+type MissingCoverImageCause =
+  | { reason: string; error?: never }
+  | { reason?: never; error: unknown };
+
+function logMissingCoverImage(conversionId: string, cause: MissingCoverImageCause) {
   logEvent(
     "cover-image-unavailable",
     "The declared cover image could not be stored; the audiobook goes without one.",

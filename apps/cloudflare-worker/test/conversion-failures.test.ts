@@ -239,6 +239,15 @@ test("a segment whose prepared narration cannot be loaded is released and sends 
       "cup.audio_segment.sequence": "0",
     },
   });
+  // The Workflow step rebuilds the `CupError` its callback threw without the brand; the run
+  // captures the error the step threw, so the message stays.
+  expect(events[0]?.exception?.values).toEqual([
+    expect.objectContaining({
+      type: "Error",
+      value: `Audiobook manifest was not found in storage: ${manifestKey}`,
+      stacktrace: expect.anything(),
+    }),
+  ]);
 });
 
 test("a finally failed segment's owner logs its release with the run's attempts", async ({
@@ -279,7 +288,7 @@ test("a finally failed segment's owner logs its release with the run's attempts"
   });
 });
 
-test("a failed Durable Object RPC is captured once, by its caller", async ({
+test("a preparation whose owner refuses its failed outcome is not captured by the run", async ({
   expect,
   onTestFinished,
 }) => {
@@ -293,33 +302,16 @@ test("a failed Durable Object RPC is captured once, by its caller", async ({
   const env = await worker.getEnv();
   const conversionId = crypto.randomUUID();
 
-  // The grant was never initialized, so each phase the preparation records throws in the grant's
-  // Durable Object, before source preparation would fail on its own.
+  // The grant was never initialized, so it refuses each phase the preparation records, the
+  // finalization of its failure included. The run stops without a recorded outcome, which is for
+  // the owner's alarm to capture as a stopped Workflow; capturing here too would open two issues.
   await env.PREPARE_AUDIOBOOK_WORKFLOW.create({
     id: conversionId,
     params: { sourceUrl: SOURCE_URL, grantId: crypto.randomUUID() },
   });
 
   await waitForStepSpan(sentry, "finalization: create failed conversion outcome");
-  const events = sentry.errorEvents("cup-worker");
-  expect(events).toHaveLength(1);
-  expect(events[0]).toMatchObject({
-    tags: {
-      "cup.component": "prepare-audiobook-workflow",
-      "cup.conversion.id": conversionId,
-      "cup.conversion.failure_category": "source-preparation",
-    },
-  });
-  // The grant's `CupError` crossed the RPC call, which keeps its brand, and the Workflow step,
-  // which rebuilds it without the brand; the run captures the error its step threw, so the message
-  // stays.
-  expect(events[0]?.exception?.values).toEqual([
-    expect.objectContaining({
-      type: "Error",
-      value: "Conversion grant is not initialized",
-      stacktrace: expect.anything(),
-    }),
-  ]);
+  expect(sentry.errorEvents("cup-worker")).toEqual([]);
 });
 
 test("a foreign error that failed a preparation step keeps its type and loses its message", async ({

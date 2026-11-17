@@ -18,12 +18,18 @@ vi.mock("cloudflare:workers", () => ({
 vi.mock("cloudflare:workflows", () => ({
   NonRetryableError: class NonRetryableError extends Error {},
 }));
+// The Worker's failure tests check the event that reaches the Sentry stub.
+vi.mock(import("@sentry/core"), async (importOriginal) => ({
+  ...(await importOriginal()),
+  captureException: vi.fn<typeof captureException>(),
+}));
 // The helper itself is tested against the Sentry stub in @cup/telemetry.cloudflare.
 vi.mock(import("@cup/telemetry.cloudflare"), async (importOriginal) => ({
   ...(await importOriginal()),
   logEvent: vi.fn<typeof logEvent>(),
 }));
 
+import { captureException } from "@sentry/core";
 import { NonRetryableError } from "cloudflare:workflows";
 
 import type { AccountDurableObject } from "@cup/accounts";
@@ -80,6 +86,7 @@ let environment: TestEnvironment;
 
 beforeEach(() => {
   vi.mocked(logEvent).mockClear();
+  vi.mocked(captureException).mockClear();
 });
 
 beforeAll(async () => {
@@ -560,6 +567,71 @@ test("a narration over the content limit logs one content-limit warning, also wh
     failureCategory: "content-limit",
   });
   expect(loggedEvents("content-limit")).toHaveLength(1);
+});
+
+test.each([
+  ["is refused", async () => ({ result: "refused", reason: "unsupported-type" }) as const],
+  [
+    "cannot be loaded",
+    async () => {
+      throw new Error("Browser session unavailable");
+    },
+  ],
+] as const)(
+  "a replayed run logs the language warnings and a cover image that %s once each",
+  async (_description, loadCoverImage) => {
+    const { grantId, conversionId } = await createOwnedConversion("trial");
+    const step = createReplayingStep();
+    const run = () =>
+      runConversion(grantId, conversionId, undefined, false, step, loadCoverImage, {
+        declaredLanguage: { htmlLang: "fi" },
+        detectNarrationLanguage: createFakeNarrationLanguageDetector({ answer: null }),
+      });
+
+    await run();
+    // A replay reruns the code between steps and reuses each step's recorded result.
+    await run();
+
+    expect(loggedEvents("narration-language-fallback")).toHaveLength(1);
+    expect(loggedEvents("narration-language-unspeakable")).toHaveLength(1);
+    expect(loggedEvents("cover-image-unavailable")).toHaveLength(1);
+  },
+);
+
+test("a failed preparation is captured once, also when the run is replayed, under its diagnostic reference", async () => {
+  const { grant, grantId, conversionId } = await createConversion();
+  const step = createReplayingStep();
+  const run = () => runConversion(grantId, conversionId, undefined, true, step);
+
+  await expect(run()).rejects.toThrow("Configured preparation failure");
+  await expect(run()).rejects.toThrow("Configured preparation failure");
+
+  const conversion = await grant.getConversion(conversionId);
+  if (conversion?.status !== "failed") {
+    throw new Error("Expected a failed conversion");
+  }
+  expect(conversion.diagnosticReference).toMatch(/^[0-9a-f]{32}$/);
+  expect(vi.mocked(captureException).mock.calls).toEqual([
+    [
+      new Error("Configured preparation failure"),
+      {
+        event_id: conversion.diagnosticReference,
+        captureContext: { tags: { "cup.conversion.failure_category": "source-preparation" } },
+      },
+    ],
+  ]);
+});
+
+test("a failed preparation whose owner cannot record the failure is left to the owner's alarm to capture", async () => {
+  const { grantId } = await createConversion();
+  // The grant knows no such conversion, so it refuses every phase and outcome of the run.
+  const unknownConversionId = crypto.randomUUID();
+
+  await expect(runConversion(grantId, unknownConversionId, undefined, true)).rejects.toBeInstanceOf(
+    Error,
+  );
+
+  expect(captureException).not.toHaveBeenCalled();
 });
 
 test("a document exceeding the available duration reserves nothing", async () => {
@@ -1069,18 +1141,30 @@ function createImmediateRetryStep(): WorkflowStep {
   };
 }
 
-/** A step whose runs share recorded results, as a replay of a Workflow run reuses them. */
+/**
+ * A step whose runs share recorded outcomes, as a replay of a Workflow run reuses them: a recorded
+ * step returns its result or rejects with its error again, without running its callback.
+ */
 function createReplayingStep(): WorkflowStep {
-  const results = new Map<string, unknown>();
+  const outcomes = new Map<string, { result: unknown } | { error: unknown }>();
   const step = createImmediateRetryStep();
   const runStep = step.do.bind(step);
   step.do = async (name: string, ...rest: unknown[]) => {
-    if (results.has(name)) {
-      return results.get(name);
+    const recorded = outcomes.get(name);
+    if (recorded !== undefined) {
+      if ("error" in recorded) {
+        throw recorded.error;
+      }
+      return recorded.result;
     }
-    const result: unknown = await Reflect.apply(runStep, step, [name, ...rest]);
-    results.set(name, result);
-    return result;
+    try {
+      const result: unknown = await Reflect.apply(runStep, step, [name, ...rest]);
+      outcomes.set(name, { result });
+      return result;
+    } catch (error) {
+      outcomes.set(name, { error });
+      throw error;
+    }
   };
   return step;
 }
