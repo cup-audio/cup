@@ -29,7 +29,7 @@
     "start": "pnpm run dev",
     "test": "vitest run",
     "test:watch": "vitest",
-    "turbo:build": "prepare-declaration-build --declaration-output-dir ./dist/types --build-info-file ./dist/tsconfig.build.tsbuildinfo --source-package-json ./src/package.json && tsc --build ./tsconfig.json && vite build && prepare-source-maps --build-dir ./dist/create_audiobook_from_url --source-map-dir ./dist/source-maps",
+    "turbo:build": "prepare-declaration-build --declaration-output-dir ./dist/types --build-info-file ./dist/tsconfig.build.tsbuildinfo --build-info-file ./dist/tsconfig.scripts.tsbuildinfo --source-package-json ./src/package.json && tsc --build ./tsconfig.json && vite build && prepare-source-maps --build-dir ./dist/create_audiobook_from_url --source-map-dir ./dist/source-maps",
     "turbo:cf-typegen": "pnpm run cf-typegen",
     "turbo:lint": "oxlint --type-aware --max-warnings 0 .",
     "turbo:lint:fix": "pnpm run turbo:lint --fix",
