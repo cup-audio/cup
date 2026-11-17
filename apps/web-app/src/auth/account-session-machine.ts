@@ -333,7 +333,7 @@ export const accountSessionMachine = accountSessionSetup.createMachine({
                 return { context: { session: event.session } };
               }
               if (context.session === null) {
-                // Unhandled: the event goes to the parent state, as a failed v5 guard did.
+                // Unhandled here, so the event goes on to the parent state.
                 return undefined;
               }
 
@@ -379,7 +379,7 @@ export const accountSessionMachine = accountSessionSetup.createMachine({
               on: {
                 SESSION_CHANGED: ({ context, event, actions }, enq) => {
                   if (!startsSession(context.session, event.session)) {
-                    // Unhandled: the event goes to the parent state, as a failed v5 guard did.
+                    // Unhandled here, so the event goes on to the parent state.
                     return undefined;
                   }
 
@@ -410,7 +410,7 @@ export const accountSessionMachine = accountSessionSetup.createMachine({
                 // The provider reports the new session before the sign-in call returns.
                 SESSION_CHANGED: ({ context, event, actions }, enq) => {
                   if (!startsSession(context.session, event.session)) {
-                    // Unhandled: the event goes to the parent state, as a failed v5 guard did.
+                    // Unhandled here, so the event goes on to the parent state.
                     return undefined;
                   }
 

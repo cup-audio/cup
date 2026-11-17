@@ -3,7 +3,7 @@
 ## What it does
 
 - provides the React UI for submitting a source URL and listening
-- models client lifecycles with real modes and cancellable async work, such as account auth, as XState machines ([ADR 0009](../../docs/adr/0009-use-xstate-for-client-lifecycle-state-machines.md))
+- models client lifecycles with real modes and cancellable async work, such as account auth, as XState machines ([ADR 0009](../../docs/adr/0009-use-xstate-for-client-lifecycle-state-machines.md)). It runs the XState v6 beta, pinned to an exact version because a beta may still change; [cup-audio/cup#457](https://github.com/cup-audio/cup/pull/457) assessed it on 2026-11-17
 - initializes native listeners and renders the app from `src/bootstrap.tsx`
 - builds the shared SPA bundle consumed by `apps/cloudflare-worker` and `apps/mobile-app`
 
