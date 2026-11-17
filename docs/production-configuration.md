@@ -55,9 +55,10 @@ pnpm --filter '@cup/cloudflare-worker' run deploy
 The [deploy script](../apps/cloudflare-worker/scripts/deploy.ts) runs these steps in order, and the first that fails aborts the deploy before anything goes live. There is no flag to deploy anyway; fix the cause and run it again.
 
 1. `sentry-cli info` checks the Sentry token.
-2. It builds the web app and the Worker; each build injects debug IDs and moves its source maps out of what is served and deployed ([release tracking](architecture/observability-operations.md#release-tracking)).
-3. It uploads the web app's source maps to the `cup-app` project and the Worker's to `cup-worker`.
-4. `wrangler deploy` deploys the Worker with the [Worker configuration](../apps/cloudflare-worker/wrangler.jsonc), which sets `LOCAL_DEVELOPMENT` to `"false"`.
+2. It empties the folders that hold the served build and its source maps, because Turbo restores a cached build over a folder's old files without removing them, which would otherwise upload and deploy every earlier build's files.
+3. It builds the web app and the Worker; each build injects debug IDs and moves its source maps out of what is served and deployed ([release tracking](architecture/observability-operations.md#release-tracking)).
+4. It uploads the web app's source maps to the `cup-app` project and the Worker's to `cup-worker`.
+5. `wrangler deploy` deploys the Worker with the [Worker configuration](../apps/cloudflare-worker/wrangler.jsonc), which sets `LOCAL_DEVELOPMENT` to `"false"`.
 
 The script makes no release API calls: Sentry creates a release from the first event that names it, and matches source maps by debug ID, not by release. Wrangler authenticates with the operator's own login (`wrangler login`). Keep the Cloudflare credentials from `apps/cloudflare-worker/.env.local` out of the deploying shell: that token covers development AI calls only, and Wrangler fails the asset upload with "No access to the specified resource" when it uses it. `wrangler deployments list`, run in `apps/cloudflare-worker`, shows the version now serving traffic.
 
