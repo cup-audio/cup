@@ -42,10 +42,10 @@ export const TELEMETRY_ATTRIBUTES = {
   /** Why a shell's Android WebView lost its renderer process: `crash` or `system-kill`. */
   RENDERER_CAUSE: "cup.renderer.cause",
   /**
-   * The Android WebView renderer's priority when it ended: `waived`, `bound` or `important`. Named
-   * after Android's `RenderProcessGoneDetail.rendererPriorityAtExit()`, as the spec names the tag.
+   * The Android WebView renderer's priority when it ended: `waived`, `bound` or `important`, by
+   * Android's `RenderProcessGoneDetail.rendererPriorityAtExit()`.
    */
-  RENDERER_PRIORITY_AT_EXIT: "rendererPriorityAtExit",
+  RENDERER_PRIORITY_AT_EXIT: "cup.renderer.priority_at_exit",
   /** Whether a shell was `foreground` or `background` when its WebView lost its page. */
   APP_STATE: "cup.app.state",
   /** The wrapper types of a logged error, outermost to innermost. */
@@ -78,6 +78,12 @@ export const TELEMETRY_ATTRIBUTES = {
   /** Absent when the segment is missing. */
   AUDIO_SEGMENT_STORED_BYTE_LENGTH: "cup.audio_segment.stored_byte_length",
 } as const;
+
+/**
+ * The `cup.conversion.failure_category` of an audio segment's final failure. A failed preparation
+ * is tagged with its conversion failure category instead.
+ */
+export const SEGMENT_FAILURE_CATEGORY = "segment";
 
 /**
  * The telemetry user of a listener who is not signed in, also after sign-out and account deletion.

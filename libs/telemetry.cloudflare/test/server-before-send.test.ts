@@ -44,6 +44,8 @@ test("drops the IP address and IP headers and masks URLs", () => {
         "x-forwarded-for": "203.0.113.7",
         "X-Real-IP": "203.0.113.7",
         "True-Client-IP": "203.0.113.7",
+        "CF-Connecting-IPv6": "2001:db8::7",
+        "X-Vercel-Forwarded-For": "203.0.113.7",
         Accept: "*/*",
       },
     },

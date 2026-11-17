@@ -91,7 +91,7 @@ test("a renderer crash brings Cup back on Recents and reaches the stub through t
     platform: "javascript",
     tags: { "cup.renderer.cause": "crash", "cup.app.state": "foreground" },
   });
-  expect(rendererGoneEvents()[0]?.tags?.["rendererPriorityAtExit"]).toMatch(
+  expect(rendererGoneEvents()[0]?.tags?.["cup.renderer.priority_at_exit"]).toMatch(
     /^(waived|bound|important)$/,
   );
   expect(app.worker.requests()).toContainEqual(

@@ -8,7 +8,12 @@ export {
   type LogLevel,
   type TelemetryLog,
 } from "#src/log-events.ts";
-export { SIGNED_OUT_USER, TELEMETRY_ATTRIBUTES } from "#src/telemetry-attributes.ts";
+export {
+  SEGMENT_FAILURE_CATEGORY,
+  SIGNED_OUT_USER,
+  TELEMETRY_ATTRIBUTES,
+} from "#src/telemetry-attributes.ts";
+export { TELEMETRY_TUNNEL_PATH } from "#src/telemetry-tunnel-path.ts";
 export {
   MASKED_QUERY_PARAMETERS,
   MASKED_VALUE,

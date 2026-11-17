@@ -130,12 +130,18 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
     if (narrationTextCharactersBySegment !== undefined) {
       await this.ctx.storage.setAlarm(Temporal.Now.instant().epochMilliseconds + 60_000);
     }
-    this.settle(conversionId, outcome, nowMs, executionEpoch, narrationTextCharactersBySegment);
+    this.settleAndLog(
+      conversionId,
+      outcome,
+      nowMs,
+      executionEpoch,
+      narrationTextCharactersBySegment,
+    );
     await this.scheduleUsagePublication();
   }
 
   /** Records the outcome and sends `conversion-preparation-settled` unless it is a replay. */
-  private settle(
+  private settleAndLog(
     conversionId: string,
     outcome: AccountConversionOutcome,
     nowMs: number,
@@ -273,7 +279,7 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
           {
             v: 3,
             conversionId,
-            owner: { kind: "account", accountId: this.sqlite.snapshot().accountId },
+            owner: this.owner(),
             executionEpoch,
           },
           reservation.sequences,
@@ -299,7 +305,7 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
     setConversionScope({ conversionId });
     this.assertExecution(conversionId, executionEpoch);
     assertSynthesisAttempts(attempts);
-    this.release(conversionId, sequence, attempts);
+    this.releaseAndLog(conversionId, sequence, attempts);
     await this.scheduleUsagePublication();
   }
 
@@ -307,7 +313,7 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
    * Releases the segment's reservation and sends `audio-segment-settled` if it had one; returns
    * whether it had one.
    */
-  private release(conversionId: string, sequence: number, attempts: number | undefined) {
+  private releaseAndLog(conversionId: string, sequence: number, attempts: number | undefined) {
     const releasedAtMs = Temporal.Now.instant().epochMilliseconds;
     const isReleased = this.sqlite.releaseAudioSegment(conversionId, sequence, releasedAtMs);
     if (isReleased) {
@@ -441,7 +447,7 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
             params: {
               v: 2,
               sourceUrl: conversion.sourceUrl,
-              owner: { kind: "account", accountId: account.accountId },
+              owner: this.owner(),
               conversionId,
               executionEpoch: account.executionEpoch,
             },
@@ -452,7 +458,11 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
           await instance.restart();
         }
       } catch (error) {
-        this.settle(conversionId, conversion.outcome, Temporal.Now.instant().epochMilliseconds);
+        this.settleAndLog(
+          conversionId,
+          conversion.outcome,
+          Temporal.Now.instant().epochMilliseconds,
+        );
         throw error;
       }
     });
@@ -614,7 +624,6 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
   private async reconcileDispatch() {
     const workflow = this.env.PREPARE_AUDIOBOOK_WORKFLOW;
     const registry = this.env.REGISTRY;
-    const account = this.sqlite.snapshot();
     for (const job of this.sqlite.unsettledConversions()) {
       await withConversionScope(
         { conversionId: job.conversionId, owner: this.owner() },
@@ -626,7 +635,7 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
               if (status.status === "errored" || status.status === "terminated") {
                 // The instance stopped without recording a failed outcome, so nothing captured it.
                 captureStoppedWorkflow({ kind: "preparation", conversionId: job.conversionId });
-                this.settle(
+                this.settleAndLog(
                   job.conversionId,
                   {
                     status: "failed",
@@ -644,10 +653,7 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
               throw new CupError("Missing conversion dispatch target");
             }
             const registryStub = registry.get(registry.idFromName("registry"));
-            await registryStub.bindConversionOwner(job.conversionId, {
-              kind: "account",
-              accountId: account.accountId,
-            });
+            await registryStub.bindConversionOwner(job.conversionId, this.owner());
 
             // A deletion, even its whole cleanup, can land while the bind is in flight, so the bind may
             // have recreated an owner the cleanup already removed.
@@ -659,7 +665,7 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
             const params: AccountWorkflowParams = {
               v: 2,
               sourceUrl: conversion.sourceUrl,
-              owner: { kind: "account", accountId: account.accountId },
+              owner: this.owner(),
               conversionId: job.conversionId,
               executionEpoch: job.executionEpoch,
             };
@@ -697,7 +703,7 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
           {
             v: 3,
             conversionId: segment.conversionId,
-            owner: { kind: "account", accountId: account.accountId },
+            owner: this.owner(),
             executionEpoch: account.executionEpoch,
             sequence: segment.sequence,
           },
@@ -706,7 +712,7 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
         // The instance stopped without releasing the segment itself, so nothing captured it.
         if (
           result === "stopped" &&
-          this.release(segment.conversionId, segment.sequence, undefined)
+          this.releaseAndLog(segment.conversionId, segment.sequence, undefined)
         ) {
           captureStoppedWorkflow({
             kind: "audio-segment",

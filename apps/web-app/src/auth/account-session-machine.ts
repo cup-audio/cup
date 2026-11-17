@@ -635,7 +635,11 @@ function rejectAll(replies: readonly Reply<void>[], error: unknown) {
   }
 }
 
-/** Captures the failure of an effect that nothing awaits, so its rejection stays observable. */
+/**
+ * Captures the failure of an effect that nothing awaits, so its rejection stays observable. The
+ * machine's own copy of `reportFailure` in `#src/report-failure.js`: its tests load this module
+ * under Node, which resolves no `.js` import of the app.
+ */
 function reportFailure(message: string) {
   return (error: unknown) => {
     Sentry.captureException(new Error(message, { cause: error }));

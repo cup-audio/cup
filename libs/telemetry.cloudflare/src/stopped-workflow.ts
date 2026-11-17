@@ -1,7 +1,8 @@
 import { captureException } from "@sentry/core";
 
+import type { ConversionFailureCategory } from "@cup/conversion-contracts";
 import { CupError } from "@cup/errors";
-import { TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
+import { SEGMENT_FAILURE_CATEGORY, TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
 
 /** A conversion Workflow instance that an owner's alarm found errored or terminated. */
 export type StoppedWorkflow =
@@ -32,7 +33,9 @@ export function captureStoppedWorkflow(workflow: StoppedWorkflow): string {
   return captureException(error, {
     tags: {
       [TELEMETRY_ATTRIBUTES.CONVERSION_FAILURE_CATEGORY]:
-        workflow.kind === "preparation" ? "workflow-platform" : "segment",
+        workflow.kind === "preparation"
+          ? ("workflow-platform" satisfies ConversionFailureCategory)
+          : SEGMENT_FAILURE_CATEGORY,
     },
   });
 }

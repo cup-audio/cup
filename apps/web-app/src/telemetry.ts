@@ -81,15 +81,15 @@ async function readShellContext(): Promise<ShellTelemetryContext | undefined> {
   if (!Capacitor.isNativePlatform()) {
     return undefined;
   }
-  const [{ version, build }, crashReports] = await Promise.all([
+  const [{ version, build }, shouldSendCrashReports] = await Promise.all([
     App.getInfo(),
     readCrashReportsEnabled(),
   ]);
   const testSentryDsn: unknown = Reflect.get(window, TEST_SENTRY_DSN_GLOBAL);
   return {
-    debugBuild: Capacitor.DEBUG !== false,
+    isDebugBuild: Capacitor.DEBUG !== false,
     testSentryDsn: typeof testSentryDsn === "string" ? testSentryDsn : undefined,
-    crashReports,
+    shouldSendCrashReports,
     app: { version, build },
   };
 }

@@ -1,5 +1,6 @@
 import { App } from "@capacitor/app";
-import * as Sentry from "@sentry/react";
+
+import { reportFailure } from "#src/report-failure.js";
 
 /**
  * Calls `listener` with whether the app is in the foreground: once with its current state, then on
@@ -15,9 +16,7 @@ export function watchAppState(listener: (isActive: boolean) => void): () => void
       listener(isActive);
     }
   });
-  registration.catch((error: unknown) => {
-    Sentry.captureException(new Error("Failed to listen for app state changes", { cause: error }));
-  });
+  registration.catch(reportFailure("Failed to listen for app state changes"));
 
   const reportCurrentState = async () => {
     const { isActive } = await App.getState();
@@ -26,19 +25,13 @@ export function watchAppState(listener: (isActive: boolean) => void): () => void
       listener(isActive);
     }
   };
-  reportCurrentState().catch((error: unknown) => {
-    Sentry.captureException(new Error("Failed to read the app state", { cause: error }));
-  });
+  reportCurrentState().catch(reportFailure("Failed to read the app state"));
 
   return () => {
     isWatching = false;
     registration
       .then((handle) => handle.remove())
-      .catch((error: unknown) => {
-        Sentry.captureException(
-          new Error("Failed to stop listening for app state changes", { cause: error }),
-        );
-      });
+      .catch(reportFailure("Failed to stop listening for app state changes"));
   };
 }
 

@@ -1,5 +1,6 @@
 import { handleTunnelRequest } from "@sentry/cloudflare";
 
+import { CLIENT_IP_HEADERS } from "#src/client-ip-headers.ts";
 import {
   InvalidTunnelEnvelopeError,
   readEnvelopeDsn,
@@ -15,18 +16,6 @@ export type TelemetryTunnelOptions = {
    */
   country: string | undefined;
 };
-
-/**
- * The request headers that carry the listener's IP address. `handleTunnelRequest` would forward the
- * first one it finds to Sentry as `X-Sentry-Forwarded-For`; `X-Vercel-Forwarded-For` is one it
- * reads.
- */
-const CLIENT_IP_HEADERS = [
-  "CF-Connecting-IP",
-  "X-Forwarded-For",
-  "X-Real-IP",
-  "X-Vercel-Forwarded-For",
-];
 
 /** The headers of Sentry's answer that the client SDK reads, for its rate limits. */
 const FORWARDED_RESPONSE_HEADERS = ["Content-Type", "Retry-After", "X-Sentry-Rate-Limits"];
@@ -64,6 +53,8 @@ export async function handleTelemetryTunnelRequest(
     throw error;
   }
 
+  // `handleTunnelRequest` would forward the first IP header it finds to Sentry as
+  // `X-Sentry-Forwarded-For`.
   const headers = new Headers(request.headers);
   for (const name of CLIENT_IP_HEADERS) {
     headers.delete(name);

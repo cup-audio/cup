@@ -251,24 +251,19 @@ async function readTrackPart(
 
   await object?.body.cancel();
   // A fault the operator must look at, so an issue as well as the error log record with its sizes.
-  captureException(
-    new CupError(
-      "A stored audio segment is missing or its size differs from its settled duration.",
-    ),
-    { tags: { [TELEMETRY_ATTRIBUTES.AUDIO_SEGMENT_SEQUENCE]: String(part.sequence) } },
-  );
-  logEvent(
-    "narration-track-segment-mismatch",
-    "A stored audio segment is missing or its size differs from its settled duration.",
-    {
-      attributes: {
-        [TELEMETRY_ATTRIBUTES.CONVERSION_ID]: conversionId,
-        [TELEMETRY_ATTRIBUTES.AUDIO_SEGMENT_SEQUENCE]: part.sequence,
-        [TELEMETRY_ATTRIBUTES.AUDIO_SEGMENT_EXPECTED_BYTE_LENGTH]: part.segmentByteLength,
-        [TELEMETRY_ATTRIBUTES.AUDIO_SEGMENT_STORED_BYTE_LENGTH]: object?.size,
-      },
+  const mismatch =
+    "A stored audio segment is missing or its size differs from its settled duration.";
+  captureException(new CupError(mismatch), {
+    tags: { [TELEMETRY_ATTRIBUTES.AUDIO_SEGMENT_SEQUENCE]: String(part.sequence) },
+  });
+  logEvent("narration-track-segment-mismatch", mismatch, {
+    attributes: {
+      [TELEMETRY_ATTRIBUTES.CONVERSION_ID]: conversionId,
+      [TELEMETRY_ATTRIBUTES.AUDIO_SEGMENT_SEQUENCE]: part.sequence,
+      [TELEMETRY_ATTRIBUTES.AUDIO_SEGMENT_EXPECTED_BYTE_LENGTH]: part.segmentByteLength,
+      [TELEMETRY_ATTRIBUTES.AUDIO_SEGMENT_STORED_BYTE_LENGTH]: object?.size,
     },
-  );
+  });
   return undefined;
 }
 

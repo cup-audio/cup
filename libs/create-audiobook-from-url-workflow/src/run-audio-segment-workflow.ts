@@ -15,7 +15,7 @@ import {
   type SegmentWorkflowParams,
 } from "@cup/conversion-contracts";
 import { setConversionScope } from "@cup/telemetry.cloudflare";
-import { TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
+import { SEGMENT_FAILURE_CATEGORY, TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
 
 import { resolveConversionExecution } from "#src/conversion-execution.ts";
 import { keepStepErrors, originalStepError } from "#src/keep-step-errors.ts";
@@ -164,7 +164,7 @@ export async function runAudioSegmentWorkflow({
         // Last in the step, so only a step that released the reservation reports the final failure,
         // and a replay of the run reuses the recorded step instead of capturing again.
         captureException(originalStepError(error), {
-          tags: { [TELEMETRY_ATTRIBUTES.CONVERSION_FAILURE_CATEGORY]: "segment" },
+          tags: { [TELEMETRY_ATTRIBUTES.CONVERSION_FAILURE_CATEGORY]: SEGMENT_FAILURE_CATEGORY },
         });
       },
     );

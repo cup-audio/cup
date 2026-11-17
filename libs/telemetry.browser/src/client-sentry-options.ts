@@ -14,6 +14,7 @@ import {
   CUP_APP_DSN,
   maskSpanUrls,
   TELEMETRY_ATTRIBUTES,
+  TELEMETRY_TUNNEL_PATH,
 } from "@cup/telemetry.core";
 
 import { beforeBreadcrumbClient, beforeSendClientEvent } from "#src/client-before-send.ts";
@@ -38,7 +39,7 @@ export type ShellTelemetryContext = {
    * Whether the shell is a debug build, as its native side says. Callers count only an explicit
    * "release" as one, so a shell that says nothing is a debug build and sends nothing.
    */
-  debugBuild: boolean;
+  isDebugBuild: boolean;
   /**
    * Debug builds only: the DSN the mobile E2E suite passed as the `cupTestSentryDsn` launch
    * argument, the Sentry stub's.
@@ -49,7 +50,7 @@ export type ShellTelemetryContext = {
    * the shell runs JS-only: its JS errors still go through the tunnel, but the native SDK stays
    * off.
    */
-  crashReports: boolean;
+  shouldSendCrashReports: boolean;
   /** The app's version and build number, from `App.getInfo()`. */
   app: { version: string; build: string };
 };
@@ -62,9 +63,6 @@ const PRODUCTION_ORIGIN = "https://cup.audio";
 
 /** The shells' application ID, which names their release. */
 const SHELL_APP_ID = "audio.cup.app";
-
-/** The telemetry tunnel on the Worker, at the API origin. */
-const TUNNEL_PATH = "/_/e";
 
 /**
  * Known browser noise: a layout loop the browser recovers from itself, and a request aborted on
@@ -101,7 +99,7 @@ export function createClientSentryOptions({
     ...target,
     // Through Cup's own domain, so ad blockers that block Sentry's hosts don't drop it.
     transport: makeFetchTransport,
-    tunnel: `${apiOrigin}${TUNNEL_PATH}`,
+    tunnel: `${apiOrigin}${TELEMETRY_TUNNEL_PATH}`,
     // `dataCollection` stays unset: setting any of its keys makes the others permissive.
     sendDefaultPii: false,
     enableLogs: true,
@@ -168,9 +166,9 @@ function browserTarget(pageOrigin: string, release: string | undefined): SendTar
 function shellTarget(
   apiOrigin: string,
   webRelease: string | undefined,
-  { debugBuild, testSentryDsn, crashReports, app }: ShellTelemetryContext,
+  { isDebugBuild, testSentryDsn, shouldSendCrashReports, app }: ShellTelemetryContext,
 ): SendTarget | undefined {
-  const dsn = debugBuild
+  const dsn = isDebugBuild
     ? testSentryDsn
     : apiOrigin === PRODUCTION_ORIGIN
       ? CUP_APP_DSN
@@ -184,14 +182,14 @@ function shellTarget(
     // The native SDK gets the same release, so a native crash and the JS error before it line up.
     release: `${SHELL_APP_ID}@${app.version}+${app.build}`,
     dist: app.build,
-    environment: debugBuild ? "debug" : "production",
+    environment: isDebugBuild ? "debug" : "production",
     ...(webRelease === undefined
       ? {}
       : { initialScope: { tags: { [TELEMETRY_ATTRIBUTES.WEB_RELEASE]: webRelease } } }),
     // Native crashes, ANRs and app hangs, with the native installation ID kept in memory only, unless
     // the listener turned crash reports off. That gives up native release health, so native session
     // tracking is off.
-    enableNative: crashReports,
+    enableNative: shouldSendCrashReports,
     enableAutoSessionTracking: false,
     enableWatchdogTerminationTracking: false,
     attachThreads: true,

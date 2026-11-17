@@ -39,6 +39,7 @@ import {
   logEvent,
   setConversionScope,
 } from "@cup/telemetry.cloudflare";
+import { TELEMETRY_TUNNEL_PATH } from "@cup/telemetry.core";
 
 import { resolveConversionDispatch } from "#src/adapters/conversion-dispatch.ts";
 import { resolveConversionReader } from "#src/adapters/conversion-reader.ts";
@@ -78,9 +79,6 @@ import { startAudiobookConversion } from "#src/use-cases/start-audiobook-convers
 
 type GrantStub = DurableObjectStub<ConversionGrantDurableObject>;
 type RegistryStub = DurableObjectStub<RegistryDurableObject>;
-
-/** The telemetry tunnel's path, outside `/api/*`. */
-const TELEMETRY_TUNNEL_PATH = "/_/e";
 
 const accessKeySets = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
 type ApiServerDependencies = {

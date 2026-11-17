@@ -3,8 +3,9 @@ import type { Contexts, ErrorEvent, EventHint, Exception } from "@sentry/core";
 import { findErrorChain, findErrorType, isCupError } from "@cup/errors";
 import { maskEventUrls, maskSpanUrls, type StreamedSpan } from "@cup/telemetry.core";
 
-/** Headers that carry the listener's IP address. */
-const IP_HEADERS = new Set(["cf-connecting-ip", "true-client-ip", "x-forwarded-for", "x-real-ip"]);
+import { CLIENT_IP_HEADERS } from "#src/client-ip-headers.ts";
+
+const IP_HEADERS = new Set(CLIENT_IP_HEADERS);
 
 /**
  * The SDK copies `request.cf.timezone` onto spans and, as the `culture` context, onto events: a

@@ -14,11 +14,11 @@ export type WebViewProcessLoss =
       readonly didCrash: boolean;
       /** `waived`, `bound` or `important`, by `RenderProcessGoneDetail.rendererPriorityAtExit()`. */
       readonly rendererPriorityAtExit: string;
-      readonly inForeground: boolean;
+      readonly isInForeground: boolean;
     }
   | {
       readonly platform: "ios";
-      readonly inForeground: boolean;
+      readonly isInForeground: boolean;
     };
 
 /** The JS interface of the shells' `WebViewProcessLoss` plugin. */
@@ -49,19 +49,20 @@ export function parseWebViewProcessLoss(value: unknown): WebViewProcessLoss | un
   }
   if (typeof value === "object") {
     const platform: unknown = Reflect.get(value, "platform");
-    const inForeground: unknown = Reflect.get(value, "inForeground");
+    // The native side records the flag as `inForeground`.
+    const isInForeground: unknown = Reflect.get(value, "inForeground");
     const didCrash: unknown = Reflect.get(value, "didCrash");
     const rendererPriorityAtExit: unknown = Reflect.get(value, "rendererPriorityAtExit");
     if (
       platform === "android" &&
-      typeof inForeground === "boolean" &&
+      typeof isInForeground === "boolean" &&
       typeof didCrash === "boolean" &&
       typeof rendererPriorityAtExit === "string"
     ) {
-      return { platform, didCrash, rendererPriorityAtExit, inForeground };
+      return { platform, didCrash, rendererPriorityAtExit, isInForeground };
     }
-    if (platform === "ios" && typeof inForeground === "boolean") {
-      return { platform, inForeground };
+    if (platform === "ios" && typeof isInForeground === "boolean") {
+      return { platform, isInForeground };
     }
   }
   throw new Error(`The shell recorded a malformed WebView process loss: ${JSON.stringify(value)}`);
@@ -75,7 +76,7 @@ export function webViewProcessLossMessage(loss: WebViewProcessLoss): {
   message: string;
   context: { level: "error"; fingerprint: string[]; tags: Record<string, string> };
 } {
-  const appState = loss.inForeground ? "foreground" : "background";
+  const appState = loss.isInForeground ? "foreground" : "background";
   if (loss.platform === "android") {
     return {
       message: "The WebView's renderer process is gone",

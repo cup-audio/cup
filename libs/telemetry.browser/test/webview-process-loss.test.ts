@@ -21,7 +21,7 @@ test("an Android renderer crash becomes one error grouped by its own fingerprint
       fingerprint: ["webview-renderer-gone"],
       tags: {
         "cup.renderer.cause": "crash",
-        rendererPriorityAtExit: "important",
+        "cup.renderer.priority_at_exit": "important",
         "cup.app.state": "foreground",
       },
     },
@@ -38,7 +38,7 @@ test("an Android renderer the system killed in the background is a system kill",
 
   expect(webViewProcessLossMessage(loss).context.tags).toEqual({
     "cup.renderer.cause": "system-kill",
-    rendererPriorityAtExit: "waived",
+    "cup.renderer.priority_at_exit": "waived",
     "cup.app.state": "background",
   });
 });
