@@ -315,5 +315,3 @@ function dexContaining(classDescriptors: readonly string[]): Buffer {
     ),
   ]);
 }
-
-/** Writes a zip archive with deflated entries, unless an entry asks to be stored. */

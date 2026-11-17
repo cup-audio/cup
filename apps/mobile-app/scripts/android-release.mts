@@ -100,6 +100,12 @@ const androidSdkRoot = requireJvmToolchain();
 
 // Reads the credentials before the build, so missing ones fail before Gradle starts rather than after it.
 const publisher = options["skip-upload"] ? undefined : await createPublisher();
+if (publisher !== undefined) {
+  // `symbols:upload` runs `sentry-cli info` again before uploading; this fails before the build instead.
+  runCaptured("pnpm", ["--filter", "@cup/source-maps", "exec", "sentry-cli", "info"], {
+    failureHint: `Sentry CLI has no working upload token; set it up as for the deploy (docs/production-configuration.md#deploy). Setup is documented in ${SETUP_DOCS}.`,
+  });
+}
 
 // Read once, so `versionCode` and `versionName` describe the same instant.
 const version = deriveReleaseVersion(Temporal.Now.instant());
@@ -167,6 +173,7 @@ if (violations.length > 0) {
 if (!fs.existsSync(MAPPING_FILE)) {
   fail(`Gradle succeeded but wrote no R8 mapping file at ${MAPPING_FILE}.`);
 }
+
 const symbolsUploadArgs = [
   "run",
   "symbols:upload",

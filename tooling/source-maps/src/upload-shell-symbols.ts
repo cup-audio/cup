@@ -139,8 +139,9 @@ async function assertMappingMatchesBuild(
         `\`sentry-cli ${[...args, mappingFile].join(" ")}\` failed with exit code ${exitCode}. Do not upload this build to the store.`,
       );
     }
+
     const mappingUuid = (await fs.readFile(propertiesFile, "utf8")).match(
-      /^io\.sentry\.ProguardUuids=(\S+)$/m,
+      /^io\.sentry\.ProguardUuids=([0-9a-f-]{36})\s*$/m,
     )?.[1];
     if (mappingUuid !== proguardUuid) {
       throw new Error(

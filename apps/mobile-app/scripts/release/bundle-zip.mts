@@ -15,16 +15,13 @@ const DEFLATED = 8;
 
 export type ZipEntry = { name: string; read(): Buffer };
 
-/**
- * Lists a zip archive's entries from its central directory; `read` inflates one on demand. Only
- * what Gradle's bundles use is supported: stored or deflated entries, no ZIP64, no encryption.
- */
+/** Lists a zip archive's entries from its central directory; `read` inflates one on demand. */
 export function readZipEntries(zip: Buffer): ZipEntry[] {
   const endOffset = findEndOfCentralDirectory(zip);
   const entryCount = zip.readUInt16LE(endOffset + 10);
   const centralDirectoryOffset = zip.readUInt32LE(endOffset + 16);
   if (centralDirectoryOffset === ZIP64_MARKER) {
-    throw new Error("The bundle is a ZIP64 archive, which the bundle safety check can't read.");
+    throw new Error("The bundle is a ZIP64 archive, which the release scripts can't read.");
   }
 
   const entries: ZipEntry[] = [];
@@ -42,7 +39,7 @@ export function readZipEntries(zip: Buffer): ZipEntry[] {
     const name = zip.toString("utf8", offset + 46, offset + 46 + nameLength);
     if (compressedSize === ZIP64_MARKER || localHeaderOffset === ZIP64_MARKER) {
       throw new Error(
-        `The bundle's entry ${name} uses ZIP64, which the bundle safety check can't read.`,
+        `The bundle's entry ${name} uses ZIP64, which the release scripts can't read.`,
       );
     }
 
@@ -105,6 +102,6 @@ function readEntryData({
     return zlib.inflateRawSync(data);
   }
   throw new Error(
-    `The bundle's entry ${name} uses zip compression method ${String(method)}, which the bundle safety check can't read.`,
+    `The bundle's entry ${name} uses zip compression method ${String(method)}, which the release scripts can't read.`,
   );
 }

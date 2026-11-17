@@ -1,4 +1,5 @@
 import com.android.build.api.artifact.SingleArtifact
+import java.nio.ByteBuffer
 import java.security.MessageDigest
 
 apply plugin: 'com.android.application'
@@ -115,7 +116,7 @@ abstract class GenerateSentryDebugMetaTask extends DefaultTask {
     }
 
     private static byte[] toBytes(UUID uuid) {
-        def buffer = java.nio.ByteBuffer.allocate(16)
+        def buffer = ByteBuffer.allocate(16)
         buffer.putLong(uuid.mostSignificantBits)
         buffer.putLong(uuid.leastSignificantBits)
         return buffer.array()

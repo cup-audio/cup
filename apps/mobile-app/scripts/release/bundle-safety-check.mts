@@ -1,7 +1,7 @@
 /*
  * The bundle safety check: what proves a release bundle is safe to hand to testers (#438). It reads the
  * merged release manifest Gradle writes as plain XML, because the bundle holds the manifest as
- * protobuf, and the bundle's own zip entries, with Node's zlib and no extra tools.
+ * protobuf, and the bundle's own zip entries (`bundle-zip.mts`).
  */
 import { readZipEntries } from "#scripts/release/bundle-zip.mts";
 
@@ -33,6 +33,7 @@ export function findBundleViolations({
       "No debug class to look for: the debug source set should hold at least the mobile E2E suite's hooks.",
     );
   }
+
   const violations = findManifestViolations(manifestXml);
 
   for (const entry of readZipEntries(bundle)) {
