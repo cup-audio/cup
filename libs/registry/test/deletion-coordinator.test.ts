@@ -249,18 +249,18 @@ test.for([
       sentryDsn: sentry.dsn("cup-worker"),
     });
     const nowMs = Temporal.Now.instant().epochMilliseconds;
-    // Two overdue attempts, so a repeated report is never an immediate repeat of the same event,
+    // Two stuck attempts, so a repeated report is never an immediate repeat of the same event,
     // which Sentry's Dedupe integration would drop and so hide.
-    const overdueFirst = await coordinator.accept(nowMs - 61 * MINUTE_MS, progress);
-    const overdueSecond = await coordinator.accept(nowMs - 62 * MINUTE_MS, progress);
-    const almostOverdue = await coordinator.accept(nowMs - 59 * MINUTE_MS, progress);
+    const stuckFirst = await coordinator.accept(nowMs - 61 * MINUTE_MS, progress);
+    const stuckSecond = await coordinator.accept(nowMs - 62 * MINUTE_MS, progress);
+    const almostStuck = await coordinator.accept(nowMs - 59 * MINUTE_MS, progress);
 
     await coordinator.reconcile();
 
     await sentry.waitFor("both stuck reports", () => sentry.errorEvents("cup-worker").length >= 2);
     expect(sentry.errorEvents("cup-worker")).toStrictEqual(
       expect.arrayContaining(
-        [overdueFirst, overdueSecond].map((attempt) =>
+        [stuckFirst, stuckSecond].map((attempt) =>
           expect.objectContaining({
             level: "error",
             fingerprint: ["account-deletion-stuck"],
@@ -277,20 +277,20 @@ test.for([
     expect(sentry.errorEvents("cup-worker")).toHaveLength(2);
     expect(JSON.stringify(sentry.envelopes)).not.toContain(RECIPIENT);
     expect(await coordinator.overdueByAttempt()).toStrictEqual({
-      [overdueFirst.attemptId]: true,
-      [overdueSecond.attemptId]: true,
-      [almostOverdue.attemptId]: false,
+      [stuckFirst.attemptId]: true,
+      [stuckSecond.attemptId]: true,
+      [almostStuck.attemptId]: false,
     });
 
-    // A later pass reports nothing new; the third attempt, once overdue, marks its flush.
+    // A later pass reports nothing new; the third attempt, once stuck, marks its flush.
     await coordinator.reconcile();
-    await coordinator.moveDeadline(almostOverdue.attemptId, nowMs - 61 * MINUTE_MS);
+    await coordinator.moveDeadline(almostStuck.attemptId, nowMs - 61 * MINUTE_MS);
     await coordinator.reconcile();
 
     await sentry.waitFor("the third stuck report", () =>
       sentry
         .errorEvents("cup-worker")
-        .some(({ tags }) => tags?.["cup.account_deletion.attempt_id"] === almostOverdue.attemptId),
+        .some(({ tags }) => tags?.["cup.account_deletion.attempt_id"] === almostStuck.attemptId),
     );
     expect(sentry.errorEvents("cup-worker")).toHaveLength(3);
   },

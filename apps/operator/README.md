@@ -252,7 +252,7 @@ List unfinished deletion cleanup and completed deletion receipts. Each receipt r
 pnpm operator account deletions
 ```
 
-An unfinished deletion is `overdue` once it is still neither erased nor restored 1 h after its recovery deadline. Sentry reports the same deletion once as a stuck account deletion, with the attempt ID and whether the identity, the account or both are pending; see [stuck checks](../../docs/architecture/observability-operations.md#stuck-checks).
+The listing marks a [stuck account deletion](../../docs/GLOSSARY.md#stuck-account-deletion) as `overdue`: one still neither erased nor restored well after its recovery deadline. Sentry reports the same deletion once, with the attempt ID and whether the identity, the account or both are pending; see [stuck checks](../../docs/architecture/observability-operations.md#stuck-checks).
 
 Provider acceptance of a notification is not proof of inbox delivery. For recovery deadlines, cleanup retries, unresolved writers, and retained receipts, see [account deletion](../../docs/architecture/account-deletion.md). For the relationship between trial and account conversions, see [trial access](../../docs/architecture/authentication.md#trial-access).
 

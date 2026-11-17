@@ -1877,9 +1877,6 @@ importers:
       '@cup/telemetry.core':
         specifier: workspace:*
         version: link:../telemetry.core
-      '@sentry/core':
-        specifier: catalog:sentry-server
-        version: 11.10.0
       drizzle-orm:
         specifier: ^0.45.4
         version: 0.45.4

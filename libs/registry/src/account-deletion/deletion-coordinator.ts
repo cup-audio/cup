@@ -1,4 +1,3 @@
-import { captureMessage } from "@sentry/core";
 import { and, asc, eq, inArray, lte, min, sql } from "drizzle-orm";
 import { drizzle, type DrizzleSqliteDODatabase } from "drizzle-orm/durable-sqlite";
 import { Temporal } from "temporal-polyfill";
@@ -6,7 +5,7 @@ import { z } from "zod";
 
 import { deletionAttemptSchema, type DeletionAttempt } from "@cup/accounts/lifecycle";
 import { CupError } from "@cup/errors";
-import { logEvent } from "@cup/telemetry.cloudflare";
+import { logEvent, reportStuckCases } from "@cup/telemetry.cloudflare";
 import { TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
 
 import type { ProviderRequest } from "#src/providers/provider-request.ts";
@@ -40,18 +39,22 @@ export type DeletionProviderOptions = Partial<ProviderRequest>;
 const PROVIDER_TIMEOUT_MS = 10_000;
 const DAY = 86_400_000;
 /**
- * How long after its recovery deadline an unfinished deletion counts as overdue, which is the same
- * as stuck: the alarm reports it to Sentry once, and the Operator CLI lists it as `overdue`.
+ * How long after its recovery deadline an unfinished deletion counts as stuck: the alarm reports it
+ * to Sentry once, and the operator API's `overdue` field is true for it.
  */
-const OVERDUE_AFTER_DEADLINE_MS = 3_600_000;
+const STUCK_AFTER_DEADLINE_MS = 3_600_000;
 const jobSchema = deletionAttemptSchema.extend({
   googleRevocation: z.enum(["unavailable", "revoked", "failed"]).default("unavailable"),
   identityDone: z.boolean(),
   accountDone: z.boolean(),
   failures: z.number().int(),
   nextAttemptMs: z.number(),
-  /** Whether the alarm has reported this job as stuck; jobs stored before the check lack it. */
-  stuckReported: z.boolean().default(false),
+  /**
+   * Whether the alarm has reported this job as stuck. Jobs stored before the check lack it, and
+   * code from before the check drops it when it saves a job during a rollback; the job then reads
+   * as unreported, so the worst case is one more report of the same attempt.
+   */
+  isStuckReported: z.boolean().default(false),
 });
 type DeletionJob = z.infer<typeof jobSchema>;
 const noticeTypeSchema = z.enum(["scheduled", "completed"]);
@@ -149,7 +152,7 @@ export class DeletionCoordinator {
           accountDone: false,
           failures: 0,
           nextAttemptMs: attempt.deadlineMs,
-          stuckReported: false,
+          isStuckReported: false,
         });
         this.enqueue(
           attempt,
@@ -344,7 +347,7 @@ export class DeletionCoordinator {
           identityDone: job.identityDone,
           accountDone: job.accountDone,
           failures: job.failures,
-          overdue: isOverdue(job, Temporal.Now.instant().epochMilliseconds),
+          overdue: isStuck(job, Temporal.Now.instant().epochMilliseconds),
         };
       });
   }
@@ -366,14 +369,26 @@ export class DeletionCoordinator {
     this.save({ ...job, googleRevocation: outcome });
   }
 
-  /** Reports each overdue attempt once, whether or not this pass retried it. */
+  /** Reports each stuck attempt once, whether or not this pass retried it. */
   private reportStuckAttempts() {
-    const nowMs = Temporal.Now.instant().epochMilliseconds;
-    for (const row of this.database.select({ json: deletionJobs.json }).from(deletionJobs).all()) {
-      const job = jobSchema.parse(JSON.parse(row.json));
-      if (isOverdue(job, nowMs) && !job.stuckReported) {
-        reportStuck(job);
-        this.save({ ...job, stuckReported: true });
+    const unreportedJobs = this.database
+      .select({ json: deletionJobs.json })
+      .from(deletionJobs)
+      .all()
+      .map((row) => jobSchema.parse(JSON.parse(row.json)))
+      .filter((job) => !job.isStuckReported);
+    const reportedAttemptIds = new Set(
+      reportStuckCases(unreportedJobs, Temporal.Now.instant().epochMilliseconds, {
+        idOf: (job) => job.attemptId,
+        startedAtMsOf: (job) => job.deadlineMs,
+        isStuck: (job, msSinceDeadline) => isStuckAfter(job, msSinceDeadline),
+        toEvent: stuckEvent,
+      }),
+    );
+
+    for (const job of unreportedJobs) {
+      if (reportedAttemptIds.has(job.attemptId)) {
+        this.save({ ...job, isStuckReported: true });
       }
     }
   }
@@ -584,30 +599,29 @@ function logUndeliveredNotice(attemptId: string, notification: Notification) {
 }
 
 /** An attempt still not erased, nor restored, an hour after its recovery deadline. */
-function isOverdue(job: DeletionJob, nowMs: number) {
+function isStuck(job: DeletionJob, nowMs: number) {
+  return isStuckAfter(job, nowMs - job.deadlineMs);
+}
+
+function isStuckAfter(job: DeletionJob, msSinceDeadline: number) {
   return (
     (job.state === "scheduled" || job.state === "deleting") &&
-    nowMs >= job.deadlineMs + OVERDUE_AFTER_DEADLINE_MS
+    msSinceDeadline >= STUCK_AFTER_DEADLINE_MS
   );
 }
 
-/** One error event per stuck attempt, grouped into one Sentry issue; never the email address. */
-function reportStuck(job: DeletionJob) {
+/** The error event of a stuck attempt; all group into one Sentry issue. Never the email address. */
+function stuckEvent(job: DeletionJob) {
   // A scheduled job has not fenced the account yet, which counts as account cleanup.
   const pending =
     !job.identityDone && !job.accountDone ? "both" : job.identityDone ? "account" : "identity";
-  // The attempt ID keeps Sentry's Dedupe integration from dropping the report of a second stuck
-  // attempt as a repeat of the first; the fingerprint still groups them into one issue.
-  captureMessage(
-    `Account deletion attempt ${job.attemptId} is still not erased 1 h after its recovery deadline`,
-    {
-      level: "error",
-      fingerprint: ["account-deletion-stuck"],
-      tags: {
-        [TELEMETRY_ATTRIBUTES.ACCOUNT_ID]: job.accountId,
-        [TELEMETRY_ATTRIBUTES.ACCOUNT_DELETION_ATTEMPT_ID]: job.attemptId,
-        [TELEMETRY_ATTRIBUTES.ACCOUNT_DELETION_PENDING]: pending,
-      },
+  return {
+    message: `Account deletion attempt ${job.attemptId} is still not erased 1 h after its recovery deadline`,
+    fingerprint: ["account-deletion-stuck"],
+    tags: {
+      [TELEMETRY_ATTRIBUTES.ACCOUNT_ID]: job.accountId,
+      [TELEMETRY_ATTRIBUTES.ACCOUNT_DELETION_ATTEMPT_ID]: job.attemptId,
+      [TELEMETRY_ATTRIBUTES.ACCOUNT_DELETION_PENDING]: pending,
     },
-  );
+  };
 }
