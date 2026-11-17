@@ -160,7 +160,7 @@ export async function synthesizeGeminiAudio({
                       : {
                           // An unspoken style is what makes a names-only segment, such as a
                           // byline, sound like the narration language; the language parameter
-                          // alone does not (patricktree/cup#193).
+                          // alone does not (cup-audio/cup#193).
                           annotations: [{ type: "speech_metadata", style: spokenLanguage.style }],
                         }),
                   },

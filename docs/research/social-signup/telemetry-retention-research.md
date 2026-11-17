@@ -2,7 +2,7 @@
 
 > Historical research, incorporated 2026-10-02. The fourteen-day telemetry requirement and Sentry alternatives below belong to earlier planning. They do not establish current retention or deployment configuration. See [current account deletion](../../architecture/account-deletion.md) for application receipt retention and its external-provider limits. External claims retain their original research dates and have not been reverified during this migration.
 
-[Original investigation](https://github.com/patricktree/cup/blob/28971d5dca7915dd74ad629878aac9287ec7f7a3/.scratch/social-signup/telemetry-retention-research.md).
+[Original investigation](https://github.com/cup-audio/cup/blob/28971d5dca7915dd74ad629878aac9287ec7f7a3/.scratch/social-signup/telemetry-retention-research.md).
 
 Research date: 2026-09-21. Scope: managed observability for Cup deletion/notification failures, including the user's email address, with the requested fourteen-day retention. No provider was configured.
 

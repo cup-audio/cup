@@ -4,7 +4,7 @@ status: accepted
 
 # Keep trial links out of the mobile apps
 
-The Android and iOS apps claimed `https://cup.audio/app` links through Android App Links and iOS Universal Links, and the iOS Share Extension opened a shared trial link in the app. Cup has no links meant to open the app, and the only Cup links people pass around are trial links. A trial is for trying Cup without installing anything, and it was never released in the apps. Patrick decided on 2026-11-06 that the mobile apps intentionally don't support trial links, and [patricktree/cup#178](https://github.com/patricktree/cup/pull/178) implemented it.
+The Android and iOS apps claimed `https://cup.audio/app` links through Android App Links and iOS Universal Links, and the iOS Share Extension opened a shared trial link in the app. Cup has no links meant to open the app, and the only Cup links people pass around are trial links. A trial is for trying Cup without installing anything, and it was never released in the apps. Patrick decided on 2026-11-06 that the mobile apps intentionally don't support trial links, and [cup-audio/cup#178](https://github.com/cup-audio/cup/pull/178) implemented it.
 
 ## Decision
 

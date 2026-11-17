@@ -2,7 +2,7 @@
 
 > Deferred planning, incorporated 2026-10-02. This handoff is not an accepted launch commitment or evidence of implementation. Revalidate its provider requirements when work resumes. See [current authentication](../../architecture/authentication.md).
 
-Deferred by Patrick on 2026-09-22. This is a handoff for a separate future effort, not an open dependency of the [current map](https://github.com/patricktree/cup/blob/28971d5dca7915dd74ad629878aac9287ec7f7a3/.scratch/social-signup/map.md). The current feature targets Google sign-in on Android and web only. No existing iOS code or infrastructure is removed by this planning change.
+Deferred by Patrick on 2026-09-22. This is a handoff for a separate future effort, not an open dependency of the [current map](https://github.com/cup-audio/cup/blob/28971d5dca7915dd74ad629878aac9287ec7f7a3/.scratch/social-signup/map.md). The current feature targets Google sign-in on Android and web only. No existing iOS code or infrastructure is removed by this planning change.
 
 ## Future scope
 
@@ -16,4 +16,4 @@ Deferred by Patrick on 2026-09-22. This is a handoff for a separate future effor
 
 ## Existing context
 
-Preserve the [native provider research](native-social-sso-research.md), [deletion research](account-deletion-research.md), [provider setup history](https://github.com/patricktree/cup/blob/28971d5dca7915dd74ad629878aac9287ec7f7a3/.scratch/social-signup/issues/15-native-auth-setup.md), [auth proof](https://github.com/patricktree/cup/blob/28971d5dca7915dd74ad629878aac9287ec7f7a3/.scratch/social-signup/issues/08-native-auth-proof.md) and [email setup history](https://github.com/patricktree/cup/blob/28971d5dca7915dd74ad629878aac9287ec7f7a3/.scratch/social-signup/issues/19-email-setup.md). Their Apple/iOS findings remain useful research, but their older launch requirements do not apply to the current Google-only effort. Revalidate provider and platform requirements when starting this task.
+Preserve the [native provider research](native-social-sso-research.md), [deletion research](account-deletion-research.md), [provider setup history](https://github.com/cup-audio/cup/blob/28971d5dca7915dd74ad629878aac9287ec7f7a3/.scratch/social-signup/issues/15-native-auth-setup.md), [auth proof](https://github.com/cup-audio/cup/blob/28971d5dca7915dd74ad629878aac9287ec7f7a3/.scratch/social-signup/issues/08-native-auth-proof.md) and [email setup history](https://github.com/cup-audio/cup/blob/28971d5dca7915dd74ad629878aac9287ec7f7a3/.scratch/social-signup/issues/19-email-setup.md). Their Apple/iOS findings remain useful research, but their older launch requirements do not apply to the current Google-only effort. Revalidate provider and platform requirements when starting this task.

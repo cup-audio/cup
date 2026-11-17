@@ -82,7 +82,7 @@ export function isSameSpeechConfig(left: SpeechConfig, right: SpeechConfig): boo
   );
 }
 
-// Picked by ear from Sonic renders between 1.05 and 1.20 (patricktree/cup#266).
+// Picked by ear from Sonic renders between 1.05 and 1.20 (cup-audio/cup#266).
 const POLICY_6_SPEED_FACTOR = 1.05;
 
 /**

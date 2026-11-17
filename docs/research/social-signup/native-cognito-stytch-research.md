@@ -2,7 +2,7 @@
 
 > Historical research, incorporated 2026-10-02. Historical supporting evidence for the [native sign-in comparison](native-social-sso-research.md). Cup uses Supabase; these alternatives are not implemented. External claims retain their original research dates and have not been reverified during this migration.
 
-[Original investigation](https://github.com/patricktree/cup/blob/28971d5dca7915dd74ad629878aac9287ec7f7a3/.scratch/social-signup/native-cognito-stytch-research.md).
+[Original investigation](https://github.com/cup-audio/cup/blob/28971d5dca7915dd74ad629878aac9287ec7f7a3/.scratch/social-signup/native-cognito-stytch-research.md).
 
 Researched 2026-09-17. Requirement: Google’s native Android account flow and Apple’s native iOS authorization sheet, followed by the auth SaaS’s user/session creation. Browser-based OAuth, including browser sheets, does not qualify. This is documentation and source research, not a device test.
 

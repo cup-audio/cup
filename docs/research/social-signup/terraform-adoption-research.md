@@ -2,7 +2,7 @@
 
 > Historical research, incorporated 2026-10-02. The adoption proposal and backend choice below predate the repository Terraform setup. Existing project identifiers and proposed imports are historical; use the [Terraform guide](../../../terraform/README.md) for the later setup and outstanding prerequisites. Do not execute this proposal as a current runbook. External claims retain their original research dates and have not been reverified during this migration.
 
-[Original investigation](https://github.com/patricktree/cup/blob/28971d5dca7915dd74ad629878aac9287ec7f7a3/.scratch/social-signup/terraform-adoption-research.md).
+[Original investigation](https://github.com/cup-audio/cup/blob/28971d5dca7915dd74ad629878aac9287ec7f7a3/.scratch/social-signup/terraform-adoption-research.md).
 
 Research date: 2026-09-22. Scope: adopt existing external configuration without recreating services; no credentials read, provider account calls, imports, plans, or infrastructure mutations performed.
 

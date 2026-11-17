@@ -2,7 +2,7 @@
 
 > Historical research, incorporated 2026-10-02. The Cloudflare Email Sending recommendation below was superseded by the Resend integration. See [current account deletion](../../architecture/account-deletion.md) for notification behavior and the [production configuration guide](../../production-configuration.md#email) for configuration. External claims retain their original research dates and have not been reverified during this migration.
 
-[Original investigation](https://github.com/patricktree/cup/blob/28971d5dca7915dd74ad629878aac9287ec7f7a3/.scratch/social-signup/transactional-email-research.md).
+[Original investigation](https://github.com/cup-audio/cup/blob/28971d5dca7915dd74ad629878aac9287ec7f7a3/.scratch/social-signup/transactional-email-research.md).
 
 Research checked 2026-09-21 against primary vendor documentation. Scope: deletion-scheduled and deletion-completed notifications; no provisioning or sending performed.
 

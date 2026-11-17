@@ -2,7 +2,7 @@
 
 > Historical research, incorporated 2026-10-02. The per-request online session check recommended below is not implemented. Cup verifies JWTs locally; local sign-out does not immediately invalidate every copied JWT. Preserve this investigation as an alternative design, not a current guarantee. See [current authentication](../../architecture/authentication.md). External claims retain their original research dates and have not been reverified during this migration.
 
-[Original investigation](https://github.com/patricktree/cup/blob/28971d5dca7915dd74ad629878aac9287ec7f7a3/.scratch/social-signup/supabase-session-revocation-research.md).
+[Original investigation](https://github.com/cup-audio/cup/blob/28971d5dca7915dd74ad629878aac9287ec7f7a3/.scratch/social-signup/supabase-session-revocation-research.md).
 
 Researched 2026-09-18 against official documentation and Supabase Auth source at commit `8be26910bc1830a2af4dd760bc2901cdec4575c2`. No live tenant test was performed.
 

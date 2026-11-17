@@ -1,10 +1,10 @@
 # Locked-screen playback of one long MP3
 
-> Historical research, incorporated 2026-10-27 by [ADR 0011](../adr/0011-serve-one-narration-track-and-play-it-with-one-audio-element.md). Cup adopted one continuous `<audio>` element with `preload="metadata"`, Media Session metadata without action handlers, and a [signed media URL](../architecture/authentication.md#signed-media-url) that stays valid for a whole listen, renewed on an in-app Play. Its "Cup today" section describes the element pair and media cookie that this change removed. The device behavior it could not observe was checked by the operator in [issue #72](https://github.com/patricktree/cup/issues/72). External claims have not been reverified.
+> Historical research, incorporated 2026-10-27 by [ADR 0011](../adr/0011-serve-one-narration-track-and-play-it-with-one-audio-element.md). Cup adopted one continuous `<audio>` element with `preload="metadata"`, Media Session metadata without action handlers, and a [signed media URL](../architecture/authentication.md#signed-media-url) that stays valid for a whole listen, renewed on an in-app Play. Its "Cup today" section describes the element pair and media cookie that this change removed. The device behavior it could not observe was checked by the operator in [issue #72](https://github.com/cup-audio/cup/issues/72). External claims have not been reverified.
 
-[Original investigation](https://github.com/patricktree/cup/blob/8fc211666488d7c42b7480318365f92ed3b64502/docs/research/locked-mp3-playback.md).
+[Original investigation](https://github.com/cup-audio/cup/blob/8fc211666488d7c42b7480318365f92ed3b64502/docs/research/locked-mp3-playback.md).
 
-Research date: 2026-10-27. Question: [issue #58](https://github.com/patricktree/cup/issues/58), part of the [narration track map](https://github.com/patricktree/cup/issues/56).
+Research date: 2026-10-27. Question: [issue #58](https://github.com/cup-audio/cup/issues/58), part of the [narration track map](https://github.com/cup-audio/cup/issues/56).
 
 How do iOS Safari and Android Chrome fetch and keep playing one long MP3 (CBR, 30–90 minutes, served with byte ranges and a cookie) from a single `<audio>` element while the device is locked, and do their default media controls suffice?
 
@@ -24,7 +24,7 @@ Limits:
 - The media cookie `cup_media` holds the bearer JWT itself, scoped `Path=/api/files; HttpOnly; SameSite=Strict`, with `Max-Age` equal to the token's remaining lifetime ([`account-auth.ts`](../../libs/api-server/src/http/account-auth.ts) `mediaCookie`, issued by `filesSession` in [`api-server.ts`](../../libs/api-server/src/api-server.ts)). Even a cookie a browser kept would fail verification once the JWT's `exp` passes. A missing or expired credential gets `401 account-session-required` ([`http-errors.ts`](../../libs/api-server/src/http/http-errors.ts)).
 - Delivery answers `Range: bytes=N-`, `bytes=N-M` and suffix ranges with `206` and `Content-Range`, a plain request with `200`, and sends `Accept-Ranges: bytes` and an `ETag` ([`serve-audiobook.ts`](../../libs/api-server/src/http/serve-audiobook.ts)). Responses default to `Cache-Control: private, no-store`.
 - The client requests a fresh cookie on load, on every Play and before each preload ([private media access](../architecture/authentication.md#private-media-access)). A Play pressed on the lock screen without a page action handler never reaches that code.
-- [`registerPlayerMediaSession`](https://github.com/patricktree/cup/blob/0fb4e71d/apps/web-app/src/platform/player.ts) sets the title and handlers for play, pause, next track, previous track and seek-to, and publishes position state.
+- [`registerPlayerMediaSession`](https://github.com/cup-audio/cup/blob/0fb4e71d/apps/web-app/src/platform/player.ts) sets the title and handlers for play, pause, next track, previous track and seek-to, and publishes position state.
 
 ## Findings
 

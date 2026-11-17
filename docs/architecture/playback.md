@@ -43,7 +43,7 @@ The player host drives the system's media controls in browsers and iOS itself th
 
 ## In the mobile apps
 
-iOS plays through the web player in its WebView with WebKit's Now Playing, best effort ([patricktree/cup#386](https://github.com/patricktree/cup/issues/386)).
+iOS plays through the web player in its WebView with WebKit's Now Playing, best effort ([cup-audio/cup#386](https://github.com/cup-audio/cup/issues/386)).
 
 ### Android's native engine
 

@@ -5,7 +5,7 @@ Cup tracks work in two places, split by what an issue is:
 | Tracker                                                                         | Holds                                                                                                                               | Access                |
 | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
 | Linear: team `CUP` in the [`cup-audio`](https://linear.app/cup-audio) workspace | Feature requests, bugs, design changes and other product and maintenance work, with their status from backlog through production QA | The Linear MCP server |
-| GitHub Issues in [`patricktree/cup`](https://github.com/patricktree/cup/issues) | Wayfinder maps and their decision tickets, specs, and implementation tickets                                                        | The `gh` CLI          |
+| GitHub Issues in [`cup-audio/cup`](https://github.com/cup-audio/cup/issues)     | Wayfinder maps and their decision tickets, specs, and implementation tickets                                                        | The `gh` CLI          |
 
 Local `.scratch/` maps are for throwaway work only; anything a later ADR or landing needs to cite goes on GitHub.
 
