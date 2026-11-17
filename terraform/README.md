@@ -134,7 +134,7 @@ The [Sentry root](sentry/main.tf) manages Cup's Sentry production setup through 
 - The privacy settings the provider cannot set (see [Privacy settings](#privacy-settings)).
 - The alerts and monitors in [alerts.tf](sentry/alerts.tf) (see [Alerts and monitors](#alerts-and-monitors)).
 
-The first apply ran on 2026-11-16, and the plan after it showed no changes. The alerts and monitors were added later and are not applied yet.
+The first apply ran on 2026-11-16, and the plan after it showed no changes. The alerts and monitors were applied on 2026-11-17, after the deploy that added the health route, and the plan after that showed no changes.
 
 ### Organisation
 
