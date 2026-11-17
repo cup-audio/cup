@@ -38,13 +38,13 @@ Deploys are manual: no CI workflow deploys, and pushing to `main` deploys nothin
 pnpm gate:deploy
 ```
 
-Once per machine, log Sentry CLI in to the `cupaudio` organisation, from the repository so that it picks up the committed [`.sentryclirc`](../.sentryclirc):
+Once per machine, log Sentry CLI in to the `cupaudio` organisation with `--global`. Without it, Sentry CLI writes the token into the `.sentryclirc` it finds above the working directory, which in a checkout is the committed one:
 
 ```sh
-pnpm --filter '@cup/cloudflare-worker' exec sentry-cli login
+pnpm --filter '@cup/cloudflare-worker' exec sentry-cli login --global
 ```
 
-Paste an organisation auth token, which Sentry creates with the source map upload scope only (`org:ci`). Sentry CLI stores it in `~/.sentryclirc`, outside every checkout. The committed `.sentryclirc` holds only the organisation and the Germany region URL; keep the token out of it, out of `.env.local` (`pnpm env:check` fails on a `SENTRY_AUTH_TOKEN` there) and out of the deploying shell. An organisation auth token carries its region's URL, and Sentry CLI uses it, because it ignores a URL configured in another file than the token.
+The link the login opens lacks the organisation and fails; create the token at <https://cupaudio.sentry.io/settings/auth-tokens/> instead. Sentry creates an organisation auth token with the source map upload scope only (`org:ci`), and Sentry CLI stores it in `~/.sentryclirc`, outside every checkout. The committed `.sentryclirc` holds only the organisation and the Germany region URL; keep the token out of it, out of `.env.local` (`pnpm env:check` fails on a `SENTRY_AUTH_TOKEN` there) and out of the deploying shell. An organisation auth token names `https://sentry.io`, and Sentry CLI uses that URL instead of the configured one, with a warning; `sentry.io` forwards the organisation's requests to the Germany region.
 
 Then deploy that commit:
 
