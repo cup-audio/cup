@@ -29,6 +29,8 @@ const MP3_SEEK_TOLERANCE_MILLISECONDS = 100;
 /** How far the page's position, which follows ExoPlayer's reports, may lag behind or run ahead. */
 const POSITION_TOLERANCE_MILLISECONDS = 2_500;
 const LOCKED_LISTEN_MILLISECONDS = 120_000;
+/** The longest time between two saves the locked listen accepts, on a Mac under load. */
+const LOCKED_SAVE_INTERVAL_LIMIT_MILLISECONDS = 7_000;
 /** How often the locked listen checks Cup's process and service. */
 const LOCKED_CHECK_INTERVAL_MILLISECONDS = 20_000;
 /**
@@ -119,13 +121,33 @@ test("media keys and the notification's buttons and seek bar act on the player w
   await device.tapMediaControl("Back 15 seconds");
   webView = await device.webView();
   await expectPositionNear(webView, pausedAt);
-  // ExoPlayer skips from its own position, so back where it paused, up to the MP3 frame a seek
-  // lands on.
+  // ExoPlayer skips from its own position, so back where it paused. The pause save is no exact
+  // reference: ExoPlayer reports the pause before its playback thread stops the audio, and under
+  // load its position then moves on by a few hundred milliseconds without an event. So the back
+  // skip lands at or after the pause save, and a second forward skip lands where the first did.
   const backSave = await waitForSaveAfter(conversionId, saveCount);
-  expect(backSave.synchronizationUnitId).toBe(pauseSave.synchronizationUnitId);
-  expect(Math.abs(backSave.offsetMilliseconds - pauseSave.offsetMilliseconds)).toBeLessThan(
-    MP3_SEEK_TOLERANCE_MILLISECONDS,
-  );
+  expect(unitIds).toContain(backSave.synchronizationUnitId);
+  const unitOrder =
+    unitIds.indexOf(backSave.synchronizationUnitId) -
+    unitIds.indexOf(pauseSave.synchronizationUnitId);
+  // In another unit, only the units' order counts.
+  const millisecondsAfterPauseSave =
+    unitOrder === 0
+      ? backSave.offsetMilliseconds - pauseSave.offsetMilliseconds
+      : Math.sign(unitOrder) * Number.POSITIVE_INFINITY;
+  expect(millisecondsAfterPauseSave).toBeGreaterThan(-MP3_SEEK_TOLERANCE_MILLISECONDS);
+
+  saveCount = positionSaves(conversionId).length;
+  await device.tapMediaControl("Forward 15 seconds");
+  const secondForwardSave = await waitForSaveAfter(conversionId, saveCount);
+  expect(secondForwardSave.synchronizationUnitId).toBe(forwardSave.synchronizationUnitId);
+  expect(
+    Math.abs(secondForwardSave.offsetMilliseconds - forwardSave.offsetMilliseconds),
+  ).toBeLessThan(MP3_SEEK_TOLERANCE_MILLISECONDS);
+  saveCount = positionSaves(conversionId).length;
+  await device.tapMediaControl("Back 15 seconds");
+  await waitForSaveAfter(conversionId, saveCount);
+  webView = await device.webView();
 
   const durationMilliseconds = await readDuration(webView);
   saveCount = positionSaves(conversionId).length;
@@ -181,31 +203,35 @@ test(
 
     await device.background();
     await device.turnScreenOff();
-    const savesBefore = positionSaves(conversionId).length;
-    const lockedAt = performance.now();
-    for (
-      let elapsed = 0;
-      elapsed < LOCKED_LISTEN_MILLISECONDS;
-      elapsed += LOCKED_CHECK_INTERVAL_MILLISECONDS
-    ) {
-      await timers.setTimeout(LOCKED_CHECK_INTERVAL_MILLISECONDS);
-      // The foreground service keeps Android's cached apps freezer away from Cup.
-      expect(await device.isFrozen()).toBe(false);
-      expect(await cupMediaPlaybackService(device)).toMatch(/\bisForeground=true\b/u);
+    // Every later test needs the screen on, so a failure here must not leave it off.
+    try {
+      const savesBefore = positionSaves(conversionId).length;
+      const lockedAt = performance.now();
+      for (
+        let elapsed = 0;
+        elapsed < LOCKED_LISTEN_MILLISECONDS;
+        elapsed += LOCKED_CHECK_INTERVAL_MILLISECONDS
+      ) {
+        await timers.setTimeout(LOCKED_CHECK_INTERVAL_MILLISECONDS);
+        // The foreground service keeps Android's cached apps freezer away from Cup.
+        expect(await device.isFrozen()).toBe(false);
+        expect(await cupMediaPlaybackService(device)).toMatch(/\bisForeground=true\b/u);
+      }
+      expect(await cupMediaSession(device)).toMatch(/\bstate=PlaybackState \{state=PLAYING\(3\)/u);
+      // The plugin saves at the save interval while the page is suspended; it checks twice a second
+      // whether a save is due, so the saves come every 5 to 5.5 s on an idle Mac. Under load, such as the
+      // deploy gate's parallel iOS suite, they came every 5.7 to 6.3 s (2026-11-17).
+      const lockedSaves = positionSaves(conversionId).length - savesBefore;
+      const lockedMilliseconds = performance.now() - lockedAt;
+      expect(lockedSaves).toBeGreaterThanOrEqual(
+        Math.floor(lockedMilliseconds / LOCKED_SAVE_INTERVAL_LIMIT_MILLISECONDS) - 1,
+      );
+      expect(lockedSaves).toBeLessThanOrEqual(
+        Math.ceil(lockedMilliseconds / SAVE_INTERVAL_MILLISECONDS) + 1,
+      );
+    } finally {
+      await device.turnScreenOnAndUnlock();
     }
-    expect(await cupMediaSession(device)).toMatch(/\bstate=PlaybackState \{state=PLAYING\(3\)/u);
-    // The plugin saves at the save interval while the page is suspended; it checks twice a second
-    // whether a save is due, so the saves come every 5 to 5.5 s.
-    const lockedSaves = positionSaves(conversionId).length - savesBefore;
-    const lockedMilliseconds = performance.now() - lockedAt;
-    expect(lockedSaves).toBeGreaterThanOrEqual(
-      Math.floor(lockedMilliseconds / (SAVE_INTERVAL_MILLISECONDS + 500)) - 1,
-    );
-    expect(lockedSaves).toBeLessThanOrEqual(
-      Math.ceil(lockedMilliseconds / SAVE_INTERVAL_MILLISECONDS) + 1,
-    );
-
-    await device.turnScreenOnAndUnlock();
     await device.bringToForeground();
     webView = await device.webView();
     // Becoming visible, the page asks the plugin for ExoPlayer's position.
