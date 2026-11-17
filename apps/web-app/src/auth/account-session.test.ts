@@ -1,5 +1,11 @@
 import { AuthError, type AuthChangeEvent, type Session } from "@supabase/supabase-js";
-import { createActor, fromCallback, fromPromise, waitFor, type EventFromLogic } from "xstate";
+import {
+  createActor,
+  createAsyncLogic,
+  createCallbackLogic,
+  waitFor,
+  type EventFromLogic,
+} from "xstate";
 
 import {
   accountSessionMachine,
@@ -251,16 +257,20 @@ function startMachine({
   const actor = createActor(
     accountSessionMachine.provide({
       actors: {
-        loadConnection: fromPromise(async () => {
-          if (connectionError) {
-            throw connectionError;
-          }
-          return connection;
+        loadConnection: createAsyncLogic({
+          run: async () => {
+            if (connectionError) {
+              throw connectionError;
+            }
+            return connection;
+          },
         }),
-        clearNativeSignIn: fromPromise(async () => {
-          effects.push("clearNativeSignIn");
+        clearNativeSignIn: createAsyncLogic({
+          run: async () => {
+            effects.push("clearNativeSignIn");
+          },
         }),
-        watchAppState: fromCallback<AccountSessionEvent>(({ sendBack }) => {
+        watchAppState: createCallbackLogic<AccountSessionEvent>(({ sendBack }) => {
           const listener = (isActive: boolean) => sendBack({ type: "APP_STATE_CHANGED", isActive });
           appStateListeners.add(listener);
           return () => appStateListeners.delete(listener);
@@ -343,9 +353,11 @@ test("failed initialization is retryable", async () => {
   const actor = createActor(
     accountSessionMachine.provide({
       actors: {
-        loadConnection: fromPromise<AccountAuthConnection>(async () => {
-          attempts += 1;
-          throw new Error("Configuration unavailable");
+        loadConnection: createAsyncLogic<AccountAuthConnection>({
+          run: async () => {
+            attempts += 1;
+            throw new Error("Configuration unavailable");
+          },
         }),
       },
     }),

@@ -1,6 +1,6 @@
 import * as Sentry from "@sentry/react";
 import { createClient, type Session } from "@supabase/supabase-js";
-import { createActor, fromCallback, fromPromise, waitFor } from "xstate";
+import { createActor, createAsyncLogic, createCallbackLogic, waitFor } from "xstate";
 
 import { parseOkResponse } from "@cup/listener-api.client";
 import { authConfigResponseSchema } from "@cup/listener-api.routes";
@@ -40,9 +40,9 @@ export type { SignInMethod };
 const accountSessionActor = createActor(
   accountSessionMachine.provide({
     actors: {
-      loadConnection: fromPromise(loadConnection),
-      clearNativeSignIn: fromPromise(clearNativeSignIn),
-      watchAppState: fromCallback(({ sendBack }) =>
+      loadConnection: createAsyncLogic({ run: loadConnection }),
+      clearNativeSignIn: createAsyncLogic({ run: () => clearNativeSignIn() }),
+      watchAppState: createCallbackLogic(({ sendBack }) =>
         watchAppState((isActive) => sendBack({ type: "APP_STATE_CHANGED", isActive })),
       ),
     },
