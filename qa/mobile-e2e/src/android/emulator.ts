@@ -70,6 +70,19 @@ export async function bootEmulator(host: AndroidHost): Promise<Emulator> {
 
   try {
     await waitForBoot(host, serial, emulatorProcess);
+    // A second crash within a minute, as the telemetry tests cause, shows "Cup keeps stopping",
+    // and Android keeps the crashed process until someone answers it. Without error dialogs it
+    // ends the process at once, which `waitForProcessExit()` waits for.
+    await run(host.adb, [
+      "-s",
+      serial,
+      "shell",
+      "settings",
+      "put",
+      "global",
+      "hide_error_dialogs",
+      "1",
+    ]);
   } catch (error) {
     await stop();
     throw error;
