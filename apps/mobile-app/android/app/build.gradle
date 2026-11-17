@@ -1,3 +1,6 @@
+import com.android.build.api.artifact.SingleArtifact
+import java.security.MessageDigest
+
 apply plugin: 'com.android.application'
 
 // `android:release` (scripts/android-release.mts) passes the release version (ADR 0032) as these
@@ -60,6 +63,62 @@ androidComponents {
                 output.versionName.set(releaseVersionName.toString())
             }
         }
+
+        // Sentry matches an event's obfuscated Java frames to R8's mapping file through this UUID,
+        // which the SDK reads from the asset; `symbols:upload` uploads the mapping file under it.
+        def sentryDebugMeta = tasks.register(
+            "generate${variant.name.capitalize()}SentryDebugMeta",
+            GenerateSentryDebugMetaTask,
+        ) {
+            mappingFile.set(variant.artifacts.get(SingleArtifact.OBFUSCATION_MAPPING_FILE.INSTANCE))
+        }
+        variant.sources.assets.addGeneratedSourceDirectory(sentryDebugMeta) { it.outputDirectory }
+    }
+}
+
+/**
+ * Writes `sentry-debug-meta.properties` with the R8 mapping file's ProGuard UUID, which is what
+ * `sentry-cli proguard uuid` computes: a UUIDv5 of the file's bytes in the namespace that is the
+ * UUIDv5 of "guardsquare.com" in the DNS namespace.
+ */
+abstract class GenerateSentryDebugMetaTask extends DefaultTask {
+    private static final UUID DNS_NAMESPACE = UUID.fromString("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
+
+    @InputFile
+    abstract RegularFileProperty getMappingFile()
+
+    @OutputDirectory
+    abstract DirectoryProperty getOutputDirectory()
+
+    @TaskAction
+    void generate() {
+        def proguardNamespace = uuidV5(DNS_NAMESPACE, "guardsquare.com".getBytes("UTF-8"))
+        def uuid = uuidV5(proguardNamespace, mappingFile.get().asFile.bytes)
+        def output = outputDirectory.get().asFile
+        output.mkdirs()
+        new File(output, "sentry-debug-meta.properties").text = "io.sentry.ProguardUuids=${uuid}\n"
+    }
+
+    private static UUID uuidV5(UUID namespace, byte[] name) {
+        def digest = MessageDigest.getInstance("SHA-1")
+        digest.update(toBytes(namespace))
+        byte[] hash = digest.digest(name)
+        hash[6] = (byte) ((hash[6] & 0x0f) | 0x50)
+        hash[8] = (byte) ((hash[8] & 0x3f) | 0x80)
+        long most = 0
+        long least = 0
+        for (int i = 0; i < 8; i++) {
+            most = (most << 8) | (hash[i] & 0xff)
+            least = (least << 8) | (hash[i + 8] & 0xff)
+        }
+        return new UUID(most, least)
+    }
+
+    private static byte[] toBytes(UUID uuid) {
+        def buffer = java.nio.ByteBuffer.allocate(16)
+        buffer.putLong(uuid.mostSignificantBits)
+        buffer.putLong(uuid.leastSignificantBits)
+        return buffer.array()
     }
 }
 

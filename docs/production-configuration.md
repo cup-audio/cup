@@ -101,7 +101,9 @@ The script makes no release API calls: Sentry creates a release from the first e
 
 ## Native release
 
-A release of the Android or iOS shell goes to the stores by hand. Before its store upload, upload the files Sentry needs to read the release's stack traces: the source maps of the web bundle packed into the build, and on iOS the archive's dSYMs ([release tracking](architecture/observability-operations.md#release-tracking)). Sentry CLI needs the same login as the [deploy](#deploy).
+A release of the iOS shell goes to App Store Connect by hand; Android test builds go to Google Play through [`android:release`](../apps/mobile-app/README.md#release-builds), which uploads the Android symbols itself before Play sees the bundle, and with `--skip-upload` prints the `symbols:upload` command for its bundle. Before a store upload, upload the files Sentry needs to read the release's stack traces: the source maps of the web bundle packed into the build, on iOS the archive's dSYMs, and on Android R8's mapping file ([release tracking](architecture/observability-operations.md#release-tracking)). Sentry CLI needs the same login as the [deploy](#deploy).
+
+For iOS:
 
 1. Build the shells from the commit being released, which builds the web app with its source maps and syncs the bundle into both native projects:
 
@@ -109,19 +111,18 @@ A release of the Android or iOS shell goes to the stores by hand. Before its sto
    pnpm --filter '@cup/mobile-app' build
    ```
 
-2. Archive the release: in Xcode, **Product → Archive** with the Release configuration; in Android Studio, a signed release bundle.
-3. Upload its symbols, passing the archive's absolute path for iOS (Xcode's Organizer shows it under **Show in Finder**):
+2. Archive the release in Xcode, **Product → Archive** with the Release configuration.
+3. Upload its symbols, passing the archive's absolute path (Xcode's Organizer shows it under **Show in Finder**):
 
    ```sh
    pnpm --filter '@cup/mobile-app' symbols:upload ios "/absolute/path/to/Cup.xcarchive"
-   pnpm --filter '@cup/mobile-app' symbols:upload android
    ```
 
-4. Upload the build to App Store Connect or the Play Console only if the step before succeeded.
+4. Upload the build to App Store Connect only if the step before succeeded.
 
-`symbols:upload` runs [`upload-shell-symbols`](../tooling/source-maps/README.md#upload-shell-symbols). It refuses source maps whose debug IDs are not all in the bundle packed into the build, which happens when the web app was rebuilt after the sync; it checks the Sentry token with `sentry-cli info`; on iOS it uploads every dSYM of the archive and waits until Sentry has processed them; and it uploads the source maps to `cup-app`. The first failing step stops it with a message saying not to upload the build to the store; fix the cause and run it again. There is no Xcode build phase that uploads, and the script makes no release API calls.
+`symbols:upload` runs [`upload-shell-symbols`](../tooling/source-maps/README.md#upload-shell-symbols). It refuses source maps whose debug IDs are not all in the bundle packed into the build, which happens when the web app was rebuilt after the sync; it checks the Sentry token with `sentry-cli info`; on iOS it uploads every dSYM of the archive and waits until Sentry has processed them; on Android it refuses an R8 mapping file whose ProGuard UUID differs from the one the build embedded, then uploads it; and it uploads the source maps to `cup-app`. The first failing step stops it with a message saying not to upload the build to the store; fix the cause and run it again. There is no Xcode build phase that uploads, and the script makes no release API calls.
 
-**Store-side symbols.** The stores read crash reports themselves, which covers listeners who turned "Send crash reports" off. Keep "Include symbols for your app" on when uploading from Xcode's Organizer, so App Store Connect receives the dSYMs and Xcode Organizer's crash reports are symbolicated. Android release builds are shrunk by R8 ([#444](https://github.com/patricktree/cup/issues/444)). AGP embeds the mapping file in the bundle, so the Play Console's Android vitals read Java stack traces without a separate upload. Sentry needs the same mapping file for each release, which `symbols:upload` and `android:release` don't upload yet: until they do, Sentry shows obfuscated Java frames for Android release builds (implementation gap).
+**Store-side symbols.** The stores read crash reports themselves, which covers listeners who turned "Send crash reports" off. Keep "Include symbols for your app" on when uploading from Xcode's Organizer, so App Store Connect receives the dSYMs and Xcode Organizer's crash reports are symbolicated. Android release builds are shrunk by R8 ([#444](https://github.com/patricktree/cup/issues/444)). AGP embeds the mapping file in the bundle, so the Play Console's Android vitals read Java stack traces without a separate upload. Sentry gets the same mapping file through `symbols:upload`: the release build writes the mapping file's ProGuard UUID into its `sentry-debug-meta.properties` asset (`GenerateSentryDebugMetaTask` in the app's `build.gradle`), and the Android SDK sends it with every event, so Sentry deobfuscates Java frames with that mapping file.
 
 **Store privacy forms**, filled in by the operator at the first release with Sentry and checked at every release:
 

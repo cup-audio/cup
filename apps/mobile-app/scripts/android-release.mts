@@ -20,6 +20,7 @@ import type { PlayPublisher } from "#scripts/release/play-upload.mts";
 import { findFailedReleasePreconditions } from "#scripts/release/release-preconditions.mts";
 import type { ReleaseGit } from "#scripts/release/release-preconditions.mts";
 import { deriveReleaseVersion, formatReleaseName } from "#scripts/release/release-version.mts";
+import { readProguardUuid } from "#scripts/release/sentry-debug-meta.mts";
 import {
   KEYSTORE_PATH,
   KEYSTORE_PATH_VARIABLE,
@@ -50,6 +51,15 @@ const RELEASE_MANIFEST = path.join(
   "release",
   "processReleaseManifestForPackage",
   "AndroidManifest.xml",
+);
+const MAPPING_FILE = path.join(
+  ANDROID_PROJECT,
+  "app",
+  "build",
+  "outputs",
+  "mapping",
+  "release",
+  "mapping.txt",
 );
 // Every class here is a debug hook that a release bundle must not contain.
 const DEBUG_SOURCES = path.join(ANDROID_PROJECT, "app", "src", "debug", "java");
@@ -141,10 +151,11 @@ if (!fs.existsSync(RELEASE_MANIFEST)) {
 }
 
 console.log("Checking the bundle for debug hooks and native code.");
+const bundle = fs.readFileSync(BUNDLE);
 const violations = findBundleViolations({
   debugClassNames: listDebugClassNames(),
   manifestXml: fs.readFileSync(RELEASE_MANIFEST, "utf8"),
-  bundle: fs.readFileSync(BUNDLE),
+  bundle,
 });
 
 if (violations.length > 0) {
@@ -153,9 +164,27 @@ if (violations.length > 0) {
   );
 }
 
+if (!fs.existsSync(MAPPING_FILE)) {
+  fail(`Gradle succeeded but wrote no R8 mapping file at ${MAPPING_FILE}.`);
+}
+const symbolsUploadArgs = [
+  "run",
+  "symbols:upload",
+  "android",
+  "--android-mapping",
+  MAPPING_FILE,
+  "--android-proguard-uuid",
+  readProguardUuidOrFail(bundle),
+];
+
 if (publisher === undefined) {
-  console.log("Built the release-signed bundle and skipped the upload.");
+  console.log(`Built the release-signed bundle and skipped the uploads. Before uploading it to a store by hand, upload its symbols to Sentry:
+  pnpm --filter @cup/mobile-app ${symbolsUploadArgs.join(" ")}`);
 } else {
+  // Sentry gets the symbols first: a failure here stops the release before Play sees it.
+  console.log("Uploading the release's R8 mapping file and web source maps to Sentry.");
+  runVisible("pnpm", symbolsUploadArgs, { cwd: MOBILE_APP_ROOT, env: process.env });
+
   console.log(`Uploading ${releaseName} to Google Play's internal testing track.`);
 
   try {
@@ -185,6 +214,14 @@ async function createPublisher(): Promise<PlayPublisher> {
     return fail(
       `Reading your Google application-default credentials failed:\n${util.inspect(error)}\nSign in with \`gcloud auth application-default login\`; uploads impersonate ${UPLOADER_SERVICE_ACCOUNT} through them. Setup is documented in ${SETUP_DOCS}.`,
     );
+  }
+}
+
+function readProguardUuidOrFail(releaseBundle: Buffer): string {
+  try {
+    return readProguardUuid(releaseBundle);
+  } catch (error) {
+    return fail(error instanceof Error ? error.message : String(error));
   }
 }
 

@@ -15,7 +15,7 @@ export async function runCli(
   const program = new Command()
     .name("upload-shell-symbols")
     .description(
-      "Upload a shell release's dSYMs and the source maps of its packed web bundle to Sentry",
+      "Upload a shell release's dSYMs or R8 mapping file and the source maps of its packed web bundle to Sentry",
     )
     .showHelpAfterError()
     .exitOverride()
@@ -30,6 +30,11 @@ export async function runCli(
       "--android-web-dir <directory>",
       "the web bundle packed into the Android project",
     )
+    .option("--android-mapping <file>", "R8's mapping file of the Android release")
+    .option(
+      "--android-proguard-uuid <uuid>",
+      "the ProGuard UUID the Android release embedded in its sentry-debug-meta.properties asset",
+    )
     .action(async (platform, archive, options) => {
       if (platform === "ios") {
         if (archive === undefined) {
@@ -43,11 +48,18 @@ export async function runCli(
         if (archive !== undefined) {
           throw new Error("An Android release has no archive to pass; pass `android` alone.");
         }
+        if (options.androidMapping === undefined || options.androidProguardUuid === undefined) {
+          throw new Error(
+            "Pass R8's mapping file with --android-mapping and the ProGuard UUID the build embedded with --android-proguard-uuid.",
+          );
+        }
         await uploadShellSymbols(
           {
             platform,
             packedWebDir: options.androidWebDir,
             webSourceMapDir: options.webSourceMapDir,
+            mappingFile: options.androidMapping,
+            proguardUuid: options.androidProguardUuid,
           },
           runSentryCli,
         );
