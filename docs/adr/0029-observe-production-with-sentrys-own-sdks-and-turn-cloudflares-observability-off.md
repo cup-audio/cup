@@ -4,7 +4,7 @@ status: accepted
 
 # Observe production with Sentry's own SDKs and turn Cloudflare's observability off
 
-Before the public launch the operator learned of a failure only when a listener reported it: the Worker wrote a few `console.*` lines into Cloudflare Workers Observability, the web app and the shells reported nothing, and nothing sent an alert. The map [Observability and APM](https://github.com/patricktree/cup/issues/337) for Linear CUP-37 chose how Cup observes production; [Which backend and alert channel?](https://github.com/patricktree/cup/issues/342) settled it with the operator on 2026-11-14, and the [spec](https://github.com/patricktree/cup/issues/403) describes the build. Ticket [#405](https://github.com/patricktree/cup/issues/405) implemented the Worker's part first.
+Before the public launch the operator learned of a failure only when a listener reported it: the Worker wrote a few `console.*` lines into Cloudflare Workers Observability, the web app and the shells reported nothing, and nothing sent an alert. The map [Observability and APM](https://github.com/patricktree/cup/issues/337) for Linear CUP-37 chose how Cup observes production; [Which backend and alert channel?](https://github.com/patricktree/cup/issues/342) settled it with the operator on 2026-11-14, and the [spec](https://github.com/patricktree/cup/issues/403) describes the build. Ticket [#405](https://github.com/patricktree/cup/issues/405) implemented the Worker's part first, and pull request [#422](https://github.com/patricktree/cup/pull/422) implemented the whole decision.
 
 ## Decision
 

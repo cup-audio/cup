@@ -39,7 +39,7 @@ Every error body of the Listener API and the Operator API carries `traceId`, the
 
 ## Sampling
 
-The Worker traces every invocation, the web app's polls included, except `GET /api/health` ([sampler](../../libs/telemetry.cloudflare/src/worker-sentry-options.ts)). Sentry's uptime monitor checks that route every minute, and its near-empty traces would take about 43k spans a month of the free plan's quota. If span volume grows, a later change lowers the trace rate where little is lost, starting with the polls.
+The Worker traces every invocation, the web app's polls included, except `GET /api/health` ([sampler](../../libs/telemetry.cloudflare/src/worker-sentry-options.ts)). Sentry's uptime monitor checks that route every minute, and its near-empty traces would use up much of the free plan's span quota. If span volume grows, a later change lowers the trace rate where little is lost, starting with the polls.
 
 ## Privacy
 
@@ -56,7 +56,7 @@ Sentry emails the operator, and nobody else, through the alerts in the [Terrafor
 - **New or regressed issues** of either project, which include client and native crash issues, the stuck checks, and the issues the uptime and volume monitors open.
 - **Frequent conversion failures**: an issue tagged with a failure category that is seen often within an hour.
 - **Uptime** of `GET https://cup.audio/api/health`, which answers 200 while the Worker runs and calls no binding.
-- **Volume**: each project's daily errors and spans, each monitor set to a day's share of the free plan's monthly quota, so the operator learns before a quota runs out mid-month, after which alerting is blind until the next month. When one fires, the operator finds the source on Sentry's Stats page and fixes it; if the month is still at risk, adds a temporary inbound filter or drop; and if nothing is broken, lowers span sampling or upgrades. Spike protection is on in both projects.
+- **Volume**: each project's daily errors and spans, each monitor set to a day's share of the free plan's monthly quota, so the operator learns before a quota runs out mid-month, after which alerting is blind until the next month. When one fires, the operator finds the source on Sentry's Stats page and fixes it, or lowers span sampling or upgrades when nothing is broken. Spike protection is on in both projects.
 
 Every alert emails at most once an hour per issue, and the operator's personal workflow notifications are off ([Terraform guide](../../terraform/README.md#personal-notifications)). A true failure-rate monitor, failed conversion outcomes divided by all outcomes, waits for volume or Sentry's Team plan.
 
