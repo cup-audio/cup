@@ -17,6 +17,14 @@ const CLEAN_MANIFEST = `<?xml version="1.0" encoding="utf-8"?>
 </manifest>
 `;
 
+/** The debug source set's classes the command passes, as in `android/app/src/debug/java`. */
+const DEBUG_CLASS_NAMES = [
+  "audio.cup.app.FakeGoogleSignInPlugin",
+  "audio.cup.app.TestApiOrigin",
+  "audio.cup.app.TestApiOriginPlugin",
+  "audio.cup.app.TestSentryDsn",
+];
+
 const R8_MAPPING_ENTRY = "BUNDLE-METADATA/com.android.tools.build.obfuscation/proguard.map";
 
 const CLEAN_DEX = dexContaining([
@@ -33,7 +41,11 @@ const CLEAN_ENTRIES: ZipEntryFixture[] = [
 
 test("a clean bundle passes", () => {
   expect(
-    findBundleViolations({ manifestXml: CLEAN_MANIFEST, bundle: createZip(CLEAN_ENTRIES) }),
+    findBundleViolations({
+      debugClassNames: DEBUG_CLASS_NAMES,
+      manifestXml: CLEAN_MANIFEST,
+      bundle: createZip(CLEAN_ENTRIES),
+    }),
   ).toEqual([]);
 });
 
@@ -46,7 +58,11 @@ test("a stored, uncompressed dex is read too", () => {
     },
   ]);
 
-  const violations = findBundleViolations({ manifestXml: CLEAN_MANIFEST, bundle });
+  const violations = findBundleViolations({
+    debugClassNames: DEBUG_CLASS_NAMES,
+    manifestXml: CLEAN_MANIFEST,
+    bundle,
+  });
 
   expect(violations).toHaveLength(1);
   expect(violations[0]).toContain("audio.cup.app.TestApiOrigin");
@@ -54,6 +70,7 @@ test("a stored, uncompressed dex is read too", () => {
 
 test("a debuggable application is reported", () => {
   const violations = findBundleViolations({
+    debugClassNames: DEBUG_CLASS_NAMES,
     manifestXml: withApplicationAttribute('android:debuggable="true"'),
     bundle: createZip(CLEAN_ENTRIES),
   });
@@ -65,6 +82,7 @@ test("a debuggable application is reported", () => {
 test("debuggable set to false passes", () => {
   expect(
     findBundleViolations({
+      debugClassNames: DEBUG_CLASS_NAMES,
       manifestXml: withApplicationAttribute('android:debuggable="false"'),
       bundle: createZip(CLEAN_ENTRIES),
     }),
@@ -73,6 +91,7 @@ test("debuggable set to false passes", () => {
 
 test("a network security config is reported", () => {
   const violations = findBundleViolations({
+    debugClassNames: DEBUG_CLASS_NAMES,
     manifestXml: withApplicationAttribute(
       'android:networkSecurityConfig="@xml/network_security_config"',
     ),
@@ -85,6 +104,7 @@ test("a network security config is reported", () => {
 
 test("permitted cleartext traffic is reported", () => {
   const violations = findBundleViolations({
+    debugClassNames: DEBUG_CLASS_NAMES,
     manifestXml: withApplicationAttribute('android:usesCleartextTraffic="true"'),
     bundle: createZip(CLEAN_ENTRIES),
   });
@@ -95,6 +115,7 @@ test("permitted cleartext traffic is reported", () => {
 
 test("the debug application class is reported", () => {
   const violations = findBundleViolations({
+    debugClassNames: DEBUG_CLASS_NAMES,
     manifestXml: withApplicationAttribute('android:name="audio.cup.app.DebugApplication"'),
     bundle: createZip(CLEAN_ENTRIES),
   });
@@ -103,7 +124,7 @@ test("the debug application class is reported", () => {
   expect(violations[0]).toMatch(/DebugApplication/);
 });
 
-test.each(["FakeGoogleSignInPlugin", "TestApiOrigin", "TestApiOriginPlugin"])(
+test.each(["FakeGoogleSignInPlugin", "TestApiOrigin", "TestApiOriginPlugin", "TestSentryDsn"])(
   "a dex containing %s is reported",
   (className) => {
     const bundle = createZip([
@@ -114,7 +135,11 @@ test.each(["FakeGoogleSignInPlugin", "TestApiOrigin", "TestApiOriginPlugin"])(
       },
     ]);
 
-    const violations = findBundleViolations({ manifestXml: CLEAN_MANIFEST, bundle });
+    const violations = findBundleViolations({
+      debugClassNames: DEBUG_CLASS_NAMES,
+      manifestXml: CLEAN_MANIFEST,
+      bundle,
+    });
 
     expect(violations).toHaveLength(1);
     // The trailing space tells `TestApiOrigin` apart from `TestApiOriginPlugin`.
@@ -123,19 +148,48 @@ test.each(["FakeGoogleSignInPlugin", "TestApiOrigin", "TestApiOriginPlugin"])(
   },
 );
 
+test("a debug class the caller doesn't name is not looked for", () => {
+  const bundle = createZip([
+    ...CLEAN_ENTRIES,
+    { name: "base/dex/classes2.dex", data: dexContaining(["Laudio/cup/app/TestSentryDsn;"]) },
+  ]);
+
+  expect(
+    findBundleViolations({
+      debugClassNames: ["audio.cup.app.TestApiOrigin"],
+      manifestXml: CLEAN_MANIFEST,
+      bundle,
+    }),
+  ).toEqual([]);
+});
+
+test("an empty list of debug classes fails, because the command found no debug source set", () => {
+  expect(() =>
+    findBundleViolations({
+      debugClassNames: [],
+      manifestXml: CLEAN_MANIFEST,
+      bundle: createZip(CLEAN_ENTRIES),
+    }),
+  ).toThrow(/debug class/);
+});
+
 test("a native library is reported", () => {
   const bundle = createZip([
     ...CLEAN_ENTRIES,
     { name: "base/lib/arm64-v8a/libnative.so", data: Buffer.from("ELF") },
   ]);
 
-  const violations = findBundleViolations({ manifestXml: CLEAN_MANIFEST, bundle });
+  const violations = findBundleViolations({
+    debugClassNames: DEBUG_CLASS_NAMES,
+    manifestXml: CLEAN_MANIFEST,
+    bundle,
+  });
 
   expect(violations).toHaveLength(1);
   expect(violations[0]).toContain("base/lib/arm64-v8a/libnative.so");
 });
 
-test.each(["FakeGoogleSignInPlugin", "TestApiOrigin", "TestApiOriginPlugin"])(
+test.each(["FakeGoogleSignInPlugin", "TestApiOrigin", "TestApiOriginPlugin", "TestSentryDsn"])(
   "R8's mapping file naming %s as an original class is reported",
   (className) => {
     const bundle = createZip([
@@ -148,7 +202,11 @@ test.each(["FakeGoogleSignInPlugin", "TestApiOrigin", "TestApiOriginPlugin"])(
       },
     ]);
 
-    const violations = findBundleViolations({ manifestXml: CLEAN_MANIFEST, bundle });
+    const violations = findBundleViolations({
+      debugClassNames: DEBUG_CLASS_NAMES,
+      manifestXml: CLEAN_MANIFEST,
+      bundle,
+    });
 
     expect(violations).toHaveLength(1);
     // The trailing space tells `TestApiOrigin` apart from `TestApiOriginPlugin`.
@@ -168,7 +226,13 @@ test("R8's mapping file naming no debug class passes", () => {
     },
   ]);
 
-  expect(findBundleViolations({ manifestXml: CLEAN_MANIFEST, bundle })).toEqual([]);
+  expect(
+    findBundleViolations({
+      debugClassNames: DEBUG_CLASS_NAMES,
+      manifestXml: CLEAN_MANIFEST,
+      bundle,
+    }),
+  ).toEqual([]);
 });
 
 test("a debug class name in an entry that is neither dex nor R8's mapping file is ignored", () => {
@@ -182,7 +246,13 @@ test("a debug class name in an entry that is neither dex nor R8's mapping file i
     },
   ]);
 
-  expect(findBundleViolations({ manifestXml: CLEAN_MANIFEST, bundle })).toEqual([]);
+  expect(
+    findBundleViolations({
+      debugClassNames: DEBUG_CLASS_NAMES,
+      manifestXml: CLEAN_MANIFEST,
+      bundle,
+    }),
+  ).toEqual([]);
 });
 
 test("every violation is reported at once", () => {
@@ -204,12 +274,15 @@ test("every violation is reported at once", () => {
     { name: "base/lib/arm64-v8a/libtwo.so", data: Buffer.from("ELF") },
   ]);
 
-  expect(findBundleViolations({ manifestXml, bundle })).toHaveLength(10);
+  expect(
+    findBundleViolations({ debugClassNames: DEBUG_CLASS_NAMES, manifestXml, bundle }),
+  ).toHaveLength(10);
 });
 
 test("a manifest without an application element fails", () => {
   expect(() =>
     findBundleViolations({
+      debugClassNames: DEBUG_CLASS_NAMES,
       manifestXml: '<manifest xmlns:android="http://schemas.android.com/apk/res/android" />',
       bundle: createZip(CLEAN_ENTRIES),
     }),
@@ -218,7 +291,11 @@ test("a manifest without an application element fails", () => {
 
 test("a file that isn't a zip archive fails", () => {
   expect(() =>
-    findBundleViolations({ manifestXml: CLEAN_MANIFEST, bundle: Buffer.from("not a zip") }),
+    findBundleViolations({
+      debugClassNames: DEBUG_CLASS_NAMES,
+      manifestXml: CLEAN_MANIFEST,
+      bundle: Buffer.from("not a zip"),
+    }),
   ).toThrow(/zip/i);
 });
 

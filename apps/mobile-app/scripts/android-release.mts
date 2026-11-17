@@ -1,15 +1,15 @@
-/* oxlint-disable node/no-process-env -- The script reads the host's Android SDK location and hands Gradle the upload key through its environment. */
+/* oxlint-disable node/no-process-env -- The script hands Gradle the upload key through its environment. */
 /*
  * Turns a clean, pushed commit into a release-signed Android App Bundle for Google Play's internal
  * testing track. See the README's "Release builds". `.mts` because this package is CommonJS for
  * `capacitor.config.ts`.
  */
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import util from "node:util";
 import { Temporal } from "temporal-polyfill";
 
+import { requireJvmToolchain } from "#scripts/jvm-toolchain.mts";
 import { findBundleViolations } from "#scripts/release/bundle-safety-check.mts";
 import {
   createGooglePlayPublisher,
@@ -40,18 +40,19 @@ const BUNDLE = path.join(
   "release",
   "app-release.aab",
 );
-// The manifest Gradle merges into the bundle, as plain XML; the bundle itself holds it as protobuf.
+// The merged release manifest Gradle packages, as plain XML; the bundle itself holds it as protobuf.
 const RELEASE_MANIFEST = path.join(
   ANDROID_PROJECT,
   "app",
   "build",
   "intermediates",
-  "bundle_manifest",
+  "packaged_manifests",
   "release",
-  "processApplicationManifestReleaseForBundle",
+  "processReleaseManifestForPackage",
   "AndroidManifest.xml",
 );
-const DEFAULT_SDK_ROOT = path.join(os.homedir(), "Library", "Android", "sdk");
+// Every class here is a debug hook that a release bundle must not contain.
+const DEBUG_SOURCES = path.join(ANDROID_PROJECT, "app", "src", "debug", "java");
 const SETUP_DOCS = `${path.join(MOBILE_APP_ROOT, "README.md")}, section "Release builds"`;
 
 const GIT_COMMAND_LINE_ADAPTER: ReleaseGit = {
@@ -84,6 +85,9 @@ if (failures.length > 0) {
   );
 }
 
+// Exits with every problem when the Android SDK or Java 21 is missing, before the build starts.
+const androidSdkRoot = requireJvmToolchain();
+
 // Reads the credentials before the build, so missing ones fail before Gradle starts rather than after it.
 const publisher = options["skip-upload"] ? undefined : await createPublisher();
 
@@ -97,8 +101,8 @@ console.log(`Building ${releaseName}, versionCode ${String(version.versionCode)}
 
 const environment: NodeJS.ProcessEnv = {
   ...process.env,
-  // Gradle reads the SDK from ANDROID_HOME, so no `local.properties` is needed; the lookup order matches `android-run.mts`.
-  ANDROID_HOME: process.env["ANDROID_HOME"] ?? process.env["ANDROID_SDK_ROOT"] ?? DEFAULT_SDK_ROOT,
+  // Gradle reads the SDK from ANDROID_HOME, so no `local.properties` is needed.
+  ANDROID_HOME: androidSdkRoot,
 };
 runVisible("pnpm", ["exec", "turbo", "run", "turbo:build"], {
   cwd: MOBILE_APP_ROOT,
@@ -138,6 +142,7 @@ if (!fs.existsSync(RELEASE_MANIFEST)) {
 
 console.log("Checking the bundle for debug hooks and native code.");
 const violations = findBundleViolations({
+  debugClassNames: listDebugClassNames(),
   manifestXml: fs.readFileSync(RELEASE_MANIFEST, "utf8"),
   bundle: fs.readFileSync(BUNDLE),
 });
@@ -181,4 +186,17 @@ async function createPublisher(): Promise<PlayPublisher> {
       `Reading your Google application-default credentials failed:\n${util.inspect(error)}\nSign in with \`gcloud auth application-default login\`; uploads impersonate ${UPLOADER_SERVICE_ACCOUNT} through them. Setup is documented in ${SETUP_DOCS}.`,
     );
   }
+}
+
+/** The debug source set's classes, fully qualified, from its Java and Kotlin file paths. */
+function listDebugClassNames(): string[] {
+  return fs
+    .readdirSync(DEBUG_SOURCES, { recursive: true, encoding: "utf8" })
+    .filter((file) => /\.(?:java|kt)$/.test(file))
+    .map((file) =>
+      file
+        .replace(/\.(?:java|kt)$/, "")
+        .split(path.sep)
+        .join("."),
+    );
 }

@@ -125,14 +125,14 @@ Check that a bundle is signed with the upload key with `keytool -printcert -jarf
 
 ### Bundle safety check
 
-After `bundleRelease`, before any upload, the command checks that the bundle carries none of the [debug launch arguments'](#debug-launch-arguments) hooks and no native code ([#438](https://github.com/patricktree/cup/issues/438)). It reads the merged release manifest Gradle writes as plain XML, `android/app/build/intermediates/bundle_manifest/release/processApplicationManifestReleaseForBundle/AndroidManifest.xml`, because the bundle holds the manifest as protobuf, and reads the bundle's zip entries in Node, with no extra tools. It refuses the bundle, listing every violation at once and pointing here, when:
+After `bundleRelease`, before any upload, the command checks that the bundle carries none of the [debug launch arguments'](#debug-launch-arguments) hooks and no native code ([#438](https://github.com/patricktree/cup/issues/438)). It reads the merged release manifest Gradle writes as plain XML, `android/app/build/intermediates/packaged_manifests/release/processReleaseManifestForPackage/AndroidManifest.xml`, because the bundle holds the manifest as protobuf, and reads the bundle's zip entries in Node, with no extra tools. It refuses the bundle, listing every violation at once and pointing here, when:
 
 - the manifest's `<application>` sets `android:debuggable="true"`;
 - it sets any `android:networkSecurityConfig`, which the debug source set uses to allow plain HTTP to `localhost`;
 - it sets `android:usesCleartextTraffic="true"`;
 - its application class is `DebugApplication`;
-- any `.dex` entry contains the class descriptor of `FakeGoogleSignInPlugin`, `TestApiOrigin` or `TestApiOriginPlugin`, the debug source set's sign-in fake and test-origin classes;
-- R8's mapping file in the bundle, `BUNDLE-METADATA/com.android.tools.build.obfuscation/proguard.map`, lists one of those three classes under its original name, which catches a class R8 renamed, such as `TestApiOrigin`, which no keep rule covers;
+- any `.dex` entry contains the class descriptor of a class in the debug source set (`android/app/src/debug/java`), such as the sign-in fake `FakeGoogleSignInPlugin`, the test-origin classes `TestApiOrigin` and `TestApiOriginPlugin`, or the Sentry DSN override `TestSentryDsn`;
+- R8's mapping file in the bundle, `BUNDLE-METADATA/com.android.tools.build.obfuscation/proguard.map`, lists one of those classes under its original name, which catches a class R8 renamed, such as `TestApiOrigin`, which no keep rule covers;
 - the bundle contains any `.so` entry, so that a dependency bringing native code is noticed before Google Play's 16 KB page-size rule can block an update ([#436](https://github.com/patricktree/cup/issues/436)).
 
 A debug class name in any other entry doesn't count. A refused bundle stays at its path for inspection, but the command uploads nothing.

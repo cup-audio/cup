@@ -5,12 +5,6 @@
  */
 import zlib from "node:zlib";
 
-/** The mobile E2E suite's debug hooks (`android/app/src/debug`), as dex class descriptors. */
-const DEBUG_CLASS_DESCRIPTORS = [
-  "Laudio/cup/app/FakeGoogleSignInPlugin;",
-  "Laudio/cup/app/TestApiOrigin;",
-  "Laudio/cup/app/TestApiOriginPlugin;",
-];
 const DEBUG_APPLICATION_CLASS = "DebugApplication";
 /**
  * R8's mapping file, which AGP embeds in the bundle. R8 may rename a debug class that no keep rule
@@ -30,35 +24,43 @@ const DEFLATED = 8;
 
 /**
  * Returns a message for every violation: debug networking or the debug application class in the
- * manifest, a debug hook's class in any dex or as an original class in R8's mapping file, and any
- * native library. Empty when the bundle is safe.
+ * manifest, one of `debugClassNames` (the debug source set's classes, fully qualified, such as the
+ * mobile E2E suite's hooks) in any dex or as an original class in R8's mapping file, and any native
+ * library. Empty when the bundle is safe.
  */
 export function findBundleViolations({
+  debugClassNames,
   manifestXml,
   bundle,
 }: {
+  debugClassNames: readonly string[];
   manifestXml: string;
   bundle: Buffer;
 }): string[] {
+  if (debugClassNames.length === 0) {
+    throw new Error(
+      "No debug class to look for: the debug source set should hold at least the mobile E2E suite's hooks.",
+    );
+  }
   const violations = findManifestViolations(manifestXml);
 
   for (const entry of readZipEntries(bundle)) {
     if (entry.name.endsWith(".dex")) {
       const dex = entry.read();
-      for (const descriptor of DEBUG_CLASS_DESCRIPTORS) {
-        if (dex.includes(descriptor)) {
+      for (const className of debugClassNames) {
+        if (dex.includes(descriptorOf(className))) {
           violations.push(
-            `The debug class ${classNameOf(descriptor)} is in ${entry.name}; debug hooks must stay in the debug source set.`,
+            `The debug class ${className} is in ${entry.name}; debug hooks must stay in the debug source set.`,
           );
         }
       }
     }
     if (entry.name === R8_MAPPING_ENTRY) {
       const mappedClassNames = readOriginalClassNames(entry.read().toString("utf8"));
-      for (const descriptor of DEBUG_CLASS_DESCRIPTORS) {
-        if (mappedClassNames.has(classNameOf(descriptor))) {
+      for (const className of debugClassNames) {
+        if (mappedClassNames.has(className)) {
           violations.push(
-            `The debug class ${classNameOf(descriptor)} is in R8's mapping file ${entry.name}, so the bundle's code contains it, possibly renamed; debug hooks must stay in the debug source set.`,
+            `The debug class ${className} is in R8's mapping file ${entry.name}, so the bundle's code contains it, possibly renamed; debug hooks must stay in the debug source set.`,
           );
         }
       }
@@ -130,9 +132,9 @@ function readOriginalClassNames(mapping: string): Set<string> {
   return classNames;
 }
 
-/** `Laudio/cup/app/TestApiOrigin;` becomes `audio.cup.app.TestApiOrigin`. */
-function classNameOf(descriptor: string): string {
-  return descriptor.slice(1, -1).replaceAll("/", ".");
+/** `audio.cup.app.TestApiOrigin` becomes the dex class descriptor `Laudio/cup/app/TestApiOrigin;`. */
+function descriptorOf(className: string): string {
+  return `L${className.replaceAll(".", "/")};`;
 }
 
 type ZipEntry = { name: string; read(): Buffer };
