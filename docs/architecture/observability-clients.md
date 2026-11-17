@@ -28,7 +28,7 @@ The native SDKs keep their installation ID in memory only, a new one per process
 
 ### Events captured in the background
 
-Cup has no flush or page-hide handler of its own: when a shell goes to the background, Sentry's browser client already sends its log buffer and drains its transport, and errors are sent as soon as they are captured. The accepted gap is what is captured after the page hides: it waits in memory until the app returns and is lost if the app is killed first. A probe on 2026-11-16 ([#383](https://github.com/patricktree/cup/issues/383), simulator and emulator only) saw logs held on Android, whose page freezes a few seconds after hide, and errors held on iOS from about 30 s after hide, because `@sentry/capacitor` waits on the frozen native bridge for every error. Only code that runs in the background is affected; if Cup ever captures client errors from background playback, revisit this.
+Cup has no flush or page-hide handler of its own: when a shell goes to the background, Sentry's browser client already sends its log buffer and drains its transport, and errors are sent as soon as they are captured. The accepted gap is what is captured after the page hides: it waits in memory until the app returns and is lost if the app is killed first. A probe on 2026-11-16 ([#383](https://github.com/cup-audio/cup/issues/383), simulator and emulator only) saw logs held on Android, whose page freezes a few seconds after hide, and errors held on iOS from about 30 s after hide, because `@sentry/capacitor` waits on the frozen native bridge for every error. Only code that runs in the background is affected; if Cup ever captures client errors from background playback, revisit this.
 
 ## Crash reports switch
 

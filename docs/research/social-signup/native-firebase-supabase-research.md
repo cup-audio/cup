@@ -2,7 +2,7 @@
 
 > Historical research, incorporated 2026-10-02. Historical supporting evidence for the [native sign-in comparison](native-social-sso-research.md). See [current authentication](../../architecture/authentication.md) for the implemented Supabase integration; Apple/iOS findings remain deferred. External claims retain their original research dates and have not been reverified during this migration.
 
-[Original investigation](https://github.com/patricktree/cup/blob/28971d5dca7915dd74ad629878aac9287ec7f7a3/.scratch/social-signup/native-firebase-supabase-research.md).
+[Original investigation](https://github.com/cup-audio/cup/blob/28971d5dca7915dd74ad629878aac9287ec7f7a3/.scratch/social-signup/native-firebase-supabase-research.md).
 
 Research date: 2026-09-17. Scope: Google native sign-in on Android and Apple AuthenticationServices on iOS, with a resulting Firebase or Supabase session. Browser OAuth, custom tabs, and ASWebAuthenticationSession do not qualify. Documentation/source inspection only; no device prototype was run.
 

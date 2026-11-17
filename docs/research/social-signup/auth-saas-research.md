@@ -2,7 +2,7 @@
 
 > Historical research, incorporated 2026-10-02. The initial provider comparison predates the native-only investigation below and the implemented Supabase integration. Its provider shortlist and open decisions are historical. See [native sign-in research](native-social-sso-research.md) and [current authentication](../../architecture/authentication.md). External claims retain their original research dates and have not been reverified during this migration.
 
-[Original investigation](https://github.com/patricktree/cup/blob/28971d5dca7915dd74ad629878aac9287ec7f7a3/.scratch/social-signup/auth-saas-research.md).
+[Original investigation](https://github.com/cup-audio/cup/blob/28971d5dca7915dd74ad629878aac9287ec7f7a3/.scratch/social-signup/auth-saas-research.md).
 
 Checked: 2026-09-16. Scope: Google and Apple signup on React web and Capacitor 8 Android/iOS, with a Cloudflare Worker backend. This is research for a provider decision, not a provider selection or an integration test.
 

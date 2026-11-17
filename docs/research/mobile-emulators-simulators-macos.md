@@ -1,10 +1,10 @@
 # Running Android emulators and iOS simulators from a script on macOS
 
-> Historical research, incorporated 2026-11-10 by [ADR 0018](../adr/0018-test-the-mobile-apps-with-appium-through-webdriverio-on-host-owned-emulators-and-simulators.md), whose host-owned devices and the rejection of Docker rest on it. The [mobile E2E suite](../../qa/mobile-e2e/README.md) differs in three ways: iOS runs one uniquely named simulator per run in the default device set, because WebDriverAgent does not work with a custom `simctl --set` ([spike](https://github.com/patricktree/cup/issues/186)); the Android AVD gets 4 GB of RAM, because at 2 GB the guest swapped and adb stalled; and the iOS runtime must match Xcode's SDK. External claims have not been reverified.
+> Historical research, incorporated 2026-11-10 by [ADR 0018](../adr/0018-test-the-mobile-apps-with-appium-through-webdriverio-on-host-owned-emulators-and-simulators.md), whose host-owned devices and the rejection of Docker rest on it. The [mobile E2E suite](../../qa/mobile-e2e/README.md) differs in three ways: iOS runs one uniquely named simulator per run in the default device set, because WebDriverAgent does not work with a custom `simctl --set` ([spike](https://github.com/cup-audio/cup/issues/186)); the Android AVD gets 4 GB of RAM, because at 2 GB the guest swapped and adb stalled; and the iOS runtime must match Xcode's SDK. External claims have not been reverified.
 
-[Original investigation](https://github.com/patricktree/cup/blob/7bd843c76170eab01082097d3fac6e27f6ae8b88/docs/research/mobile-emulators-simulators-macos.md).
+[Original investigation](https://github.com/cup-audio/cup/blob/7bd843c76170eab01082097d3fac6e27f6ae8b88/docs/research/mobile-emulators-simulators-macos.md).
 
-Research date: 2026-11-06, for [issue #181](https://github.com/patricktree/cup/issues/181) of the [automated mobile QA map](https://github.com/patricktree/cup/issues/179). Repository observations are from `main` at `626776ac`. Web sources were read on the research date. Measurements ran on the developer's Mac on the same day; the [environment](#environment) section lists the versions.
+Research date: 2026-11-06, for [issue #181](https://github.com/cup-audio/cup/issues/181) of the [automated mobile QA map](https://github.com/cup-audio/cup/issues/179). Repository observations are from `main` at `626776ac`. Web sources were read on the research date. Measurements ran on the developer's Mac on the same day; the [environment](#environment) section lists the versions.
 
 ## Question
 

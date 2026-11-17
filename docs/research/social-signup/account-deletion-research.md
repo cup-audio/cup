@@ -2,7 +2,7 @@
 
 > Historical research, incorporated 2026-10-02. Provider prerequisites below are historical evidence, not Cup policy or proof of integration. Apple sign-in remains deferred. See [current account deletion](../../architecture/account-deletion.md) for recovery, fencing, erasure, and retention behavior. External claims retain their original research dates and have not been reverified during this migration.
 
-[Original investigation](https://github.com/patricktree/cup/blob/28971d5dca7915dd74ad629878aac9287ec7f7a3/.scratch/social-signup/account-deletion-research.md).
+[Original investigation](https://github.com/cup-audio/cup/blob/28971d5dca7915dd74ad629878aac9287ec7f7a3/.scratch/social-signup/account-deletion-research.md).
 
 Research date: 2026-09-21. Scope: factual prerequisites for Cup's deletion decision; this note does not settle product policy.
 

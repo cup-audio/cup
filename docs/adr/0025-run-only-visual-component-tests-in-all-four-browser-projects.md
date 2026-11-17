@@ -4,7 +4,7 @@ status: accepted
 
 # Run only visual component tests in all four browser projects
 
-The web app component tests ran every test in four Playwright projects, Chromium and WebKit each on a desktop and a mobile device, so that the screenshots cover both engines and both viewports. Most tests assert no screenshot: in the run of 2026-11-12, 1,112 of 1,372 test runs (1,360 s of 1,816 s test time) repeated a behaviour check four times, and the suite took about 7 min 40 s of the uncached review gate ([redundant tests research](https://github.com/patricktree/cup/issues/300)). The map [patricktree/cup#295](https://github.com/patricktree/cup/issues/295) decided the change, the spec [#303](https://github.com/patricktree/cup/issues/303) described it, and [#306](https://github.com/patricktree/cup/issues/306) built it.
+The web app component tests ran every test in four Playwright projects, Chromium and WebKit each on a desktop and a mobile device, so that the screenshots cover both engines and both viewports. Most tests assert no screenshot: in the run of 2026-11-12, 1,112 of 1,372 test runs (1,360 s of 1,816 s test time) repeated a behaviour check four times, and the suite took about 7 min 40 s of the uncached review gate ([redundant tests research](https://github.com/cup-audio/cup/issues/300)). The map [cup-audio/cup#295](https://github.com/cup-audio/cup/issues/295) decided the change, the spec [#303](https://github.com/cup-audio/cup/issues/303) described it, and [#306](https://github.com/cup-audio/cup/issues/306) built it.
 
 ## Decision
 
@@ -25,7 +25,7 @@ The web app component tests ran every test in four Playwright projects, Chromium
 
 ## Extension to app E2E (2026-11-13)
 
-[#308](https://github.com/patricktree/cup/issues/308) applied the same rule to the app E2E suite, which had also run every test in all four projects. In the run of 2026-11-12, its Worker, Workflow and account journeys took 395 s of 572 s test time without checking anything engine-specific ([redundant tests research](https://github.com/patricktree/cup/issues/300)).
+[#308](https://github.com/cup-audio/cup/issues/308) applied the same rule to the app E2E suite, which had also run every test in all four projects. In the run of 2026-11-12, its Worker, Workflow and account journeys took 395 s of 572 s test time without checking anything engine-specific ([redundant tests research](https://github.com/cup-audio/cup/issues/300)).
 
 - **The same tag decides the projects.** A test tagged `@visual` runs in all four projects; every other test runs in desktop Chromium and mobile WebKit, which keeps WebKit's HTTPS-only `__Secure-` cookie path covered (`grep` in [`qa/e2e/playwright.config.ts`](../../qa/e2e/playwright.config.ts)). The suite's `expect` from [`test-e2e/fixtures.ts`](../../qa/e2e/test-e2e/fixtures.ts) fails a screenshot in an untagged test, as the component tests' does.
 - **In app E2E, a visual test is one that asserts a screenshot or checks how the browser handles redirects, URL fragments, history and reloads**: the routing tests. The accounts, conversion, duration allowance and navigation journeys run in the two projects, except the signup journey that asserts the signup prompt and private Recents screenshots.

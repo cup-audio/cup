@@ -4,7 +4,7 @@ status: accepted
 
 # Reserve 70 milliseconds of audio per narration-text character
 
-[ADR 0003](0003-charge-for-accessible-generated-narration.md) estimated duration reservations at 80 milliseconds of audio per narration-text character, with a one-second minimum. Narration becomes 5% faster: each audio segment is time-stretched by ×1.05 after synthesis ([spec #275](https://github.com/patricktree/cup/issues/275)). At that pace running text measures about 62 milliseconds per character ([#266](https://github.com/patricktree/cup/issues/266)), so 80 milliseconds over-reserves by about 28%. Conversions near the end of a duration allowance are then refused as insufficient duration although their audio would fit, and the required duration shown with that refusal is inflated. The map [patricktree/cup#263](https://github.com/patricktree/cup/issues/263) decided the new rate in [#267](https://github.com/patricktree/cup/issues/267), and [#278](https://github.com/patricktree/cup/issues/278) implemented it.
+[ADR 0003](0003-charge-for-accessible-generated-narration.md) estimated duration reservations at 80 milliseconds of audio per narration-text character, with a one-second minimum. Narration becomes 5% faster: each audio segment is time-stretched by ×1.05 after synthesis ([spec #275](https://github.com/cup-audio/cup/issues/275)). At that pace running text measures about 62 milliseconds per character ([#266](https://github.com/cup-audio/cup/issues/266)), so 80 milliseconds over-reserves by about 28%. Conversions near the end of a duration allowance are then refused as insufficient duration although their audio would fit, and the required duration shown with that refusal is inflated. The map [cup-audio/cup#263](https://github.com/cup-audio/cup/issues/263) decided the new rate in [#267](https://github.com/cup-audio/cup/issues/267), and [#278](https://github.com/cup-audio/cup/issues/278) implemented it.
 
 ## Decision
 
@@ -29,4 +29,4 @@ This partially supersedes ADR 0003's 80-millisecond rate only. Reserving before 
 ## Evidence
 
 - Today's pace per character: [Narration audio per character](../research/narration-characters-to-duration.md).
-- The pace at ×1.05: the listening prototype on the unmerged branch `prototype/narration-pace` at [`ecfa2311`](https://github.com/patricktree/cup/tree/ecfa2311929a894ef2c4ba6498d2cc70070c600e/libs/audiobook-production/prototype-narration-pace), in `summary.json`.
+- The pace at ×1.05: the listening prototype on the unmerged branch `prototype/narration-pace` at [`ecfa2311`](https://github.com/cup-audio/cup/tree/ecfa2311929a894ef2c4ba6498d2cc70070c600e/libs/audiobook-production/prototype-narration-pace), in `summary.json`.

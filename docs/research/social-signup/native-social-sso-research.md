@@ -2,7 +2,7 @@
 
 > Historical research, incorporated 2026-10-02. Cup implements Google sign-in with Supabase on web and Android. Apple sign-in and native iOS account support remain deferred. Provider comparisons and prototype requirements below describe the investigation, not completed validation. See [current authentication](../../architecture/authentication.md) and [deferred Apple/iOS work](deferred-apple-ios.md). External claims retain their original research dates and have not been reverified during this migration.
 
-[Original investigation](https://github.com/patricktree/cup/blob/28971d5dca7915dd74ad629878aac9287ec7f7a3/.scratch/social-signup/native-social-sso-research.md).
+[Original investigation](https://github.com/cup-audio/cup/blob/28971d5dca7915dd74ad629878aac9287ec7f7a3/.scratch/social-signup/native-social-sso-research.md).
 
 Researched 2026-09-17 for Cup's Capacitor 8 application. This report checks native Google sign-in on Android and native Apple sign-in on iOS, followed by authentication with each managed service. It supersedes the earlier provider recommendation where that recommendation relied on browser-based mobile login. No provider is selected by this research.
 
