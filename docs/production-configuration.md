@@ -28,7 +28,7 @@ Register the Android OAuth client for package `audio.cup.app` and its signing ce
 
 Deletion notices go to the Resend API at the `RESEND_BASE_URL` variable, `https://api.resend.com`, from the Resend domain described in the [Terraform guide](../terraform/README.md#resend-domain). Inspect notification outcomes with the [operator CLI](../apps/operator/README.md#list-account-deletions); provider acceptance is not proof of inbox delivery.
 
-`support@cup.audio`, the Google Play developer email, is received by Cloudflare Email Routing and forwarded to the operator's private address, as the [Terraform guide](../terraform/README.md#support-mail) describes. No other `cup.audio` address receives mail.
+`support@cup.audio`, the Google Play developer email, and `github@cup.audio`, the contact email of the `cup-audio` GitHub organization, are received by Cloudflare Email Routing and forwarded to the operator's private address, as the [Terraform guide](../terraform/README.md#support-mail) describes. No other `cup.audio` address receives mail.
 
 ## Deploy
 
