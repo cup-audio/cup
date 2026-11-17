@@ -1,6 +1,6 @@
 apply plugin: 'com.android.application'
 
-// `android:release` (scripts/android-release.mts) passes the release version (ADR 0029) as these
+// `android:release` (scripts/android-release.mts) passes the release version (ADR 0032) as these
 // properties and the upload key as these environment variables; the password is no `-P` argument,
 // which would show it in the process list. Release tasks fail without all four.
 def releaseVersionCode = findProperty("cupVersionCode")

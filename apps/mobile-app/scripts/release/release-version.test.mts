@@ -3,7 +3,7 @@ import { expect, test } from "vitest";
 
 import { deriveReleaseVersion, formatReleaseName } from "#scripts/release/release-version.mts";
 
-test("ADR 0029's example: 2026-11-14 at 13:50 UTC is versionCode 457310", () => {
+test("ADR 0032's example: 2026-11-14 at 13:50 UTC is versionCode 457310", () => {
   expect(deriveReleaseVersion(Temporal.Instant.from("2026-11-14T13:50:00Z"))).toEqual({
     versionCode: 457_310,
     versionName: "2026.11.14",

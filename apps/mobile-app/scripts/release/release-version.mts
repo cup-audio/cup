@@ -1,5 +1,5 @@
 /*
- * The version of a mobile release build, derived from its UTC build time (ADR 0029).
+ * The version of a mobile release build, derived from its UTC build time (ADR 0032).
  */
 import { Temporal } from "temporal-polyfill";
 
