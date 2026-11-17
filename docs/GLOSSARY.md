@@ -68,7 +68,7 @@ _Avoid_: account deletion for the cleanup step alone
 
 ## stuck account deletion
 
-An account deletion still not finished an hour after its recovery deadline, because removing the sign-in identity, account erasure or both remain. The operator is told about each one once.
+An account deletion still not finished well after its recovery deadline, because removing the sign-in identity, account erasure or both remain. The operator is told about each one once.
 
 _Avoid_: overdue deletion, hung deletion
 
@@ -80,7 +80,7 @@ _Avoid_: conversion erasure, archiving, removal
 
 ## stuck conversion deletion
 
-A conversion deletion still not finished an hour after it was requested. The operator is told about each one once.
+A conversion deletion still not finished long after it was requested. The operator is told about each one once.
 
 _Avoid_: hung deletion, failed deletion
 
@@ -168,9 +168,15 @@ What a conversion's preparation ended in, as its owner records it: ready, failed
 
 _Avoid_: workflow result, conversion status for the recorded result
 
+## conversion stage
+
+One of the two stretches of work a conversion goes through: preparation, which produces its narration document while the conversion is pending, and synthesis, which generates the audio of its segments once the document is prepared. A retry starts the stage it retries again. A stage is coarser than a [conversion phase](#conversion-phase), which is one recorded step of the work.
+
+_Avoid_: conversion phase for a stage, step
+
 ## stuck conversion
 
-A conversion that has stayed in preparation or in synthesis far longer than that stage normally takes. The operator is told once per stage; a retry starts the stage, and with it the wait, again.
+A conversion that has stayed in one [conversion stage](#conversion-stage) far longer than that stage normally takes. The operator is told once per stage; a retry starts the stage, and with it the wait, again.
 
 _Avoid_: hung conversion, stalled conversion
 

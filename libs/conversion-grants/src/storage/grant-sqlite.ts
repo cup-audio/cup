@@ -125,7 +125,11 @@ function conversionRowToUnknown(row: ConversionRow): unknown {
     createdAtMs: row.createdAtMs,
     ...(row.workflowStartedAtMs === null ? {} : { workflowStartedAtMs: row.workflowStartedAtMs }),
     lastStartedPhase: row.lastStartedPhase,
-    stageStartedAtMs: row.stageStartedAtMs,
+    /*
+     * Code from before migration 0005 writes no stage start, so a row it wrote during a rollback
+     * has none. Such a row reads the way the migration backfilled the rows it found.
+     */
+    stageStartedAtMs: row.stageStartedAtMs ?? row.completedAtMs ?? row.createdAtMs,
     ...(row.stuckReportedAtMs === null ? {} : { stuckReportedAtMs: row.stuckReportedAtMs }),
   };
   if (row.status === "pending") {

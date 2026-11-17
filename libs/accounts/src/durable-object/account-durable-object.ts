@@ -730,7 +730,7 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
   /** Sends one Sentry event per stuck conversion and stage; see docs/architecture/conversion.md. */
   private reportStuckConversions(nowMs: number) {
     const reported = reportStuckConversions(
-      this.sqlite.stuckConversionCandidates(),
+      this.sqlite.conversionsWithUnreportedStage(),
       this.owner(),
       nowMs,
     );

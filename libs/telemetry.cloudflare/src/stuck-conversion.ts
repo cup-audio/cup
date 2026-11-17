@@ -1,4 +1,4 @@
-import type { ConversionOwner } from "@cup/conversion-contracts";
+import type { ConversionOwner, ConversionPhase } from "@cup/conversion-contracts";
 import { TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
 
 import { conversionOwnerKeys } from "#src/conversion-owner.ts";
@@ -7,14 +7,19 @@ import { reportStuckCases } from "#src/stuck-check.ts";
 /** The stage a conversion can hang in: its preparation, or the synthesis of its audio segments. */
 type ConversionStage = "preparation" | "synthesis";
 
-/** A conversion the stuck-conversion check looks at: one whose current stage it has not reported. */
+/**
+ * What the stuck-conversion check reads of a conversion; an owner passes the conversions whose
+ * current stage the check has not reported.
+ */
 export type StuckConversionCandidate = {
   conversionId: string;
-  stage: ConversionStage;
+  status: "pending" | "ready" | "failed";
+  /** Whether a segment of the conversion still holds a duration reservation. */
+  hasReservedSegment: boolean;
   /** When the stage last started: preparation accepted or retried, or synthesis started again. */
   stageStartedAtMs: number;
   /** The conversion phase the conversion last started; only preparation reports it. */
-  lastStartedPhase: string;
+  lastStartedPhase: ConversionPhase;
 };
 
 /*
@@ -35,16 +40,21 @@ const STUCK_AFTER_MS_BY_STAGE: Record<ConversionStage, number> = {
 
 /**
  * The stuck-conversion check that both owners' alarms run: sends one Sentry error event for each
- * candidate past its stage's threshold at `nowMs`, and returns the conversion IDs it reported, so
- * the owner stores that the event was sent and skips the conversion until its stage starts again.
- * All events of a stage share one fingerprint, so they group into one Sentry issue per stage.
+ * candidate that is in a stage and past that stage's threshold at `nowMs`, and returns the
+ * conversion IDs it reported, so the owner stores that the event was sent and skips the conversion
+ * until its stage starts again. All events of a stage share one fingerprint, so they group into one
+ * Sentry issue per stage.
  */
 export function reportStuckConversions(
   candidates: readonly StuckConversionCandidate[],
   owner: ConversionOwner,
   nowMs: number,
 ): string[] {
-  return reportStuckCases(candidates, nowMs, {
+  const staged = candidates.flatMap((candidate) => {
+    const stage = stageOf(candidate);
+    return stage === undefined ? [] : [{ ...candidate, stage }];
+  });
+  return reportStuckCases(staged, nowMs, {
     idOf: (candidate) => candidate.conversionId,
     startedAtMsOf: (candidate) => candidate.stageStartedAtMs,
     isStuck: (candidate, ageMs) => ageMs >= STUCK_AFTER_MS_BY_STAGE[candidate.stage],
@@ -64,4 +74,15 @@ export function reportStuckConversions(
       },
     }),
   });
+}
+
+/** The stage a conversion is in; a settled conversion without a reserved segment is in none. */
+function stageOf(candidate: StuckConversionCandidate): ConversionStage | undefined {
+  if (candidate.status === "pending") {
+    return "preparation";
+  }
+  if (candidate.status === "ready" && candidate.hasReservedSegment) {
+    return "synthesis";
+  }
+  return undefined;
 }

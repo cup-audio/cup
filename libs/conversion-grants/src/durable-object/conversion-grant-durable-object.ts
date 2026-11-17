@@ -26,7 +26,6 @@ import {
   setConversionScope,
   withConversionScope,
   type PreparationOutcome,
-  type StuckConversionCandidate,
 } from "@cup/telemetry.cloudflare";
 
 import type {
@@ -860,23 +859,15 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
           .filter((segment) => segment.state === "reserved")
           .map((segment) => segment.conversionId),
       );
-      const candidates = record.conversions.flatMap((conversion): StuckConversionCandidate[] => {
-        if (conversion.stuckReportedAtMs !== undefined) {
-          return [];
-        }
-        const candidate = {
+      const candidates = record.conversions
+        .filter((conversion) => conversion.stuckReportedAtMs === undefined)
+        .map((conversion) => ({
           conversionId: conversion.conversionId,
+          status: conversion.status,
+          hasReservedSegment: reservedConversionIds.has(conversion.conversionId),
           stageStartedAtMs: conversion.stageStartedAtMs,
           lastStartedPhase: conversion.lastStartedPhase,
-        };
-        if (conversion.status === "pending") {
-          return [{ ...candidate, stage: "preparation" }];
-        }
-        if (conversion.status === "ready" && reservedConversionIds.has(conversion.conversionId)) {
-          return [{ ...candidate, stage: "synthesis" }];
-        }
-        return [];
-      });
+        }));
 
       const reported = new Set(
         reportStuckConversions(candidates, { kind: "trial", grantId: record.grantId }, nowMs),

@@ -250,6 +250,64 @@ test(
 );
 
 test(
+  "an account conversion stored without a stage start counts from its acceptance, or from when it became ready",
+  async () => {
+    const { account, accountId } = await createAccount();
+    const settled = await startAccountConversion(account, T0_MS);
+    await account.settleConversion(
+      settled,
+      { status: "failed", failureCategory: "source-preparation", explanation: "Stopped." },
+      T0_MS + 5 * MINUTE_MS,
+      1,
+    );
+    const pending = await startAccountConversion(account, T0_MS);
+    const ready = await startAccountConversion(account, T0_MS);
+    await settleAccountConversionReady(account, accountId, ready, T0_MS + 10 * MINUTE_MS);
+    await account.forgetStageStartsForTest();
+
+    expect(await account.failingReconcileAtForTest(T0_MS + 16 * MINUTE_MS)).toBeUndefined();
+    await waitForStuckEvents(pending, 1);
+    expect(stuckEvents(pending)[0]).toMatchObject({
+      contexts: { stuck_conversion: { stage: "preparation", age_minutes: 16 } },
+    });
+
+    expect(await account.failingReconcileAtForTest(T0_MS + 71 * MINUTE_MS)).toBeUndefined();
+    await waitForStuckEvents(ready, 1);
+    expect(stuckEvents(ready)[0]).toMatchObject({
+      contexts: { stuck_conversion: { stage: "synthesis", age_minutes: 61 } },
+    });
+    expect(stuckEvents(pending)).toHaveLength(1);
+    expect(stuckEvents(settled)).toEqual([]);
+  },
+  TEST_TIMEOUT_MS,
+);
+
+test(
+  "a trial conversion stored without a stage start counts from its acceptance, or from when it became ready",
+  async () => {
+    const { grant } = await createGrant();
+    const pending = await startGrantConversion(grant, T0_MS);
+    const ready = await startGrantConversion(grant, T0_MS);
+    await recordGrantConversionReady(grant, ready, T0_MS + 10 * MINUTE_MS);
+    await grant.forgetStageStartsForTest();
+
+    expect(await grant.failingReconcileAtForTest(T0_MS + 16 * MINUTE_MS)).toBeUndefined();
+    await waitForStuckEvents(pending, 1);
+    expect(stuckEvents(pending)[0]).toMatchObject({
+      contexts: { stuck_conversion: { stage: "preparation", age_minutes: 16 } },
+    });
+
+    expect(await grant.failingReconcileAtForTest(T0_MS + 71 * MINUTE_MS)).toBeUndefined();
+    await waitForStuckEvents(ready, 1);
+    expect(stuckEvents(ready)[0]).toMatchObject({
+      contexts: { stuck_conversion: { stage: "synthesis", age_minutes: 61 } },
+    });
+    expect(stuckEvents(pending)).toHaveLength(1);
+  },
+  TEST_TIMEOUT_MS,
+);
+
+test(
   "a conversion deletion still marked 1 hour after it was marked is reported once",
   async () => {
     const { account, accountId } = await createAccount();

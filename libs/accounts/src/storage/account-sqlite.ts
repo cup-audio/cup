@@ -13,7 +13,6 @@ import {
 import { DurationLedger } from "@cup/duration-ledger";
 import { CupError } from "@cup/errors";
 import { RollingLimits } from "@cup/rolling-limits";
-import type { StuckConversionCandidate } from "@cup/telemetry.cloudflare";
 
 import {
   ACCOUNT_USAGE_PROJECTION_SCHEMA_VERSION,
@@ -50,6 +49,17 @@ import {
 import { rateEvents } from "#src/storage/rate-limit-schema.ts";
 import { migrateAccount } from "#src/storage/sqlite-migrations.ts";
 import { requireRow } from "#src/storage/sqlite-row.ts";
+
+/** How far a conversion's current stage has come: what the stuck-conversion check reads of it. */
+type ConversionStageProgress = {
+  conversionId: string;
+  status: "pending" | "ready" | "failed";
+  lastStartedPhase: ConversionPhase;
+  /** Whether a segment of the conversion still holds a duration reservation. */
+  hasReservedSegment: boolean;
+  /** When the current stage started: preparation while pending, synthesis once ready. */
+  stageStartedAtMs: number;
+};
 
 const WELCOME_ALLOWANCE_MILLISECONDS = 30 * 60 * 1_000;
 
@@ -698,11 +708,10 @@ export class AccountSqlite {
   }
 
   /**
-   * The conversions whose current stage the stuck-conversion check has not reported: pending ones
-   * in preparation, and ready ones with a reserved segment in synthesis. A conversion marked for
-   * deletion is skipped.
+   * The conversions whose current stage the stuck-conversion check has not reported, without those
+   * marked for deletion.
    */
-  stuckConversionCandidates(): StuckConversionCandidate[] {
+  conversionsWithUnreportedStage(): ConversionStageProgress[] {
     const reservedConversionIds = new Set(
       this.duration.reservedSegments().map((segment) => segment.conversionId),
     );
@@ -712,6 +721,8 @@ export class AccountSqlite {
         status: accountConversions.status,
         lastStartedPhase: accountConversions.lastStartedPhase,
         stageStartedAtMs: accountConversions.stageStartedAtMs,
+        createdAtMs: accountConversions.createdAtMs,
+        completedAtMs: accountConversions.completedAtMs,
       })
       .from(accountConversions)
       .where(
@@ -721,25 +732,17 @@ export class AccountSqlite {
         ),
       )
       .all()
-      .flatMap(
-        ({
-          conversionId,
-          status,
-          lastStartedPhase,
-          stageStartedAtMs,
-        }): StuckConversionCandidate[] => {
-          if (stageStartedAtMs === null) {
-            throw new CupError(`Account conversion ${conversionId} has no stage start`);
-          }
-          if (status === "pending") {
-            return [{ conversionId, stage: "preparation", stageStartedAtMs, lastStartedPhase }];
-          }
-          if (status === "ready" && reservedConversionIds.has(conversionId)) {
-            return [{ conversionId, stage: "synthesis", stageStartedAtMs, lastStartedPhase }];
-          }
-          return [];
-        },
-      );
+      .map((row) => ({
+        conversionId: row.conversionId,
+        status: row.status,
+        lastStartedPhase: row.lastStartedPhase,
+        hasReservedSegment: reservedConversionIds.has(row.conversionId),
+        /*
+         * Code from before migration 0011 writes no stage start, so a row it wrote during a
+         * rollback has none. Such a row reads the way the migration backfilled the rows it found.
+         */
+        stageStartedAtMs: row.stageStartedAtMs ?? row.completedAtMs ?? row.createdAtMs,
+      }));
   }
 
   /** Records that the stuck-conversion check reported the conversion's current stage. */

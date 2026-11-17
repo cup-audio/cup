@@ -213,6 +213,10 @@ export class AccountDurableObject extends BaseAccountDurableObject {
   reconcileForTest() {
     return super.alarm();
   }
+  /** Leaves every conversion as code from before the stage start wrote it, as after a rollback. */
+  forgetStageStartsForTest() {
+    this.ctx.storage.sql.exec("UPDATE account_conversions SET stage_started_at_ms = NULL");
+  }
   /** Runs one alarm pass whose stuck-conversion check reads `nowMs` as the current time. */
   reconcileAtForTest(nowMs: number) {
     return super.reconcile(nowMs);
@@ -312,6 +316,10 @@ export class ConversionGrantTestDurableObject extends BaseConversionGrantDurable
       throw new CupError("Segment release failed");
     }
     return super.releaseAudioSegment(conversionId, sequence, attempts);
+  }
+  /** Leaves every conversion as code from before the stage start wrote it, as after a rollback. */
+  forgetStageStartsForTest() {
+    this.ctx.storage.sql.exec("UPDATE conversions SET stage_started_at_ms = NULL");
   }
   /** Runs one alarm pass whose stuck-conversion check reads `nowMs` as the current time. */
   reconcileAtForTest(nowMs: number) {
