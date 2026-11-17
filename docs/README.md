@@ -4,18 +4,18 @@ Start with the [glossary](GLOSSARY.md) for Cup's vocabulary and the [system over
 
 ## Understand the system
 
-| Page                                                               | What it explains                                                                                         |
-| ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
-| [Glossary](GLOSSARY.md)                                            | Canonical concepts, terminology, and rejected synonyms                                                   |
-| [System overview](architecture/README.md)                          | Runtime components, API definitions, storage ownership, external services, and development boundaries    |
-| [Authentication and authorization](architecture/authentication.md) | Google and Supabase sign-in, Cup account provisioning, media access, trials, and operator authentication |
-| [Durable Object schemas](architecture/durable-object-storage.md)   | SQLite tables, relationships, and naming conventions for all three Durable Object stores                 |
-| [R2 objects and key layout](architecture/r2-storage.md)            | Account and trial prefixes, stored objects, metadata, access, and cleanup                                |
-| [Conversion](architecture/conversion.md)                           | Source preparation through delivery, duration accounting, retries, and failure boundaries                |
-| [Playback](architecture/playback.md)                               | The web player and host, listening-position saves, and the system media controls                         |
-| [Account deletion](architecture/account-deletion.md)               | Fresh authentication, recovery, write fencing, cleanup, and notification retries                         |
-| [Conversion deletion](architecture/conversion-deletion.md)         | Fencing one conversion with a durable marker, releasing its open reservations, and its cleanup           |
-| [Web application screens](architecture/web-app.md)                 | Routes and redirects, Recents with its Add and account dialogs, account recovery, and the detail view    |
+| Page                                                                 | What it explains                                                                                                                |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| [Glossary](GLOSSARY.md)                                              | Canonical concepts, terminology, and rejected synonyms                                                                          |
+| [System overview](architecture/README.md)                            | Runtime components, API definitions, storage ownership, external services, and development boundaries                           |
+| [Authentication and authorization](architecture/authentication.md)   | Google and Supabase sign-in, Cup account provisioning, media access, trials, and operator authentication                        |
+| [Durable Object schemas](architecture/durable-object-storage.md)     | SQLite tables, relationships, and naming conventions for all three Durable Object stores                                        |
+| [R2 objects and key layout](architecture/r2-storage.md)              | Account and trial prefixes, stored objects, metadata, access, and cleanup                                                       |
+| [Conversion](architecture/conversion.md)                             | Source preparation through delivery, duration accounting, retries, and failure boundaries                                       |
+| [Playback](architecture/playback.md)                                 | The web player and host, listening-position saves, and the system media controls                                                |
+| [Account deletion](architecture/account-deletion.md)                 | Fresh authentication, recovery, write fencing, cleanup, and notification retries                                                |
+| [Conversion deletion](architecture/conversion-deletion.md)           | Fencing one conversion with a durable marker, releasing its open reservations, and its cleanup                                  |
+| [Web application screens](architecture/web-app.md)                   | Routes and redirects, Recents with its Add and account dialogs, account recovery, and the detail view                           |
 | [Observability](architecture/observability.md)                       | What the Worker sends to Sentry, the capture and correlation rules, privacy, alerts, and why nothing is sent outside production |
 | [Client observability](architecture/observability-clients.md)        | What the web app and the mobile shells send, crash reports and their switch, and the telemetry tunnel                           |
 | [Observability operations](architecture/observability-operations.md) | Stuck checks, log records, conversion durations, going-live checks, and build and release tracking                              |

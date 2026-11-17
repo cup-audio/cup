@@ -14,7 +14,7 @@ In the browser on `https://cup.audio`, the web app reports through `@sentry/capa
 
 ## What the shells send
 
-The shells run the same web app and the same `initializeTelemetry`, which there also starts Sentry's native SDK, Android's or Cocoa's, through `@sentry/capacitor` ([ADR 0030](../adr/0030-capture-native-crashes-in-the-shells-without-consent-keeping-no-installation-id-on-the-device.md)). The [mobile app guide](../../apps/mobile-app/README.md#sentry) lists the native settings.
+The shells run the same web app and the same `initializeTelemetry`, which there also starts Sentry's native SDK, Android's or Cocoa's, through `@sentry/capacitor` ([ADR 0031](../adr/0031-capture-native-crashes-in-the-shells-without-consent-keeping-no-installation-id-on-the-device.md)). The [mobile app guide](../../apps/mobile-app/README.md#sentry) lists the native settings.
 
 - **JS errors, traces and logs** as in the browser, through the telemetry tunnel.
 - **[Crash reports](../GLOSSARY.md#crash-report)** go straight from the native SDK to Sentry on the next launch: native crashes on both platforms, ANRs and memory-limiter kills on Android, app hangs and MetricKit diagnostics on iOS. A native crash carries the account ID; ANR and tombstone events, reported from a later process, carry none.

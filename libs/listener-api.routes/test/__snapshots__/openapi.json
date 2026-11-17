@@ -1811,6 +1811,7 @@
                             "operational-error",
                             "origin-blocked",
                             "origin-forbidden",
+                            "position-url-invalid",
                             "range-not-satisfiable",
                             "rate-limited",
                             "request-too-large",
@@ -6964,15 +6965,15 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "requestId": {
+                        "traceId": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          "pattern": "^[0-9a-f]{32}$"
                         }
                       },
                       "required": [
                         "code",
                         "message",
-                        "requestId"
+                        "traceId"
                       ]
                     }
                   },

@@ -1,6 +1,6 @@
 # Observability
 
-Cup reports production failures to Sentry through Sentry's own SDKs, and only from production. Cloudflare Workers Observability is off. [ADR 0029](../adr/0029-observe-production-with-sentrys-own-sdks-and-turn-cloudflares-observability-off.md) records why; the [spec](https://github.com/patricktree/cup/issues/403) describes the whole effort, of which these pages describe what is built:
+Cup reports production failures to Sentry through Sentry's own SDKs, and only from production. Cloudflare Workers Observability is off. [ADR 0030](../adr/0030-observe-production-with-sentrys-own-sdks-and-turn-cloudflares-observability-off.md) records why; the [spec](https://github.com/patricktree/cup/issues/403) describes the whole effort, of which these pages describe what is built:
 
 - this page: what the Worker sends, the rules every runtime shares, and the alerts;
 - [client observability](observability-clients.md): the web app, the mobile shells, crash reports and the telemetry tunnel;

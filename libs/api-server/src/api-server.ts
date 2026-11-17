@@ -721,12 +721,7 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
     const position = context.req.valid("json");
     const audiobook = await loadReadyAudiobookFromEnvironment(context.env, conversionId);
     if (!audiobook) {
-      return jsonError(
-        context.get("requestId"),
-        "audiobook-not-found",
-        "Audiobook not found.",
-        404,
-      );
+      return jsonError(context.get("traceId"), "audiobook-not-found", "Audiobook not found.", 404);
     }
     if (
       !audiobook.narrationDocument.synchronizationUnits.some(
