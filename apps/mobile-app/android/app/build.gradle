@@ -36,6 +36,9 @@ dependencies {
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
+    // The narration track's engine and the media session that keeps it playing in the background.
+    implementation "androidx.media3:media3-exoplayer:$androidxMedia3Version"
+    implementation "androidx.media3:media3-session:$androidxMedia3Version"
     // The mobile E2E suite's launch arguments (src/debug) inject a document-start script.
     debugImplementation "androidx.webkit:webkit:$androidxWebkitVersion"
     testImplementation "junit:junit:$junitVersion"

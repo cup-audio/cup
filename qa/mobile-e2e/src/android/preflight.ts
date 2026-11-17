@@ -1,7 +1,8 @@
 /* oxlint-disable node/no-process-env -- The preflight reads the host's Android SDK and Java locations. */
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
+
+import { DEFAULT_SDK_ROOT, resolveAndroidSdkRoot } from "@cup/mobile-app/android-sdk";
 
 import { run } from "#src/host.ts";
 
@@ -18,7 +19,6 @@ export type AndroidHost = {
 /** The `sdkmanager` package of the system image the suite's emulator runs. */
 export const SYSTEM_IMAGE_PACKAGE = "system-images;android-36;google_apis;arm64-v8a";
 
-const DEFAULT_SDK_ROOT = path.join(os.homedir(), "Library", "Android", "sdk");
 const ANDROID_STUDIO_JAVA_HOME = "/Applications/Android Studio.app/Contents/jbr/Contents/Home";
 
 /**
@@ -76,11 +76,6 @@ export async function checkAndroidHost(): Promise<AndroidHost> {
     );
   }
   return { sdkRoot, adb, emulator, avdManager, javaHome };
-}
-
-/** The SDK the run uses: `ANDROID_HOME`, then `ANDROID_SDK_ROOT`, then Android Studio's default. */
-export function resolveAndroidSdkRoot(): string {
-  return process.env["ANDROID_HOME"] ?? process.env["ANDROID_SDK_ROOT"] ?? DEFAULT_SDK_ROOT;
 }
 
 /** The Java home Gradle and Appium get, or undefined when `java` comes from `PATH`. */

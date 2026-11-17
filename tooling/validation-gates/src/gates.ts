@@ -68,6 +68,17 @@ const GH_AUTHENTICATED = commandPrerequisite(
 );
 
 /**
+ * The test step runs the Android app's JVM unit tests through Gradle, which needs the Android SDK
+ * and Java 21; the mobile app's own check names what is missing and its fix.
+ */
+const ANDROID_JVM_TOOLCHAIN_READY = commandPrerequisite(
+  "JDK 21 and Android SDK",
+  ["pnpm", "--silent", "--filter", "@cup/mobile-app", "run", "jvm:check"],
+  "The Android app's JVM unit test toolchain is missing",
+  { isOutputShown: true },
+);
+
+/**
  * The deploy gate runs on exactly the commit being deployed: a clean `main` equal to a freshly
  * fetched `origin/main`.
  */
@@ -110,7 +121,7 @@ const MOBILE_TOOLCHAINS_READY = commandPrerequisite(
 /** Runs before the operator reviews a pull request; see the validation section of AGENTS.md. */
 const REVIEW_GATE: Gate = {
   name: "review",
-  prerequisites: [DOCKER_RUNNING, UVX_INSTALLED, GH_AUTHENTICATED],
+  prerequisites: [DOCKER_RUNNING, UVX_INSTALLED, GH_AUTHENTICATED, ANDROID_JVM_TOOLCHAIN_READY],
   steps: [
     { name: "Env check", command: ["pnpm", "run", "env:check"] },
     { name: "Submodule check", command: ["pnpm", "run", "submodule:check"] },

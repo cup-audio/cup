@@ -4,4 +4,8 @@
     <string name="title_activity_main">Cup</string>
     <string name="package_name">audio.cup.app</string>
     <string name="custom_url_scheme">audio.cup.app</string>
+    <!-- The media notification and lock screen buttons, as in Cup's player. -->
+    <string name="media_session_back">Back 15 seconds</string>
+    <string name="media_session_forward">Forward 15 seconds</string>
+    <string name="media_session_close">Close</string>
 </resources>

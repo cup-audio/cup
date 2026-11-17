@@ -11,11 +11,11 @@ flowchart LR
     subgraph listenerApps[Listener apps]
       direction LR
       web[Web app]
-      native[Capacitor mobile app]
+      native[Capacitor mobile app, with a native player on Android]
     end
     operator[Operator CLI]
   end
-  listenerApps -->|/api and web assets, Supabase JWT or grant cookie| fetch
+  listenerApps -->|/api and web assets, Supabase JWT or grant cookie; media, and the native player's position saves, by signed URL| fetch
   listenerApps -->|Google sign-in| auth
   operator -->|/api/operator| access
   subgraph cloudflare[Cloudflare]
@@ -66,7 +66,7 @@ The Worker is the HTTP boundary; its `fetch` handler is its only entry point, an
 
 | Component                                 | Responsibility                                                                                 | Implementation                                                                                                                         |
 | ----------------------------------------- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Web application                           | Conversion entry, account UI, playback, and session management                                 | [Web source](../../apps/web-app/), [screens](web-app.md)                                                                               |
+| Web application                           | Conversion entry, account UI, playback, and session management                                 | [Web source](../../apps/web-app/), [screens](web-app.md), [playback](playback.md)                                                      |
 | Native shells                             | Package the shared UI and supply platform sign-in, sharing, and media integration              | [Mobile guide](../../apps/mobile-app/README.md), [platform adapters source](../../apps/web-app/src/platform/)                          |
 | Operator CLI                              | Administrative requests authenticated through Cloudflare Access                                | [Operator guide](../../apps/operator/README.md)                                                                                        |
 | Worker and API server                     | Assets, domain routing, authentication, request validation, conversion admission, and delivery | [Worker entry source](../../apps/cloudflare-worker/src/index.ts), [API composition source](../../libs/api-server/src/api-server.ts)    |

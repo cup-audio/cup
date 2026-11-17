@@ -118,11 +118,19 @@ export type AudioSegment = z.infer<typeof audioSegmentSchema>;
  */
 export const signedMediaUrlQuerySchema = z.object({ token: z.string() });
 /**
+ * The query of the listening-position route. `token` is a signed position URL's authorization, the
+ * alternative to the listener's bearer token; a request carries exactly one of the two.
+ */
+export const signedPositionUrlQuerySchema = z.object({ token: z.string().optional() });
+/**
  * Where to request the audiobook's narration track (a signed media URL), and where each segment
  * starts in it. `startMilliseconds[i]` is the sum of the settled durations of segments `0..i-1`.
+ * `positionUrl`, issued to account principals only, saves the listening position without the
+ * listener's session: a signed position URL for `PUT /api/audiobooks/{conversionId}/position`.
  */
 export const narrationTrackSchema = z.object({
   url: z.url(),
+  positionUrl: z.url().optional(),
   durationMilliseconds: z.number().int().positive(),
   startMilliseconds: z.array(z.number().int().nonnegative()).min(1),
 });
@@ -232,6 +240,7 @@ export const ERROR_CODE = {
   OPERATIONAL_ERROR: "operational-error",
   ORIGIN_BLOCKED: "origin-blocked",
   ORIGIN_FORBIDDEN: "origin-forbidden",
+  POSITION_URL_INVALID: "position-url-invalid",
   RANGE_NOT_SATISFIABLE: "range-not-satisfiable",
   RATE_LIMITED: "rate-limited",
   REQUEST_TOO_LARGE: "request-too-large",

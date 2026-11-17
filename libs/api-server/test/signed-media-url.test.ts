@@ -199,6 +199,24 @@ test("the audiobook response's cover image URL serves every request kind without
   }
 });
 
+test("media URLs stay byte-identical to the ones issued before position URLs existed", async () => {
+  const nowMs = Temporal.Instant.from("2026-10-27T13:45:00.000Z").epochMilliseconds;
+  expect(
+    await signMediaUrl({
+      url: `${origin}/api/files/audiobooks/${conversionId}/narration-track.mp3`,
+      conversionId,
+      principal: accountOwner,
+      signingKey: SIGNING_KEY,
+      nowMs,
+    }),
+  ).toBe(
+    `${origin}/api/files/audiobooks/${conversionId}/narration-track.mp3?token=v1.eyJjb252ZXJzaW9uSWQiOiJmOWNjMmU1OS00NmEzLTQ4OTAtYjkyMy1iZGEwNGQwM2I0ZDAiLCJwcmluY2lwYWwiOnsia2luZCI6ImFjY291bnQiLCJhY2NvdW50SWQiOiJkMWE1MmU2NC0zZTRkLTRhN2YtYTcxMS03ZmIxMTUwMWU5YWYifSwiZXhwaXJlc0F0TXMiOjE3OTMyMzIwMDAwMDB9.IQn5yrEziyX9GAXaltW0hjWc3-sXhMzWuxXMFhWGk8Y`,
+  );
+  expect(await signCoverImageUrl(trialOwner, { nowMs })).toBe(
+    `${origin + coverImagePath}?token=v1.eyJjb252ZXJzaW9uSWQiOiJmOWNjMmU1OS00NmEzLTQ4OTAtYjkyMy1iZGEwNGQwM2I0ZDAiLCJwcmluY2lwYWwiOnsia2luZCI6InRyaWFsIiwiZ3JhbnRJZCI6IjZiMGY1ZjJlLThkN2MtNGI4ZS05YTUxLTBmN2MzYzJkMWU0YSJ9LCJleHBpcmVzQXRNcyI6MTc5MzIzMjAwMDAwMH0.66ZdLRJGcnYaFDrCNfjYHAVtr37zRbM9O9Psdtn1nrU`,
+  );
+});
+
 test("missing, malformed, tampered, expired and other-audiobook tokens answer 401 without storage access", async () => {
   for (const owner of [accountOwner, trialOwner]) {
     const { app, env, bucketRead } = fixture(owner);
@@ -318,6 +336,57 @@ test("a URL handed out at 23:59 UTC is accepted until 48 hours after the start o
         expect((await app.request(url, { method: "HEAD" }, env)).status).toBe(status);
       }
     }
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("in local development, a shortened lifetime expires media URLs that many seconds after they are handed out", async () => {
+  const { app, env: productionEnv } = fixture(accountOwner);
+  const env = {
+    ...productionEnv,
+    LOCAL_DEVELOPMENT: "true",
+    LOCAL_SIGNED_URL_LIFETIME_SECONDS: "30",
+  };
+  vi.useFakeTimers({ toFake: ["Date"] });
+  try {
+    vi.setSystemTime(Temporal.Instant.from("2026-10-27T12:00:00.000Z").epochMilliseconds);
+    const audiobook = await requestJson(app, env, audiobookPath, {
+      Authorization: `Bearer ${await createAccessToken()}`,
+    });
+
+    for (const [instant, status] of [
+      ["2026-10-27T12:00:29.999Z", 200],
+      ["2026-10-27T12:00:30.000Z", 401],
+    ] as const) {
+      vi.setSystemTime(Temporal.Instant.from(instant).epochMilliseconds);
+      for (const url of [getCoverImageUrl(audiobook), getNarrationTrackUrl(audiobook)]) {
+        expect((await app.request(url, { method: "HEAD" }, env)).status).toBe(status);
+      }
+    }
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("outside local development, the shortened lifetime is ignored", async () => {
+  const { app, env: productionEnv } = fixture(accountOwner);
+  const env = {
+    ...productionEnv,
+    LOCAL_DEVELOPMENT: "false",
+    LOCAL_SIGNED_URL_LIFETIME_SECONDS: "30",
+  };
+  vi.useFakeTimers({ toFake: ["Date"] });
+  try {
+    vi.setSystemTime(Temporal.Instant.from("2026-10-27T12:00:00.000Z").epochMilliseconds);
+    const audiobook = await requestJson(app, env, audiobookPath, {
+      Authorization: `Bearer ${await createAccessToken()}`,
+    });
+
+    vi.setSystemTime(Temporal.Instant.from("2026-10-27T12:01:00.000Z").epochMilliseconds);
+    expect(
+      (await app.request(getNarrationTrackUrl(audiobook), { method: "HEAD" }, env)).status,
+    ).toBe(200);
   } finally {
     vi.useRealTimers();
   }

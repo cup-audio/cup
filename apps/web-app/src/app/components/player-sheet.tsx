@@ -18,7 +18,6 @@ import {
 } from "#src/app/design-system/icons.js";
 import { textStyles } from "#src/app/design-system/text-styles.js";
 import { interTypefaceScope } from "#src/app/global-styles.js";
-import { SKIP_MILLISECONDS } from "#src/app/player/narration-track-player.js";
 import { formatDuration, formatTimelinePosition } from "#src/app/player/playback-format.js";
 import { isPlayableAudiobook } from "#src/app/player/playback-session.js";
 import {
@@ -27,6 +26,7 @@ import {
   usePlayerState,
 } from "#src/app/player/player-host-provider.js";
 import type { LoadedAudiobook } from "#src/app/player/player-host.js";
+import { SKIP_MILLISECONDS } from "#src/app/player/player.js";
 import { composeClassnames } from "#src/app/utils.js";
 import { BOTTOM_BAR_TRANSITION_NAME } from "#src/app/view-transition-names.js";
 

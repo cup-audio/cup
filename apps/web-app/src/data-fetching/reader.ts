@@ -140,6 +140,26 @@ export function getLocalPlaybackPosition(conversionId: string): PlaybackPosition
 }
 
 /**
+ * Writes a listening position into the cached audiobook without a request, for one that the Android
+ * app's native player saved. It neither cancels nor invalidates the audiobook's query: the player
+ * renews its track URL through that query's data.
+ */
+export function cachePlaybackPosition(conversionId: string, position: PlaybackPosition) {
+  const queryKey = QUERY_KEYS.audiobook(conversionId);
+  const cached = queryClient.getQueryState<Audiobook>(queryKey);
+  // Only a prepared audiobook carries a listening position.
+  if (cached?.data && cached.data.status !== "pending" && cached.data.status !== "failed") {
+    const audiobook: Audiobook = { ...cached.data, playbackPosition: position };
+    queryClient.setQueryData<Audiobook>(
+      queryKey,
+      audiobook,
+      // The cached response keeps its arrival time, which dates its narration track URL.
+      { updatedAt: cached.dataUpdatedAt },
+    );
+  }
+}
+
+/**
  * Saves a listening position: on the device for listeners without an account, on the server and in
  * the cached audiobook for signed-in ones, so an audiobook opened again before its refetch returns
  * loads at this position.
@@ -156,17 +176,7 @@ export async function savePlaybackPosition(
 
   const queryKey = QUERY_KEYS.audiobook(conversionId);
   await queryClient.cancelQueries({ queryKey });
-  const cached = queryClient.getQueryState<Audiobook>(queryKey);
-  // Only a prepared audiobook carries a listening position.
-  if (cached?.data && cached.data.status !== "pending" && cached.data.status !== "failed") {
-    const audiobook: Audiobook = { ...cached.data, playbackPosition: position };
-    queryClient.setQueryData<Audiobook>(
-      queryKey,
-      audiobook,
-      // The cached response keeps its arrival time, which dates its narration track URL.
-      { updatedAt: cached.dataUpdatedAt },
-    );
-  }
+  cachePlaybackPosition(conversionId, position);
 
   try {
     await requestApi({ subject }, (client) => client.savePosition({ conversionId }, position));

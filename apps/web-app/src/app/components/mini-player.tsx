@@ -10,13 +10,13 @@ import { PauseMiniIcon, PlayIcon, SkipBack15Icon } from "#src/app/design-system/
 import { pressableOverlay } from "#src/app/design-system/interaction-states.js";
 import { singleLine, textStyles } from "#src/app/design-system/text-styles.js";
 import { interTypefaceScope } from "#src/app/global-styles.js";
-import { SKIP_MILLISECONDS } from "#src/app/player/narration-track-player.js";
 import {
   usePlayerHost,
   usePlayerHostSnapshot,
   usePlayerState,
 } from "#src/app/player/player-host-provider.js";
 import type { LoadedAudiobook } from "#src/app/player/player-host.js";
+import { SKIP_MILLISECONDS } from "#src/app/player/player.js";
 import { toSourceHost } from "#src/app/source-host.js";
 import { composeClassnames } from "#src/app/utils.js";
 

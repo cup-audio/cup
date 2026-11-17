@@ -1,5 +1,7 @@
 # Android background network access and freezing
 
+> Outcome, 2026-11-16: [ADR 0029](../adr/0029-play-the-narration-track-in-the-android-app-with-a-native-media3-exoplayer.md) plays the narration track in the Android app with a native Media3 ExoPlayer in a `mediaPlayback` foreground service, which keeps Cup unfrozen and its network reachable while it plays; the WebView's `<audio>` is no longer the engine there.
+
 Research date: 2026-11-14, for [CUP-71](https://linear.app/cup-audio/issue/CUP-71). Observed on the mobile E2E suite's emulator `cup-mobile-e2e-api36-ram4g` (Android 16, Google APIs system image `android-36` `arm64-v8a`, emulator 36.4.10.0, WebView Chrome 133.0.6943.137), running the debug build of the Android shell from commit `fc4d38ae` without a test origin, so it talked to production `https://cup.audio`. The probes sent only `GET /` to Cup and streamed one public-domain LibriVox MP3 from archive.org. External claims come from Android's [Android 15 behavior changes](https://developer.android.com/about/versions/15/behavior-changes-all#background-network-access), read on the research date. No physical device took part.
 
 ## Question
@@ -17,7 +19,7 @@ The Android app's player sometimes showed `Unable to resolve host "cup.audio": N
 
 ## Implications
 
-- Saving a failed position again when Cup returns to the foreground works: the network is back at once. Cup does that since CUP-71 ([positions](../architecture/conversion.md#delivery-positions-and-lifecycle)).
+- Saving a failed position again when Cup returns to the foreground works: the network is back at once. Cup does that since CUP-71 ([positions](../architecture/playback.md#listening-positions)).
 - Background playback on Android needs Cup out of the cached state: a `mediaPlayback` foreground service, as [Capacitor WebView playback](webview-audio-playback.md) already called for, keeps it from being frozen and keeps its network access, so playback and saves continue. Its notification can be the media notification the Android app lacks, since the WebView shows none.
 - The freeze comes first. WebView buffered about 7 minutes ahead and then stopped downloading, so a long narration track would also stall once that buffer runs out without network access, but only if the process were not frozen already.
 

@@ -1,14 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
+import { resolveAndroidSdkRoot } from "@cup/mobile-app/android-sdk";
 import { readVersion, type Unreadable } from "@cup/toolchain-key/key-file";
 
-import {
-  javaExecutable,
-  resolveAndroidSdkRoot,
-  resolveJavaHome,
-  SYSTEM_IMAGE_PACKAGE,
-} from "#src/android/preflight.ts";
+import { javaExecutable, resolveJavaHome, SYSTEM_IMAGE_PACKAGE } from "#src/android/preflight.ts";
 import { run } from "#src/host.ts";
 import { readMacosVersion, type MacosVersion } from "#src/toolchain-version.ts";
 

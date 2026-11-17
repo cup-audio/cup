@@ -9,7 +9,13 @@ import path from "node:path";
 import { TEST_ACCOUNT } from "#src/auth-provider.ts";
 
 /** Selects how the test Worker's fakes behave; the Worker entry parses the same values. */
-export type TestWorkerScenario = "success" | "tts-failure" | "speech-gated" | "preparation-failure";
+export type TestWorkerScenario =
+  | "success"
+  | "tts-failure"
+  | "speech-gated"
+  /** Each segment speaks for a minute, for a track that plays long enough to lock the device. */
+  | "long-speech"
+  | "preparation-failure";
 
 export type CreatedGrant = {
   grantId: string;
@@ -23,7 +29,7 @@ export type RecordedRequest = {
   readonly path: string;
   /** Header names are lowercase. */
   readonly headers: Readonly<Record<string, string>>;
-  /** The body of a POST request, as text. */
+  /** The body of a POST or PUT request, as text. */
   readonly body?: string;
 };
 
@@ -36,13 +42,32 @@ export type TestWorker = {
   requests(): RecordedRequest[];
   /** Creates a conversion grant through the operator API, authorized by the fake access check. */
   createGrant(label?: string): Promise<CreatedGrant>;
-  /** Restarts Wrangler with another scenario, keeping the port and persisted storage. */
-  restart(scenario: TestWorkerScenario): Promise<void>;
+  /**
+   * Restarts Wrangler with another scenario, keeping the port and persisted storage. The signed URL
+   * lifetime and the track speed stay unless `options` sets others.
+   */
+  restart(scenario: TestWorkerScenario, options?: RestartOptions): Promise<void>;
   /** Stops Wrangler and removes the persistence directory unless it is retained. */
   stop(options?: { retainPersistenceDirectory?: boolean }): Promise<void>;
 };
 
-type StartTestWorkerOptions = {
+type SignedUrlOptions = {
+  /**
+   * Signed media and position URLs expire this many seconds after the Worker hands them out,
+   * instead of at least a day, so a test sees them expire.
+   */
+  signedUrlLifetimeSeconds?: number;
+};
+
+type RestartOptions = SignedUrlOptions & {
+  /**
+   * Sends narration tracks at this many bytes per second instead of at loopback speed, so a player
+   * buffers only part of the track and a lost connection fails a request while it plays.
+   */
+  trackBytesPerSecond?: number;
+};
+
+type StartTestWorkerOptions = RestartOptions & {
   scenario?: TestWorkerScenario;
   /** The fake auth provider the Worker verifies tokens against, if the test signs in. */
   authProviderOrigin?: string;
@@ -77,6 +102,7 @@ export async function startTestWorker(options: StartTestWorkerOptions = {}): Pro
   const persistenceDirectory = await fs.mkdtemp(path.join(os.tmpdir(), "cup-test-worker-"));
   const logs: string[] = [];
   let workerProcess: childProcess.ChildProcess | undefined;
+  let { signedUrlLifetimeSeconds, trackBytesPerSecond } = options;
 
   const start = async (scenario: TestWorkerScenario): Promise<void> => {
     const environment = { ...process.env };
@@ -126,6 +152,13 @@ export async function startTestWorker(options: StartTestWorkerOptions = {}): Pro
               `LOCAL_TEST_ACCOUNT_PASSWORD:${TEST_ACCOUNT.password}`,
             ]
           : []),
+        // The API server honours it only with `LOCAL_DEVELOPMENT`, which the Worker's config sets.
+        ...(signedUrlLifetimeSeconds === undefined
+          ? []
+          : ["--var", `LOCAL_SIGNED_URL_LIFETIME_SECONDS:${signedUrlLifetimeSeconds}`]),
+        ...(trackBytesPerSecond === undefined
+          ? []
+          : ["--var", `QA_TRACK_BYTES_PER_SECOND:${trackBytesPerSecond}`]),
       ],
       { cwd: PACKAGE_ROOT, detached: true, env: environment, stdio: ["ignore", "pipe", "pipe"] },
     );
@@ -141,7 +174,10 @@ export async function startTestWorker(options: StartTestWorkerOptions = {}): Pro
     logs,
     requests: () => parseRequestLog(logs),
     createGrant: (label = "Trial") => createGrant(origin, label),
-    async restart(scenario) {
+    async restart(scenario, restartOptions = {}) {
+      signedUrlLifetimeSeconds =
+        restartOptions.signedUrlLifetimeSeconds ?? signedUrlLifetimeSeconds;
+      trackBytesPerSecond = restartOptions.trackBytesPerSecond ?? trackBytesPerSecond;
       await stopProcess(workerProcess);
       workerProcess = undefined;
       await start(scenario);

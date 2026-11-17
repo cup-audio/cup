@@ -69,7 +69,7 @@ export class ListenerApiClient {
   }
   async savePosition(params: ConversionParams, position: PlaybackPosition) {
     return this.#honoClient.api.audiobooks[":conversionId"].position.$put(
-      { param: params, json: position, header: browserHeaders() },
+      { param: params, query: {}, json: position, header: browserHeaders() },
       { init: { credentials: "include" } },
     );
   }
@@ -153,7 +153,7 @@ export class AuthenticatedRpcClient {
   }
   async savePosition(params: ConversionParams, position: PlaybackPosition) {
     return this.#honoClient.api.audiobooks[":conversionId"].position.$put(
-      { param: params, json: position, header: browserHeaders() },
+      { param: params, query: {}, json: position, header: browserHeaders() },
       this.#options(),
     );
   }

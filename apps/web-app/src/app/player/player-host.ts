@@ -2,13 +2,6 @@ import type { Audiobook, PlaybackPosition } from "@cup/listener-api.routes";
 
 import { clampToTimeline } from "#src/app/player/audiobook-timeline.ts";
 import {
-  isElementPlaying,
-  NarrationTrackPlayer,
-  type NarrationAudioElement,
-  type Player,
-  type PositionOnClose,
-} from "#src/app/player/narration-track-player.ts";
-import {
   isPlayableAudiobook,
   toTrackPositionMilliseconds,
   type PlayableAudiobook,
@@ -16,7 +9,16 @@ import {
   type PlaybackSessionRequest,
   type PreparedAudiobook,
 } from "#src/app/player/playback-session.ts";
-import type { MediaMetadataInput } from "#src/platform/media-session.ts";
+import {
+  SKIP_MILLISECONDS,
+  type CreatePlayer,
+  type FindRunningPlayer,
+  type PlaybackChange,
+  type Player,
+  type PlayerEnding,
+  type PositionOnClose,
+} from "#src/app/player/player.ts";
+import type { MediaSessionActionHandlers, MediaSessionPort } from "#src/platform/media-session.ts";
 
 /** The one audiobook the app's player holds, with the player playing it. */
 export type LoadedAudiobook = {
@@ -60,11 +62,16 @@ export type PlayerHostAccount =
   | { status: "known"; subject: string | null };
 
 export type PlayerHostServices = {
-  /** Called once: the host keeps the element for its own lifetime. */
-  createAudioElement(): NarrationAudioElement;
+  /**
+   * Builds the player for each load: on the browser's one `<audio>` element, or on the Android
+   * app's native player.
+   */
+  createPlayer: CreatePlayer;
+  /** What already plays when the page starts, which the host takes over. */
+  findRunningPlayer: FindRunningPlayer;
   createSession(request: PlaybackSessionRequest): PlaybackSession;
-  /** Shows the loaded audiobook in the system's media controls; the returned function clears it. */
-  publishMediaMetadata(metadata: MediaMetadataInput): () => void;
+  /** The system's media controls, which show the loaded audiobook and send their actions. */
+  mediaSession: MediaSessionPort;
   /** Read at load time, so a load never uses an account state the host was not told about yet. */
   getAccount(): PlayerHostAccount;
   /** The listening position stored on this device, used for listeners without an account. */
@@ -88,33 +95,35 @@ const RENEWAL_ERROR_MESSAGE = "The audio could not be loaded again. Press Play t
 const UNAVAILABLE_TRACK_MESSAGE = "This track is no longer available.";
 
 /**
- * Holds the app's one `<audio>` element and the audiobook loaded into it, so playback continues
- * while the listener navigates, and decides what it plays.
+ * Holds the audiobook loaded into the app's player, so playback continues while the listener
+ * navigates, and decides what it plays.
  *
  * A page reports the conversion it shows; showing it loads nothing. Its narration track is loaded
  * only when the listener starts it: `playShown`, or `loadShown` for seeking and skipping. Only
  * `play` and `playShown` start playback, which must run within a user gesture. Loading the shown
- * audiobook while another one is loaded saves the previous one and sets the new track on the same
- * element. A change of the signed-in user unloads the element.
+ * audiobook while another one is loaded saves the previous one and replaces its player. A change of
+ * the signed-in user unloads it. The loaded audiobook is shown in the system's media controls,
+ * whose actions act like the app's own controls.
  */
 export class PlayerHost {
   private readonly services: PlayerHostServices;
-  private readonly element: NarrationAudioElement;
   private readonly listeners = new Set<() => void>();
   private snapshot: PlayerHostSnapshot = { loaded: null, shown: null, unavailable: null };
-  private clearMediaMetadata: (() => void) | undefined;
   /** When the client received the shown audiobook, whose track URL a load uses. */
   private shownAudiobookReceivedAt = 0;
-  /** When the client received the loaded track's URL. */
-  private trackUrlReceivedAt = 0;
+  /** When the client received the loaded audiobook's signed URLs. */
+  private urlsReceivedAt = 0;
   /** The renewal Play is waiting for; Pause and unloading cancel it. */
   private pendingRenewal: symbol | null = null;
+  /** Stops reporting the loaded player's playback changes to the system's media controls. */
+  private unsubscribeMediaSessionReports: (() => void) | null = null;
+  /** The host looks for a running player once, when the page starts. */
+  private hasLookedForRunningPlayer = false;
+  /** Called once the account is known, by what waits for its restore. */
+  private readonly accountWaiters = new Set<() => void>();
 
   constructor(services: PlayerHostServices) {
     this.services = services;
-    this.element = services.createAudioElement();
-    // Only the duration is needed before Play; the track itself streams once playback starts.
-    this.element.preload = "metadata";
   }
 
   subscribe = (listener: () => void) => {
@@ -139,6 +148,68 @@ export class PlayerHost {
 
     // Which listening position applies depends on the account.
     this.refreshResumePosition();
+
+    if (account.status === "known") {
+      for (const waiter of this.accountWaiters) {
+        waiter();
+      }
+      this.accountWaiters.clear();
+    }
+  };
+
+  /**
+   * Takes over what already plays when the page starts, such as the Android app's native session
+   * after a reload, a renderer crash, a live update or a relaunch: it fetches that audiobook and
+   * makes it the loaded one without loading it again, so playback goes on and the mini player shows
+   * it. A deleted audiobook, or one loaded for another account, ends the session instead. Runs
+   * once; a load before it finishes replaces the session's audiobook, and it then takes nothing
+   * over.
+   */
+  adoptRunningPlayer = async () => {
+    if (this.hasLookedForRunningPlayer) {
+      return;
+    }
+    this.hasLookedForRunningPlayer = true;
+
+    const running = await this.services.findRunningPlayer();
+    if (!running) {
+      return;
+    }
+    const subject = await this.readKnownSubject();
+    if (this.snapshot.loaded) {
+      return;
+    }
+    if (running.subject !== subject) {
+      running.discard();
+      return;
+    }
+
+    let audiobook: Audiobook | null;
+    try {
+      audiobook = await this.services.fetchAudiobook(running.conversionId);
+    } catch {
+      // The request layer reports the failure itself; the session plays on, and the next load
+      // replaces it.
+      return;
+    }
+    if (this.snapshot.loaded) {
+      return;
+    }
+    if (audiobook?.status !== "ready" || !isPlayableAudiobook(audiobook)) {
+      running.discard();
+      return;
+    }
+
+    const { conversionId } = running;
+    const session = this.services.createSession({
+      conversionId,
+      audiobook,
+      position: this.readStoredPosition(conversionId, audiobook, subject),
+      subject,
+    });
+    // The session's URLs came from an earlier page, so the adopted player asks for new ones
+    // (`needsNewTrackUrl`) and the first Play renews them.
+    this.setLoaded({ conversionId, audiobook, subject, player: running.adopt(session) });
   };
 
   /**
@@ -200,8 +271,11 @@ export class PlayerHost {
       return;
     }
 
-    const trackUrlAge = this.services.now() - this.trackUrlReceivedAt;
-    if (this.element.error || trackUrlAge > TRACK_URL_RENEWAL_AGE_MILLISECONDS) {
+    const trackUrlAge = this.services.now() - this.urlsReceivedAt;
+    if (
+      loaded.player.getSnapshot().needsNewTrackUrl ||
+      trackUrlAge > TRACK_URL_RENEWAL_AGE_MILLISECONDS
+    ) {
       void this.renewTrackUrlAndPlay(loaded);
       return;
     }
@@ -216,8 +290,7 @@ export class PlayerHost {
 
   /** Pauses the loaded audiobook while it plays, and plays it otherwise, from a user gesture. */
   togglePlayback = () => {
-    // A failed source can leave the element unpaused; Play then renews the track URL.
-    if (isElementPlaying(this.element)) {
+    if (this.snapshot.loaded?.player.getSnapshot().isPlaying) {
       this.pause();
     } else {
       this.play();
@@ -257,9 +330,9 @@ export class PlayerHost {
     return this.snapshot.loaded?.player ?? null;
   };
 
-  /** Saves the position and empties the element: pause, remove its source, and load nothing. */
+  /** Saves the position and unloads the audiobook, which ends its playback. */
   unload = () => {
-    this.emptyElement("save");
+    this.unloadPlayer("save");
   };
 
   /**
@@ -269,9 +342,20 @@ export class PlayerHost {
    */
   release = (conversionId: string) => {
     if (this.snapshot.loaded?.conversionId === conversionId) {
-      this.emptyElement("discard");
+      this.unloadPlayer("discard");
     }
   };
+
+  /** Who listens, once the stored account is restored. */
+  private async readKnownSubject(): Promise<string | null> {
+    const account = this.services.getAccount();
+    if (account.status === "known") {
+      return account.subject;
+    }
+
+    await new Promise<void>((resolve) => this.accountWaiters.add(resolve));
+    return this.readKnownSubject();
+  }
 
   /** Signed-in listeners keep their position on the server; others on the device. */
   private readStoredPosition(
@@ -331,7 +415,7 @@ export class PlayerHost {
       throw new Error(`Audiobook ${conversionId} cannot be loaded without a narration track.`);
     }
 
-    this.closeLoadedPlayer();
+    this.closeLoadedPlayer("save", "replace");
 
     const account = this.services.getAccount();
     const subject = account.status === "known" ? account.subject : null;
@@ -341,14 +425,65 @@ export class PlayerHost {
       position: this.readStoredPosition(conversionId, audiobook, subject),
       subject,
     });
-    const player = new NarrationTrackPlayer(session, this.element);
-    this.trackUrlReceivedAt = this.shownAudiobookReceivedAt;
-    this.clearMediaMetadata = this.services.publishMediaMetadata({
-      title: audiobook.title,
-      artworkUrl: audiobook.coverImage?.url,
-    });
-    this.update({ loaded: { conversionId, audiobook, subject, player }, unavailable: null });
+    this.urlsReceivedAt = this.shownAudiobookReceivedAt;
+    const player = this.services.createPlayer(session, this.urlsReceivedAt);
+    this.setLoaded({ conversionId, audiobook, subject, player });
   }
+
+  /** Makes `loaded` the loaded audiobook and shows it in the system's media controls. */
+  private setLoaded(loaded: LoadedAudiobook) {
+    const { audiobook, player } = loaded;
+    this.update({ loaded, unavailable: null });
+
+    const { mediaSession } = this.services;
+    mediaSession.setMetadata({ title: audiobook.title, artworkUrl: audiobook.coverImage?.url });
+    mediaSession.setActionHandlers(this.mediaSessionHandlers);
+    this.unsubscribeMediaSessionReports = player.subscribePlaybackChanges(
+      this.reportToMediaSession,
+    );
+    this.reportToMediaSession();
+  }
+
+  /** The system's media controls act like Cup's own controls, including saving the position. */
+  private readonly mediaSessionHandlers: MediaSessionActionHandlers = {
+    play: () => this.play(),
+    pause: () => this.pause(),
+    // The audiobook stays loaded, so the listener can resume it.
+    stop: () => this.pause(),
+    seekTo: (positionMilliseconds) => this.snapshot.loaded?.player.seekTo(positionMilliseconds),
+    seekBackward: (offsetMilliseconds) =>
+      this.snapshot.loaded?.player.skipBy(-(offsetMilliseconds ?? SKIP_MILLISECONDS)),
+    seekForward: (offsetMilliseconds) =>
+      this.snapshot.loaded?.player.skipBy(offsetMilliseconds ?? SKIP_MILLISECONDS),
+  };
+
+  /**
+   * Tells the system's media controls the loaded audiobook's playback and position state. The
+   * duration is the narration track's listed one, the timeline the reader and the position bar use,
+   * not the player's.
+   */
+  private reportToMediaSession = (change?: PlaybackChange) => {
+    const { loaded } = this.snapshot;
+    if (!loaded) {
+      return;
+    }
+
+    const { positionMilliseconds, isPlaying, isBuffering, playbackRate } =
+      loaded.player.getSnapshot();
+    const { durationMilliseconds } = loaded.audiobook.narrationTrack;
+    const { mediaSession } = this.services;
+    mediaSession.setPlaybackState({
+      playbackState: isPlaying ? "playing" : "paused",
+      isWaiting: isBuffering,
+      // The player returns to the start at the end, so only the change tells it ended.
+      hasEnded: change?.hasEnded ?? false,
+    });
+    mediaSession.setPositionState({
+      durationMilliseconds,
+      positionMilliseconds: Math.min(positionMilliseconds, durationMilliseconds),
+      playbackRate,
+    });
+  };
 
   private async renewTrackUrlAndPlay(loaded: LoadedAudiobook) {
     const renewal = Symbol("renewal");
@@ -382,15 +517,15 @@ export class PlayerHost {
       return;
     }
 
-    this.trackUrlReceivedAt = this.services.now();
-    loaded.player.replaceTrackUrl(audiobook.narrationTrack.url);
+    this.urlsReceivedAt = this.services.now();
+    loaded.player.replaceUrls(audiobook.narrationTrack, this.urlsReceivedAt);
     loaded.player.play();
   }
 
   /** Unloads a track that no longer exists and keeps its page from playing it. */
   private reportUnavailable(conversionId: string) {
     // The position of a track that no longer exists has nowhere to go.
-    this.emptyElement("discard");
+    this.unloadPlayer("discard");
     const { shown } = this.snapshot;
     this.update({
       unavailable: { conversionId, message: UNAVAILABLE_TRACK_MESSAGE },
@@ -398,25 +533,28 @@ export class PlayerHost {
     });
   }
 
-  private emptyElement(position: PositionOnClose) {
+  private unloadPlayer(position: PositionOnClose) {
     if (!this.snapshot.loaded) {
       return;
     }
 
-    this.closeLoadedPlayer(position);
-    this.element.removeAttribute("src");
-    this.element.load();
+    this.closeLoadedPlayer(position, "unload");
     this.update({ loaded: null });
     // Playback moved the listening position, which a listener without an account keeps only on the
     // device, where the shown audiobook does not see it change.
     this.refreshResumePosition();
   }
 
-  private closeLoadedPlayer(position: PositionOnClose = "save") {
+  private closeLoadedPlayer(position: PositionOnClose, ending: PlayerEnding) {
     this.pendingRenewal = null;
-    this.snapshot.loaded?.player.close(position);
-    this.clearMediaMetadata?.();
-    this.clearMediaMetadata = undefined;
+    if (!this.snapshot.loaded) {
+      return;
+    }
+
+    this.unsubscribeMediaSessionReports?.();
+    this.unsubscribeMediaSessionReports = null;
+    this.snapshot.loaded.player.close(position, ending);
+    this.services.mediaSession.clear();
   }
 
   private update(value: Partial<PlayerHostSnapshot>) {

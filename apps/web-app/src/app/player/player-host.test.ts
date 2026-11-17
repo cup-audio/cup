@@ -1,6 +1,9 @@
 import type { Audiobook, PlaybackPosition } from "@cup/listener-api.routes";
 
-import type { NarrationAudioElement } from "#src/app/player/narration-track-player.ts";
+import {
+  createElementPlayers,
+  type NarrationAudioElement,
+} from "#src/app/player/narration-track-player.ts";
 import {
   PlaybackSession,
   type PlayableAudiobook,
@@ -8,6 +11,13 @@ import {
 } from "#src/app/player/playback-session.ts";
 import { PlayerHost, type PlayerHostAccount } from "#src/app/player/player-host.ts";
 import { UserFacingError } from "#src/errors.ts";
+import type {
+  MediaMetadataInput,
+  MediaPlaybackStateInput,
+  MediaPositionStateInput,
+  MediaSessionActionHandlers,
+  MediaSessionPort,
+} from "#src/platform/media-session.ts";
 import { expect, test } from "#src/test-utils/component-test.ts";
 
 const HAVE_METADATA = 1;
@@ -25,6 +35,7 @@ class FakeAudioElement extends EventTarget implements NarrationAudioElement {
   ended = false;
   seeking = false;
   readyState = 0;
+  playbackRate = 1;
   duration = Number.NaN;
   error: { code: number } | null = null;
   /** The error the next `play()` rejects with, as a browser refusing to start. */
@@ -120,6 +131,12 @@ class FakeAudioElement extends EventTarget implements NarrationAudioElement {
     this.fire("error");
   }
 
+  /** The listener changed the playback speed. */
+  setPlaybackRate(rate: number) {
+    this.playbackRate = rate;
+    this.fire("ratechange");
+  }
+
   fire(type: string) {
     this.dispatchEvent(new Event(type));
   }
@@ -133,6 +150,56 @@ class FakeAudioElement extends EventTarget implements NarrationAudioElement {
   }
 }
 
+/**
+ * The system's media controls, as far as the host reports to them. `calls` lists every state report
+ * in order; the other fields hold what the controls currently show.
+ */
+class FakeMediaSession implements MediaSessionPort {
+  readonly calls: string[] = [];
+  /** Each audiobook shown, and `null` for each clear. */
+  readonly published: Array<string | null> = [];
+  playbackState = "none";
+  positionState: MediaPositionStateInput | null = null;
+  handlers: MediaSessionActionHandlers | null = null;
+
+  setMetadata({ title, artworkUrl }: MediaMetadataInput) {
+    this.published.push(artworkUrl ? `${title} (${artworkUrl})` : title);
+  }
+
+  setPlaybackState({ playbackState, isWaiting, hasEnded }: MediaPlaybackStateInput) {
+    this.playbackState = `${playbackState}${isWaiting ? ", waiting" : ""}${hasEnded ? ", ended" : ""}`;
+    this.calls.push(`playbackState:${this.playbackState}`);
+  }
+
+  setPositionState(state: MediaPositionStateInput) {
+    this.positionState = state;
+    const { positionMilliseconds, durationMilliseconds, playbackRate } = state;
+    this.calls.push(
+      `positionState:${positionMilliseconds}/${durationMilliseconds}@${playbackRate}`,
+    );
+  }
+
+  setActionHandlers(handlers: MediaSessionActionHandlers) {
+    this.handlers = handlers;
+  }
+
+  clear() {
+    this.published.push(null);
+    this.calls.push("clear");
+    this.playbackState = "none";
+    this.positionState = null;
+    this.handlers = null;
+  }
+
+  /** The handlers the controls call, which exist only while an audiobook is loaded. */
+  action() {
+    if (!this.handlers) {
+      throw new Error("Expected media session action handlers.");
+    }
+    return this.handlers;
+  }
+}
+
 function createHost({
   localPositions = new Map<string, PlaybackPosition>(),
   subject = null as string | null,
@@ -140,8 +207,10 @@ function createHost({
   fetchAudiobook = (conversionId: string): Promise<Audiobook | null> =>
     Promise.reject(new Error(`Unexpected fetch of audiobook ${conversionId}.`)),
 } = {}) {
-  const elements: FakeAudioElement[] = [];
-  const mediaMetadata: Array<string | null> = [];
+  // The browser's players, which the host reaches only through the `Player` port.
+  const element = new FakeAudioElement();
+  const elements = [element];
+  const mediaSession = new FakeMediaSession();
   const saved: Array<{ position: PlaybackPosition; subject: string | null }> = [];
   const fetchedConversionIds: string[] = [];
   const clock = { now: 0 };
@@ -150,11 +219,8 @@ function createHost({
   let account: PlayerHostAccount = { status: "known", subject };
 
   const host = new PlayerHost({
-    createAudioElement: () => {
-      const element = new FakeAudioElement();
-      elements.push(element);
-      return element;
-    },
+    createPlayer: createElementPlayers(element),
+    findRunningPlayer: () => Promise.resolve(null),
     createSession: (request) =>
       new PlaybackSession(request, {
         savePosition: (position, savedSubject) => {
@@ -174,10 +240,7 @@ function createHost({
         },
         onReconnect: () => () => undefined,
       }),
-    publishMediaMetadata: ({ title, artworkUrl }) => {
-      mediaMetadata.push(artworkUrl ? `${title} (${artworkUrl})` : title);
-      return () => mediaMetadata.push(null);
-    },
+    mediaSession,
     getAccount: () => account,
     getLocalPosition: (conversionId) => localPositions.get(conversionId) ?? null,
     fetchAudiobook: (conversionId) => {
@@ -192,7 +255,6 @@ function createHost({
     account = value;
     host.accountChanged();
   };
-  const element = elements[0]!;
   const player = () => {
     const loaded = host.getSnapshot().loaded;
     if (!loaded) {
@@ -206,7 +268,7 @@ function createHost({
     elements,
     element,
     player,
-    mediaMetadata,
+    mediaSession,
     saved,
     fetchedConversionIds,
     clock,
@@ -273,7 +335,7 @@ function withTrackUrl(audiobook: PlayableAudiobook, url: string): PlayableAudiob
 }
 
 test("showing an audiobook loads nothing, while it can be played", () => {
-  const { host, elements, element, mediaMetadata } = createHost();
+  const { host, elements, element, mediaSession } = createHost();
 
   host.showConversion("first", FIRST);
 
@@ -281,7 +343,7 @@ test("showing an audiobook loads nothing, while it can be played", () => {
   expect(element.calls).toEqual([]);
   expect(host.getSnapshot().loaded).toBeNull();
   expect(host.getSnapshot().shown?.canPlay).toBe(true);
-  expect(mediaMetadata).toEqual([]);
+  expect(mediaSession.published).toEqual([]);
 });
 
 test("before it is loaded, the shown audiobook resumes from the listening position the server stored", () => {
@@ -358,7 +420,7 @@ test("a shown audiobook that cannot play resumes from the start", () => {
 });
 
 test("loading the shown audiobook sets its narration track on the one element without playing", () => {
-  const { host, elements, element, mediaMetadata } = createHost();
+  const { host, elements, element, mediaSession } = createHost();
 
   host.showConversion("first", { ...FIRST, coverImage: { url: "https://example.com/cover" } });
   host.loadShown();
@@ -368,7 +430,7 @@ test("loading the shown audiobook sets its narration track on the one element wi
   expect(element.preload).toBe("metadata");
   expect(host.getSnapshot().loaded?.conversionId).toBe("first");
   expect(host.getSnapshot().shown?.canPlay).toBe(true);
-  expect(mediaMetadata).toEqual(["First (https://example.com/cover)"]);
+  expect(mediaSession.published).toEqual(["First (https://example.com/cover)"]);
 });
 
 test("loading restores the saved unit and offset once metadata is loaded and stays paused", () => {
@@ -1087,7 +1149,7 @@ test("a refused play is shown, and Play stays available", async () => {
 });
 
 test("playing another audiobook sets its narration track on the same element", async () => {
-  const { host, elements, element, mediaMetadata, saved } = createHost();
+  const { host, elements, element, mediaSession, saved } = createHost();
 
   host.showConversion("first", FIRST);
   host.loadShown();
@@ -1106,7 +1168,7 @@ test("playing another audiobook sets its narration track on the same element", a
   expect(elements).toHaveLength(1);
   expect(element.calls.slice(-3)).toEqual(["pause", `src:${SECOND_TRACK_URL}`, "play"]);
   expect(host.getSnapshot().loaded?.conversionId).toBe("second");
-  expect(mediaMetadata).toEqual(["First", null, "Second"]);
+  expect(mediaSession.published).toEqual(["First", null, "Second"]);
   // The previous audiobook's position is saved when it is replaced.
   expect(saved[0]?.position).toEqual({
     synchronizationUnitId: "unit-1",
@@ -1242,7 +1304,7 @@ test("listeners without an account resume from the device's listening position",
 });
 
 test("a change of the signed-in user unloads the element", async () => {
-  const { host, element, mediaMetadata, saved, setAccount } = createHost({ subject: "user-1" });
+  const { host, element, mediaSession, saved, setAccount } = createHost({ subject: "user-1" });
   host.showConversion("first", FIRST);
   host.loadShown();
   element.loadMetadata(15);
@@ -1254,7 +1316,7 @@ test("a change of the signed-in user unloads the element", async () => {
 
   expect(element.calls.slice(-3)).toEqual(["pause", "removeAttribute:src", "load"]);
   expect(saved.map(({ subject }) => subject)).toEqual(["user-1", "user-1"]);
-  expect(mediaMetadata).toEqual(["First", null]);
+  expect(mediaSession.published).toEqual(["First", null]);
   // The shown audiobook stays unloaded until the new user plays it.
   expect(host.getSnapshot().loaded).toBeNull();
   host.playShown();
@@ -1262,7 +1324,7 @@ test("a change of the signed-in user unloads the element", async () => {
 });
 
 test("unloading leaves the element empty and paused", async () => {
-  const { host, element, mediaMetadata } = createHost();
+  const { host, element, mediaSession } = createHost();
   host.showConversion("first", FIRST);
   host.loadShown();
   host.play();
@@ -1272,5 +1334,275 @@ test("unloading leaves the element empty and paused", async () => {
 
   expect(element.calls.slice(-3)).toEqual(["pause", "removeAttribute:src", "load"]);
   expect(host.getSnapshot().loaded).toBeNull();
-  expect(mediaMetadata).toEqual(["First", null]);
+  expect(mediaSession.published).toEqual(["First", null]);
+});
+
+test("loading publishes the audiobook to the system's media controls, paused at its position", () => {
+  const { host, mediaSession } = createHost({ subject: "user-1" });
+  host.showConversion(
+    "first",
+    createAudiobook("First", { synchronizationUnitId: "unit-2", offsetMilliseconds: 1_500 }),
+  );
+
+  host.loadShown();
+
+  expect(mediaSession.published).toEqual(["First"]);
+  expect(mediaSession.handlers).not.toBeNull();
+  expect(mediaSession.playbackState).toBe("paused");
+  // The restored position is reported before the browser read the track.
+  expect(mediaSession.positionState).toEqual({
+    durationMilliseconds: 15_000,
+    positionMilliseconds: 5_500,
+    playbackRate: 1,
+  });
+});
+
+test("unloading clears the system's media controls", () => {
+  const { host, mediaSession } = createHost();
+  host.showConversion("first", FIRST);
+  host.loadShown();
+
+  host.unload();
+
+  expect(mediaSession).toMatchObject({
+    published: ["First", null],
+    playbackState: "none",
+    positionState: null,
+    handlers: null,
+  });
+});
+
+test("releasing a track being deleted clears the system's media controls", () => {
+  const { host, mediaSession } = createHost();
+  host.showConversion("first", FIRST);
+  host.loadShown();
+
+  host.release("first");
+
+  expect(mediaSession).toMatchObject({
+    published: ["First", null],
+    playbackState: "none",
+    positionState: null,
+    handlers: null,
+  });
+});
+
+test("a track found gone clears the system's media controls", async () => {
+  const { host, clock, mediaSession } = createHost({
+    fetchAudiobook: () => Promise.resolve(null),
+  });
+  host.showConversion("first", FIRST);
+  host.loadShown();
+
+  clock.now = TWELVE_HOURS_MILLISECONDS + 1;
+  host.play();
+  await settle();
+
+  expect(mediaSession).toMatchObject({
+    published: ["First", null],
+    playbackState: "none",
+    positionState: null,
+    handlers: null,
+  });
+});
+
+test("loading another audiobook clears the system's media controls before publishing it", () => {
+  const { host, mediaSession } = createHost();
+  host.showConversion("first", FIRST);
+  host.loadShown();
+  host.hideConversion("first");
+  host.showConversion("second", SECOND);
+
+  host.loadShown();
+
+  expect(mediaSession.published).toEqual(["First", null, "Second"]);
+  expect(mediaSession.calls.slice(-3)).toEqual([
+    "clear",
+    "playbackState:paused",
+    "positionState:0/15000@1",
+  ]);
+  expect(mediaSession.handlers).not.toBeNull();
+});
+
+test("the system's media controls are told the state on each playback change, and not on time updates", async () => {
+  const { host, element, mediaSession } = createHost();
+  host.showConversion("first", FIRST);
+  host.loadShown();
+  element.loadMetadata(15.2);
+  mediaSession.calls.length = 0;
+
+  host.play();
+  element.fire("play");
+  element.readyState = HAVE_ENOUGH_DATA;
+  element.fire("playing");
+  element.advanceTo(3);
+  element.advanceTo(3.25);
+  element.setPlaybackRate(1.5);
+  element.readyState = HAVE_METADATA;
+  element.fire("waiting");
+  element.readyState = HAVE_ENOUGH_DATA;
+  element.fire("playing");
+  host.pause();
+  await settle();
+
+  expect(mediaSession.calls).toEqual([
+    // `play` before the element has data: playing, but waiting for it.
+    "playbackState:playing, waiting",
+    "positionState:0/15000@1",
+    "playbackState:playing",
+    "positionState:0/15000@1",
+    "playbackState:playing",
+    "positionState:3250/15000@1.5",
+    // While it waits for data, the system must not move the position on.
+    "playbackState:playing, waiting",
+    "positionState:3250/15000@1.5",
+    "playbackState:playing",
+    "positionState:3250/15000@1.5",
+    "playbackState:paused",
+    "positionState:3250/15000@1.5",
+  ]);
+});
+
+test("a seek and the end of the audiobook are reported to the system's media controls", () => {
+  const { host, element, mediaSession } = createHost();
+  host.showConversion("first", FIRST);
+  host.loadShown();
+  element.loadMetadata(15);
+  mediaSession.calls.length = 0;
+
+  host.getSnapshot().loaded?.player.seekTo(9_000);
+  element.fire("seeked");
+  element.paused = true;
+  element.ended = true;
+  element.fire("ended");
+
+  expect(mediaSession.calls).toEqual([
+    "playbackState:paused",
+    "positionState:9000/15000@1",
+    // A finished audiobook starts over.
+    "playbackState:paused, ended",
+    "positionState:0/15000@1",
+  ]);
+});
+
+test("the reported duration is the narration track's, and the position is clamped to it", () => {
+  const { host, element, mediaSession } = createHost();
+  host.showConversion("first", FIRST);
+  host.loadShown();
+  // The file reads longer than the track's listed duration.
+  element.loadMetadata(15.6);
+
+  element.advanceTo(15.4);
+  element.fire("seeked");
+
+  expect(mediaSession.positionState).toEqual({
+    durationMilliseconds: 15_000,
+    positionMilliseconds: 15_000,
+    playbackRate: 1,
+  });
+});
+
+test("a seek before metadata is loaded is reported as the position", () => {
+  const { host, element, mediaSession } = createHost();
+  host.showConversion("first", FIRST);
+  host.loadShown();
+
+  host.getSnapshot().loaded?.player.seekTo(6_000);
+  host.play();
+  element.fire("play");
+
+  expect(mediaSession.calls.slice(-2)).toEqual([
+    "playbackState:playing, waiting",
+    "positionState:6000/15000@1",
+  ]);
+});
+
+test("Play and Pause from the system's media controls play and pause like Cup's own, and Pause saves", async () => {
+  const { host, element, mediaSession, saved } = createHost();
+  host.showConversion("first", FIRST);
+  host.loadShown();
+  element.loadMetadata(15);
+
+  mediaSession.action().play();
+  expect(element.calls.at(-1)).toBe("play");
+  element.advanceTo(4);
+
+  mediaSession.action().pause();
+  await settle();
+
+  expect(element.paused).toBe(true);
+  expect(saved.at(-1)?.position).toEqual({
+    synchronizationUnitId: "unit-2",
+    offsetMilliseconds: 0,
+  });
+});
+
+test("Play from the system's media controls renews a stale track URL first", async () => {
+  const { host, element, clock, fetchedConversionIds, mediaSession } = createHost({
+    fetchAudiobook: () => Promise.resolve(withTrackUrl(FIRST, RENEWED_TRACK_URL)),
+  });
+  host.showConversion("first", FIRST);
+  host.loadShown();
+  element.loadMetadata(15);
+  element.advanceTo(5);
+
+  clock.now = TWELVE_HOURS_MILLISECONDS + 1;
+  mediaSession.action().play();
+  await settle();
+
+  expect(fetchedConversionIds).toEqual(["first"]);
+  expect(element.calls.slice(-2)).toEqual([`src:${RENEWED_TRACK_URL}`, "play"]);
+});
+
+test("Stop from the system's media controls pauses, saves and keeps the audiobook loaded", async () => {
+  const { host, element, mediaSession, saved } = createHost();
+  host.showConversion("first", FIRST);
+  host.loadShown();
+  element.loadMetadata(15);
+  host.play();
+  element.advanceTo(11);
+
+  mediaSession.action().stop();
+  await settle();
+
+  expect(element.paused).toBe(true);
+  expect(saved.at(-1)?.position).toEqual({
+    synchronizationUnitId: "unit-3",
+    offsetMilliseconds: 1_000,
+  });
+  expect(host.getSnapshot().loaded?.conversionId).toBe("first");
+  expect(mediaSession.handlers).not.toBeNull();
+});
+
+test("a seek from the system's media controls sets the element's time and saves it", async () => {
+  const { host, element, mediaSession, saved } = createHost();
+  host.showConversion("first", FIRST);
+  host.loadShown();
+  element.loadMetadata(15);
+
+  mediaSession.action().seekTo(7_250);
+  await settle();
+
+  expect(element.calls.at(-1)).toBe("currentTime:7.25");
+  expect(saved.at(-1)?.position).toEqual({
+    synchronizationUnitId: "unit-2",
+    offsetMilliseconds: 3_250,
+  });
+});
+
+test("skips from the system's media controls use the system's interval, or 15 s without one", () => {
+  const { host, element, mediaSession } = createHost();
+  host.showConversion("first", FIRST);
+  host.loadShown();
+  element.loadMetadata(15);
+  element.advanceTo(2);
+
+  mediaSession.action().seekForward(10_000);
+  expect(element.calls.at(-1)).toBe("currentTime:12");
+  mediaSession.action().seekBackward(undefined);
+  expect(element.calls.at(-1)).toBe("currentTime:0");
+  mediaSession.action().seekForward(undefined);
+  expect(element.calls.at(-1)).toBe("currentTime:14.999");
+  mediaSession.action().seekBackward(10_000);
+  expect(element.calls.at(-1)).toBe("currentTime:4.999");
 });

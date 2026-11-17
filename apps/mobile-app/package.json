@@ -1,15 +1,27 @@
 {
   "name": "@cup/mobile-app",
   "private": true,
+  "imports": {
+    "#scripts/*": "./scripts/*"
+  },
+  "exports": {
+    "./android-sdk": {
+      "types": "./dist/types/android-sdk.d.mts",
+      "default": "./scripts/android-sdk.mts"
+    }
+  },
   "scripts": {
     "android:run": "node scripts/android-run.mts",
     "build": "turbo run turbo:build && pnpm run native:sync",
+    "jvm:check": "node scripts/jvm-toolchain.mts",
     "lint": "turbo run turbo:lint",
     "lint:fix": "turbo run turbo:lint:fix",
     "native:sync": "cap sync android && cap sync ios",
+    "test": "node scripts/test-jvm.mts",
     "turbo:build": "tsc --build",
     "turbo:lint": "oxlint --type-aware --max-warnings 0 .",
-    "turbo:lint:fix": "pnpm run turbo:lint --fix"
+    "turbo:lint:fix": "pnpm run turbo:lint --fix",
+    "turbo:test": "pnpm run test"
   },
   "dependencies": {
     "@aparajita/capacitor-secure-storage": "8.0.1",

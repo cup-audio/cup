@@ -16,6 +16,13 @@ export type AndroidLaunchArguments = LaunchArguments & {
    * build's fake that signs in against the fake auth provider.
    */
   readonly realGoogleSignIn?: boolean;
+  /**
+   * How long the native player treats signed URLs as valid; pass the test Worker's
+   * `signedUrlLifetimeSeconds`.
+   */
+  readonly signedUrlLifetimeSeconds?: number;
+  /** Media3's foreground grace after a pause, instead of 10 minutes. */
+  readonly foregroundGraceSeconds?: number;
 };
 
 const APP_PACKAGE = "audio.cup.app";
@@ -24,7 +31,25 @@ const MAIN_ACTIVITY = `${APP_PACKAGE}/.MainActivity`;
 const API_ORIGIN_EXTRA = "cupTestApiOrigin";
 /** Read only by the debug build's `DebugApplication`. */
 const REAL_GOOGLE_SIGN_IN_EXTRA = "cupTestRealGoogleSignIn";
+/** Read only by the debug build's `TestPlaybackTimings`. */
+const SIGNED_URL_LIFETIME_EXTRA = "cupTestSignedUrlLifetimeSeconds";
+/** Read only by the debug build's `TestPlaybackTimings`. */
+const FOREGROUND_GRACE_EXTRA = "cupTestForegroundGraceSeconds";
 const WEBVIEW_CONTEXT = `WEBVIEW_${APP_PACKAGE}`;
+/** Received only by the debug build's `FocusProbePlugin`. */
+const FOCUS_PROBE_ACTION = `${APP_PACKAGE}.FOCUS_PROBE`;
+/** System UI's media controls in the notification shade. */
+const SYSTEM_UI_PACKAGE = "com.android.systemui";
+
+/** Who takes audio focus from Cup through the debug build's focus probe, or gives it back. */
+export type FocusProbeRequest =
+  /** As a phone call: a transient loss. */
+  | "transient"
+  /** As a navigation prompt: a transient loss that allows ducking. */
+  | "duck"
+  /** As another media app: a permanent loss. */
+  | "full"
+  | "abandon";
 
 /** Opens an Appium session on the run's emulator, addressed by serial, without launching Cup. */
 export async function openAndroidAppDevice(target: AndroidTarget): Promise<AndroidAppDevice> {
@@ -130,6 +155,77 @@ export class AndroidAppDevice implements AppDevice {
       text,
       ...launchArgumentExtras(launchArguments),
     ]);
+  }
+
+  /**
+   * Opens Cup with the arguments of the last launch without stopping it first, as tapping its icon
+   * does: a process that still runs, such as one kept by a playing media session, stays.
+   */
+  async reopen(): Promise<void> {
+    if (this.lastLaunchArguments === undefined) {
+      throw new Error("Cup has not been launched in this spec file, so it cannot be reopened.");
+    }
+    await this.adb([
+      "shell",
+      "am",
+      "start",
+      "-W",
+      "-n",
+      MAIN_ACTIVITY,
+      ...launchArgumentExtras(this.lastLaunchArguments),
+    ]);
+  }
+
+  /**
+   * Swipes Cup's task away in the recent apps screen, which destroys its activity; Android then
+   * tells its running services through `onTaskRemoved`.
+   */
+  async removeFromRecents(): Promise<void> {
+    await this.adb(["shell", "input", "keyevent", "KEYCODE_APP_SWITCH"]);
+    await this.driver.switchContext("NATIVE_APP");
+    // The launcher shows the recent apps with Cup's card, the latest task, in the middle. Its
+    // snapshot exists only there, unlike a "Cup" label in Cup's own screen.
+    const card = this.driver.$(`android=new UiSelector().resourceIdMatches(".*:id/snapshot")`);
+    await card.waitForExist({ timeout: 10_000 });
+    // The card slides into place; swipe it once it has stopped.
+    let location = await card.getLocation();
+    await waitFor(
+      "Cup's card in the recent apps to settle",
+      async () => {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        const previous = location;
+        location = await card.getLocation();
+        return location.x === previous.x && location.y === previous.y ? true : undefined;
+      },
+      10_000,
+    );
+    const { x, y } = location;
+    const { width, height } = await card.getSize();
+    const centerX = Math.round(x + width / 2);
+    await this.adb([
+      "shell",
+      "input",
+      "swipe",
+      String(centerX),
+      String(Math.round(y + height / 2)),
+      String(centerX),
+      "0",
+      "200",
+    ]);
+    await waitFor(
+      "Cup's task to leave the recent apps",
+      async () => {
+        const { stdout } = await this.adb(["shell", "dumpsys", "activity", "recents"]);
+        return new RegExp(
+          String.raw`\bA=(?:\d+:)?${APP_PACKAGE.replaceAll(".", String.raw`\.`)}\b`,
+          "u",
+        ).test(stdout)
+          ? undefined
+          : true;
+      },
+      10_000,
+    );
+    await this.adb(["shell", "input", "keyevent", "KEYCODE_HOME"]);
   }
 
   async relaunch(): Promise<void> {
@@ -245,6 +341,151 @@ export class AndroidAppDevice implements AppDevice {
     await this.adb(["shell", "input", "keyevent", "KEYCODE_BACK"]);
   }
 
+  /**
+   * Presses a media key, such as `KEYCODE_MEDIA_PAUSE`, as a headset or a keyboard does. Android
+   * delivers it to the active media session.
+   */
+  async pressMediaKey(keyCode: `KEYCODE_MEDIA_${string}`): Promise<void> {
+    await this.adb(["shell", "input", "keyevent", keyCode]);
+  }
+
+  /** Turns the screen off, as the power button does; the keyguard has no PIN. */
+  async turnScreenOff(): Promise<void> {
+    await this.adb(["shell", "input", "keyevent", "KEYCODE_SLEEP"]);
+  }
+
+  /** Turns the screen on and dismisses the keyguard, which has no PIN. */
+  async turnScreenOnAndUnlock(): Promise<void> {
+    await this.adb(["shell", "input", "keyevent", "KEYCODE_WAKEUP"]);
+    await this.adb(["shell", "wm", "dismiss-keyguard"]);
+  }
+
+  /** Sends a command to the emulator's console, such as `gsm call <number>` for an incoming call. */
+  async emulatorConsole(...args: string[]): Promise<string> {
+    const { stdout } = await this.adb(["emu", ...args]);
+    return stdout;
+  }
+
+  /** Takes audio focus from Cup, or gives it back, through the debug build's focus probe. */
+  async probeAudioFocus(request: FocusProbeRequest): Promise<void> {
+    await this.adb([
+      "shell",
+      "am",
+      "broadcast",
+      "-p",
+      APP_PACKAGE,
+      "-a",
+      FOCUS_PROBE_ACTION,
+      "--es",
+      "focus",
+      request,
+    ]);
+  }
+
+  /**
+   * Whether Android's cached apps freezer has frozen Cup's main process, from `dumpsys activity
+   * processes`.
+   */
+  async isFrozen(): Promise<boolean> {
+    const { stdout } = await this.adb(["shell", "dumpsys", "activity", "processes", APP_PACKAGE]);
+    const record = stdout
+      .split(/\n(?= {2}\*)/u)
+      .find((entry) => new RegExp(`ProcessRecord\\{\\w+ \\d+:${APP_PACKAGE}/`, "u").test(entry));
+    const frozen =
+      record === undefined ? undefined : /\bisFrozen=(true|false)\b/u.exec(record)?.[1];
+    if (frozen === undefined) {
+      throw new Error(`Cup's process record shows no freezer state:\n${stdout}`);
+    }
+    return frozen === "true";
+  }
+
+  /**
+   * Taps a button of the media controls in the notification shade by its description, such as
+   * `Forward 15 seconds`, then closes the shade.
+   */
+  async tapMediaControl(description: string): Promise<void> {
+    await this.inNotificationShade(async () => {
+      const button = this.driver.$(
+        `android=new UiSelector().packageName("${SYSTEM_UI_PACKAGE}").description("${description}")`,
+      );
+      await button.waitForExist({ timeout: 10_000 });
+      await button.click();
+    });
+  }
+
+  /**
+   * Drags the seek bar of the media controls in the notification shade to `fraction` of its width,
+   * then closes the shade.
+   */
+  async dragMediaControlsSeekBar(fraction: number): Promise<void> {
+    await this.inNotificationShade(async () => {
+      const seekBar = this.driver.$(
+        `android=new UiSelector().packageName("${SYSTEM_UI_PACKAGE}").className("android.widget.SeekBar")`,
+      );
+      await seekBar.waitForExist({ timeout: 10_000 });
+      const { x, y } = await seekBar.getLocation();
+      const { width, height } = await seekBar.getSize();
+      const centerY = Math.round(y + height / 2);
+      await this.adb([
+        "shell",
+        "input",
+        "swipe",
+        String(Math.round(x + width * 0.05)),
+        String(centerY),
+        String(Math.round(x + width * fraction)),
+        String(centerY),
+        "600",
+      ]);
+    });
+  }
+
+  /**
+   * The progress the media controls in the notification shade show for the playing session, such as
+   * `9 seconds of 19 seconds`: System UI's own reading of the session's position and duration,
+   * which `dumpsys media_session` does not print. It opens the shade and closes it again.
+   */
+  async readMediaControlsProgress(): Promise<string> {
+    return this.inNotificationShade(async () => {
+      const progress = this.driver.$(
+        `android=new UiSelector().packageName("${SYSTEM_UI_PACKAGE}").descriptionMatches(".+ of .+")`,
+      );
+      await progress.waitForExist({ timeout: 10_000 });
+      return (await progress.getAttribute("content-desc")) ?? "";
+    });
+  }
+
+  /**
+   * Dismisses the media controls in the notification shade as a listener does since Android 13,
+   * where they replace the media notification: a long press on the player, then "Hide". System UI
+   * then cancels the notification, which Media3 hears as its dismissal. It is offered only once the
+   * session's service left the foreground.
+   */
+  async hideMediaControls(): Promise<void> {
+    await this.inNotificationShade(async () => {
+      const seekBar = this.driver.$(
+        `android=new UiSelector().packageName("${SYSTEM_UI_PACKAGE}").className("android.widget.SeekBar")`,
+      );
+      await seekBar.waitForExist({ timeout: 10_000 });
+      const { x, y } = await seekBar.getLocation();
+      const { width } = await seekBar.getSize();
+      // Above the seek bar, on the player's title; a swipe that stays in place is a long press.
+      const pressX = String(Math.round(x + width / 2));
+      const pressY = String(Math.round(y - 60));
+      await this.adb(["shell", "input", "swipe", pressX, pressY, pressX, pressY, "1500"]);
+      const hide = this.driver.$(
+        `android=new UiSelector().packageName("${SYSTEM_UI_PACKAGE}").text("Hide")`,
+      );
+      await hide.waitForExist({ timeout: 10_000 });
+      await hide.click();
+    });
+  }
+
+  /** The output of `dumpsys <service>`, such as `media_session` or `activity services`. */
+  async dumpsys(service: string, ...args: string[]): Promise<string> {
+    const { stdout } = await this.adb(["shell", "dumpsys", service, ...args]);
+    return stdout;
+  }
+
   async continueGoogleSignIn(): Promise<void> {
     // The debug build's sign-in fake answers without showing anything.
   }
@@ -254,6 +495,20 @@ export class AndroidAppDevice implements AppDevice {
     await this.driver.switchContext("NATIVE_APP");
     await waitFor("Cup's WebView", () => this.findWebViewContext(), 60_000);
     await this.driver.switchContext(WEBVIEW_CONTEXT);
+    // Reopening Cup in a process that still runs, such as one a playing media session kept, creates
+    // a new WebView page in the same context and closes the one Chromedriver was attached to.
+    await waitFor(
+      "Cup's WebView page",
+      async () => {
+        const handle = (await this.driver.getWindowHandles()).at(-1);
+        if (handle === undefined) {
+          return undefined;
+        }
+        await this.driver.switchToWindow(handle);
+        return true;
+      },
+      60_000,
+    );
     return this.driver;
   }
 
@@ -283,6 +538,17 @@ export class AndroidAppDevice implements AppDevice {
 
   async close(): Promise<void> {
     await this.driver.deleteSession();
+  }
+
+  /** Opens the notification shade for `act` and closes it again. */
+  private async inNotificationShade<Result>(act: () => Promise<Result>): Promise<Result> {
+    await this.driver.switchContext("NATIVE_APP");
+    await this.driver.openNotifications();
+    try {
+      return await act();
+    } finally {
+      await this.pressBack();
+    }
   }
 
   /** Cup's WebView context, once Appium lists it. */
@@ -317,6 +583,12 @@ function launchArgumentExtras(launchArguments: AndroidLaunchArguments): string[]
     ...(launchArguments.realGoogleSignIn === true
       ? ["--ez", REAL_GOOGLE_SIGN_IN_EXTRA, "true"]
       : []),
+    ...(launchArguments.signedUrlLifetimeSeconds === undefined
+      ? []
+      : ["--ei", SIGNED_URL_LIFETIME_EXTRA, String(launchArguments.signedUrlLifetimeSeconds)]),
+    ...(launchArguments.foregroundGraceSeconds === undefined
+      ? []
+      : ["--ei", FOREGROUND_GRACE_EXTRA, String(launchArguments.foregroundGraceSeconds)]),
   ];
 }
 

@@ -1,10 +1,10 @@
 ---
-status: partially superseded by ADR 0013
+status: partially superseded by ADR 0013 and ADR 0029
 ---
 
 # Serve one narration track and play it with one audio element
 
-[ADR 0013](0013-cache-cover-images-in-the-browser-for-a-day.md) supersedes this decision for the token lifetime only: signed media URLs now take the start of the current UTC day as their issue time and expire 48 hours after it, instead of 24 hours after issuance. Everything else below remains accepted, and the original decisions are preserved as historical rationale.
+[ADR 0013](0013-cache-cover-images-in-the-browser-for-a-day.md) supersedes this decision for the token lifetime only: signed media URLs now take the start of the current UTC day as their issue time and expire 48 hours after it, instead of 24 hours after issuance. [ADR 0029](0029-play-the-narration-track-in-the-android-app-with-a-native-media3-exoplayer.md) supersedes three bullets: "One `<audio>` element" and "Native players removed" for Android only, whose app now plays the narration track with a native Media3 ExoPlayer, and "System media controls use browser defaults" for every platform, which the web player's media session port replaces. Everything else below remains accepted, and the original decisions are preserved as historical rationale.
 
 [ADR 0008](0008-synthesize-the-whole-narration-document.md) kept one MP3 per audio segment and made each player stitch them into one timeline: two alternating `<audio>` elements, a silence file and an XState machine in the browser, and native playlists on Android and iOS. On Android and iOS the browser player pauses 10–20 seconds after the device is locked, and on Safari pressing Play sometimes plays two audios at once. [patricktree/cup#58](https://github.com/patricktree/cup/issues/58) traced the locked pause to the element pair: the next segment starts from an `ended` handler, which a locked device does not run in time. Media authorization was a cookie that expires with the bearer token (about an hour) and that the Capacitor WebViews never send. The map [patricktree/cup#56](https://github.com/patricktree/cup/issues/56) and the spec [patricktree/cup#64](https://github.com/patricktree/cup/issues/64) (2026-10-27) chose to fix playback by simplifying delivery.
 
@@ -37,4 +37,4 @@ This partially supersedes [ADR 0008](0008-synthesize-the-whole-narration-documen
 
 ### Implementation status
 
-Implemented on 2026-10-27 by patricktree/cup#65 to patricktree/cup#71 (pull request patricktree/cup#73). The [conversion architecture](../architecture/conversion.md#playback) describes the route and the player, and the [authentication architecture](../architecture/authentication.md#signed-media-url) the signed media URL and its renewal. The operator verified playback on physical devices in patricktree/cup#72.
+Implemented on 2026-10-27 by patricktree/cup#65 to patricktree/cup#71 (pull request patricktree/cup#73). The [conversion architecture](../architecture/conversion.md#delivery-and-lifecycle) describes the route, the [playback architecture](../architecture/playback.md) the player, and the [authentication architecture](../architecture/authentication.md#signed-media-url) the signed media URL and its renewal. The operator verified playback on physical devices in patricktree/cup#72.
