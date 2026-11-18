@@ -79,8 +79,8 @@ export function PlayerSheet({ statusLine }: { statusLine: string }): React.JSX.E
           positionMilliseconds: shown.resumePositionMilliseconds,
           durationMilliseconds: audiobook.narrationTrack.durationMilliseconds,
           isPlaying: false,
-          seekTo: (positionMilliseconds) => host.loadShown()?.seekTo(positionMilliseconds),
-          skipBy: (deltaMilliseconds) => host.loadShown()?.skipBy(deltaMilliseconds),
+          seekTo: host.seekShown,
+          skipBy: host.skipShown,
           togglePlayback: () => host.playShown(),
         }}
       />

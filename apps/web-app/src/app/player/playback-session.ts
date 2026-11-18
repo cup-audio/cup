@@ -1,7 +1,13 @@
+import { createActor, type Actor } from "xstate";
+
 import type { Audiobook, NarrationTrack, PlaybackPosition } from "@cup/listener-api.routes";
 
 import { findUnitIndexAt, type AudiobookTimeline } from "#src/app/player/audiobook-timeline.ts";
-import { describeError } from "#src/errors.ts";
+import {
+  positionSavesMachine,
+  type PositionSavesMachineSnapshot,
+} from "#src/app/player/position-saves-machine.ts";
+import { reportFailure } from "#src/report-failure.ts";
 
 /** A conversion whose narration document is prepared, whatever the state of its audio. */
 export type PreparedAudiobook = Extract<
@@ -39,19 +45,27 @@ export type PlaybackSessionServices = {
 };
 
 export const SAVE_INTERVAL_MILLISECONDS = 5_000;
-/** How long after a failed save its position is saved again, unless a newer save comes first. */
-export const SAVE_RETRY_DELAY_MILLISECONDS = 15_000;
-/** Shown once a failed save's retry failed too; the session keeps trying. */
-export const SAVE_RETRY_FAILURE_MESSAGE =
-  "Your listening position could not be saved yet. Cup keeps trying.";
-const SAVE_FAILURE_TITLE = "Your listening position could not be saved.";
-
-/** A save the listener's playback asked for, or the retry of one that failed. */
-type SaveAttempt = "new" | "retry";
-type SaveRequest = { position: PlaybackPosition; attempt: SaveAttempt; saveNumber: number };
 
 export function isPlayableAudiobook(audiobook: PreparedAudiobook): audiobook is PlayableAudiobook {
   return audiobook.status === "ready" && audiobook.narrationTrack !== undefined;
+}
+
+/**
+ * Why a listening session on the audiobook cannot be created, or `null` when it can: its narration
+ * track must list one start offset per synchronization unit. The player host checks this before it
+ * replaces the loaded audiobook.
+ */
+export function findSessionRefusal(
+  conversionId: string,
+  { narrationTrack, narrationDocument }: PlayableAudiobook,
+): Error | null {
+  const unitCount = narrationDocument.synchronizationUnits.length;
+  if (narrationTrack.startMilliseconds.length === unitCount) {
+    return null;
+  }
+  return new Error(
+    `Audiobook ${conversionId} has ${narrationTrack.startMilliseconds.length} start offsets for ${unitCount} synchronization units.`,
+  );
 }
 
 /**
@@ -80,7 +94,8 @@ export function toTrackPositionMilliseconds(
  * One subject's listening session on one loaded audiobook.
  *
  * It converts between listening positions, a synchronization unit and an offset in its audio, and
- * positions on the narration track, and it owns the save cadence and order.
+ * positions on the narration track, and it owns the save cadence and order, which the XState
+ * machine in `position-saves-machine.ts` models (ADR 0009).
  */
 export class PlaybackSession {
   readonly conversionId: string;
@@ -91,26 +106,17 @@ export class PlaybackSession {
   readonly initialPositionMilliseconds: number;
 
   private readonly services: PlaybackSessionServices;
-  private lastSavedAt = Number.NEGATIVE_INFINITY;
-  private saves: Promise<void> = Promise.resolve();
-  /** Counts save requests, so only the latest one's failure arms a retry. */
-  private latestSaveNumber = 0;
-  /** Cancels the armed retry of the latest position, whose save failed. */
-  private cancelArmedRetry: (() => void) | null = null;
-  /** When the saves started failing for a reason that can pass; `null` after a successful one. */
-  private failingSince: number | null = null;
+  private readonly saves: Actor<typeof positionSavesMachine>;
   private saveFailure: string | null = null;
   private readonly saveFailureListeners = new Set<() => void>();
-  private isClosed = false;
 
   constructor(request: PlaybackSessionRequest, services: PlaybackSessionServices) {
-    const { narrationTrack, narrationDocument } = request.audiobook;
-    const unitCount = narrationDocument.synchronizationUnits.length;
-    if (narrationTrack.startMilliseconds.length !== unitCount) {
-      throw new Error(
-        `Audiobook ${request.conversionId} has ${narrationTrack.startMilliseconds.length} start offsets for ${unitCount} synchronization units.`,
-      );
+    const refusal = findSessionRefusal(request.conversionId, request.audiobook);
+    if (refusal) {
+      throw refusal;
     }
+
+    const { narrationTrack } = request.audiobook;
 
     this.conversionId = request.conversionId;
     this.audiobook = request.audiobook;
@@ -121,6 +127,17 @@ export class PlaybackSession {
       request.audiobook,
       request.position,
     );
+    this.saves = createActor(positionSavesMachine, {
+      input: { services, subject: request.subject },
+    });
+    this.saves.subscribe({
+      next: (snapshot) => this.publishSaveFailure(snapshot),
+      error: (error: unknown) => {
+        console.error("The listening session stopped saving positions.", error);
+        reportFailure("The listening session stopped saving positions.")(error);
+      },
+    });
+    this.saves.start();
   }
 
   /** The listening position at a position on the narration track. */
@@ -144,7 +161,13 @@ export class PlaybackSession {
    * a newer save comes first.
    */
   save = (positionMilliseconds: number): Promise<void> =>
-    this.enqueueSave(this.listeningPositionAt(positionMilliseconds), "new");
+    new Promise((settle) => {
+      this.saves.send({
+        type: "SAVE",
+        position: this.listeningPositionAt(positionMilliseconds),
+        resolveSave: settle,
+      });
+    });
 
   /**
    * The failure to show the listener, in plain words, or `null`. A failure that a retry may fix
@@ -162,102 +185,28 @@ export class PlaybackSession {
 
   /** Stops retrying a failed save, which the session then no longer reports. */
   close = () => {
-    this.isClosed = true;
-    this.disarmRetry();
+    this.saves.send({ type: "CLOSE" });
     this.saveFailureListeners.clear();
   };
 
   /** Saves during playback, at most every `SAVE_INTERVAL_MILLISECONDS`. */
   saveIfDue = (positionMilliseconds: number): Promise<void> => {
-    if (this.services.now() - this.lastSavedAt < SAVE_INTERVAL_MILLISECONDS) {
+    const { lastSavedAt } = this.saves.getSnapshot().context;
+    if (this.services.now() - lastSavedAt < SAVE_INTERVAL_MILLISECONDS) {
       return Promise.resolve();
     }
 
     return this.save(positionMilliseconds);
   };
 
-  private enqueueSave(position: PlaybackPosition, attempt: SaveAttempt): Promise<void> {
-    this.disarmRetry();
-    this.latestSaveNumber += 1;
-    const request: SaveRequest = { position, attempt, saveNumber: this.latestSaveNumber };
-
-    this.lastSavedAt = this.services.now();
-    const save = this.saves.then(() => this.writeSave(request));
-    // A failing listener or service must not stop the saves queued after this one.
-    this.saves = save.catch(() => undefined);
-    return save;
-  }
-
-  private async writeSave(request: SaveRequest) {
-    // A retry queued before the session closed, such as for a track being deleted, has no use.
-    if (this.isClosed && request.attempt === "retry") {
+  private publishSaveFailure({ context: { saveFailure } }: PositionSavesMachineSnapshot) {
+    if (saveFailure === this.saveFailure) {
       return;
     }
 
-    try {
-      // The request layer checks the subject when it resolves the token, right before dispatch.
-      await this.services.savePosition(request.position, this.subject);
-    } catch (error) {
-      this.handleSaveError(error, request);
-      return;
-    }
-    this.failingSince = null;
-    this.setSaveFailure(null);
-  }
-
-  private handleSaveError(error: unknown, { position, attempt, saveNumber }: SaveRequest) {
-    const description = describeError(error, SAVE_FAILURE_TITLE);
-    if (!description.isRetryable) {
-      // A lasting refusal, such as a signed-out listener; saving again would be refused too.
-      this.setSaveFailure(description.detail ?? description.title);
-      return;
-    }
-
-    // A newer save is queued already and carries a later position; its outcome counts.
-    if (saveNumber !== this.latestSaveNumber) {
-      return;
-    }
-
-    this.failingSince ??= this.services.now();
-    // During playback, newer saves replace the retry every few seconds; they stay quiet until saves
-    // have failed for as long as the retry delay.
-    const hasFailedForRetryDelay =
-      this.services.now() - this.failingSince >= SAVE_RETRY_DELAY_MILLISECONDS;
-    if (attempt === "retry" || hasFailedForRetryDelay) {
-      this.setSaveFailure(SAVE_RETRY_FAILURE_MESSAGE);
-    }
-    this.armRetry(position);
-  }
-
-  private setSaveFailure(failure: string | null) {
-    if (this.isClosed || failure === this.saveFailure) {
-      return;
-    }
-
-    this.saveFailure = failure;
+    this.saveFailure = saveFailure;
     for (const listener of this.saveFailureListeners) {
       listener();
     }
-  }
-
-  private armRetry(position: PlaybackPosition) {
-    if (this.isClosed) {
-      return;
-    }
-
-    const retry = () => {
-      void this.enqueueSave(position, "retry");
-    };
-    const cancelTimer = this.services.setRetryTimer(retry, SAVE_RETRY_DELAY_MILLISECONDS);
-    const stopReconnect = this.services.onReconnect(retry);
-    this.cancelArmedRetry = () => {
-      cancelTimer();
-      stopReconnect();
-    };
-  }
-
-  private disarmRetry() {
-    this.cancelArmedRetry?.();
-    this.cancelArmedRetry = null;
   }
 }

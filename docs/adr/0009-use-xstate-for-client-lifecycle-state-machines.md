@@ -1,5 +1,5 @@
 ---
-status: partially superseded by ADR 0011
+status: partially superseded by ADR 0011 and ADR 0034
 ---
 
 # Use XState for client lifecycle state machines
@@ -29,3 +29,7 @@ Two web app modules had grown into hand-rolled state machines. The account auth 
 - The facade adds an indirection: requests become events, and their results return through reply callbacks. Snapshots notify subscribers once per macrostep rather than at each assignment.
 - Machines can be tested directly in Node with fake actors, including results that arrive after their state was left.
 - Machine diagrams in the architecture pages describe the states and events, not every guard; the machine definition is authoritative.
+
+## Notes
+
+- 2026-11-18: [ADR 0034](0034-model-the-player-host-and-position-saves-as-xstate-machines.md) applies these rules to the player host and position saves, above the element, and supersedes two of them: a module that already has a services port passes it as the machine's input instead of through `machine.provide(...)`, and a machine reports an effect that throws instead of letting it stop the actor.
