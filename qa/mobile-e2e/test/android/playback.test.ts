@@ -767,7 +767,6 @@ function parseProgress(progress: string): [positionSeconds: number, durationSeco
   ];
 }
 
-/** Waits until the player's button reads `label`, as the plugin reports playing or not. */
 /**
  * Records every label the player's Play/Pause button shows from now on, starting with the current
  * one; `readPlayButtonLabels` returns them. A flicker lasts a few milliseconds, which polling
@@ -807,6 +806,7 @@ async function readPlayButtonLabels(webView: WebdriverIO.Browser): Promise<strin
   return labels.split(" ").filter((label) => label !== "");
 }
 
+/** Waits until the player's button reads `label`, as the plugin reports playing or not. */
 async function waitForPlayButton(webView: WebdriverIO.Browser, label: "Play" | "Pause") {
   await webView
     .$(`${PLAYER} button[aria-label="${label}"]`)
