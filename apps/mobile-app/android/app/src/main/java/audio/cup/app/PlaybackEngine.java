@@ -119,6 +119,16 @@ final class PlaybackEngine {
     /** A native stop is on its way, so the states until then report nothing. */
     private boolean isStopping;
 
+    /**
+     * Where the page just loaded an audiobook, whose state the engine does not report until the player
+     * shows anything else; null otherwise. The page shows that audiobook paused there already, and the
+     * page receives the load's reports only after its next command: a Play on an audiobook that was
+     * not loaded would show Pause, then this paused state, then Play's own report. Every command of
+     * the page calls {@link #endUnreportedLoad}, since its effect needs reporting.
+     */
+    @Nullable
+    private Long unreportedLoadPosition;
+
     /** Whether the listener heard playback at the last change, so the change to paused saves. */
     private boolean wasPlaying;
 
@@ -217,7 +227,8 @@ final class PlaybackEngine {
 
     /**
      * Sets the audiobook as the media item, paused. While the player was never prepared, this
-     * fetches nothing and shows no notification; in a running session, it replaces the item.
+     * fetches nothing and shows no notification; in a running session, it replaces the item. It
+     * reports nothing until the player shows more than the load, since the page shows it already.
      */
     void load(LoadRequest request) {
         MediaItem item = new MediaItem.Builder()
@@ -262,12 +273,13 @@ final class PlaybackEngine {
         // Loading another audiobook leaves it paused, as on the web.
         exoPlayer.pause();
         exoPlayer.setMediaItem(item, request.startPositionMilliseconds);
-        sendState(false);
+        unreportedLoadPosition = request.startPositionMilliseconds;
         updateExpiryCheck();
     }
 
     /** Prepares and plays; the first Play starts the service. Returns false without a loaded audiobook. */
     boolean play() {
+        endUnreportedLoad();
         ExoPlayer exoPlayer = loadedPlayer();
         if (exoPlayer == null || sessionPlayer == null) {
             return false;
@@ -287,6 +299,7 @@ final class PlaybackEngine {
     }
 
     boolean pause() {
+        endUnreportedLoad();
         ExoPlayer exoPlayer = loadedPlayer();
         if (exoPlayer == null) {
             return false;
@@ -299,6 +312,7 @@ final class PlaybackEngine {
     }
 
     boolean seekTo(long positionMilliseconds) {
+        endUnreportedLoad();
         ExoPlayer exoPlayer = loadedPlayer();
         if (exoPlayer == null) {
             return false;
@@ -312,6 +326,7 @@ final class PlaybackEngine {
 
     /** Skips from ExoPlayer's own position, which can be ahead of the page's last report. */
     boolean skipBy(long deltaMilliseconds) {
+        endUnreportedLoad();
         ExoPlayer exoPlayer = loadedPlayer();
         if (exoPlayer == null) {
             return false;
@@ -325,6 +340,7 @@ final class PlaybackEngine {
 
     /** Replaces the URLs, keeping the position. */
     boolean replaceUrls(SignedUrls urls) {
+        endUnreportedLoad();
         ExoPlayer exoPlayer = loadedPlayer();
         Loaded audiobook = loaded;
         if (exoPlayer == null || audiobook == null) {
@@ -347,6 +363,7 @@ final class PlaybackEngine {
      * the save is the ended session's, if its own failed. Reports nothing.
      */
     void close(PositionOnClose position) {
+        endUnreportedLoad();
         ExoPlayer exoPlayer = player;
         Loaded audiobook = loaded;
         if (exoPlayer != null && audiobook != null) {
@@ -477,6 +494,7 @@ final class PlaybackEngine {
         hasPlaybackError = false;
         isStopping = false;
         wasPlaying = false;
+        endUnreportedLoad();
         handler.removeCallbacks(expiryCheck);
         handler.removeCallbacks(saveCheck);
         cancelExpiryAlarm();
@@ -615,6 +633,25 @@ final class PlaybackEngine {
         return positionSave;
     }
 
+    /**
+     * Whether the player shows only what the page's load set, paused at its start position, which the
+     * page shows already. Anything else, such as Play or a seek from the notification, needs reporting.
+     */
+    private boolean showsOnlyTheLoad(Player exoPlayer) {
+        Long startPositionMilliseconds = unreportedLoadPosition;
+        return (
+            startPositionMilliseconds != null &&
+            !isPlayingForListener(exoPlayer) &&
+            exoPlayer.getPlayerError() == null &&
+            exoPlayer.getCurrentPosition() == startPositionMilliseconds
+        );
+    }
+
+    /** The player's state needs reporting from here on, after a command or a change beyond the load. */
+    private void endUnreportedLoad() {
+        unreportedLoadPosition = null;
+    }
+
     /** Paused for a transient loss of audio focus, such as a call, ExoPlayer still wants to play. */
     private boolean isPlayingForListener(Player exoPlayer) {
         return (
@@ -731,7 +768,10 @@ final class PlaybackEngine {
                 return;
             }
             followPlayback(isPlayingForListener(eventPlayer));
-            sendState(false);
+            if (!showsOnlyTheLoad(eventPlayer)) {
+                endUnreportedLoad();
+                sendState(false);
+            }
             updateExpiryCheck();
         }
 
