@@ -1,8 +1,8 @@
 # Cup brand assets
 
-Edit `assets/cup.svg` for the native app icons, splash screens, web favicon, and touch/social icon. `assets/cup-dark.svg` is the separate dark-mode web favicon. Keep their artwork coordinated when changing the logo.
+Edit `assets/cup.svg` for the native app icons, splash screens, web favicon, touch/social icon, and Google Play store listing icon. `assets/cup-dark.svg` is the separate dark-mode web favicon. Keep their artwork coordinated when changing the logo.
 
-`assets/outputs.json` defines raster output paths, sizes, padding through `markSize`, and transparency. Platform assets remain checked in so Xcode and Android Studio can build directly. Treat those generated files as outputs and edit the sources here.
+`assets/outputs.json` defines raster output paths, sizes, padding through `markSize`, and transparency. Platform assets remain checked in so Xcode and Android Studio can build directly. Treat those generated files as outputs and edit the sources here. One output is read by no build: `apps/mobile-app/store-assets/google-play/app-icon-512.png` is the Google Play store listing icon, which the operator uploads by hand ([store listing icon](../../apps/mobile-app/README.md#store-listing-icon)). It currently renders the same as the web app's `cup-icon.png` but is a separate output, so that changing the web icon never changes the store listing unnoticed.
 
 From the repository root:
 

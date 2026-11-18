@@ -51,7 +51,7 @@ Deletion notices go to the Resend API at the `RESEND_BASE_URL` variable, `https:
 
 ## Google Play developer account and app record
 
-Cup's Android app is distributed through the Google Play developer account `Cup Audio`, a personal account owned by the Google account behind Cup's Google Cloud project, with `support@cup.audio` as its developer email. Test builds reach testers through the internal testing track only; the store listing and a production release belong to [CUP-46](https://linear.app/cup-audio/issue/CUP-46/publish-the-android-app-to-google-play).
+Cup's Android app is distributed through the Google Play developer account `Cup Audio`, a personal account owned by the Google account behind Cup's Google Cloud project, with `support@cup.audio` as its developer email. Test builds reach testers through the internal testing track only; the store listing and a production release belong to [CUP-46](https://linear.app/cup-audio/issue/CUP-46/publish-the-android-app-to-google-play). Its app icon is already generated from the brand assets ([store listing icon](../apps/mobile-app/README.md#store-listing-icon)).
 
 - **Account.** Identity verification finished on 2026-11-17, about a day after registration ([#364](https://github.com/cup-audio/cup/issues/364)).
 - **App record.** A free app named Cup, created on 2026-11-18 ([#365](https://github.com/cup-audio/cup/issues/365)). The first upload fixed its package name `audio.cup.app` ([#447](https://github.com/cup-audio/cup/issues/447)).

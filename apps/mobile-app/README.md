@@ -160,6 +160,10 @@ Google requires the first bundle of an app to be uploaded in the Play Console; t
 
 Every later upload is `android:release` without `--skip-upload`.
 
+### Store listing icon
+
+Google Play shows a default icon until the store listing has one. `store-assets/google-play/app-icon-512.png` is that icon, generated from the [brand assets](#brand-assets) with the same white square and padding as the Android launcher and iOS app icons. Play asks for a 512 × 512, 32-bit PNG with alpha of at most 1024 KB, and adds the rounded corners and drop shadow itself, so the file is a full square without them ([icon design specifications](https://developer.android.com/distribute/google-play/resources/icon-design-specifications), [preview assets](https://support.google.com/googleplay/android-developer/answer/9866151), checked 2026-11-18). No build reads it; upload it by hand in the Play Console under **Grow users** → **Store presence** → **Main store listing**, in the **Graphics** section, as the **App icon**. The rest of the store listing belongs to [CUP-46](https://linear.app/cup-audio/issue/CUP-46/publish-the-android-app-to-google-play).
+
 ## iOS
 
 After building, open `apps/mobile-app/ios/App/App.xcodeproj` in Xcode and choose a simulator or a device. The project uses Swift Package Manager, matching Content Relay. Both targets, `App` and `CupShare`, sign automatically with the Apple Developer team `4GQ2V3WJW8`, which owns both bundle identifiers; signing for a device or the App Store needs an Xcode account in that team.
@@ -314,7 +318,7 @@ CUP-44's Android pass runs on builds from Google Play's [internal testing track]
 
 ## Brand assets
 
-Edit the canonical artwork in `tooling/brand-assets/assets/` at the repository root. Run `pnpm brand-assets:sync` to regenerate native icons, splash images, and web assets, then review the generated changes. Native sync uses the checked-in brand assets without regenerating them. See [the brand asset guide](../../tooling/brand-assets/README.md) for sources, sizing, and validation.
+Edit the canonical artwork in `tooling/brand-assets/assets/` at the repository root. Run `pnpm brand-assets:sync` to regenerate native icons, splash images, the Google Play store listing icon, and web assets, then review the generated changes. Native sync uses the checked-in brand assets without regenerating them. See [the brand asset guide](../../tooling/brand-assets/README.md) for sources, sizing, and validation.
 
 ## Playback
 
