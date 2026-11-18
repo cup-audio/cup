@@ -6,7 +6,7 @@ The web player plays an audiobook's [narration track](../GLOSSARY.md#narration-t
 
 The web player plays the narration track with one `<audio>` element in browsers and the iOS app ([ADR 0011](../adr/0011-serve-one-narration-track-and-play-it-with-one-audio-element.md)). The [player host](../../apps/web-app/src/app/player/player-host.ts) reaches it only through the `Player` port, whose implementation [`createPlatformPlayers`](../../apps/web-app/src/app/player/create-playback.ts) chooses once per platform. In browsers and iOS, every player plays on the same element, created once for the app shell's lifetime, with the loaded audiobook's track URL as its `src`; the signed URL carries the authorization, and the content security policy allows media only from the API origin's `/api/files/`.
 
-- **State:** the element and its events are the player state; there is no player state machine.
+- **State:** the element and its events are the playback state; the player keeps no state machine. The [player host](#the-player-host) and [position saves](#listening-positions) above it are machines ([ADR 0034](../adr/0034-model-the-player-host-and-position-saves-as-xstate-machines.md)).
 - **Timeline:** the response's start offsets map `currentTime` to the current unit, which drives the reader's highlight; seeking sets `currentTime`. A seek waits until the element reports a duration above 0, because WebKit's GStreamer media backend on Linux first reports 0, and a seek then can end playback at once; the next media event that finds the duration known applies it.
 - **Play:** `play()` is called synchronously within the user gesture, because Mobile Safari refuses audio started after an await. A stale or failed track URL is [renewed](authentication.md#signed-media-url) first.
 
@@ -21,6 +21,42 @@ The web application holds one player for every page inside its [app shell](../..
 - **Unloading:** the loaded audiobook is unloaded on leaving the shell, a change of the signed-in user, the track's deletion, or when renewing its URL finds the track gone. A reload restores it only from Android's native session ([adoption](#androids-native-engine)).
 - **Track:** a loaded narration track never changes, because it exists only once every segment has audio; only its signed URL is [renewed](authentication.md#signed-media-url).
 
+The host's lifecycle is the XState machine in [`player-host-machine.ts`](../../apps/web-app/src/app/player/player-host-machine.ts), which `PlayerHost` fronts. Two regions run side by side; the diagram shows states and events, not every guard:
+
+```mermaid
+stateDiagram-v2
+  state PlayerHost {
+    state playback {
+      [*] --> empty
+      empty --> loading: LOAD_SHOWN / takeover
+      loaded --> loading: LOAD_SHOWN
+      loading --> loaded: player built
+      loading --> empty: build failed
+      loaded --> empty: UNLOAD, RELEASE, another account, track gone
+      state loaded {
+        [*] --> ready
+        ready --> renewingTrackUrl: PLAY with a stale or failed URL
+        renewingTrackUrl --> ready: renewed (plays), failed, PAUSE
+      }
+    }
+    --
+    state adoption {
+      [*] --> notStarted
+      notStarted --> findingRunningPlayer: ADOPT
+      findingRunningPlayer --> awaitingAccount: found
+      awaitingAccount --> fetchingAudiobook: account known, the listener's
+      fetchingAudiobook --> handingOver: handed to playback
+      handingOver --> done: built, or failed
+      fetchingAudiobook --> done: discarded
+      findingRunningPlayer --> done: none
+      awaitingAccount --> done: loaded already, another account's, or a load
+      fetchingAudiobook --> done: a load
+    }
+  }
+```
+
+Leaving `renewingTrackUrl` cancels its request, so Pause, unloading or another load discards a renewal that arrives late. Leaving `loaded` stops reporting to the system's media controls; an effect then closes the player and clears them. A transition only computes, so `loading` waits for the effect that builds the player to report back, within the same `send`, which keeps Play within the tap's gesture; a seek, Play, Pause or unload asked for meanwhile is applied once it is built. A load first checks that a listening session can be created on the audiobook, so an audiobook whose session is refused fails the tap without leaving `loaded`, and the loaded audiobook plays on. A port that throws, such as a Media Session call the browser refuses, is reported to Sentry and does not stop the host.
+
 ## Listening positions
 
 Each signed-in listener has one saved position per conversion, a synchronization unit and an offset within its audio, which the server replaces on every save; anonymous positions stay on the device. Loading restores it; a loaded player is never moved by query refreshes or other devices' saves, so device switches resume from the last successful save. Saves are serialized to keep their order, and the request layer refuses a save for a user who is no longer signed in. [`PlaybackSession`](../../apps/web-app/src/app/player/playback-session.ts) converts positions and orders the saves ([`playback-session.test.ts`](../../apps/web-app/src/app/player/playback-session.test.ts)). On Android the plugin saves instead of the page ([Android's native engine](#androids-native-engine)).
@@ -30,6 +66,30 @@ A failed save is saved again unless a newer save comes first, because since [And
 - **When:** after a delay, when the device goes online, or when the app returns to the foreground.
 - **What the listener sees:** nothing for a failure that can pass, such as a lost connection or a server error, until a retry fails too or saves have failed for as long as the retry delay; the player then says in plain words that the position is not saved yet, until a save succeeds. A lasting refusal, such as a signed-out listener, shows at once and is not saved again.
 - **Gap:** saving again stops when the audiobook is unloaded, so a final save that fails on unloading is lost.
+
+The browser's saves are the XState machine in [`position-saves-machine.ts`](../../apps/web-app/src/app/player/position-saves-machine.ts), one per loaded audiobook. Its `writer` region writes queued saves one at a time; a failure counts only when no newer save is queued behind it. Its `retry` region arms the retry of the latest failed position and disarms it on any newer save. Its `lifecycle` region closes with the player: saves already asked for are still written, but nothing is retried or reported.
+
+```mermaid
+stateDiagram-v2
+  state PositionSaves {
+    state writer {
+      [*] --> idle
+      idle --> writing: a save is queued
+      writing --> idle: written or failed
+    }
+    --
+    state retry {
+      [*] --> disarmed
+      disarmed --> armed: the latest save failed for a reason that can pass
+      armed --> disarmed: SAVE, CLOSE, RETRY_DUE (queues the retry)
+    }
+    --
+    state lifecycle {
+      [*] --> open
+      open --> closed: CLOSE
+    }
+  }
+```
 
 ## System media controls
 

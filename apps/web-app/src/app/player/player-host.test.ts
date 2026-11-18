@@ -10,6 +10,7 @@ import {
   type PreparedAudiobook,
 } from "#src/app/player/playback-session.ts";
 import { PlayerHost, type PlayerHostAccount } from "#src/app/player/player-host.ts";
+import type { RunningPlayer } from "#src/app/player/player.ts";
 import { UserFacingError } from "#src/errors.ts";
 import type {
   MediaMetadataInput,
@@ -206,6 +207,8 @@ function createHost({
   savePosition = (): Promise<void> => Promise.resolve(),
   fetchAudiobook = (conversionId: string): Promise<Audiobook | null> =>
     Promise.reject(new Error(`Unexpected fetch of audiobook ${conversionId}.`)),
+  findRunningPlayer = (): Promise<RunningPlayer | null> => Promise.resolve(null),
+  initialAccount = null as PlayerHostAccount | null,
 } = {}) {
   // The browser's players, which the host reaches only through the `Player` port.
   const element = new FakeAudioElement();
@@ -216,11 +219,11 @@ function createHost({
   const clock = { now: 0 };
   /** The loaded session's armed save retry, which tests fire in place of the timer. */
   const saveRetry: { fire: (() => void) | null } = { fire: null };
-  let account: PlayerHostAccount = { status: "known", subject };
+  let account: PlayerHostAccount = initialAccount ?? { status: "known", subject };
 
   const host = new PlayerHost({
     createPlayer: createElementPlayers(element),
-    findRunningPlayer: () => Promise.resolve(null),
+    findRunningPlayer,
     createSession: (request) =>
       new PlaybackSession(request, {
         savePosition: (position, savedSubject) => {
@@ -1132,6 +1135,134 @@ test("releasing a track being deleted unloads it until Play", async () => {
   host.playShown();
   expect(host.getSnapshot().loaded?.conversionId).toBe("first");
   expect(element.calls.slice(-2)).toEqual([`src:${FIRST_TRACK_URL}`, "play"]);
+});
+
+test("an audiobook whose listening session is refused fails the tap and leaves the loaded one playing", async () => {
+  const { host, element, mediaSession } = createHost();
+  // The start offsets do not match the units, which the listening session refuses.
+  const broken: PlayableAudiobook = {
+    ...FIRST,
+    narrationTrack: { ...FIRST.narrationTrack, startMilliseconds: [0, 4_000] },
+  };
+  host.showConversion("second", SECOND);
+  host.playShown();
+
+  host.showConversion("first", broken);
+  expect(() => host.playShown()).toThrow("2 start offsets for 3 synchronization units");
+  await settle();
+
+  // The tap touched nothing that plays, and the player still takes the listener's controls.
+  expect(host.getSnapshot().loaded?.conversionId).toBe("second");
+  expect(element.calls).toEqual([`src:${SECOND_TRACK_URL}`, "play"]);
+  expect(mediaSession.published.at(-1)).toBe("Second");
+  host.pause();
+  expect(element.calls.at(-1)).toBe("pause");
+});
+
+test("an audiobook whose listening session is refused leaves a track URL renewal in progress to play", async () => {
+  const { host, element, clock } = createHost({
+    fetchAudiobook: () => Promise.resolve(withTrackUrl(FIRST, RENEWED_TRACK_URL)),
+  });
+  const broken: PlayableAudiobook = {
+    ...SECOND,
+    narrationTrack: { ...SECOND.narrationTrack, startMilliseconds: [0, 4_000] },
+  };
+  host.showConversion("first", FIRST);
+  host.loadShown();
+  element.loadMetadata(15);
+  clock.now = TWELVE_HOURS_MILLISECONDS + 1;
+  host.play();
+
+  host.showConversion("second", broken);
+  expect(() => host.playShown()).toThrow("2 start offsets for 3 synchronization units");
+  await settle();
+
+  expect(host.getSnapshot().loaded?.conversionId).toBe("first");
+  expect(element.calls.slice(-2)).toEqual([`src:${RENEWED_TRACK_URL}`, "play"]);
+});
+
+test("a segment tap made while the host handles another event plays once the player is built", () => {
+  const { host, element } = createHost();
+  host.showConversion("first", FIRST);
+  // A listener that taps from within the host's own notification, as a nested call would.
+  let hasTapped = false;
+  host.subscribe(() => {
+    if (!hasTapped && host.getSnapshot().shown?.conversionId === "second") {
+      hasTapped = true;
+      host.playShown(2);
+    }
+  });
+
+  host.showConversion("second", SECOND);
+
+  expect(host.getSnapshot().loaded?.conversionId).toBe("second");
+  expect(element.calls).toEqual([`src:${SECOND_TRACK_URL}`, "play"]);
+  element.loadMetadata(15);
+  expect(element.currentTime).toBe(10);
+});
+
+test("taking over what played rejects when the running session cannot be adopted", async () => {
+  const running: RunningPlayer = {
+    conversionId: "second",
+    subject: "user-1",
+    adopt: () => {
+      throw new Error("The native session ended.");
+    },
+    discard: () => undefined,
+  };
+  const { host } = createHost({
+    subject: "user-1",
+    findRunningPlayer: () => Promise.resolve(running),
+    fetchAudiobook: () => Promise.resolve(SECOND),
+  });
+
+  await expect(host.adoptRunningPlayer()).rejects.toThrow("The native session ended.");
+  expect(host.getSnapshot().loaded).toBeNull();
+});
+
+test("a media control the browser refuses is reported, and the player keeps taking the listener's controls", async () => {
+  const { host, element, mediaSession } = createHost();
+  mediaSession.setActionHandlers = () => {
+    throw new TypeError("The provided value 'seekto' is not a valid enum value.");
+  };
+  host.showConversion("first", FIRST);
+
+  host.playShown();
+  host.pause();
+  host.showConversion("second", SECOND);
+  host.playShown();
+
+  expect(host.getSnapshot().loaded?.conversionId).toBe("second");
+  expect(element.calls.slice(-2)).toEqual([`src:${SECOND_TRACK_URL}`, "play"]);
+});
+
+test("a load while the host waits to take over what played ends the takeover, also once unloaded", async () => {
+  const discarded: string[] = [];
+  const running: RunningPlayer = {
+    conversionId: "second",
+    subject: "user-1",
+    adopt: () => {
+      throw new Error("Unexpected takeover of a session the load replaced.");
+    },
+    discard: () => discarded.push("second"),
+  };
+  const { host, setAccount, fetchedConversionIds } = createHost({
+    initialAccount: { status: "restoring" },
+    findRunningPlayer: () => Promise.resolve(running),
+    fetchAudiobook: () => Promise.resolve(SECOND),
+  });
+  const adoption = host.adoptRunningPlayer();
+  await settle();
+
+  host.showConversion("first", FIRST);
+  host.loadShown();
+  host.unload();
+  setAccount({ status: "known", subject: "user-1" });
+  await adoption;
+
+  expect(fetchedConversionIds).toEqual([]);
+  expect(discarded).toEqual([]);
+  expect(host.getSnapshot().loaded).toBeNull();
 });
 
 test("a refused play is shown, and Play stays available", async () => {
