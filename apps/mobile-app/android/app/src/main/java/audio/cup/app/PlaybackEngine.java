@@ -278,8 +278,7 @@ final class PlaybackEngine {
 
     /** Prepares and plays; the first Play starts the service. Returns false without a loaded audiobook. */
     boolean play() {
-        // The page's command shows its own state from here on.
-        quietLoadPosition = null;
+        endQuietLoad();
         ExoPlayer exoPlayer = loadedPlayer();
         if (exoPlayer == null || sessionPlayer == null) {
             return false;
@@ -299,8 +298,7 @@ final class PlaybackEngine {
     }
 
     boolean pause() {
-        // The page's command shows its own state from here on.
-        quietLoadPosition = null;
+        endQuietLoad();
         ExoPlayer exoPlayer = loadedPlayer();
         if (exoPlayer == null) {
             return false;
@@ -313,8 +311,7 @@ final class PlaybackEngine {
     }
 
     boolean seekTo(long positionMilliseconds) {
-        // The page's command shows its own state from here on.
-        quietLoadPosition = null;
+        endQuietLoad();
         ExoPlayer exoPlayer = loadedPlayer();
         if (exoPlayer == null) {
             return false;
@@ -328,8 +325,7 @@ final class PlaybackEngine {
 
     /** Skips from ExoPlayer's own position, which can be ahead of the page's last report. */
     boolean skipBy(long deltaMilliseconds) {
-        // The page's command shows its own state from here on.
-        quietLoadPosition = null;
+        endQuietLoad();
         ExoPlayer exoPlayer = loadedPlayer();
         if (exoPlayer == null) {
             return false;
@@ -343,8 +339,7 @@ final class PlaybackEngine {
 
     /** Replaces the URLs, keeping the position. */
     boolean replaceUrls(SignedUrls urls) {
-        // The page's command shows its own state from here on.
-        quietLoadPosition = null;
+        endQuietLoad();
         ExoPlayer exoPlayer = loadedPlayer();
         Loaded audiobook = loaded;
         if (exoPlayer == null || audiobook == null) {
@@ -367,8 +362,7 @@ final class PlaybackEngine {
      * the save is the ended session's, if its own failed. Reports nothing.
      */
     void close(PositionOnClose position) {
-        // The page's command shows its own state from here on.
-        quietLoadPosition = null;
+        endQuietLoad();
         ExoPlayer exoPlayer = player;
         Loaded audiobook = loaded;
         if (exoPlayer != null && audiobook != null) {
@@ -637,7 +631,6 @@ final class PlaybackEngine {
         return positionSave;
     }
 
-    /** Paused for a transient loss of audio focus, such as a call, ExoPlayer still wants to play. */
     /**
      * Whether the player shows only what the page's load set, paused at its start position, which the
      * page shows already. Anything else, such as Play or a seek from the notification, ends the quiet.
@@ -652,12 +645,18 @@ final class PlaybackEngine {
             exoPlayer.getPlayerError() != null ||
             exoPlayer.getCurrentPosition() != startPositionMilliseconds
         ) {
-            quietLoadPosition = null;
+            endQuietLoad();
             return false;
         }
         return true;
     }
 
+    /** The page's command, or a change beyond the load, shows its own state from here on. */
+    private void endQuietLoad() {
+        quietLoadPosition = null;
+    }
+
+    /** Paused for a transient loss of audio focus, such as a call, ExoPlayer still wants to play. */
     private boolean isPlayingForListener(Player exoPlayer) {
         return (
             exoPlayer.getPlayWhenReady() &&
