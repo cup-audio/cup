@@ -170,6 +170,7 @@ Cloudflare Workflows owns execution state; the account or grant object owns the 
 - Supabase Auth: IAM (Cup owns account authorization and application data)
 - Google Auth Platform: social sign-in
 - Resend: account-deletion emails
+- Google Play: distributes Android test builds to invited testers through the internal testing track; the operator's Mac uploads them ([ADR 0033](../adr/0033-ship-android-test-builds-from-the-operators-mac-to-google-plays-internal-testing-track.md), [mobile guide](../../apps/mobile-app/README.md#release-builds))
 - Sentry (Germany region, free Developer plan): errors and traces of the Worker, its Durable Objects and Workflows, and client envelopes the telemetry tunnel forwards; see [observability](observability.md)
 
 ## Development and test view
