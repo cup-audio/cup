@@ -149,13 +149,14 @@ Agents run `android:release` without `--skip-upload` only when the operator asks
 
 ### First upload, by hand
 
-Google requires the first bundle of an app to be uploaded in the Play Console; that upload enrolls the app in Play App Signing ([#356](https://github.com/cup-audio/cup/issues/356)). It is a one-time step for the operator, tracked in [#447](https://github.com/cup-audio/cup/issues/447), and needs the [Play developer account and the app record](../../docs/production-configuration.md#google-play-developer-account-and-app-record):
+Google requires the first bundle of an app to be uploaded in the Play Console; that upload enrolls the app in Play App Signing ([#356](https://github.com/cup-audio/cup/issues/356)). It is a one-time step for the operator, done for Cup on 2026-11-18 ([#447](https://github.com/cup-audio/cup/issues/447)), and needs the [Play developer account and the app record](../../docs/production-configuration.md#google-play-developer-account-and-app-record):
 
 1. Run `pnpm --filter '@cup/mobile-app' android:release --skip-upload` on a clean, pushed `main` commit, note the bundle's path and the release name it prints, and run the `symbols:upload` command it prints.
 2. In the Play Console, open the app's internal testing track and create a release.
-3. Accept Play App Signing with a Google-generated app signing key; the upload key that signed the bundle stays the upload key.
-4. Upload the bundle, name the release with the printed release name, `<versionName> (<short SHA>)`, and roll it out. The app may still be in Draft. If Play asks for App content declarations, fill in only what blocks the internal release, and note which ones it asked for.
-5. Copy every app signing SHA-1 from the Play app signing page into a new Android OAuth client each, as [Android OAuth clients](../../docs/production-configuration.md#android-oauth-clients) describes, so that Play-installed builds can sign in with Google.
+3. Keep Play App Signing with a Google-generated app signing key; the upload key that signed the bundle stays the upload key. On 2026-11-18 the release page didn't ask; its enhancements panel showed "Releases are signed by Google Play".
+4. Upload the bundle, name the release with the printed release name, `<versionName> (<short SHA>)`, and roll it out. The app may still be in Draft. If Play asks for App content declarations, fill in only what blocks the internal release; on 2026-11-18 it asked for none.
+5. Copy every app signing SHA-1 from the Play app signing page into a new Android OAuth client each, as [Android OAuth clients](../../docs/production-configuration.md#android-oauth-clients) describes, so that Play-installed builds can sign in with Google. A hybrid key listed under **Previous app signing keys** shows no SHA-1: download its certificates and read each one's with `openssl x509 -inform DER -in <certificate>.der -noout -fingerprint -sha1`.
+6. Open the opt-in link from the track's **Testers** tab on the test device and accept. While the Play Store app still answers "Item not found" for a new app, as it did on 2026-11-18, install it from `https://play.google.com/store/apps/details?id=audio.cup.app` in a desktop browser signed in with the same account, which offers the device.
 
 Every later upload is `android:release` without `--skip-upload`.
 
