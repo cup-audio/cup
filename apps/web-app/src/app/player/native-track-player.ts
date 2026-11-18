@@ -211,6 +211,9 @@ export function createRunningPlayerFinder(
   };
 }
 
+/** What a command shows at once, before the plugin reports it: the playing state or the position. */
+type CommandEffect = "playback" | "position";
+
 /** How the player starts: loading the audiobook, or taking over the session that plays it. */
 type NativePlayerStart =
   | { kind: "load"; subject: string; urls: NativeUrls }
@@ -220,9 +223,10 @@ type NativePlayerStart =
  * Plays a loaded audiobook on the Android app's ExoPlayer, through its plugin.
  *
  * The plugin is the only playback state: the snapshot follows its `state` events, and while it
- * plays, the position moves on from the time it was read. A command shows its effect at once, until
- * the plugin reports. The plugin owns the listening position, so this player saves nothing: it
- * writes the reported position into the cached audiobook, and words how the plugin's saves fare.
+ * plays, the position moves on from the time it was read. A command shows its effect at once, and
+ * keeps it against reports the plugin sent before answering it. The plugin owns the listening
+ * position, so this player saves nothing: it writes the reported position into the cached
+ * audiobook, and words how the plugin's saves fare.
  *
  * After a native stop the plugin has no media item. The audiobook stays loaded at the last
  * position, seeks move only that position, and the next Play loads the audiobook again and plays.
@@ -241,6 +245,8 @@ class NativeTrackPlayer implements Player {
   private urls: NativeUrls | null;
   private failure: string | null = null;
   private isClosed = false;
+  /** The commands the plugin has not answered yet, by what each shows at once. */
+  private readonly unansweredCommands = new Set<{ effect: CommandEffect }>();
   private snapshot: PlayerSnapshot;
 
   constructor(
@@ -310,13 +316,13 @@ class NativeTrackPlayer implements Player {
       error: null,
       closedReason: null,
     });
-    this.send(this.plugin.play());
+    this.send(this.plugin.play(), "playback");
   };
 
   pause = () => {
     this.setState(this.stateAt({ isPlaying: false, isBuffering: false }));
     if (!this.isNativelyStopped()) {
-      this.send(this.plugin.pause());
+      this.send(this.plugin.pause(), "playback");
     }
   };
 
@@ -333,7 +339,7 @@ class NativeTrackPlayer implements Player {
     const position = clampToTimeline(this.session.timeline, positionMilliseconds);
     this.setState(this.stateAt({ positionMilliseconds: position }));
     if (!this.isNativelyStopped()) {
-      this.send(this.plugin.seekTo({ positionMilliseconds: position }));
+      this.send(this.plugin.seekTo({ positionMilliseconds: position }), "position");
     }
   };
 
@@ -344,7 +350,7 @@ class NativeTrackPlayer implements Player {
     );
     this.setState(this.stateAt({ positionMilliseconds: position }));
     if (!this.isNativelyStopped()) {
-      this.send(this.plugin.skipBy({ deltaMilliseconds }));
+      this.send(this.plugin.skipBy({ deltaMilliseconds }), "position");
     }
   };
 
@@ -423,7 +429,7 @@ class NativeTrackPlayer implements Player {
       return;
     }
 
-    this.setState(state);
+    this.setState(this.keepUnansweredEffects(state));
     // The plugin saved this position, or keeps trying to; a closed session's next Play saves it.
     this.services.cachePosition(
       this.session.conversionId,
@@ -434,14 +440,49 @@ class NativeTrackPlayer implements Player {
     }
   };
 
+  /**
+   * A report the plugin sent before it answered a command shows ExoPlayer before that command: Play
+   * on an audiobook that was not loaded sends `load`, whose paused report arrives after the page
+   * showed Play, and would flip the button back until Play's own report. Until the answer, a report
+   * keeps what the command showed; ExoPlayer delivers its listener events after the command that
+   * caused them returns, so the command's own report follows the answer. A report that ends
+   * playback applies whole.
+   */
+  private keepUnansweredEffects(state: NativePlaybackState): NativePlaybackState {
+    if (state.closedReason !== null || state.hasEnded || state.error !== null) {
+      return state;
+    }
+
+    const kept = { ...state };
+    if (this.hasUnansweredCommand("playback")) {
+      kept.isPlaying = this.state.isPlaying;
+      kept.isBuffering = this.state.isBuffering;
+    }
+    if (this.hasUnansweredCommand("position")) {
+      kept.positionMilliseconds = this.state.positionMilliseconds;
+      kept.positionReadAt = this.state.positionReadAt;
+    }
+    return kept;
+  }
+
+  private hasUnansweredCommand(effect: CommandEffect) {
+    return [...this.unansweredCommands].some((command) => command.effect === effect);
+  }
+
   /** Events sent while the WebView suspended the hidden page can be lost. */
   private refreshState = () => {
     void this.readPluginState();
   };
 
   private async readPluginState() {
+    const sentBefore = [...this.unansweredCommands];
     try {
       const { state } = await this.plugin.getState();
+      // The plugin ran every command sent before `getState`, so its state shows their effects. This
+      // also ends the wait for an answer the WebView lost while it suspended the hidden page.
+      for (const command of sentBefore) {
+        this.unansweredCommands.delete(command);
+      }
       if (state) {
         this.handleState(state);
       }
@@ -542,8 +583,13 @@ class NativeTrackPlayer implements Player {
   }
 
   /** A command the plugin rejects shows as a failure to play. */
-  private send(call: Promise<unknown>) {
-    call.catch((error: unknown) => {
+  private send(call: Promise<unknown>, effect: CommandEffect | null = null) {
+    const command = effect ? { effect } : null;
+    if (command) {
+      this.unansweredCommands.add(command);
+    }
+
+    const answered = call.catch((error: unknown) => {
       console.error("The media playback plugin rejected a command.", error);
       if (this.isClosed) {
         return;
@@ -551,5 +597,10 @@ class NativeTrackPlayer implements Player {
       this.failure = MEDIA_ERROR_MESSAGE;
       this.publish();
     });
+    if (command) {
+      void answered.finally(() => {
+        this.unansweredCommands.delete(command);
+      });
+    }
   }
 }
