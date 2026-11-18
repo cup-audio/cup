@@ -29,6 +29,7 @@ import {
   UPLOAD_KEY_STORE,
 } from "#scripts/release/upload-key.mts";
 import { fail, MOBILE_APP_ROOT, runCaptured, runVisible } from "#scripts/script-process.mts";
+import { emptyWebBuildOutput } from "#scripts/web-build-output.mts";
 
 const REPOSITORY_ROOT = path.resolve(MOBILE_APP_ROOT, "..", "..");
 const ANDROID_PROJECT = path.join(MOBILE_APP_ROOT, "android");
@@ -120,6 +121,8 @@ const environment: NodeJS.ProcessEnv = {
   // Gradle reads the SDK from ANDROID_HOME, so no `local.properties` is needed.
   ANDROID_HOME: androidSdkRoot,
 };
+
+emptyWebBuildOutput();
 runVisible("pnpm", ["exec", "turbo", "run", "turbo:build"], {
   cwd: MOBILE_APP_ROOT,
   env: environment,
