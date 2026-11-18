@@ -159,6 +159,10 @@ Google requires the first bundle of an app to be uploaded in the Play Console; t
 
 Every later upload is `android:release` without `--skip-upload`.
 
+### Store listing icon
+
+Google Play shows a default icon until the store listing has one. `store-assets/google-play/app-icon-512.png` is that icon: a 512 × 512 PNG with alpha, generated from the [brand assets](#brand-assets) with the same white square and padding as the Android launcher and iOS app icons, and without rounded corners or shadow, which Play adds itself. No build reads it; upload it by hand in the Play Console under **Grow users** → **Store presence** → **Main store listing** → **Graphics** → **App icon**. The rest of the store listing belongs to [CUP-46](https://linear.app/cup-audio/issue/CUP-46/publish-the-android-app-to-google-play).
+
 ## iOS
 
 After building, open `apps/mobile-app/ios/App/App.xcodeproj` in Xcode and choose a simulator or a device. The project uses Swift Package Manager, matching Content Relay. Both targets, `App` and `CupShare`, sign automatically with the Apple Developer team `4GQ2V3WJW8`, which owns both bundle identifiers; signing for a device or the App Store needs an Xcode account in that team.
