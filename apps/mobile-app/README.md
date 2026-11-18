@@ -10,7 +10,7 @@ From the repository root:
 pnpm --filter '@cup/mobile-app' build
 ```
 
-This runs the cached shared web build and Capacitor configuration check, then syncs web assets into both native projects. Sync runs outside Turbo and always executes, even when both build tasks hit the cache.
+This first empties the web app's served build and its source maps, `dist/web` and `dist/source-maps`, because Turbo restores a cached build over a folder's old files without removing them, so a native project and its Sentry upload would otherwise carry every earlier build's files. It then runs the cached shared web build and Capacitor configuration check, and syncs web assets into both native projects. Sync runs outside Turbo and always executes, even when both build tasks hit the cache.
 
 The repository-wide `pnpm build` and every [validation gate](../../AGENTS.md#validation-gates) run `turbo:build` without syncing native projects. Use the mobile package's `build` command above before building or installing a native app.
 
@@ -100,7 +100,7 @@ On the operator's Mac, with `JAVA_HOME` set as for [Android locally](#android-lo
 pnpm --filter '@cup/mobile-app' android:release
 ```
 
-The command runs `env:check`, checks the release preconditions, empties the web app's `dist/web` and `dist/source-maps` (Turbo restores a cached build over a folder's old files without removing them, so the bundle and the Sentry upload would otherwise carry every earlier build's files), builds the web app, syncs Capacitor for Android, runs Gradle's `bundleRelease`, runs the [bundle safety check](#bundle-safety-check), uploads the release's symbols to Sentry, and uploads the bundle to Google Play. It prints the bundle's path, `android/app/build/outputs/bundle/release/app-release.aab`, and the release name. No [validation gate](../../AGENTS.md#validation-gates) runs; pick the one that fits the moment yourself.
+The command runs `env:check`, checks the release preconditions, empties the web app's `dist/web` and `dist/source-maps` with the same step as the [`build`](#build) command, builds the web app, syncs Capacitor for Android, runs Gradle's `bundleRelease`, runs the [bundle safety check](#bundle-safety-check), uploads the release's symbols to Sentry, and uploads the bundle to Google Play. It prints the bundle's path, `android/app/build/outputs/bundle/release/app-release.aab`, and the release name. No [validation gate](../../AGENTS.md#validation-gates) runs; pick the one that fits the moment yourself.
 
 With `--skip-upload`, the command stops after the bundle safety check, prints the bundle's path, the release name and the `symbols:upload` command for this build, and touches nothing in Sentry or Google Play. Run that command before uploading the bundle to a store by hand. Use it to inspect a build, or for the [first upload](#first-upload-by-hand), which Google requires to be made by hand in the Play Console:
 

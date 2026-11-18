@@ -14,7 +14,7 @@
     "android:release": "node scripts/android-release.mts",
     "android:run": "node scripts/android-run.mts",
     "android:upload-key:create": "node scripts/android-upload-key-create.mts",
-    "build": "turbo run turbo:build && pnpm run native:sync",
+    "build": "pnpm run web-build:empty && turbo run turbo:build && pnpm run native:sync",
     "jvm:check": "node scripts/jvm-toolchain.mts",
     "lint": "turbo run turbo:lint",
     "lint:fix": "turbo run turbo:lint:fix",
@@ -28,7 +28,8 @@
     "turbo:build": "tsc --build",
     "turbo:lint": "oxlint --type-aware --max-warnings 0 .",
     "turbo:lint:fix": "pnpm run turbo:lint --fix",
-    "turbo:test": "pnpm run test"
+    "turbo:test": "pnpm run test",
+    "web-build:empty": "node scripts/web-build-output.mts"
   },
   "dependencies": {
     "@aparajita/capacitor-secure-storage": "8.0.1",

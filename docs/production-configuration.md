@@ -105,7 +105,7 @@ A release of the iOS shell goes to App Store Connect by hand; Android test build
 
 For iOS:
 
-1. Build the shells from the commit being released, which builds the web app with its source maps and syncs the bundle into both native projects:
+1. Build the shells from the commit being released, which empties the web app's earlier build output, builds the web app with its source maps and syncs the bundle into both native projects:
 
    ```sh
    pnpm --filter '@cup/mobile-app' build
