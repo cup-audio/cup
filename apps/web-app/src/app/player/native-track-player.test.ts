@@ -31,8 +31,6 @@ class FakeMediaPlaybackPlugin implements MediaPlaybackPlugin {
   readonly calls: Array<{ method: string; options?: unknown }> = [];
   /** What `getState` answers, as the plugin's current state. */
   currentState: NativePlaybackState | null = null;
-  /** Commands whose answer never arrives, as when the WebView loses it while suspended. */
-  readonly unansweredMethods = new Set<string>();
   /** What removing the state listener rejects with, if anything. */
   listenerRemovalError: Error | null = null;
   private stateListener: ((state: NativePlaybackState) => void) | null = null;
@@ -98,9 +96,6 @@ class FakeMediaPlaybackPlugin implements MediaPlaybackPlugin {
 
   private record(method: string, options?: unknown) {
     this.calls.push(options === undefined ? { method } : { method, options });
-    if (this.unansweredMethods.has(method)) {
-      return new Promise<void>(() => undefined);
-    }
     return Promise.resolve();
   }
 }
@@ -339,12 +334,10 @@ test("Play, Pause, a seek and the skips go to the plugin, and the player shows t
   expect(player().getSnapshot()).toMatchObject({ currentUnitIndex: 2, isPlaying: true });
 });
 
-test("while the plugin reports playing, the position moves on from the time it was read", async () => {
+test("while the plugin reports playing, the position moves on from the time it was read", () => {
   const { host, plugin, player, clock, tick, ticks } = createHost();
   host.showConversion("first", FIRST);
   host.playShown();
-  // The plugin answered Play; its reports from now on show ExoPlayer playing.
-  await settle();
 
   plugin.emit(stateOf({ isPlaying: true, positionMilliseconds: 5_600, positionReadAt: clock.now }));
   clock.now += 2_500;
@@ -375,12 +368,10 @@ test("while the plugin reports playing, the position moves on from the time it w
   expect(ticks.size).toBe(0);
 });
 
-test("the extrapolated position stops at the duration the plugin reports", async () => {
+test("the extrapolated position stops at the duration the plugin reports", () => {
   const { host, plugin, player, clock, tick } = createHost();
   host.showConversion("first", FIRST);
   host.playShown();
-  // The plugin answered Play; its reports from now on show ExoPlayer playing.
-  await settle();
 
   plugin.emit(
     stateOf({
@@ -447,8 +438,6 @@ test("the page asks the plugin for its state when it becomes visible, since even
   const { host, plugin, player, becomeVisible } = createHost();
   host.showConversion("first", FIRST);
   host.playShown();
-  // The plugin answered Play; its reports from now on show ExoPlayer playing.
-  await settle();
 
   plugin.currentState = stateOf({ positionMilliseconds: 12_000 });
   becomeVisible();
@@ -799,74 +788,4 @@ test("a page that starts after a native stop has no session to take over", async
   expect(fetched).toEqual([]);
   expect(host.getSnapshot().loaded).toBeNull();
   expect(plugin.commands()).toEqual([]);
-});
-
-test("Play on an audiobook that was not loaded shows playing throughout, although the plugin reports the load as paused after it", async () => {
-  const { host, plugin, player } = createHost();
-  host.showConversion("first", FIRST);
-  host.playShown();
-  const shownPlaying = [player().getSnapshot().isPlaying];
-  player().subscribe(() => shownPlaying.push(player().getSnapshot().isPlaying));
-
-  // The engine reports `load` paused before it answers Play.
-  plugin.emit(stateOf({ positionMilliseconds: 5_500 }));
-  await settle();
-  plugin.emit(stateOf({ isPlaying: true, isBuffering: true, positionMilliseconds: 5_500 }));
-
-  expect(shownPlaying).toEqual([true]);
-  expect(player().getSnapshot()).toMatchObject({ isPlaying: true, isBuffering: true });
-});
-
-test("once the plugin answered Play, a paused report shows, such as a call taking audio focus", async () => {
-  const { host, plugin, player } = createHost();
-  host.showConversion("first", FIRST);
-  host.playShown();
-  await settle();
-
-  plugin.emit(stateOf({ positionMilliseconds: 5_500 }));
-
-  expect(player().getSnapshot()).toMatchObject({ isPlaying: false, isBuffering: false });
-});
-
-test("a seek shows its position until the plugin answers it, and a report from before it does not move it back", async () => {
-  const { host, plugin, player } = createHost();
-  host.showConversion("first", FIRST);
-  host.loadShown();
-  await settle();
-
-  player().seekTo(12_000);
-  plugin.emit(stateOf({ positionMilliseconds: 5_500 }));
-  expect(player().getSnapshot().positionMilliseconds).toBe(12_000);
-
-  await settle();
-  plugin.emit(stateOf({ positionMilliseconds: 12_000 }));
-  expect(player().getSnapshot().positionMilliseconds).toBe(12_000);
-});
-
-test("an answer the hidden page lost holds nothing back once the page becomes visible and reads the state", async () => {
-  const { host, plugin, player, becomeVisible } = createHost();
-  host.showConversion("first", FIRST);
-  host.playShown();
-  await settle();
-  plugin.unansweredMethods.add("pause");
-  host.togglePlayback();
-
-  // The listener played again from the notification while the page was hidden.
-  plugin.currentState = stateOf({ isPlaying: true, positionMilliseconds: 6_000 });
-  becomeVisible();
-  await settle();
-  expect(player().getSnapshot()).toMatchObject({ isPlaying: true });
-
-  plugin.emit(stateOf({ positionMilliseconds: 7_000 }));
-  expect(player().getSnapshot()).toMatchObject({ isPlaying: false, positionMilliseconds: 7_000 });
-});
-
-test("a report that ends playback shows while Play is unanswered", () => {
-  const { host, plugin, player } = createHost();
-  host.showConversion("first", FIRST);
-  host.playShown();
-
-  plugin.emit(stateOf({ positionMilliseconds: 5_500, error: "playback" }));
-
-  expect(player().getSnapshot()).toMatchObject({ isPlaying: false, error: MEDIA_ERROR_MESSAGE });
 });

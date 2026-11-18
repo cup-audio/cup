@@ -172,9 +172,13 @@ test("media keys and the notification's buttons and seek bar act on the player w
 test("Close in the notification ends a playing session, which saves the position, and the page keeps it", async () => {
   const device = asAndroidAppDevice(app.device);
   const { webView, conversionId } = await openNewAudiobook(device);
+  // Play on an audiobook the plugin has not loaded sends `load` before `play`; the button turns to
+  // Pause at once and stays there, without the load's paused state flipping it back.
+  await recordPlayButtonLabels(webView);
   await webView.$(`${PLAYER} button[aria-label="Play"]`).click();
   await waitForCupMediaSession(device, "PLAYING");
   await expect.poll(() => readPosition(webView), { timeout: 15_000 }).toBeGreaterThan(3_000);
+  expect(await readPlayButtonLabels(webView)).toEqual(["Play", "Pause"]);
 
   const saveCount = positionSaves(conversionId).length;
   await device.tapMediaControl("Close");
@@ -764,6 +768,43 @@ function parseProgress(progress: string): [positionSeconds: number, durationSeco
 }
 
 /** Waits until the player's button reads `label`, as the plugin reports playing or not. */
+/**
+ * Records every label the player's Play/Pause button shows from now on, starting with the current
+ * one; `readPlayButtonLabels` returns them. A flicker lasts a few milliseconds, which polling
+ * misses.
+ */
+async function recordPlayButtonLabels(webView: WebdriverIO.Browser) {
+  await webView.execute((player) => {
+    const labels: string[] = [];
+    const record = () => {
+      const label = document
+        .querySelector(`${player} button:is([aria-label="Play"], [aria-label="Pause"])`)
+        ?.getAttribute("aria-label");
+      if (label && labels.at(-1) !== label) {
+        labels.push(label);
+      }
+    };
+    record();
+    const footer = document.querySelector(player);
+    if (!footer) {
+      throw new Error("The player is not on the page.");
+    }
+    new MutationObserver(record).observe(footer, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["aria-label"],
+    });
+    Object.assign(window, { cupPlayButtonLabels: labels });
+  }, PLAYER);
+}
+
+async function readPlayButtonLabels(webView: WebdriverIO.Browser): Promise<string[]> {
+  return webView.execute(
+    () => (window as unknown as { cupPlayButtonLabels: string[] }).cupPlayButtonLabels,
+  );
+}
+
 async function waitForPlayButton(webView: WebdriverIO.Browser, label: "Play" | "Pause") {
   await webView
     .$(`${PLAYER} button[aria-label="${label}"]`)

@@ -119,6 +119,15 @@ final class PlaybackEngine {
     /** A native stop is on its way, so the states until then report nothing. */
     private boolean isStopping;
 
+    /**
+     * Where the page just loaded an audiobook, until the player shows anything else or the page sends
+     * its next command; null otherwise. The page shows that audiobook paused there already, and the
+     * page receives the load's reports only after its next command: a Play on an audiobook that was
+     * not loaded would show Pause, then this paused state, then Play's own report.
+     */
+    @Nullable
+    private Long quietLoadPosition;
+
     /** Whether the listener heard playback at the last change, so the change to paused saves. */
     private boolean wasPlaying;
 
@@ -217,7 +226,8 @@ final class PlaybackEngine {
 
     /**
      * Sets the audiobook as the media item, paused. While the player was never prepared, this
-     * fetches nothing and shows no notification; in a running session, it replaces the item.
+     * fetches nothing and shows no notification; in a running session, it replaces the item. It
+     * reports nothing until the player shows more than the load, since the page shows it already.
      */
     void load(LoadRequest request) {
         MediaItem item = new MediaItem.Builder()
@@ -262,12 +272,14 @@ final class PlaybackEngine {
         // Loading another audiobook leaves it paused, as on the web.
         exoPlayer.pause();
         exoPlayer.setMediaItem(item, request.startPositionMilliseconds);
-        sendState(false);
+        quietLoadPosition = request.startPositionMilliseconds;
         updateExpiryCheck();
     }
 
     /** Prepares and plays; the first Play starts the service. Returns false without a loaded audiobook. */
     boolean play() {
+        // The page's command shows its own state from here on.
+        quietLoadPosition = null;
         ExoPlayer exoPlayer = loadedPlayer();
         if (exoPlayer == null || sessionPlayer == null) {
             return false;
@@ -287,6 +299,8 @@ final class PlaybackEngine {
     }
 
     boolean pause() {
+        // The page's command shows its own state from here on.
+        quietLoadPosition = null;
         ExoPlayer exoPlayer = loadedPlayer();
         if (exoPlayer == null) {
             return false;
@@ -299,6 +313,8 @@ final class PlaybackEngine {
     }
 
     boolean seekTo(long positionMilliseconds) {
+        // The page's command shows its own state from here on.
+        quietLoadPosition = null;
         ExoPlayer exoPlayer = loadedPlayer();
         if (exoPlayer == null) {
             return false;
@@ -312,6 +328,8 @@ final class PlaybackEngine {
 
     /** Skips from ExoPlayer's own position, which can be ahead of the page's last report. */
     boolean skipBy(long deltaMilliseconds) {
+        // The page's command shows its own state from here on.
+        quietLoadPosition = null;
         ExoPlayer exoPlayer = loadedPlayer();
         if (exoPlayer == null) {
             return false;
@@ -325,6 +343,8 @@ final class PlaybackEngine {
 
     /** Replaces the URLs, keeping the position. */
     boolean replaceUrls(SignedUrls urls) {
+        // The page's command shows its own state from here on.
+        quietLoadPosition = null;
         ExoPlayer exoPlayer = loadedPlayer();
         Loaded audiobook = loaded;
         if (exoPlayer == null || audiobook == null) {
@@ -347,6 +367,8 @@ final class PlaybackEngine {
      * the save is the ended session's, if its own failed. Reports nothing.
      */
     void close(PositionOnClose position) {
+        // The page's command shows its own state from here on.
+        quietLoadPosition = null;
         ExoPlayer exoPlayer = player;
         Loaded audiobook = loaded;
         if (exoPlayer != null && audiobook != null) {
@@ -616,6 +638,26 @@ final class PlaybackEngine {
     }
 
     /** Paused for a transient loss of audio focus, such as a call, ExoPlayer still wants to play. */
+    /**
+     * Whether the player shows only what the page's load set, paused at its start position, which the
+     * page shows already. Anything else, such as Play or a seek from the notification, ends the quiet.
+     */
+    private boolean showsOnlyTheLoad(Player exoPlayer) {
+        Long startPositionMilliseconds = quietLoadPosition;
+        if (startPositionMilliseconds == null) {
+            return false;
+        }
+        if (
+            isPlayingForListener(exoPlayer) ||
+            exoPlayer.getPlayerError() != null ||
+            exoPlayer.getCurrentPosition() != startPositionMilliseconds
+        ) {
+            quietLoadPosition = null;
+            return false;
+        }
+        return true;
+    }
+
     private boolean isPlayingForListener(Player exoPlayer) {
         return (
             exoPlayer.getPlayWhenReady() &&
@@ -731,7 +773,9 @@ final class PlaybackEngine {
                 return;
             }
             followPlayback(isPlayingForListener(eventPlayer));
-            sendState(false);
+            if (!showsOnlyTheLoad(eventPlayer)) {
+                sendState(false);
+            }
             updateExpiryCheck();
         }
 

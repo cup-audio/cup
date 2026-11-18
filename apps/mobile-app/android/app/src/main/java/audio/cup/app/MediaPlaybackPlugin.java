@@ -14,8 +14,8 @@ import org.json.JSONObject;
  * The page's side of the narration track's {@link PlaybackEngine}: the player port
  * ({@code native-track-player.ts}) drives it through these methods. The page sets the loaded
  * audiobook with {@code load}, which prepares nothing, and the first {@code play} starts the
- * service. After every change of the player, and after a native stop, the plugin sends one
- * {@code state} event; the page asks for {@code getState} whenever it becomes visible, since events
+ * service. After every change of the player but those of {@code load}, which the page shows
+ * already, and after a native stop, the plugin sends one {@code state} event; the page asks for {@code getState} whenever it becomes visible, since events
  * sent while the WebView suspends the hidden page can be lost, and when it starts, to take over a
  * session that outlived the previous page.
  *
