@@ -782,6 +782,8 @@ async function recordPlayButtonLabels(webView: WebdriverIO.Browser) {
         ?.getAttribute("aria-label");
       if (label && labels.at(-1) !== label) {
         labels.push(label);
+        // A data attribute carries the labels to `readPlayButtonLabels` as plain text.
+        document.documentElement.dataset["cupPlayButtonLabels"] = labels.join(" ");
       }
     };
     record();
@@ -795,14 +797,14 @@ async function recordPlayButtonLabels(webView: WebdriverIO.Browser) {
       attributes: true,
       attributeFilter: ["aria-label"],
     });
-    Object.assign(window, { cupPlayButtonLabels: labels });
   }, PLAYER);
 }
 
 async function readPlayButtonLabels(webView: WebdriverIO.Browser): Promise<string[]> {
-  return webView.execute(
-    () => (window as unknown as { cupPlayButtonLabels: string[] }).cupPlayButtonLabels,
+  const labels = await webView.execute(
+    () => document.documentElement.dataset["cupPlayButtonLabels"] ?? "",
   );
+  return labels.split(" ").filter((label) => label !== "");
 }
 
 async function waitForPlayButton(webView: WebdriverIO.Browser, label: "Play" | "Pause") {
