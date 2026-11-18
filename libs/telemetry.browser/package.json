@@ -7,8 +7,7 @@
   ],
   "type": "module",
   "imports": {
-    "#src/*": "./src/*",
-    "#test/*.ts": "./test/*.ts"
+    "#src/*": "./src/*"
   },
   "exports": {
     "./package.json": "./package.json",
@@ -38,7 +37,7 @@
     "@sentry/react": "catalog:sentry-client"
   },
   "devDependencies": {
-    "@capacitor/core": "^8.5.3",
+    "@capacitor/core": "^8.6.2",
     "@cup/config-oxlint": "workspace:*",
     "@cup/prepare-declaration-build": "workspace:*",
     "@patricktree-stack/config-typescript": "workspace:*",

@@ -54,7 +54,7 @@
     "google-auth-library": "^11.3.4",
     "oxlint": "catalog:",
     "oxlint-tsgolint": "catalog:",
-    "temporal-polyfill": "^1.0.5",
+    "temporal-polyfill": "^1.0.8",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"

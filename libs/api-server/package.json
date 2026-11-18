@@ -42,9 +42,9 @@
     "@cup/telemetry.core": "workspace:*",
     "@sentry/core": "catalog:sentry-server",
     "hono": "catalog:hono",
-    "jose": "^6.2.12",
-    "temporal-polyfill": "^1.0.5",
-    "zod": "^4.6.5"
+    "jose": "^6.2.17",
+    "temporal-polyfill": "^1.0.8",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@cup/config-oxlint": "workspace:*",

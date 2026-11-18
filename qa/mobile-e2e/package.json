@@ -3,8 +3,7 @@
   "private": true,
   "type": "module",
   "imports": {
-    "#src/*.ts": "./src/*.ts",
-    "#src/*": "./src/*"
+    "#src/*.ts": "./src/*.ts"
   },
   "scripts": {
     "clean": "del-cli --dot=true \"*.tsbuildinfo\"",
@@ -24,9 +23,9 @@
     "@cup/sentry-stub": "workspace:*",
     "@cup/test-worker": "workspace:*",
     "@cup/toolchain-key": "workspace:*",
-    "appium": "3.9.0",
-    "temporal-polyfill": "^1.0.5",
-    "webdriverio": "10.1.0"
+    "appium": "4.0.0",
+    "temporal-polyfill": "^1.0.8",
+    "webdriverio": "10.2.0"
   },
   "devDependencies": {
     "@cup/config-oxlint": "workspace:*",

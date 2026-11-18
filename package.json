@@ -41,16 +41,16 @@
     "submodule:check": "submodule-check commits HEAD && submodule-check staged",
     "test": "turbo run turbo:test",
     "test:e2e": "pnpm run test:e2e:app && pnpm run test:e2e:source-material",
-    "test:e2e:app": "docker pull mcr.microsoft.com/playwright:v1.65.0-noble && turbo run turbo:e2e --filter=@cup/e2e --output-logs=new-only",
+    "test:e2e:app": "docker pull mcr.microsoft.com/playwright:v1.65.1-noble && turbo run turbo:e2e --filter=@cup/e2e --output-logs=new-only",
     "test:e2e:mobile": "turbo run turbo:e2e:android turbo:e2e:ios --filter=@cup/mobile-e2e --continue=dependencies-successful --output-logs=new-only",
     "test:e2e:mobile:android": "turbo run turbo:e2e:android --filter=@cup/mobile-e2e --output-logs=new-only",
     "test:e2e:mobile:clean": "pnpm --filter '@cup/mobile-e2e' devices:clean",
     "test:e2e:mobile:ios": "turbo run turbo:e2e:ios --filter=@cup/mobile-e2e --output-logs=new-only",
     "test:e2e:source-material": "turbo run turbo:e2e --filter=@cup/prepare-source-material --output-logs=new-only",
     "test:e2e:ui": "pnpm run build && pnpm --filter '@cup/e2e' test:e2e:ui",
-    "test:e2e:update": "docker pull mcr.microsoft.com/playwright:v1.65.0-noble && pnpm run build && pnpm --filter '@cup/e2e' test:e2e:update",
+    "test:e2e:update": "docker pull mcr.microsoft.com/playwright:v1.65.1-noble && pnpm run build && pnpm --filter '@cup/e2e' test:e2e:update",
     "test:resend-live": "pnpm --filter '@cup/resend-stub' test:resend-live",
-    "zizmor": "uvx zizmor@1.29.0 --gh-token \"$(gh auth token)\" ."
+    "zizmor": "uvx zizmor@1.32.0 --gh-token \"$(gh auth token)\" ."
   },
   "devDependencies": {
     "@cup/config-oxlint": "workspace:*",
@@ -59,27 +59,27 @@
     "@patricktree-stack/config-oxfmt": "workspace:*",
     "@patricktree-stack/mermaid-check": "workspace:*",
     "@patricktree-stack/submodule-check": "workspace:*",
-    "cf": "^1.0.0-beta.14",
+    "cf": "^1.0.0-beta.32",
     "del-cli": "^8.0.1",
-    "eslint-plugin-react-you-might-not-need-an-effect": "^1.0.2",
+    "eslint-plugin-react-you-might-not-need-an-effect": "^1.2.0",
     "husky": "^9.1.7",
-    "knip": "^6.41.0",
-    "markdownlint-cli2": "^0.23.3",
-    "markdownlint-rule-relative-links": "^5.1.3",
+    "knip": "^6.45.1",
+    "markdownlint-cli2": "^0.24.1",
+    "markdownlint-rule-relative-links": "^5.1.4",
     "oxfmt": "catalog:",
     "oxlint": "catalog:",
     "oxlint-tsgolint": "catalog:",
-    "turbo": "^2.11.7"
+    "turbo": "^2.11.11"
   },
   "devEngines": {
     "runtime": {
       "name": "node",
-      "version": "^24.21.0",
+      "version": "^24.22.3",
       "onFail": "download"
     }
   },
   "engines": {
-    "pnpm": "12.11.2"
+    "pnpm": "12.21.0"
   },
-  "packageManager": "pnpm@12.11.2"
+  "packageManager": "pnpm@12.21.0"
 }

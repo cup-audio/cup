@@ -6,7 +6,19 @@ import {
   LOG_EVENTS,
   TELEMETRY_ATTRIBUTES,
   type LogEventName,
+  type LogEventSeverity,
 } from "@cup/telemetry.core";
+
+/**
+ * `Sentry.logger`'s function per severity. Indexing the `logger` namespace import directly fails
+ * oxlint's `import/namespace` rule, which cannot check a computed member of a namespace.
+ */
+const LOG_FUNCTIONS = {
+  error: logger.error,
+  warn: logger.warn,
+  info: logger.info,
+  debug: logger.debug,
+} satisfies Record<LogEventSeverity, typeof logger.info>;
 
 /** A log attribute value Sentry types natively. */
 export type LogAttributeValue = string | number | boolean | string[] | number[];
@@ -37,7 +49,7 @@ export function logEvent(
     [LOG_ATTRIBUTES.EVENT_NAME]: event,
   };
   // The SDK would send an `undefined` attribute as an empty string.
-  logger[LOG_EVENTS[event]](
+  LOG_FUNCTIONS[LOG_EVENTS[event]](
     message,
     Object.fromEntries(Object.entries(allAttributes).filter(([, value]) => value !== undefined)),
   );

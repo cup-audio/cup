@@ -4,9 +4,7 @@
   "type": "module",
   "imports": {
     "#test-vitest/*.ts": "./test-vitest/*.ts",
-    "#test-vitest/*": "./test-vitest/*",
-    "#test-e2e/*.ts": "./test-e2e/*.ts",
-    "#test-e2e/*": "./test-e2e/*"
+    "#test-e2e/*.ts": "./test-e2e/*.ts"
   },
   "scripts": {
     "clean": "del-cli --dot=true \"*.tsbuildinfo\" \"playwright-output\"",
@@ -39,7 +37,7 @@
     "@typescript/native": "catalog:",
     "oxlint": "catalog:",
     "oxlint-tsgolint": "catalog:",
-    "temporal-polyfill": "^1.0.5",
+    "temporal-polyfill": "^1.0.8",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"

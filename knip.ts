@@ -25,10 +25,6 @@ const config: KnipConfig = {
     "libs/create-audiobook-from-url-workflow": {
       /* Wrangler loads this module-only Worker entry point from wrangler.test.jsonc. */
       entry: ["test/worker.ts"],
-      ignoreDependencies: [
-        /* knip doesn't detect `declare module "cloudflare:workers"` from Worker types */
-        "cloudflare",
-      ],
     },
     "apps/web-app": {
       /* Playwright and Vite load these component-testing modules indirectly. */
@@ -42,23 +38,14 @@ const config: KnipConfig = {
     "libs/registry": {
       /* Wrangler loads the integration Worker and its Cloudflare virtual module. */
       entry: ["test/worker.ts"],
-      ignoreDependencies: ["cloudflare"],
     },
     "libs/accounts": {
       /* Wrangler loads this module-only Worker entry point from wrangler.test.jsonc. */
       entry: ["test/worker.ts"],
-      ignoreDependencies: [
-        /* knip doesn't detect `declare module "cloudflare:workers"` from Worker types */
-        "cloudflare",
-      ],
     },
     "libs/conversion-grants": {
       /* Wrangler loads this module-only Worker entry point from wrangler.test.jsonc. */
       entry: ["test/worker.ts"],
-      ignoreDependencies: [
-        /* knip doesn't detect `declare module "cloudflare:workers"` from Worker types */
-        "cloudflare",
-      ],
     },
     "qa/e2e": {
       /* The global setup signs the suite's local HTTPS certificate with the system's openssl */
@@ -66,11 +53,7 @@ const config: KnipConfig = {
     },
     "qa/test-worker": {
       /* These dependencies express the built-app test dependency graph. */
-      ignoreDependencies: [
-        "@cup/cloudflare-worker",
-        /* knip doesn't detect `declare module "cloudflare:workers"` from Worker types */
-        "cloudflare",
-      ],
+      ignoreDependencies: ["@cup/cloudflare-worker"],
     },
     "libs/narration-source-analysis": {
       /* Live evals use separate Vitest discovery, so Knip cannot infer these entry points */

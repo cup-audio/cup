@@ -34,7 +34,7 @@
     "@cup/narration-document-creation": "workspace:*",
     "@hono/zod-openapi": "catalog:hono",
     "hono": "catalog:hono",
-    "zod": "^4.6.5"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@cup/config-oxlint": "workspace:*",

@@ -30,7 +30,7 @@
     "turbo:test": "pnpm run test"
   },
   "dependencies": {
-    "temporal-polyfill": "^1.0.5"
+    "temporal-polyfill": "^1.0.8"
   },
   "devDependencies": {
     "@cup/config-oxlint": "workspace:*",
