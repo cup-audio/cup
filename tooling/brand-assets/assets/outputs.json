@@ -210,6 +210,13 @@
     "transparent": false
   },
   {
+    "path": "apps/mobile-app/store-assets/google-play/app-icon-512.png",
+    "width": 512,
+    "height": 512,
+    "markSize": 430,
+    "transparent": false
+  },
+  {
     "path": "apps/web-app/public/app/cup-icon.png",
     "width": 512,
     "height": 512,
