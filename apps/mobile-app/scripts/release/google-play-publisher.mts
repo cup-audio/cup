@@ -20,6 +20,12 @@ export const UPLOADER_SERVICE_ACCOUNT = "play-publisher@cup-production.iam.gserv
 const SOURCE_SCOPES = ["https://www.googleapis.com/auth/cloud-platform"];
 const ANDROID_PUBLISHER_SCOPES = ["https://www.googleapis.com/auth/androidpublisher"];
 const TOKEN_LIFETIME_SECONDS = 3600;
+/*
+ * The project billed for minting the uploader's tokens. User application-default credentials carry
+ * the quota project of whatever `gcloud auth application-default login` last chose, which need not
+ * enable the IAM Service Account Credentials API; `cup-production` does (Terraform).
+ */
+const QUOTA_PROJECT = "cup-production";
 
 /**
  * Reads the application-default credentials, without a network request, and returns a publisher
@@ -27,6 +33,7 @@ const TOKEN_LIFETIME_SECONDS = 3600;
  */
 export async function createGooglePlayPublisher(): Promise<PlayPublisher> {
   const sourceClient = await new GoogleAuth({ scopes: SOURCE_SCOPES }).getClient();
+  sourceClient.quotaProjectId = QUOTA_PROJECT;
   const auth = new Impersonated({
     sourceClient,
     targetPrincipal: UPLOADER_SERVICE_ACCOUNT,
