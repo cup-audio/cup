@@ -55,7 +55,7 @@ stateDiagram-v2
   }
 ```
 
-Leaving `renewingTrackUrl` cancels its request, so Pause, unloading or another load discards a renewal that arrives late. Leaving `loaded` stops reporting to the system's media controls; an effect then closes the player and clears them. A transition only computes, so `loading` waits for the effect that builds the player to report back, within the same `send`, which keeps Play within the tap's gesture; a seek, Play, Pause or unload asked for meanwhile is applied once it is built. A load first checks that a listening session can be created on the audiobook, so an audiobook whose session is refused fails the tap without leaving `loaded`, and the loaded audiobook plays on. A port that throws, such as a Media Session call the browser refuses, is reported to Sentry and does not stop the host.
+Leaving `renewingTrackUrl` cancels a renewal, so one that arrives after Pause, an unload or another load plays nothing. An audiobook whose listening session would be refused fails the tap without leaving `loaded`. The machine's comments and [ADR 0034](../adr/0034-model-the-player-host-and-position-saves-as-xstate-machines.md) hold the rest: how `loading` keeps Play within the tap's gesture, and why a failing port is reported instead of stopping the host.
 
 ## Listening positions
 
@@ -67,7 +67,7 @@ A failed save is saved again unless a newer save comes first, because since [And
 - **What the listener sees:** nothing for a failure that can pass, such as a lost connection or a server error, until a retry fails too or saves have failed for as long as the retry delay; the player then says in plain words that the position is not saved yet, until a save succeeds. A lasting refusal, such as a signed-out listener, shows at once and is not saved again.
 - **Gap:** saving again stops when the audiobook is unloaded, so a final save that fails on unloading is lost.
 
-The browser's saves are the XState machine in [`position-saves-machine.ts`](../../apps/web-app/src/app/player/position-saves-machine.ts), one per loaded audiobook. Its `writer` region writes queued saves one at a time; a failure counts only when no newer save is queued behind it. Its `retry` region arms the retry of the latest failed position and disarms it on any newer save. Its `lifecycle` region closes with the player: saves already asked for are still written, but nothing is retried or reported.
+The browser's saves are the XState machine in [`position-saves-machine.ts`](../../apps/web-app/src/app/player/position-saves-machine.ts), one per loaded audiobook, which applies the rules above:
 
 ```mermaid
 stateDiagram-v2

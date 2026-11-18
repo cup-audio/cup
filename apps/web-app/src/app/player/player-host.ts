@@ -20,6 +20,7 @@ import {
   type Player,
 } from "#src/app/player/player.ts";
 import type { MediaSessionActionHandlers, MediaSessionPort } from "#src/platform/media-session.ts";
+import { reportFailure } from "#src/report-failure.ts";
 
 /** The one audiobook the app's player holds, with the player playing it. */
 export type LoadedAudiobook = {
@@ -114,6 +115,7 @@ export class PlayerHost {
       // An effect threw inside the machine; the host cannot recover from that within this page.
       error: (error: unknown) => {
         console.error("The player host stopped.", error);
+        reportFailure("The player host stopped.")(error);
       },
     });
     this.actor.start();

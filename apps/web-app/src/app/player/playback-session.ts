@@ -5,14 +5,9 @@ import type { Audiobook, NarrationTrack, PlaybackPosition } from "@cup/listener-
 import { findUnitIndexAt, type AudiobookTimeline } from "#src/app/player/audiobook-timeline.ts";
 import {
   positionSavesMachine,
-  type PositionSaveServices,
   type PositionSavesMachineSnapshot,
 } from "#src/app/player/position-saves-machine.ts";
-
-export {
-  SAVE_RETRY_DELAY_MILLISECONDS,
-  SAVE_RETRY_FAILURE_MESSAGE,
-} from "#src/app/player/position-saves-machine.ts";
+import { reportFailure } from "#src/report-failure.ts";
 
 /** A conversion whose narration document is prepared, whatever the state of its audio. */
 export type PreparedAudiobook = Extract<
@@ -33,7 +28,21 @@ export type PlaybackSessionRequest = {
   subject: string | null;
 };
 
-export type PlaybackSessionServices = PositionSaveServices;
+export type PlaybackSessionServices = {
+  /**
+   * Persists a position for the signed-in `subject`, or on this device when `null`. It must refuse
+   * to write when another account is signed in by the time the request is sent.
+   */
+  savePosition(position: PlaybackPosition, subject: string | null): Promise<void>;
+  now(): number;
+  /** Calls `callback` once after the delay; the returned function cancels it. */
+  setRetryTimer(callback: () => void, delayMilliseconds: number): () => void;
+  /**
+   * Calls `callback` whenever the connection may be back: the device went online, or the app
+   * returned to the foreground. The returned function stops it.
+   */
+  onReconnect(callback: () => void): () => void;
+};
 
 export const SAVE_INTERVAL_MILLISECONDS = 5_000;
 
@@ -125,6 +134,7 @@ export class PlaybackSession {
       next: (snapshot) => this.publishSaveFailure(snapshot),
       error: (error: unknown) => {
         console.error("The listening session stopped saving positions.", error);
+        reportFailure("The listening session stopped saving positions.")(error);
       },
     });
     this.saves.start();

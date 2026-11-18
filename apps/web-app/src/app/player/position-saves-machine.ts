@@ -3,24 +3,16 @@ import { z } from "zod";
 
 import type { PlaybackPosition } from "@cup/listener-api.routes";
 
+import type { PlaybackSessionServices } from "#src/app/player/playback-session.ts";
 import { describeError } from "#src/errors.ts";
 import { reportFailure } from "#src/report-failure.ts";
 
-export type PositionSaveServices = {
-  /**
-   * Persists a position for the signed-in `subject`, or on this device when `null`. It must refuse
-   * to write when another account is signed in by the time the request is sent.
-   */
-  savePosition(position: PlaybackPosition, subject: string | null): Promise<void>;
-  now(): number;
-  /** Calls `callback` once after the delay; the returned function cancels it. */
-  setRetryTimer(callback: () => void, delayMilliseconds: number): () => void;
-  /**
-   * Calls `callback` whenever the connection may be back: the device went online, or the app
-   * returned to the foreground. The returned function stops it.
-   */
-  onReconnect(callback: () => void): () => void;
+export type PositionSavesMachineInput = {
+  services: PlaybackSessionServices;
+  subject: string | null;
 };
+
+export type PositionSavesMachineSnapshot = SnapshotFrom<typeof positionSavesMachine>;
 
 /** How long after a failed save its position is saved again, unless a newer save comes first. */
 export const SAVE_RETRY_DELAY_MILLISECONDS = 15_000;
@@ -38,11 +30,6 @@ type QueuedSave = {
   resolveSave: () => void;
 };
 
-export type PositionSavesMachineInput = {
-  services: PositionSaveServices;
-  subject: string | null;
-};
-
 type PositionSavesContext = PositionSavesMachineInput & {
   /** Saves in the order they were asked for; the first one is being written. */
   queue: QueuedSave[];
@@ -54,8 +41,6 @@ type PositionSavesContext = PositionSavesMachineInput & {
   /** The position the armed retry saves. */
   retryPosition: PlaybackPosition | null;
 };
-
-export type PositionSavesMachineSnapshot = SnapshotFrom<typeof positionSavesMachine>;
 
 const positionSavesSetup = setup({
   schemas: {
@@ -76,12 +61,12 @@ const positionSavesSetup = setup({
   actors: {
     writePosition: createAsyncLogic<
       void,
-      { services: PositionSaveServices; position: PlaybackPosition; subject: string | null }
+      { services: PlaybackSessionServices; position: PlaybackPosition; subject: string | null }
     >({
       run: ({ input }) => input.services.savePosition(input.position, input.subject),
     }),
     /** Sends `RETRY_DUE` when the retry delay passed or the connection may be back. */
-    retryTrigger: createCallbackLogic<{ type: "RETRY_DUE" }, { services: PositionSaveServices }>(
+    retryTrigger: createCallbackLogic<{ type: "RETRY_DUE" }, { services: PlaybackSessionServices }>(
       ({ input: { services }, sendBack }) => {
         const retry = () => sendBack({ type: "RETRY_DUE" });
         // A throw here would stop the machine, and with it every save still queued; the next save

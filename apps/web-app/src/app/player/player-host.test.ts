@@ -1354,6 +1354,53 @@ test("skipping on the sheet of an audiobook that is not loaded loads it paused a
   expect(player().getSnapshot()).toMatchObject({ isPlaying: false, positionMilliseconds: 2_000 });
 });
 
+test("a seek on the sheet of an audiobook whose listening session is refused fails and leaves the loaded one playing", () => {
+  const { host, element } = createHost();
+  const broken: PlayableAudiobook = {
+    ...SECOND,
+    narrationTrack: { ...SECOND.narrationTrack, startMilliseconds: [0, 4_000] },
+  };
+  host.showConversion("first", FIRST);
+  host.playShown();
+
+  host.showConversion("second", broken);
+  expect(() => host.seekShown(12_000)).toThrow("2 start offsets for 3 synchronization units");
+
+  expect(host.getSnapshot().loaded?.conversionId).toBe("first");
+  expect(element.calls).toEqual([`src:${FIRST_TRACK_URL}`, "play"]);
+});
+
+test("a seek on the sheet of an audiobook that cannot play loads nothing", () => {
+  const { host, element } = createHost();
+  host.showConversion(
+    "first",
+    withoutNarrationTrack(FIRST, [ready(0), { sequence: 1, status: "generating" }, ready(2)]),
+  );
+
+  host.seekShown(12_000);
+  host.skipShown(15_000);
+
+  expect(host.getSnapshot().loaded).toBeNull();
+  expect(element.calls).toEqual([]);
+});
+
+test("a seek and a skip made while the host handles another event apply in order once the player is built", () => {
+  const { host, player } = createHost();
+  let hasMoved = false;
+  host.subscribe(() => {
+    if (!hasMoved && host.getSnapshot().shown?.conversionId === "second") {
+      hasMoved = true;
+      host.seekShown(12_000);
+      host.skipShown(-3_000);
+    }
+  });
+
+  host.showConversion("second", SECOND);
+
+  expect(host.getSnapshot().loaded?.conversionId).toBe("second");
+  expect(player().getSnapshot()).toMatchObject({ isPlaying: false, positionMilliseconds: 9_000 });
+});
+
 test("the shown audiobook without a narration track loads nothing, and Play leaves the loaded one", () => {
   const { host, element } = createHost();
 

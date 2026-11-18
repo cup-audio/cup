@@ -38,6 +38,14 @@ import { reportFailure } from "#src/report-failure.ts";
 /** A track that was loaded and no longer exists, such as one deleted on another device. */
 export type UnavailableTrack = { conversionId: string; message: string };
 
+export type PlayerHostMachineInput = {
+  services: PlayerHostServices;
+  /** The system's media controls act like Cup's own controls, which the facade owns. */
+  mediaSessionHandlers: MediaSessionActionHandlers;
+};
+
+export type PlayerHostMachineSnapshot = SnapshotFrom<typeof playerHostMachine>;
+
 /**
  * How old a track URL may be before Play renews it. The signed URL stays valid for at least 24
  * hours after the server handed it out, by the server clock; half of that tolerates a skewed client
@@ -46,12 +54,6 @@ export type UnavailableTrack = { conversionId: string; message: string };
 const TRACK_URL_RENEWAL_AGE_MILLISECONDS = 12 * 60 * 60 * 1_000;
 const RENEWAL_ERROR_MESSAGE = "The audio could not be loaded again. Press Play to try again.";
 const UNAVAILABLE_TRACK_MESSAGE = "This track is no longer available.";
-
-export type PlayerHostMachineInput = {
-  services: PlayerHostServices;
-  /** The system's media controls act like Cup's own controls, which the facade owns. */
-  mediaSessionHandlers: MediaSessionActionHandlers;
-};
 
 /** What the listener asked of the shown audiobook: load it, and optionally seek and play. */
 type ShownStart = { seek: ShownSeek | null; play: boolean };
@@ -62,11 +64,23 @@ type ShownSeek =
   | { kind: "position"; positionMilliseconds: number }
   | { kind: "skip"; deltaMilliseconds: number };
 
+/** The events that start the shown audiobook from the player sheet, its segments or Play. */
+type ShownStartEvent =
+  | { type: "LOAD_SHOWN" }
+  | { type: "PLAY_SHOWN"; unitIndex: number | undefined }
+  | { type: "SEEK_SHOWN"; positionMilliseconds: number }
+  | { type: "SKIP_SHOWN"; deltaMilliseconds: number };
+
 /**
- * What `loading` still owes once the player is built: the listener's start, and Pause or an unload
- * that arrived while the player was being built.
+ * What `loading` still owes once the player is built: the listener's seeks in the order they were
+ * asked for, whether to play, and an unload that arrived while the player was being built.
  */
-type PendingLoad = ShownStart & { conversionId: string; unload: PositionOnClose | null };
+type PendingLoad = {
+  conversionId: string;
+  seeks: ShownSeek[];
+  play: boolean;
+  unload: PositionOnClose | null;
+};
 
 type PlayerHostContext = PlayerHostMachineInput & {
   loaded: LoadedAudiobook | null;
@@ -86,8 +100,6 @@ type PlayerHostContext = PlayerHostMachineInput & {
   /** Taking over what played failed; the facade rejects `adoptRunningPlayer` with it. */
   adoptionFailure: { error: unknown } | null;
 };
-
-export type PlayerHostMachineSnapshot = SnapshotFrom<typeof playerHostMachine>;
 
 /** What `loading` waits for: the effect that builds a player reports its outcome as one of these. */
 type LoadOutcome =
@@ -262,14 +274,14 @@ export const playerHostMachine = playerHostSetup.createMachine({
       initial: "empty",
       // `empty` and `loaded` start the shown audiobook alike; `loading` handles these itself.
       on: {
-        LOAD_SHOWN: ({ context, self }, enq) =>
-          startShown(context, { seek: null, play: false }, self, enq),
+        LOAD_SHOWN: ({ context, event, self }, enq) =>
+          startShown(context, toShownStart(event), self, enq),
         PLAY_SHOWN: ({ context, event, self }, enq) =>
-          startShown(context, { seek: unitSeek(event.unitIndex), play: true }, self, enq),
+          startShown(context, toShownStart(event), self, enq),
         SEEK_SHOWN: ({ context, event, self }, enq) =>
-          startShown(context, { seek: { kind: "position", ...event }, play: false }, self, enq),
+          startShown(context, toShownStart(event), self, enq),
         SKIP_SHOWN: ({ context, event, self }, enq) =>
-          startShown(context, { seek: { kind: "skip", ...event }, play: false }, self, enq),
+          startShown(context, toShownStart(event), self, enq),
       },
       states: {
         empty: {
@@ -280,7 +292,7 @@ export const playerHostMachine = playerHostSetup.createMachine({
               return {
                 target: "loading",
                 context: {
-                  pendingLoad: { conversionId, seek: null, play: false, unload: null },
+                  pendingLoad: { conversionId, seeks: [], play: false, unload: null },
                 },
               };
             },
@@ -291,9 +303,13 @@ export const playerHostMachine = playerHostSetup.createMachine({
             PLAYER_BUILT: ({ context, event }, enq) => {
               const pendingLoad = requirePendingLoad(context);
               const { player } = event.loaded;
-              const { seek } = pendingLoad;
-              if (seek) {
-                enq(() => applySeek(player, seek));
+              const { seeks } = pendingLoad;
+              if (seeks.length > 0) {
+                enq(() => {
+                  for (const seek of seeks) {
+                    applySeek(player, seek);
+                  }
+                });
               }
               if (event.origin.kind === "load") {
                 enq.raise({ type: "PLAYER_LOADED" });
@@ -334,13 +350,10 @@ export const playerHostMachine = playerHostSetup.createMachine({
              * event, so the player that is being built has not reported back yet. A second start
              * of another audiobook is dropped; the listener can tap again.
              */
-            LOAD_SHOWN: ({ context }) => withPendingLoad(context, { seek: null, play: false }),
-            PLAY_SHOWN: ({ context, event }) =>
-              withPendingLoad(context, { seek: unitSeek(event.unitIndex), play: true }),
-            SEEK_SHOWN: ({ context, event }) =>
-              withPendingLoad(context, { seek: { kind: "position", ...event }, play: false }),
-            SKIP_SHOWN: ({ context, event }) =>
-              withPendingLoad(context, { seek: { kind: "skip", ...event }, play: false }),
+            LOAD_SHOWN: ({ context, event }) => withPendingLoad(context, toShownStart(event)),
+            PLAY_SHOWN: ({ context, event }) => withPendingLoad(context, toShownStart(event)),
+            SEEK_SHOWN: ({ context, event }) => withPendingLoad(context, toShownStart(event)),
+            SKIP_SHOWN: ({ context, event }) => withPendingLoad(context, toShownStart(event)),
             PLAY: ({ context }) => ({
               context: { pendingLoad: { ...requirePendingLoad(context), play: true } },
             }),
@@ -392,6 +405,7 @@ export const playerHostMachine = playerHostSetup.createMachine({
                   }
                   const { player } = requireLoaded(context);
                   enq(() => runEffect("play", () => player.play()));
+                  // Handled: the queued effect plays without a change of state.
                   return undefined;
                 },
               },
@@ -466,10 +480,7 @@ export const playerHostMachine = playerHostSetup.createMachine({
                   }
                   return { target: "awaitingAccount", context: { runningPlayer: event.output } };
                 },
-                onError: ({ event }) => ({
-                  ...ADOPTION_DONE,
-                  context: { runningPlayer: null, adoptionFailure: { error: event.error } },
-                }),
+                onError: ({ event }) => adoptionFailed(event.error),
               },
             },
             /** Who listens is unknown while the stored account is restored. */
@@ -523,10 +534,7 @@ export const playerHostMachine = playerHostSetup.createMachine({
             handingOver: {
               on: {
                 PLAYER_BUILT: ADOPTION_DONE,
-                ADOPTION_FAILED: ({ event }) => ({
-                  ...ADOPTION_DONE,
-                  context: { runningPlayer: null, adoptionFailure: { error: event.error } },
-                }),
+                ADOPTION_FAILED: ({ event }) => adoptionFailed(event.error),
               },
             },
           },
@@ -562,7 +570,8 @@ function startShown(
     if (start.play) {
       enq.raise({ type: "PLAY" });
     }
-    // Nothing to load: the effects above act on the loaded player.
+    // Nothing to load: the effects above act on the loaded player. A transition that queued an
+    // effect counts as handled even when it returns no target or context.
     return undefined;
   }
 
@@ -574,7 +583,14 @@ function startShown(
   enq(() => self.send(buildShownPlayer(context)));
   return {
     target: "#playerHost.playback.loading",
-    context: { pendingLoad: { ...start, conversionId: shown.conversionId, unload: null } },
+    context: {
+      pendingLoad: {
+        conversionId: shown.conversionId,
+        seeks: start.seek ? [start.seek] : [],
+        play: start.play,
+        unload: null,
+      },
+    },
   };
 }
 
@@ -592,25 +608,34 @@ function withPendingLoad(context: PlayerHostContext, start: ShownStart) {
       pendingLoad: {
         ...pendingLoad,
         play: pendingLoad.play || start.play,
-        seek: mergeSeeks(pendingLoad.seek, start.seek),
+        seeks: start.seek ? [...pendingLoad.seeks, start.seek] : pendingLoad.seeks,
       },
     },
   };
 }
 
-/** Skips add up; any other seek replaces the one before it. */
-function mergeSeeks(earlier: ShownSeek | null, later: ShownSeek | null): ShownSeek | null {
-  if (!later) {
-    return earlier;
+function toShownStart(event: ShownStartEvent): ShownStart {
+  if (event.type === "LOAD_SHOWN") {
+    return { seek: null, play: false };
   }
-  if (earlier?.kind === "skip" && later.kind === "skip") {
-    return { kind: "skip", deltaMilliseconds: earlier.deltaMilliseconds + later.deltaMilliseconds };
+  if (event.type === "PLAY_SHOWN") {
+    const { unitIndex } = event;
+    return { seek: unitIndex === undefined ? null : { kind: "unit", unitIndex }, play: true };
   }
-  return later;
+  if (event.type === "SEEK_SHOWN") {
+    const { positionMilliseconds } = event;
+    return { seek: { kind: "position", positionMilliseconds }, play: false };
+  }
+  const { deltaMilliseconds } = event;
+  return { seek: { kind: "skip", deltaMilliseconds }, play: false };
 }
 
-function unitSeek(unitIndex: number | undefined): ShownSeek | null {
-  return unitIndex === undefined ? null : { kind: "unit", unitIndex };
+/** The adoption is over because taking over what played failed; the facade rejects with it. */
+function adoptionFailed(error: unknown) {
+  return {
+    ...ADOPTION_DONE,
+    context: { runningPlayer: null, adoptionFailure: { error } },
+  };
 }
 
 function applySeek(player: Player, seek: ShownSeek) {

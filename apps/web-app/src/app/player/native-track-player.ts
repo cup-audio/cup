@@ -3,10 +3,7 @@ import type { PluginListenerHandle } from "@capacitor/core";
 import type { NarrationTrack, PlaybackPosition } from "@cup/listener-api.routes";
 
 import { clampToTimeline, findUnitIndexAt } from "#src/app/player/audiobook-timeline.ts";
-import {
-  SAVE_RETRY_FAILURE_MESSAGE,
-  type PlaybackSession,
-} from "#src/app/player/playback-session.ts";
+import type { PlaybackSession } from "#src/app/player/playback-session.ts";
 import {
   isSameSnapshot,
   MEDIA_ERROR_MESSAGE,
@@ -18,6 +15,7 @@ import {
   type PlayerSnapshot,
   type PositionOnClose,
 } from "#src/app/player/player.ts";
+import { SAVE_RETRY_FAILURE_MESSAGE } from "#src/app/player/position-saves-machine.ts";
 
 /** Why the plugin ended its session without the page. */
 export type NativeClosedReason =

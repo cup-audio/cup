@@ -6,12 +6,9 @@ import {
   type MediaPlaybackPlugin,
   type NativePlaybackState,
 } from "#src/app/player/native-track-player.ts";
-import {
-  PlaybackSession,
-  SAVE_RETRY_FAILURE_MESSAGE,
-  type PlayableAudiobook,
-} from "#src/app/player/playback-session.ts";
+import { PlaybackSession, type PlayableAudiobook } from "#src/app/player/playback-session.ts";
 import { PlayerHost, type PlayerHostAccount } from "#src/app/player/player-host.ts";
+import { SAVE_RETRY_FAILURE_MESSAGE } from "#src/app/player/position-saves-machine.ts";
 import type { MediaSessionPort } from "#src/platform/media-session.ts";
 import { expect, test } from "#src/test-utils/component-test.ts";
 

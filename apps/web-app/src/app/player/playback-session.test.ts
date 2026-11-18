@@ -3,11 +3,13 @@ import type { PlaybackPosition } from "@cup/listener-api.routes";
 import {
   PlaybackSession,
   SAVE_INTERVAL_MILLISECONDS,
-  SAVE_RETRY_DELAY_MILLISECONDS,
-  SAVE_RETRY_FAILURE_MESSAGE,
   type PlayableAudiobook,
   type PlaybackSessionServices,
 } from "#src/app/player/playback-session.ts";
+import {
+  SAVE_RETRY_DELAY_MILLISECONDS,
+  SAVE_RETRY_FAILURE_MESSAGE,
+} from "#src/app/player/position-saves-machine.ts";
 import { UserFacingError } from "#src/errors.ts";
 import { expect, test } from "#src/test-utils/component-test.ts";
 
