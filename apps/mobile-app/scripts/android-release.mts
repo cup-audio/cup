@@ -6,6 +6,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import url from "node:url";
 import util from "node:util";
 import { Temporal } from "temporal-polyfill";
 
@@ -61,6 +62,19 @@ const MAPPING_FILE = path.join(
   "release",
   "mapping.txt",
 );
+const WEB_APP_ROOT = path.dirname(
+  url.fileURLToPath(import.meta.resolve("@cup/web-app/package.json")),
+);
+/*
+ * The web app's served build, which `cap sync` packs into the bundle, and its source maps, which
+ * `symbols:upload` sends to Sentry. Turbo restores a cached build by writing its files over what a
+ * folder already holds and removes none, so without emptying these first the bundle and the upload
+ * would carry the files of every earlier build, as for the Worker's deploy script.
+ */
+const WEB_BUILD_OUTPUT_DIRECTORIES = [
+  path.join(WEB_APP_ROOT, "dist", "web"),
+  path.join(WEB_APP_ROOT, "dist", "source-maps"),
+];
 // Every class here is a debug hook that a release bundle must not contain.
 const DEBUG_SOURCES = path.join(ANDROID_PROJECT, "app", "src", "debug", "java");
 const SETUP_DOCS = `${path.join(MOBILE_APP_ROOT, "README.md")}, section "Release builds"`;
@@ -120,6 +134,9 @@ const environment: NodeJS.ProcessEnv = {
   // Gradle reads the SDK from ANDROID_HOME, so no `local.properties` is needed.
   ANDROID_HOME: androidSdkRoot,
 };
+for (const directory of WEB_BUILD_OUTPUT_DIRECTORIES) {
+  fs.rmSync(directory, { recursive: true, force: true });
+}
 runVisible("pnpm", ["exec", "turbo", "run", "turbo:build"], {
   cwd: MOBILE_APP_ROOT,
   env: environment,
