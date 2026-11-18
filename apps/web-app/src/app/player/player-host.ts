@@ -10,7 +10,6 @@ import type {
 } from "#src/app/player/playback-session.ts";
 import {
   playerHostMachine,
-  readLoadedPlayer,
   type PlayerHostMachineSnapshot,
   type UnavailableTrack,
 } from "#src/app/player/player-host-machine.ts";
@@ -89,11 +88,11 @@ export type PlayerHostServices = {
  * navigates, and decides what it plays.
  *
  * A page reports the conversion it shows; showing it loads nothing. Its narration track is loaded
- * only when the listener starts it: `playShown`, or `loadShown` for seeking and skipping. Only
- * `play` and `playShown` start playback, which must run within a user gesture. Loading the shown
- * audiobook while another one is loaded saves the previous one and replaces its player. A change of
- * the signed-in user unloads it. The loaded audiobook is shown in the system's media controls,
- * whose actions act like the app's own controls.
+ * only when the listener starts it: `playShown`, or `seekShown` and `skipShown` from the player
+ * sheet. Only `play` and `playShown` start playback, which must run within a user gesture. Loading
+ * the shown audiobook while another one is loaded saves the previous one and replaces its player. A
+ * change of the signed-in user unloads it. The loaded audiobook is shown in the system's media
+ * controls, whose actions act like the app's own controls.
  *
  * The lifecycle is the XState machine in `player-host-machine.ts` (ADR 0009); this class is its
  * facade. Events are processed synchronously, so a Play sent from a user gesture reaches the player
@@ -213,27 +212,25 @@ export class PlayerHost {
     this.throwLoadFailure();
   };
 
-  /**
-   * Loads the shown audiobook, paused, unless it is loaded already, and returns its player, so the
-   * player sheet can seek it before it plays. Returns `null` while the shown audiobook cannot play.
-   * Call it from a UI event handler: the player is built within the call only when the host is not
-   * handling another event at the time.
-   */
-  loadShown = (): Player | null => {
-    const { shown } = this.snapshot;
-    if (!shown?.canPlay) {
-      return null;
-    }
+  /** Seeks the shown audiobook, loading it paused first when another one is loaded. */
+  seekShown = (positionMilliseconds: number) => {
+    this.actor.send({ type: "SEEK_SHOWN", positionMilliseconds });
+    this.throwLoadFailure();
+  };
 
+  /**
+   * Skips by an amount in the shown audiobook, back when negative, loading it paused first, so the
+   * skip starts from its resume position.
+   */
+  skipShown = (deltaMilliseconds: number) => {
+    this.actor.send({ type: "SKIP_SHOWN", deltaMilliseconds });
+    this.throwLoadFailure();
+  };
+
+  /** Loads the shown audiobook, paused, unless it is loaded already or cannot play. */
+  loadShown = () => {
     this.actor.send({ type: "LOAD_SHOWN" });
     this.throwLoadFailure();
-    const player = readLoadedPlayer(this.actor.getSnapshot());
-    if (this.actor.getSnapshot().context.loaded?.conversionId !== shown.conversionId) {
-      throw new Error(
-        "loadShown ran while the player host was handling another event, so the player is not built yet.",
-      );
-    }
-    return player;
   };
 
   /** Rethrows a refused or failed load to the tap that asked for it. */

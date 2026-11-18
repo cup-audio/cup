@@ -1322,7 +1322,7 @@ test("seeking the shown audiobook while another one plays loads it paused at tha
   host.showConversion("second", SECOND);
 
   const callCountBeforeSeek = element.calls.length;
-  host.loadShown()?.seekTo(12_000);
+  host.seekShown(12_000);
   await settle();
 
   expect(host.getSnapshot().loaded?.conversionId).toBe("second");
@@ -1338,6 +1338,20 @@ test("seeking the shown audiobook while another one plays loads it paused at tha
     `src:${SECOND_TRACK_URL}`,
     "currentTime:12",
   ]);
+});
+
+test("skipping on the sheet of an audiobook that is not loaded loads it paused and skips from its listening position", () => {
+  const { host, element, player } = createHost({ subject: "user-1" });
+  host.showConversion(
+    "first",
+    createAudiobook("First", { synchronizationUnitId: "unit-2", offsetMilliseconds: 1_000 }),
+  );
+
+  host.skipShown(-3_000);
+
+  expect(host.getSnapshot().loaded?.conversionId).toBe("first");
+  expect(element.calls).toEqual([`src:${FIRST_TRACK_URL}`]);
+  expect(player().getSnapshot()).toMatchObject({ isPlaying: false, positionMilliseconds: 2_000 });
 });
 
 test("the shown audiobook without a narration track loads nothing, and Play leaves the loaded one", () => {
@@ -1356,7 +1370,8 @@ test("the shown audiobook without a narration track loads nothing, and Play leav
     ),
   );
 
-  expect(host.loadShown()).toBeNull();
+  host.loadShown();
+  expect(host.getSnapshot().loaded?.conversionId).toBe("first");
   host.playShown();
 
   expect(host.getSnapshot().loaded?.conversionId).toBe("first");

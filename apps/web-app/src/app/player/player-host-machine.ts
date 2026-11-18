@@ -54,7 +54,13 @@ export type PlayerHostMachineInput = {
 };
 
 /** What the listener asked of the shown audiobook: load it, and optionally seek and play. */
-type ShownStart = { unitIndex: number | undefined; play: boolean };
+type ShownStart = { seek: ShownSeek | null; play: boolean };
+
+/** Where the listener moves the shown audiobook from the player sheet or its segments. */
+type ShownSeek =
+  | { kind: "unit"; unitIndex: number }
+  | { kind: "position"; positionMilliseconds: number }
+  | { kind: "skip"; deltaMilliseconds: number };
 
 /**
  * What `loading` still owes once the player is built: the listener's start, and Pause or an unload
@@ -148,6 +154,10 @@ const playerHostSetup = setup({
       LOAD_SHOWN: z.object({}),
       /** Plays the shown audiobook, from the start of a unit if given, loading it first. */
       PLAY_SHOWN: types<{ unitIndex: number | undefined }>(),
+      /** Seeks the shown audiobook, loading it paused first. */
+      SEEK_SHOWN: types<{ positionMilliseconds: number }>(),
+      /** Skips by an amount in the shown audiobook, loading it paused first. */
+      SKIP_SHOWN: types<{ deltaMilliseconds: number }>(),
       UNLOAD: types<{ position: PositionOnClose }>(),
       /** Unloads `conversionId`, which the listener is deleting, without saving its position. */
       RELEASE: types<{ conversionId: string }>(),
@@ -253,9 +263,13 @@ export const playerHostMachine = playerHostSetup.createMachine({
       // `empty` and `loaded` start the shown audiobook alike; `loading` handles these itself.
       on: {
         LOAD_SHOWN: ({ context, self }, enq) =>
-          startShown(context, { unitIndex: undefined, play: false }, self, enq),
+          startShown(context, { seek: null, play: false }, self, enq),
         PLAY_SHOWN: ({ context, event, self }, enq) =>
-          startShown(context, { unitIndex: event.unitIndex, play: true }, self, enq),
+          startShown(context, { seek: unitSeek(event.unitIndex), play: true }, self, enq),
+        SEEK_SHOWN: ({ context, event, self }, enq) =>
+          startShown(context, { seek: { kind: "position", ...event }, play: false }, self, enq),
+        SKIP_SHOWN: ({ context, event, self }, enq) =>
+          startShown(context, { seek: { kind: "skip", ...event }, play: false }, self, enq),
       },
       states: {
         empty: {
@@ -266,7 +280,7 @@ export const playerHostMachine = playerHostSetup.createMachine({
               return {
                 target: "loading",
                 context: {
-                  pendingLoad: { conversionId, unitIndex: undefined, play: false, unload: null },
+                  pendingLoad: { conversionId, seek: null, play: false, unload: null },
                 },
               };
             },
@@ -277,9 +291,9 @@ export const playerHostMachine = playerHostSetup.createMachine({
             PLAYER_BUILT: ({ context, event }, enq) => {
               const pendingLoad = requirePendingLoad(context);
               const { player } = event.loaded;
-              if (pendingLoad.unitIndex !== undefined) {
-                const { unitIndex } = pendingLoad;
-                enq(() => runEffect("seek to the unit", () => player.seekToUnit(unitIndex)));
+              const { seek } = pendingLoad;
+              if (seek) {
+                enq(() => applySeek(player, seek));
               }
               if (event.origin.kind === "load") {
                 enq.raise({ type: "PLAYER_LOADED" });
@@ -320,9 +334,13 @@ export const playerHostMachine = playerHostSetup.createMachine({
              * event, so the player that is being built has not reported back yet. A second start
              * of another audiobook is dropped; the listener can tap again.
              */
-            LOAD_SHOWN: ({ context }) => withPendingLoad(context, { play: false }),
+            LOAD_SHOWN: ({ context }) => withPendingLoad(context, { seek: null, play: false }),
             PLAY_SHOWN: ({ context, event }) =>
-              withPendingLoad(context, { play: true, unitIndex: event.unitIndex }),
+              withPendingLoad(context, { seek: unitSeek(event.unitIndex), play: true }),
+            SEEK_SHOWN: ({ context, event }) =>
+              withPendingLoad(context, { seek: { kind: "position", ...event }, play: false }),
+            SKIP_SHOWN: ({ context, event }) =>
+              withPendingLoad(context, { seek: { kind: "skip", ...event }, play: false }),
             PLAY: ({ context }) => ({
               context: { pendingLoad: { ...requirePendingLoad(context), play: true } },
             }),
@@ -519,11 +537,6 @@ export const playerHostMachine = playerHostSetup.createMachine({
   },
 });
 
-/** The loaded player, for the facade's controls that act on playback without changing state. */
-export function readLoadedPlayer(snapshot: PlayerHostMachineSnapshot): Player | null {
-  return snapshot.context.loaded?.player ?? null;
-}
-
 /**
  * Starts the shown audiobook from `empty` or `loaded`. A loaded one is sought and played in place.
  * Another one is checked first: an audiobook whose listening session would be refused fails the tap
@@ -542,9 +555,9 @@ function startShown(
 
   if (shown.conversionId === loaded?.conversionId) {
     const { player } = loaded;
-    const { unitIndex } = start;
-    if (unitIndex !== undefined) {
-      enq(() => runEffect("seek to the unit", () => player.seekToUnit(unitIndex)));
+    const { seek } = start;
+    if (seek) {
+      enq(() => applySeek(player, seek));
     }
     if (start.play) {
       enq.raise({ type: "PLAY" });
@@ -569,7 +582,7 @@ function startShown(
  * Merges a start of the audiobook being built into what `loading` owes. A start of another one is
  * dropped, and handled here so it does not reach `playback`, which would build a second player.
  */
-function withPendingLoad(context: PlayerHostContext, start: Partial<ShownStart>) {
+function withPendingLoad(context: PlayerHostContext, start: ShownStart) {
   const pendingLoad = requirePendingLoad(context);
   if (context.shown?.conversionId !== pendingLoad.conversionId) {
     return { context: {} };
@@ -578,11 +591,45 @@ function withPendingLoad(context: PlayerHostContext, start: Partial<ShownStart>)
     context: {
       pendingLoad: {
         ...pendingLoad,
-        play: pendingLoad.play || start.play === true,
-        unitIndex: start.unitIndex ?? pendingLoad.unitIndex,
+        play: pendingLoad.play || start.play,
+        seek: mergeSeeks(pendingLoad.seek, start.seek),
       },
     },
   };
+}
+
+/** Skips add up; any other seek replaces the one before it. */
+function mergeSeeks(earlier: ShownSeek | null, later: ShownSeek | null): ShownSeek | null {
+  if (!later) {
+    return earlier;
+  }
+  if (earlier?.kind === "skip" && later.kind === "skip") {
+    return { kind: "skip", deltaMilliseconds: earlier.deltaMilliseconds + later.deltaMilliseconds };
+  }
+  return later;
+}
+
+function unitSeek(unitIndex: number | undefined): ShownSeek | null {
+  return unitIndex === undefined ? null : { kind: "unit", unitIndex };
+}
+
+function applySeek(player: Player, seek: ShownSeek) {
+  runEffect("seek", () => {
+    switch (seek.kind) {
+      case "unit": {
+        player.seekToUnit(seek.unitIndex);
+        break;
+      }
+      case "position": {
+        player.seekTo(seek.positionMilliseconds);
+        break;
+      }
+      case "skip": {
+        player.skipBy(seek.deltaMilliseconds);
+        break;
+      }
+    }
+  });
 }
 
 /** Whether `playback` holds or is building an audiobook. */
