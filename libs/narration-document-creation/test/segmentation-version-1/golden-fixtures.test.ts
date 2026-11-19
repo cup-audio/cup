@@ -1,20 +1,25 @@
 import fs from "node:fs";
 import path from "node:path";
 import { expect, test } from "vitest";
+import { z } from "zod";
 
-import { createNarrationDocument } from "#src/narration-document-creation.ts";
-import type { SynchronizationUnit } from "#src/narration-document-creation.ts";
+import {
+  segmentNarrationDocument,
+  SYNCHRONIZATION_UNIT_SCHEMA,
+} from "#src/narration-document-creation.ts";
 
-type SegmentationFixture = {
-  sourceTitle: string;
-  sourceSubtitle?: string;
-  sourceMaterialHtml: string;
-  synchronizationUnits: SynchronizationUnit[];
-};
+const SEGMENTATION_FIXTURE_SCHEMA = z
+  .object({
+    sourceTitle: z.string(),
+    sourceSubtitle: z.string().exactOptional(),
+    sourceMaterialHtml: z.string(),
+    synchronizationUnits: z.array(SYNCHRONIZATION_UNIT_SCHEMA),
+  })
+  .strict();
 
 // The expected units were generated from createNarrationDocument before segmentation was split out
 // of it, and are frozen: a change that alters them must become a new segmentation version.
-const FIXTURES_DIRECTORY = path.join(import.meta.dirname, "fixtures/segmentation-version-1");
+const FIXTURES_DIRECTORY = path.join(import.meta.dirname, "golden-fixtures");
 
 const FIXTURE_FILE_NAMES = fs
   .readdirSync(FIXTURES_DIRECTORY)
@@ -36,9 +41,11 @@ test("covers every committed segmentation version 1 golden fixture", () => {
 });
 
 test.for(FIXTURE_FILE_NAMES)("segmentation version 1 keeps the units of %s", (fileName) => {
-  const { synchronizationUnits, ...input } = JSON.parse(
-    fs.readFileSync(path.join(FIXTURES_DIRECTORY, fileName), "utf8"),
-  ) as SegmentationFixture;
+  const { synchronizationUnits, ...input } = SEGMENTATION_FIXTURE_SCHEMA.parse(
+    JSON.parse(fs.readFileSync(path.join(FIXTURES_DIRECTORY, fileName), "utf8")),
+  );
 
-  expect(createNarrationDocument(input).synchronizationUnits).toEqual(synchronizationUnits);
+  expect(
+    segmentNarrationDocument({ ...input, segmentationVersion: 1 }).synchronizationUnits,
+  ).toEqual(synchronizationUnits);
 });

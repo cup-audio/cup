@@ -38,17 +38,17 @@ const INLINE_TAG_NAMES = new Set([
   "wbr",
 ]);
 
-const MAX_CHUNK_CHARACTERS = 2_000;
+const MAX_UNIT_TEXT_CHARACTERS = 2_000;
 
-/** One normalized text input that fits the narration synthesis limit. */
-export type NarrationChunk = {
+/** The narration text of one synchronization unit, within the narration synthesis limit. */
+export type UnitText = {
   text: string;
 };
 
-/** Converts selected HTML into ordered narration inputs, joining headings to following text. */
-export function createNarrationChunks(html: string): NarrationChunk[] {
+/** Divides selected HTML into ordered unit texts, joining headings to the following text. */
+export function segmentUnitTexts(html: string): UnitText[] {
   const documentFragment = parseFragment(html);
-  const narrationChunks: NarrationChunk[] = [];
+  const unitTexts: UnitText[] = [];
   const pendingHeadings: string[] = [];
 
   visitNarrationElements(documentFragment, {
@@ -59,12 +59,12 @@ export function createNarrationChunks(html: string): NarrationChunk[] {
         return;
       }
 
-      const chunkText = [...pendingHeadings, normalizedText].join("\n\n");
+      const unitText = [...pendingHeadings, normalizedText].join("\n\n");
 
       pendingHeadings.length = 0;
 
-      for (const chunkPartText of splitNarrationBlock(chunkText)) {
-        narrationChunks.push({ text: chunkPartText });
+      for (const unitTextPart of splitNarrationBlock(unitText)) {
+        unitTexts.push({ text: unitTextPart });
       }
     },
     addPendingHeading(text) {
@@ -78,11 +78,11 @@ export function createNarrationChunks(html: string): NarrationChunk[] {
 
   if (pendingHeadings.length > 0) {
     for (const text of splitNarrationBlock(pendingHeadings.join("\n\n"))) {
-      narrationChunks.push({ text });
+      unitTexts.push({ text });
     }
   }
 
-  return narrationChunks;
+  return unitTexts;
 }
 
 type ElementVisitor = {
@@ -183,7 +183,7 @@ function normalizeNarrationText(text: string): string {
 
 /** Splits oversized narration at sentences, falling back to word boundaries when necessary. */
 function splitNarrationBlock(text: string): string[] {
-  if (text.length <= MAX_CHUNK_CHARACTERS) {
+  if (text.length <= MAX_UNIT_TEXT_CHARACTERS) {
     return [text];
   }
 
@@ -204,94 +204,93 @@ function splitNarrationBlock(text: string): string[] {
     sentences.push({ separatorBefore, text: text.slice(sentenceStart) });
   }
 
-  const narrationChunks: string[] = [];
-  let currentChunk = "";
+  const unitTexts: string[] = [];
+  let currentPart = "";
 
   for (const sentence of sentences) {
     for (const [sentencePartIndex, sentencePart] of splitTextAtWordBoundaries(
       sentence.text,
     ).entries()) {
       const sentencePartSeparator = sentencePartIndex === 0 ? sentence.separatorBefore : " ";
-      const combinedChunk =
-        currentChunk.length === 0
+      const combinedPart =
+        currentPart.length === 0
           ? sentencePart
-          : `${currentChunk}${sentencePartSeparator}${sentencePart}`;
+          : `${currentPart}${sentencePartSeparator}${sentencePart}`;
 
-      if (combinedChunk.length <= MAX_CHUNK_CHARACTERS) {
-        currentChunk = combinedChunk;
+      if (combinedPart.length <= MAX_UNIT_TEXT_CHARACTERS) {
+        currentPart = combinedPart;
         continue;
       }
 
-      narrationChunks.push(currentChunk);
-      currentChunk = sentencePart;
+      unitTexts.push(currentPart);
+      currentPart = sentencePart;
     }
   }
 
-  if (currentChunk.length > 0) {
-    narrationChunks.push(currentChunk);
+  if (currentPart.length > 0) {
+    unitTexts.push(currentPart);
   }
 
-  return narrationChunks;
+  return unitTexts;
 }
 
 /** Splits oversized sentences at whitespace before falling back to hard text boundaries. */
 function splitTextAtWordBoundaries(text: string): string[] {
-  if (text.length <= MAX_CHUNK_CHARACTERS) {
+  if (text.length <= MAX_UNIT_TEXT_CHARACTERS) {
     return [text];
   }
 
-  const chunks: string[] = [];
-  let currentChunk = "";
+  const parts: string[] = [];
+  let currentPart = "";
   const wordSeparators = text.match(/\s+/gu) ?? [];
 
   for (const [wordIndex, word] of text.split(/\s+/u).entries()) {
-    if (word.length > MAX_CHUNK_CHARACTERS) {
-      if (currentChunk.length > 0) {
-        chunks.push(currentChunk);
-        currentChunk = "";
+    if (word.length > MAX_UNIT_TEXT_CHARACTERS) {
+      if (currentPart.length > 0) {
+        parts.push(currentPart);
+        currentPart = "";
       }
 
-      chunks.push(...splitUnbrokenText(word));
+      parts.push(...splitUnbrokenText(word));
       continue;
     }
 
     const wordSeparator = wordIndex === 0 ? "" : (wordSeparators[wordIndex - 1] ?? " ");
-    const combinedChunk =
-      currentChunk.length === 0 ? word : `${currentChunk}${wordSeparator}${word}`;
+    const combinedPart = currentPart.length === 0 ? word : `${currentPart}${wordSeparator}${word}`;
 
-    if (combinedChunk.length <= MAX_CHUNK_CHARACTERS) {
-      currentChunk = combinedChunk;
+    if (combinedPart.length <= MAX_UNIT_TEXT_CHARACTERS) {
+      currentPart = combinedPart;
       continue;
     }
 
-    chunks.push(currentChunk);
-    currentChunk = word;
+    parts.push(currentPart);
+    currentPart = word;
   }
 
-  if (currentChunk.length > 0) {
-    chunks.push(currentChunk);
+  if (currentPart.length > 0) {
+    parts.push(currentPart);
   }
 
-  return chunks;
+  return parts;
 }
 
 // Avoid splitting UTF-16 surrogate pairs when no natural boundary is available.
 function splitUnbrokenText(text: string): string[] {
-  const chunks: string[] = [];
-  let currentChunk = "";
+  const parts: string[] = [];
+  let currentPart = "";
 
   for (const character of text) {
-    if (currentChunk.length + character.length > MAX_CHUNK_CHARACTERS) {
-      chunks.push(currentChunk);
-      currentChunk = "";
+    if (currentPart.length + character.length > MAX_UNIT_TEXT_CHARACTERS) {
+      parts.push(currentPart);
+      currentPart = "";
     }
 
-    currentChunk += character;
+    currentPart += character;
   }
 
-  if (currentChunk.length > 0) {
-    chunks.push(currentChunk);
+  if (currentPart.length > 0) {
+    parts.push(currentPart);
   }
 
-  return chunks;
+  return parts;
 }

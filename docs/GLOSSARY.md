@@ -306,6 +306,12 @@ The smallest independently navigable portion of a narration document associated 
 
 _Avoid_: sentence, paragraph, narration chunk, synchronization cue
 
+## segmentation
+
+How a narration document is divided into synchronization units. A numbered segmentation version is decided once, when a conversion is prepared, so a new version applies only to conversions prepared after it.
+
+_Avoid_: chunking, unit finding
+
 ## segment
 
 The user-facing name for a synchronization unit: an independently selectable part of an audiobook's narration document and its corresponding audio. It can include headings or multiple paragraphs, and its text can be read before the corresponding audio segment is generated. A segment whose synthesis finally failed has no audio and is marked in the text; the audiobook cannot be played until a retry gives it audio.

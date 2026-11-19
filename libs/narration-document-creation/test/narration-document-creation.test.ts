@@ -2,6 +2,8 @@ import { expect, test } from "vitest";
 
 import {
   createNarrationDocument,
+  presentNarrationDocument,
+  segmentNarrationDocument,
   SYNCHRONIZATION_UNIT_SCHEMA,
 } from "#src/narration-document-creation.ts";
 
@@ -279,4 +281,25 @@ test("never marks a unit as continuing its narration block", () => {
 
   expect(synchronizationUnits.length).toBeGreaterThan(2);
   expect(synchronizationUnits.every((unit) => !("continuesNarrationBlock" in unit))).toBe(true);
+});
+
+test("creates the narration document by segmenting the source material, then presenting it", () => {
+  const options = {
+    sourceTitle: "A Source Title",
+    sourceSubtitle: "A source subtitle",
+    sourceMaterialHtml: `<h2>A list</h2><ul><li>First <b>item</b></li><li>Second item</li></ul>`,
+  };
+
+  const { segmentedDocument, synchronizationUnits } = segmentNarrationDocument({
+    ...options,
+    segmentationVersion: 1,
+  });
+
+  expect(createNarrationDocument(options)).toEqual({
+    html: presentNarrationDocument(segmentedDocument),
+    synchronizationUnits,
+  });
+  expect(presentNarrationDocument(segmentedDocument)).toBe(
+    '<article><hgroup><h1 id="narration-unit-0001">A Source Title</h1><p id="narration-unit-0002">A source subtitle</p></hgroup><ul><li><section id="narration-unit-0003"><h2>A list</h2><p>First item</p></section></li><li><p id="narration-unit-0004">Second item</p></li></ul></article>',
+  );
 });
