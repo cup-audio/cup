@@ -1,0 +1,19 @@
+{
+  "sourceTitle": "A source title",
+  "sourceSubtitle": "A source subtitle that says more",
+  "sourceMaterialHtml": "<h2>A heading right after the cut</h2><p>The body.</p>",
+  "synchronizationUnits": [
+    {
+      "id": "narration-unit-0001",
+      "narrationText": "A source title"
+    },
+    {
+      "id": "narration-unit-0002",
+      "narrationText": "A source subtitle that says more"
+    },
+    {
+      "id": "narration-unit-0003",
+      "narrationText": "A heading right after the cut\n\nThe body."
+    }
+  ]
+}

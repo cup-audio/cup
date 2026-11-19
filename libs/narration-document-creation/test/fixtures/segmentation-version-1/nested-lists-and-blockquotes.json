@@ -1,0 +1,42 @@
+{
+  "sourceTitle": "Nested lists and blockquotes",
+  "sourceMaterialHtml": "<ul>\n  <li>First item</li>\n  <li>Second item\n    <ol>\n      <li>Nested <b>first</b></li>\n      <li><p>Nested paragraph one</p><p>Nested paragraph two</p></li>\n    </ol>\n  </li>\n</ul>\n<blockquote>\n  <p>Quoted paragraph.</p>\n  <blockquote><p>Nested quote.</p></blockquote>\n  Direct quote text.\n</blockquote>",
+  "synchronizationUnits": [
+    {
+      "id": "narration-unit-0001",
+      "narrationText": "Nested lists and blockquotes"
+    },
+    {
+      "id": "narration-unit-0002",
+      "narrationText": "First item"
+    },
+    {
+      "id": "narration-unit-0003",
+      "narrationText": "Second item"
+    },
+    {
+      "id": "narration-unit-0004",
+      "narrationText": "Nested first"
+    },
+    {
+      "id": "narration-unit-0005",
+      "narrationText": "Nested paragraph one"
+    },
+    {
+      "id": "narration-unit-0006",
+      "narrationText": "Nested paragraph two"
+    },
+    {
+      "id": "narration-unit-0007",
+      "narrationText": "Quoted paragraph."
+    },
+    {
+      "id": "narration-unit-0008",
+      "narrationText": "Nested quote."
+    },
+    {
+      "id": "narration-unit-0009",
+      "narrationText": "Direct quote text."
+    }
+  ]
+}
