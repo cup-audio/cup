@@ -171,7 +171,12 @@ test("media keys and the notification's buttons and seek bar act on the player w
 
 test("Close in the notification ends a playing session, which saves the position, and the page keeps it", async () => {
   const device = asAndroidAppDevice(app.device);
-  const { webView, conversionId } = await openNewAudiobook(device);
+  // A track of several minutes, so it still plays when Close arrives. Opening the notification shade
+  // and finding Close can take over 10 s on a Mac under load; the default 19 s track ended before
+  // that, and the engine returned it to the start, so the page kept 0.
+  await app.worker.restart("long-speech");
+  const { webView, conversionId, durationMilliseconds } = await openNewAudiobook(device);
+  expect(durationMilliseconds).toBeGreaterThan(120_000);
   // Play on an audiobook the plugin has not loaded sends `load` before `play`; the button turns to
   // Pause at once and stays there, without the load's paused state flipping it back.
   await recordPlayButtonLabels(webView);
