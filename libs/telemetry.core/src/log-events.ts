@@ -35,7 +35,10 @@ export const LOG_EVENTS = {
   "narration-language-unspeakable": "warn",
   /** The declared cover image could not be stored; the audiobook goes without one. */
   "cover-image-unavailable": "warn",
-  /** A deleted conversion's Workflow instance could not be terminated; it is tried once. */
+  /**
+   * A deleted conversion's Workflow instance that had not finished could not be terminated; it is
+   * tried once.
+   */
   "conversion-workflow-termination-failed": "warn",
   /** One pass of a conversion's preparation dispatch failed; its owner's alarm retries it. */
   "conversion-dispatch-failed": "warn",

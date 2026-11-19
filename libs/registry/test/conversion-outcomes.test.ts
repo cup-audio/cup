@@ -432,6 +432,72 @@ test(
   TEST_TIMEOUT_MS,
 );
 
+test(
+  "a deleted conversion's Workflow instances that already finished log no termination warning",
+  async () => {
+    const { account, accountId } = await createAccount();
+    await account.acceptPreparationForTest();
+    const finishedConversionId = await startPreparedAccountConversion(account, accountId);
+    const unreachableConversionId = await startPreparedAccountConversion(account, accountId);
+    // As on the platform, terminating each of these finished instances throws.
+    await account.reportWorkflowStatusForTest(finishedConversionId, "complete");
+    await account.reportWorkflowStatusForTest(`segment-${finishedConversionId}-0`, "errored");
+    await account.reportWorkflowStatusForTest(`segment-${finishedConversionId}-1`, "terminated");
+    await account.deleteConversion(finishedConversionId);
+
+    await account.reconcileForTest();
+
+    // The unreachable conversion's instances report no status, so their failed terminations warn.
+    // Its pass runs after the first one, so once its warnings arrive, the first pass's have too.
+    await account.failTerminationsForTest();
+    await account.deleteConversion(unreachableConversionId);
+    await account.reconcileForTest();
+
+    await waitForLogs("conversion-workflow-termination-failed", unreachableConversionId, 3);
+    expect(logs("conversion-workflow-termination-failed", unreachableConversionId)).toHaveLength(3);
+    expect(logs("conversion-workflow-termination-failed", finishedConversionId)).toEqual([]);
+    expect(await account.terminationsForTest()).toEqual(
+      expect.arrayContaining([
+        finishedConversionId,
+        `segment-${finishedConversionId}-0`,
+        `segment-${finishedConversionId}-1`,
+      ]),
+    );
+    expect(await account.getConversion(finishedConversionId)).toBeUndefined();
+  },
+  TEST_TIMEOUT_MS,
+);
+
+test(
+  "a deleted conversion's Workflow instance that is still running and cannot be terminated logs a warning",
+  async () => {
+    const { account, accountId } = await createAccount();
+    await account.acceptPreparationForTest();
+    const conversionId = await startPreparedAccountConversion(account, accountId);
+    for (const id of [conversionId, `segment-${conversionId}-0`, `segment-${conversionId}-1`]) {
+      await account.reportWorkflowStatusForTest(id, "running");
+    }
+    await account.failTerminationsForTest();
+    await account.deleteConversion(conversionId);
+
+    await account.reconcileForTest();
+
+    await waitForLogs("conversion-workflow-termination-failed", conversionId, 3);
+    expect(
+      logs("conversion-workflow-termination-failed", conversionId).map((log) => ({
+        level: log.level,
+        instanceId: log.attributes["cup.workflow_instance.id"]?.value,
+        exceptionType: log.attributes["exception.type"]?.value,
+      })),
+    ).toEqual([
+      { level: "warn", instanceId: conversionId, exceptionType: "Error" },
+      { level: "warn", instanceId: `segment-${conversionId}-0`, exceptionType: "Error" },
+      { level: "warn", instanceId: `segment-${conversionId}-1`, exceptionType: "Error" },
+    ]);
+  },
+  TEST_TIMEOUT_MS,
+);
+
 async function createAccount() {
   const accountId = crypto.randomUUID();
   const account = bindings.SENTRY_ACCOUNTS.get(bindings.SENTRY_ACCOUNTS.idFromName(accountId));
@@ -454,6 +520,22 @@ async function startAccountConversion(
   if (conversionId === undefined) {
     throw new Error("Expected an accepted conversion");
   }
+  return conversionId;
+}
+
+async function startPreparedAccountConversion(
+  account: Awaited<ReturnType<typeof createAccount>>["account"],
+  accountId: string,
+) {
+  const nowMs = Temporal.Now.instant().epochMilliseconds;
+  const conversionId = await startAccountConversion(account, nowMs);
+  await account.settleConversion(
+    conversionId,
+    readyAccountOutcome(accountId, conversionId),
+    nowMs,
+    1,
+    NARRATION_TEXT_CHARACTERS_BY_SEGMENT,
+  );
   return conversionId;
 }
 
