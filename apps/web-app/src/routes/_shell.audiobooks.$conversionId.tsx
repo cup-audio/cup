@@ -6,6 +6,12 @@ import React from "react";
 
 import type { Audiobook } from "@cup/listener-api.routes";
 
+import {
+  attachMarkupPrototype,
+  findUnitElements,
+  MarkupStylingPrototypeChrome,
+  useMarkupStylingVariant,
+} from "#src/app/components/PROTOTYPE-narration-markup-styling.js";
 import { DetailTopBar } from "#src/app/components/detail-top-bar.js";
 import type { DetailBack } from "#src/app/components/detail-top-bar.js";
 import { ErrorScreen } from "#src/app/components/error-message.js";
@@ -527,9 +533,20 @@ function SegmentHighlight({
       const narrationDocumentElement = narrationDocumentRef.current;
       check.assert(narrationDocumentElement);
 
+      // PROTOTYPE: a unit may span several elements marked with data-synchronization-unit.
+      const segments = unitId ? findUnitElements(narrationDocumentElement, unitId) : [];
       const segment = narrationDocumentElement.querySelector(`[id="${unitId ?? ""}"]`);
-      segment?.setAttribute("aria-current", "true");
-      return () => segment?.removeAttribute("aria-current");
+      if (segment && !segments.includes(segment)) {
+        segments.push(segment);
+      }
+      for (const element of segments) {
+        element.setAttribute("aria-current", "true");
+      }
+      return () => {
+        for (const element of segments) {
+          element.removeAttribute("aria-current");
+        }
+      };
     },
     [unitId, narrationDocumentRef],
   );
@@ -665,10 +682,26 @@ function NarrationDocument({
   );
 
   const selectUnit = React.useEffectEvent((unitIndex: number) => onSelectUnit?.(unitIndex));
+  const prototypeVariant = useMarkupStylingVariant();
+
+  React.useEffect(
+    function attachPrototype() {
+      const narrationDocumentElement = narrationDocumentElementRef.current;
+      check.assert(narrationDocumentElement);
+      return attachMarkupPrototype(
+        prototypeVariant,
+        narrationDocumentElement,
+        units.map((unit) => unit.id),
+        isSelectable ? selectUnit : undefined,
+      );
+    },
+    [prototypeVariant, units, isSelectable, narrationDocumentElementRef],
+  );
 
   React.useEffect(
     function addSegmentPlaybackButtons() {
-      if (!isSelectable) {
+      // PROTOTYPE: the decided interaction (text tap plays, link tap opens a popover) replaces the overlay.
+      if (!isSelectable || units.length > 0) {
         return undefined;
       }
 
@@ -699,6 +732,8 @@ function NarrationDocument({
   );
 
   return (
+    <>
+    <MarkupStylingPrototypeChrome />
     <div
       ref={narrationDocumentElementRef}
       className={composeClassnames(
@@ -771,6 +806,7 @@ function NarrationDocument({
       )}
       dangerouslySetInnerHTML={{ __html: audiobook.narrationDocument.html }}
     />
+    </>
   );
 }
 

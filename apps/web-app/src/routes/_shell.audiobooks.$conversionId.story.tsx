@@ -764,3 +764,76 @@ function createAccessLostWhilePollingStory(failure: "not-found" | "access-denied
 
 export const TrackGoneWhilePolling = createAccessLostWhilePollingStory("not-found");
 export const TrackAccessDeniedWhilePolling = createAccessLostWhilePollingStory("access-denied");
+
+// PROTOTYPE (cup-audio/cup#491): a segmentation-version-2 narration document that uses every kept
+// element; `?variant=A|B|C` switches the reader styles. `u="…"` expands to data-synchronization-unit,
+// plus the unit ID as `id` on the unit's first element so the unchanged reader code finds the title.
+const KEPT_MARKUP_CONVERSION_ID = "4f1e2b7a-0c55-4d4e-9a39-5a1b2c3d4e5f";
+const KEPT_MARKUP_HTML_SOURCE = `<article>
+<hgroup><h1 u="u1">Keeping the pipeline honest</h1><p u="u2">Notes from a year of running speech synthesis at scale</p></hgroup>
+<p u="u3">Most of our failures were <em>boring</em>. A cron job ran twice; a cache held on to a <strong>stale manifest</strong>; a vendor quietly changed its <i>de facto</i> rate limit, which we only noticed in <b>bold red</b> on a dashboard. The <a href="https://www.example.org/postmortems">postmortem archive</a> has the details, and the <a href="https://status.vendor.example.com/incidents/2025-03">vendor's status page</a> has theirs.</p>
+<p u="u4">To retry a stuck job, press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>R</kbd> in the console. It prints <samp>job 4812 requeued</samp> and sets <code>retryCount</code> to <var>n</var> + 1.</p>
+<p u="u5">Between CO<sub>2</sub> sensors and fans, the rack drew 4.2 × 10<sup>3</sup> W at peak. We <s>planned to move it in March</s> moved it in May. <del>The old server room is still in use.</del></p>
+<p u="u6">As one engineer put it, <q>the queue is the product, and <q>done</q> is a state, not a feeling</q>. Everything else<br>is plumbing.</p>
+<h2 u="u7">What we measured</h2>
+<ul><li u="u7">Median time to first audio</li><li u="u8">Segments regenerated per thousand</li><li u="u9">Listener-reported mismatches between the text and what was spoken, which needs a long line to show wrapping in a list</li></ul>
+<h3 u="u10">Monthly figures</h3>
+<table><thead><tr u="u10"><th>Month</th><th>Conversions</th><th>Median wait</th><th>Regenerated</th><th>Mismatches</th><th>Spend (EUR)</th></tr></thead>
+<tbody><tr u="u11"><td>January</td><td>12,480</td><td>41 s</td><td>3.1‰</td><td>14</td><td>1,920.40</td></tr>
+<tr u="u12"><td>February</td><td>15,902</td><td>38 s</td><td>2.7‰</td><td>9</td><td>2,311.75</td></tr>
+<tr u="u13"><td>March</td><td>19,377</td><td>52 s</td><td>4.4‰</td><td>31</td><td>2,980.10</td></tr></tbody></table>
+<p u="u14">March was the month the vendor changed its limit.</p>
+<table><caption u="u15">Table 2. Providers we tried</caption><thead><tr u="u16"><th>Provider</th><th>Voice</th><th>Verdict</th></tr></thead>
+<tbody><tr u="u17"><td>First</td><td>Warm, slightly fast</td><td>Kept for long-form articles</td></tr>
+<tr u="u18"><td>Second</td><td>Clear</td><td>Dropped: mispronounced every unit of measurement</td></tr></tbody></table>
+<h2 u="u19">On-call rota</h2>
+<pre u="u19">Shift   Monday to Friday                                   Weekends
+Early   06:00–14:00 (two engineers, one of them in the office)    07:00–15:00
+Late    14:00–22:00                                        15:00–23:00</pre>
+<h2 u="u20">Glossary</h2>
+<dl><dt u="u20">Segment</dt><dd u="u20">The audio for one synchronization unit.</dd><dt u="u21">Requeue</dt><dt u="u21">Retry</dt><dd u="u21">Put a stuck job back on the queue without changing its input.</dd></dl>
+<blockquote><p u="u22">Make the boring parts observable, and the interesting parts will find you.</p></blockquote>
+<p u="u23">Read the <a href="https://www.example.org/handbook/retries">retry handbook</a> for the <em>backoff</em> rules, the <a href="https://en.wikipedia.org/wiki/Exponential_backoff"><strong>exponential</strong> part</a> especially.</p>
+</article>`;
+
+const keptMarkupUnitIds = [...new Set([...KEPT_MARKUP_HTML_SOURCE.matchAll(/ u="([^"]+)"/g)].map((match) => match[1] ?? ""))];
+const seenKeptMarkupUnits = new Set<string>();
+const KEPT_MARKUP_HTML = KEPT_MARKUP_HTML_SOURCE.replaceAll(/>\n</g, "><").replaceAll(/ u="([^"]+)"/g, (_match, unitId: string) => {
+  const isFirst = !seenKeptMarkupUnits.has(unitId);
+  seenKeptMarkupUnits.add(unitId);
+  return `${isFirst ? ` id="${unitId}"` : ""} data-synchronization-unit="${unitId}"`;
+});
+const keptMarkupRouter = createAppRouter(
+  createMemoryHistory({ initialEntries: [`/app/audiobooks/${KEPT_MARKUP_CONVERSION_ID}`] }),
+);
+
+export const PROTOTYPEKeptMarkupArticle = {
+  beforeMount: async () => {
+    await queryClient.fetchQuery(createAudiobookQuery(KEPT_MARKUP_CONVERSION_ID));
+    await keptMarkupRouter.load();
+  },
+  component: () => <GlobalProviders router={keptMarkupRouter} />,
+  handlers: [
+    http.get(`/api/audiobooks/${KEPT_MARKUP_CONVERSION_ID}`, () =>
+      HttpResponse.json({
+        canGenerate: true,
+        playbackPosition: null,
+        title: "Keeping the pipeline honest",
+        originalUrl: "https://www.example.org/blog/keeping-the-pipeline-honest",
+        status: "ready",
+        narrationDocument: {
+          html: KEPT_MARKUP_HTML,
+          synchronizationUnits: keptMarkupUnitIds.map((id) => ({ id, narrationText: id })),
+        },
+        segments: keptMarkupUnitIds.map((_id, sequence) => createReadySegment(sequence)),
+        narrationTrack: createStoryNarrationTrack(
+          keptMarkupUnitIds.map(() => SEGMENT_DURATION_MILLISECONDS),
+        ),
+      } satisfies Audiobook),
+    ),
+    http.put(
+      `/api/audiobooks/${KEPT_MARKUP_CONVERSION_ID}/position`,
+      () => new HttpResponse(null, { status: 204 }),
+    ),
+  ],
+} satisfies Story;
