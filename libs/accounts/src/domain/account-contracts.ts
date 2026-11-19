@@ -47,6 +47,34 @@ export const accountAccountingInspectionSchema = z
 export type AccountAccountingInspection = z.infer<typeof accountAccountingInspectionSchema>;
 
 /**
+ * One event of the account's duration ledger, for operator inspection. Segment events (`reserve`,
+ * `consume`, `release`) carry the conversion ID as their cause and keep it after the conversion is
+ * deleted; `grant` and `adjustment` events carry the welcome version or the operator's reason.
+ */
+export const accountLedgerEntrySchema = z
+  .object({
+    eventKind: z.enum(["grant", "reserve", "consume", "release", "adjustment"]),
+    operationId: z.string(),
+    amount: z.number().int().nonnegative().safe(),
+    availableDelta: z.number().int().safe(),
+    reservedDelta: z.number().int().safe(),
+    createdAtMs: z.number().int().nonnegative().safe(),
+    cause: z.string(),
+  })
+  .strict();
+export type AccountLedgerEntry = z.infer<typeof accountLedgerEntrySchema>;
+
+/** A page of ledger events in append order; `nextCursor` is opaque and `null` on the last page. */
+export const accountLedgerPageSchema = z
+  .object({
+    unit: z.literal("audio-millisecond"),
+    entries: z.array(accountLedgerEntrySchema),
+    nextCursor: z.string().nullable(),
+  })
+  .strict();
+export type AccountLedgerPage = z.infer<typeof accountLedgerPageSchema>;
+
+/**
  * An artifact writer for operator inspection. `AccountArtifactWriters.writers()` lists only writers
  * that are not drained, but the schema accepts every stored state.
  */

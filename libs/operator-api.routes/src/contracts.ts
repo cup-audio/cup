@@ -6,6 +6,7 @@ import {
   accountConversionDeletionSchema,
   accountDurationBalanceSchema,
   accountHistoryPageSchema,
+  accountLedgerPageSchema,
   accountSnapshotSchema,
 } from "@cup/accounts/contracts";
 import {
@@ -191,6 +192,27 @@ export const inspectAccountResponseSchema = z
   })
   .strict();
 export type InspectAccountResponse = z.infer<typeof inspectAccountResponseSchema>;
+
+export const DEFAULT_LEDGER_PAGE_SIZE = 500;
+export const MAX_LEDGER_PAGE_SIZE = 1000;
+export const inspectAccountLedgerQuerySchema = z
+  .object({
+    limit: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(MAX_LEDGER_PAGE_SIZE)
+      .default(DEFAULT_LEDGER_PAGE_SIZE),
+    // At most 15 digits, so every valid cursor is a safe integer.
+    cursor: z
+      .string()
+      .regex(/^[1-9]\d{0,14}$/, "The ledger cursor is invalid.")
+      .optional(),
+  })
+  .strict();
+export type InspectAccountLedgerQuery = z.input<typeof inspectAccountLedgerQuerySchema>;
+export const inspectAccountLedgerResponseSchema = accountLedgerPageSchema;
+export type InspectAccountLedgerResponse = z.infer<typeof inspectAccountLedgerResponseSchema>;
 
 export const listAccountDeletionsResponseSchema = z
   .object({

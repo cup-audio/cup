@@ -9,6 +9,7 @@ import {
   accountAccountingInspectionSchema,
   accountArtifactWriterSchema,
   accountHistoryPageSchema,
+  accountLedgerPageSchema,
   accountSnapshotSchema,
 } from "@cup/accounts/contracts";
 
@@ -1393,6 +1394,80 @@ test("a deleted conversion is fenced, keeps its settled charge and releases only
   expect(await storage.exec("SELECT * FROM credit_operations WHERE state = 'reserved'")).toEqual(
     [],
   );
+});
+
+test("the duration ledger pages its entries in append order and keeps a deleted conversion's entries", async () => {
+  const { account, conversionId } = await startPreparedConversion();
+  await account.completeAudioSegment(conversionId, 0, 5_000, 1);
+  await account.deleteConversion(conversionId);
+  await account.reconcileForTest();
+  const segmentOperation = (sequence: number) =>
+    expect.stringMatching(new RegExp(`^segment:${conversionId}:${sequence}:`));
+
+  const first = accountLedgerPageSchema.parse(await account.ledger({ limit: 2 }));
+  const second = accountLedgerPageSchema.parse(
+    await account.ledger({ limit: 2, cursor: first.nextCursor ?? "" }),
+  );
+  const third = accountLedgerPageSchema.parse(
+    await account.ledger({ limit: 2, cursor: second.nextCursor ?? "" }),
+  );
+
+  expect([first.nextCursor, second.nextCursor, third.nextCursor].map(Boolean)).toEqual([
+    true,
+    true,
+    false,
+  ]);
+  expect([...first.entries, ...second.entries, ...third.entries]).toEqual([
+    {
+      eventKind: "grant",
+      operationId: expect.any(String),
+      amount: 1_800_000,
+      availableDelta: 1_800_000,
+      reservedDelta: 0,
+      createdAtMs: nowMs,
+      cause: "welcome-v1",
+    },
+    {
+      eventKind: "reserve",
+      operationId: segmentOperation(0),
+      amount: 7_000,
+      availableDelta: -7_000,
+      reservedDelta: 7_000,
+      createdAtMs: nowMs,
+      cause: conversionId,
+    },
+    {
+      eventKind: "reserve",
+      operationId: segmentOperation(1),
+      amount: 7_000,
+      availableDelta: -7_000,
+      reservedDelta: 7_000,
+      createdAtMs: nowMs,
+      cause: conversionId,
+    },
+    {
+      eventKind: "consume",
+      operationId: segmentOperation(0),
+      amount: 5_000,
+      availableDelta: 2_000,
+      reservedDelta: -7_000,
+      createdAtMs: expect.any(Number),
+      cause: conversionId,
+    },
+    {
+      eventKind: "release",
+      operationId: segmentOperation(1),
+      amount: 7_000,
+      availableDelta: 7_000,
+      reservedDelta: -7_000,
+      createdAtMs: expect.any(Number),
+      cause: conversionId,
+    },
+  ]);
+  expect(first.unit).toBe("audio-millisecond");
+  await expectWorkerRpcRejection(account.ledger({ limit: 2, cursor: "0" }));
+  const unknown = bindings.ACCOUNTS.get(bindings.ACCOUNTS.idFromName(crypto.randomUUID()));
+  await expectWorkerRpcRejection(unknown.ledger({ limit: 2 }));
 });
 
 test("a deletion returns before any workflow is terminated, and the alarm then tries each one", async () => {

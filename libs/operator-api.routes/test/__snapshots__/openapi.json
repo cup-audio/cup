@@ -1285,6 +1285,233 @@
         }
       }
     },
+    "/api/operator/accounts/{accountId}/ledger": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "accountId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000,
+              "default": 500
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9]\\d{0,14}$"
+            },
+            "required": false,
+            "name": "cursor",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of the account's duration ledger events, in append order.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "unit": {
+                      "type": "string",
+                      "enum": [
+                        "audio-millisecond"
+                      ]
+                    },
+                    "entries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "eventKind": {
+                            "type": "string",
+                            "enum": [
+                              "grant",
+                              "reserve",
+                              "consume",
+                              "release",
+                              "adjustment"
+                            ]
+                          },
+                          "operationId": {
+                            "type": "string"
+                          },
+                          "amount": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "availableDelta": {
+                            "type": "integer"
+                          },
+                          "reservedDelta": {
+                            "type": "integer"
+                          },
+                          "createdAtMs": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "cause": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "eventKind",
+                          "operationId",
+                          "amount",
+                          "availableDelta",
+                          "reservedDelta",
+                          "createdAtMs",
+                          "cause"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "unit",
+                    "entries",
+                    "nextCursor"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid account ID, limit, or cursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "account-not-active",
+                            "account-not-found",
+                            "account-unavailable",
+                            "adjustment-exceeds-available-duration",
+                            "allowance-below-used-duration",
+                            "conversion-not-account-owned",
+                            "conversion-not-found",
+                            "grant-not-found",
+                            "idempotency-conflict",
+                            "invalid-cursor",
+                            "invalid-input",
+                            "method-not-allowed",
+                            "not-found",
+                            "operational-error",
+                            "operator-unauthorized",
+                            "request-too-large",
+                            "unsupported-media-type"
+                          ]
+                        },
+                        "message": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "traceId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{32}$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "traceId"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Operational error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "account-not-active",
+                            "account-not-found",
+                            "account-unavailable",
+                            "adjustment-exceeds-available-duration",
+                            "allowance-below-used-duration",
+                            "conversion-not-account-owned",
+                            "conversion-not-found",
+                            "grant-not-found",
+                            "idempotency-conflict",
+                            "invalid-cursor",
+                            "invalid-input",
+                            "method-not-allowed",
+                            "not-found",
+                            "operational-error",
+                            "operator-unauthorized",
+                            "request-too-large",
+                            "unsupported-media-type"
+                          ]
+                        },
+                        "message": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "traceId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{32}$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "traceId"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/operator/conversions/{conversionId}": {
       "delete": {
         "parameters": [

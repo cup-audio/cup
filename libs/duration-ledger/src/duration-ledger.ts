@@ -19,6 +19,18 @@ export type DurationTotals = {
   spentMilliseconds: number;
 };
 
+/** One ledger event; segment events carry their conversion ID as their cause. */
+type DurationLedgerEntry = Pick<
+  typeof creditLedger.$inferSelect,
+  | "eventKind"
+  | "operationId"
+  | "amount"
+  | "availableDelta"
+  | "reservedDelta"
+  | "createdAtMs"
+  | "cause"
+>;
+
 /**
  * Keeps one owner's duration allowance, reservations, and encoded-duration charges in an
  * append-only ledger. The balance row caches the ledger's sums so that checks stay cheap.
@@ -341,6 +353,40 @@ export class DurationLedger {
       balance: this.balance(),
       reconstructed: { available: Math.max(0, totals.available), reserved: totals.reserved },
       entries: totals.entries,
+    };
+  }
+
+  /**
+   * Reads up to `limit` ledger events in the order they were appended, after the event at
+   * `afterPosition`. A position is the event's implicit SQLite rowid. The ledger never deletes an
+   * event before the whole owner is erased, and Durable Object storage is never vacuumed, so rowids
+   * only grow and paging by them never skips or repeats an event.
+   */
+  entries(page: { afterPosition?: number; limit: number }): {
+    entries: DurationLedgerEntry[];
+    nextPosition: number | undefined;
+  } {
+    const rows = this.database
+      .select({
+        position: sql<number>`rowid`,
+        eventKind: creditLedger.eventKind,
+        operationId: creditLedger.operationId,
+        amount: creditLedger.amount,
+        availableDelta: creditLedger.availableDelta,
+        reservedDelta: creditLedger.reservedDelta,
+        createdAtMs: creditLedger.createdAtMs,
+        cause: creditLedger.cause,
+      })
+      .from(creditLedger)
+      .where(page.afterPosition === undefined ? undefined : sql`rowid > ${page.afterPosition}`)
+      .orderBy(sql`rowid`)
+      .limit(page.limit + 1)
+      .all();
+    const entries = rows.slice(0, page.limit);
+    const lastOnPage = entries.at(-1);
+    return {
+      entries: entries.map(({ position: _position, ...entry }) => entry),
+      nextPosition: rows.length > page.limit && lastOnPage ? lastOnPage.position : undefined,
     };
   }
 

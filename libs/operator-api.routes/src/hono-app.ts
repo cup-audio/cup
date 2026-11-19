@@ -7,6 +7,8 @@ import {
   deleteConversionResponseSchema,
   adjustAccountAllowanceRequestSchema,
   adjustAccountAllowanceResponseSchema,
+  inspectAccountLedgerQuerySchema,
+  inspectAccountLedgerResponseSchema,
   inspectAccountResponseSchema,
   listAccountDeletionsResponseSchema,
   listAccountsQuerySchema,
@@ -175,6 +177,19 @@ const inspectAccountRoute = createRoute({
     500: errorResponse("Operational error."),
   },
 });
+const inspectAccountLedgerRoute = createRoute({
+  method: "get",
+  path: "/api/operator/accounts/{accountId}/ledger",
+  request: { params: accountParamsSchema, query: inspectAccountLedgerQuerySchema },
+  responses: {
+    200: {
+      content: { "application/json": { schema: inspectAccountLedgerResponseSchema } },
+      description: "A page of the account's duration ledger events, in append order.",
+    },
+    400: errorResponse("Invalid account ID, limit, or cursor."),
+    500: errorResponse("Operational error."),
+  },
+});
 const listAccountsRoute = createRoute({
   method: "get",
   path: "/api/operator/accounts",
@@ -262,6 +277,7 @@ export type OperatorApiHandlers<Bindings extends object> = {
   listAccounts: OperatorApiRouteHandler<typeof listAccountsRoute, Bindings>;
   adjustAccountAllowance: OperatorApiRouteHandler<typeof adjustAccountAllowanceRoute, Bindings>;
   inspectAccount: OperatorApiRouteHandler<typeof inspectAccountRoute, Bindings>;
+  inspectAccountLedger: OperatorApiRouteHandler<typeof inspectAccountLedgerRoute, Bindings>;
   listAccountDeletions: OperatorApiRouteHandler<typeof listAccountDeletionsRoute, Bindings>;
   deleteConversion: OperatorApiRouteHandler<typeof deleteConversionRoute, Bindings>;
   createGrant: OperatorApiRouteHandler<typeof createGrantRoute, Bindings>;
@@ -296,6 +312,7 @@ export function createOperatorApi<Bindings extends object>(
       }
       return undefined;
     })
+    .openapi(inspectAccountLedgerRoute, handlers.inspectAccountLedger)
     .openapi(deleteConversionRoute, handlers.deleteConversion)
     .openapi(createGrantRoute, handlers.createGrant)
     .openapi(listGrantsRoute, handlers.listGrants)
@@ -316,6 +333,7 @@ function createOperatorContractApp() {
     listAccounts: unavailable,
     adjustAccountAllowance: unavailable,
     inspectAccount: unavailable,
+    inspectAccountLedger: unavailable,
     listAccountDeletions: unavailable,
     deleteConversion: unavailable,
     createGrant: unavailable,

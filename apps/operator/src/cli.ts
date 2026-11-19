@@ -9,15 +9,19 @@ import { OperatorApiClient, parseOkResponse, RpcError } from "@cup/operator-api.
 import {
   accountPhases,
   adjustAccountAllowanceRequestSchema,
+  DEFAULT_LEDGER_PAGE_SIZE,
+  type InspectAccountLedgerResponse,
   isDevelopmentOperatorUrl,
   isLoopbackOperatorUrl,
   LOCAL_OPERATOR_ACCESS_TOKEN,
+  MAX_LEDGER_PAGE_SIZE,
   projectedGrantStates,
   uuidV4Schema,
 } from "@cup/operator-api.routes";
 
 const execFile = util.promisify(childProcess.execFile);
 const DEFAULT_LIMIT = 50;
+const MAX_LIMIT = 100;
 const globalOptionsSchema = z.object({
   operatorUrl: z.string().optional(),
   json: z.boolean(),
@@ -132,6 +136,47 @@ account
             ["Deleting since (epoch ms)", deletion.deletingSinceMs],
             ["Age (minutes)", Math.floor((nowMs - deletion.deletingSinceMs) / 60_000)],
           ]);
+        }
+      });
+    }),
+  );
+account
+  .command("ledger")
+  .description("page the account's duration ledger, which keeps the entries of deleted conversions")
+  .argument("<account-id>")
+  .option("--limit <number>", "page size", String(DEFAULT_LEDGER_PAGE_SIZE))
+  .option("--cursor <cursor>", "opaque pagination cursor")
+  .action(async (accountId, options, command) =>
+    run(command, async (client, output) => {
+      const result = await parseOkResponse(
+        client.inspectAccountLedger(
+          { accountId: parseUuid(accountId) },
+          { limit: parseInteger(options.limit, MAX_LEDGER_PAGE_SIZE), cursor: options.cursor },
+        ),
+      );
+      output(result, () => {
+        for (const entry of result.entries) {
+          process.stdout.write(
+            `${toIsoString(entry.createdAtMs)} ${entry.eventKind} ${entry.amount} ms (available ${formatDelta(entry.availableDelta)}, reserved ${formatDelta(entry.reservedDelta)}) ${entry.cause}\n`,
+          );
+        }
+        process.stdout.write("\nConversions on this page:\n");
+        const conversions = summarizeLedgerConversions(result.entries);
+        if (conversions.length === 0) {
+          process.stdout.write("none\n\n");
+        }
+        for (const summary of conversions) {
+          writeFields([
+            ["Conversion ID", summary.conversionId],
+            ["First event", toIsoString(summary.firstEventAtMs)],
+            ["Last event", toIsoString(summary.lastEventAtMs)],
+            ["Segments", summary.segments.size],
+            ["Spent minutes", summary.spentMilliseconds / 60_000],
+            ["Released minutes", summary.releasedMilliseconds / 60_000],
+          ]);
+        }
+        if (result.nextCursor !== null) {
+          process.stdout.write(`Next cursor: ${result.nextCursor}\n`);
         }
       });
     }),
@@ -425,13 +470,64 @@ function describeNarrationLanguage(
   return (outcome?.status === "ready" ? outcome.narrationLanguage : undefined) ?? "none";
 }
 
+type LedgerEntry = InspectAccountLedgerResponse["entries"][number];
+type LedgerConversionSummary = {
+  conversionId: string;
+  firstEventAtMs: number;
+  lastEventAtMs: number;
+  segments: Set<string>;
+  spentMilliseconds: number;
+  releasedMilliseconds: number;
+};
+/**
+ * Groups a page's segment events by conversion. `DurationLedger.insertReservation` in
+ * `@cup/duration-ledger` builds a segment event's operation ID as `segment:<conversion
+ * ID>:<sequence>:<reservation ID>`.
+ */
+function summarizeLedgerConversions(entries: readonly LedgerEntry[]): LedgerConversionSummary[] {
+  const summaries = new Map<string, LedgerConversionSummary>();
+  for (const entry of entries) {
+    const [prefix, conversionId, sequence] = entry.operationId.split(":");
+    if (prefix !== "segment" || conversionId === undefined || sequence === undefined) {
+      continue;
+    }
+    const summary = summaries.get(conversionId) ?? {
+      conversionId,
+      firstEventAtMs: entry.createdAtMs,
+      lastEventAtMs: entry.createdAtMs,
+      segments: new Set<string>(),
+      spentMilliseconds: 0,
+      releasedMilliseconds: 0,
+    };
+    summary.firstEventAtMs = Math.min(summary.firstEventAtMs, entry.createdAtMs);
+    summary.lastEventAtMs = Math.max(summary.lastEventAtMs, entry.createdAtMs);
+    summary.segments.add(sequence);
+    if (entry.eventKind === "consume") {
+      summary.spentMilliseconds += entry.amount;
+    }
+    if (entry.eventKind === "release") {
+      summary.releasedMilliseconds += entry.amount;
+    }
+    summaries.set(conversionId, summary);
+  }
+  return [...summaries.values()];
+}
+function formatDelta(value: number): string {
+  return value < 0 ? String(value) : `+${value}`;
+}
+function toIsoString(epochMilliseconds: number): string {
+  return Temporal.Instant.fromEpochMilliseconds(epochMilliseconds).toString({
+    fractionalSecondDigits: 3,
+  });
+}
+
 function parseUuid(value: string): string {
   return uuidV4Schema.parse(value);
 }
-function parseInteger(value: string): number {
+function parseInteger(value: string, max = MAX_LIMIT): number {
   const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > 100) {
-    throw new CliError("invalid-limit", "--limit must be an integer from 1 through 100.");
+  if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > max) {
+    throw new CliError("invalid-limit", `--limit must be an integer from 1 through ${max}.`);
   }
   return parsed;
 }

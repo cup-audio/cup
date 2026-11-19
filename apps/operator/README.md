@@ -209,6 +209,20 @@ The "Conversion deletions" section after the JSON lists each conversion whose [d
 
 An entry that stays for long has stalled. If the `writers` list holds an unresolved writer whose prefix contains that conversion's ID, the writer never resolved, and the cleanup waits for it. Otherwise the registry or R2 is failing, and the account's 60-second alarm keeps retrying; check the Worker logs. See [conversion deletion](../../docs/architecture/conversion-deletion.md) for the order of the cleanup steps.
 
+### Read an account's ledger
+
+Page through the account's [duration ledger](../../docs/GLOSSARY.md#duration-ledger), oldest event first:
+
+```sh
+pnpm operator account ledger "ACCOUNT_ID"
+```
+
+Each line is one event with its time, kind (`grant`, `reserve`, `consume`, `release`, or `adjustment`), amount in audio milliseconds, its changes to available and reserved duration, and its cause. A segment event's cause is the conversion ID; a `grant` or `adjustment` event's cause is the welcome version or the operator's audit reason. "Conversions on this page" totals each conversion's segments, spent duration, and released duration over the events on the page.
+
+The ledger keeps the events of [deleted conversions](#delete-a-conversion), so it is the only record of a conversion once its deletion has finished: its ID, when it ran, and what it spent. Its source URL and title are gone; search the Worker logs or Sentry for the conversion ID to find them. [Account deletion](../../docs/architecture/account-deletion.md) erases the ledger with the account; reading an erased or unknown account's ledger fails.
+
+A page holds 500 events by default; request up to 1000 with `--limit`. When a page ends before the ledger does, the command prints the next cursor; pass it with `--cursor` to read on. A page's conversion totals cover only its own events, so a conversion that spans two pages appears in both with partial totals. With `--json`, the command writes the page as the API returns it, without the totals.
+
 ### Delete a conversion
 
 Delete one conversion of an account, with its audiobook, artifacts, and listening position, while the rest of the account keeps working:
