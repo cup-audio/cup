@@ -65,12 +65,14 @@ export class AccountDispatchTestDurableObject extends BaseAccountDurableObject {
  * Ledger and lifecycle tests settle conversions directly without running preparation. Synthesis
  * dispatch is accepted but never runs, so tests complete or release segments themselves.
  * Preparation dispatch fails until a test accepts it; accepted preparation never runs either.
- * Workflow instances report no status, so the alarm treats them as unreachable, and record each
- * termination attempt, which fails once a test asks for it. An alarm the platform fires is only
- * counted: tests run the alarm with `reconcileForTest()`, so a pass never races the test. The
- * registry passes through, except that removing a conversion owner fails once, and applying a usage
- * projection fails from then on, when a test asks for it. Reconciling an artifact writer, the alarm
- * step that runs first, fails once a test asks for it.
+ * Workflow instances report no status, so the alarm treats them as unreachable, unless a test
+ * reports one for an instance or stops them all. They record each termination attempt, which fails
+ * once a test asks for it or, as on the platform, once the instance has finished (`complete`,
+ * `errored` or `terminated`). An alarm the platform fires is only counted: tests run the alarm with
+ * `reconcileForTest()`, so a pass never races the test. The registry passes through, except that
+ * removing a conversion owner fails once, and applying a usage projection fails from then on, when
+ * a test asks for it. Reconciling an artifact writer, the alarm step that runs first, fails once a
+ * test asks for it.
  */
 export class AccountDurableObject extends BaseAccountDurableObject {
   private readonly workflows: WorkflowControl;
@@ -97,11 +99,15 @@ export class AccountDurableObject extends BaseAccountDurableObject {
       terminations: [],
       shouldTerminationFail: false,
       stoppedStatus: undefined,
+      instanceStatuses: new Map(),
     };
+    const reportedStatus = (id: string) =>
+      workflows.instanceStatuses.get(id) ?? workflows.stoppedStatus;
     const controlledInstance = (id: string) => ({
       status: async (): Promise<{ status: string }> => {
-        if (workflows.stoppedStatus !== undefined) {
-          return { status: workflows.stoppedStatus };
+        const status = reportedStatus(id);
+        if (status !== undefined) {
+          return { status };
         }
         throw new Error("Workflows are controlled by the test");
       },
@@ -112,6 +118,10 @@ export class AccountDurableObject extends BaseAccountDurableObject {
         workflows.terminations.push(id);
         if (workflows.shouldTerminationFail) {
           throw new Error("Termination failed");
+        }
+        const status = reportedStatus(id);
+        if (status === "complete" || status === "errored" || status === "terminated") {
+          throw new Error("The instance has already finished");
         }
       },
     });
@@ -205,7 +215,11 @@ export class AccountDurableObject extends BaseAccountDurableObject {
   failTerminationsForTest() {
     this.workflows.shouldTerminationFail = true;
   }
-  /** Every Workflow instance reports `terminated` from now on. */
+  /** The Workflow instance `id` reports `status` from now on. */
+  reportWorkflowStatusForTest(id: string, status: string) {
+    this.workflows.instanceStatuses.set(id, status);
+  }
+  /** Every Workflow instance without a reported status reports `terminated` from now on. */
   stopWorkflowsForTest() {
     this.workflows.stoppedStatus = "terminated";
   }
@@ -255,6 +269,7 @@ type WorkflowControl = {
   terminations: string[];
   shouldTerminationFail: boolean;
   stoppedStatus: string | undefined;
+  instanceStatuses: Map<string, string>;
 };
 /** Simulates accounts that predate usage projections, so the alarm's backfill can be observed. */
 export class RegistryDurableObject extends BaseRegistryDurableObject {

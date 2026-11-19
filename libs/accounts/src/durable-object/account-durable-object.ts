@@ -40,8 +40,20 @@ const USAGE_PUBLICATION_RETRY_MS = 60_000;
 
 /** Conversion deletion terminates the conversion's workflow instances. */
 type TerminableWorkflow = {
-  get(id: string): Promise<{ terminate(): Promise<void> }>;
+  get(id: string): Promise<TerminableWorkflowInstance>;
 };
+
+type TerminableWorkflowInstance = {
+  status(): Promise<{ status: string }>;
+  terminate(): Promise<void>;
+};
+
+/**
+ * The statuses of a Workflow instance that has finished. `terminate()` throws for such an instance,
+ * per Cloudflare's `WorkflowInstance` documentation
+ * (https://developers.cloudflare.com/workflows/build/workers-api/).
+ */
+const FINISHED_WORKFLOW_STATUSES = new Set(["complete", "errored", "terminated"]);
 
 type AccountEnvironment = {
   CONVERSION_OWNER_LIMIT: string;
@@ -393,7 +405,8 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
   /**
    * Termination only saves cost: the marker already fences whatever still runs, and a terminated
    * instance can still land its running step. Each instance is tried once, and a failure is only
-   * logged, neither retried nor recorded.
+   * logged, neither retried nor recorded. An instance that had already finished needs no
+   * termination, so its rejected attempt logs nothing.
    */
   private async terminateConversionWorkflows(
     conversionId: string,
@@ -409,9 +422,15 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
     ];
 
     for (const { workflow, id } of instances) {
+      // Stays undefined when `get()` throws, as for an instance that does not exist.
+      let instance: TerminableWorkflowInstance | undefined;
       try {
-        await (await workflow.get(id)).terminate();
+        instance = await workflow.get(id);
+        await instance.terminate();
       } catch (error) {
+        if (instance !== undefined && (await hasWorkflowInstanceFinished(instance))) {
+          continue;
+        }
         logEvent(
           "conversion-workflow-termination-failed",
           "A deleted conversion's Workflow instance could not be terminated.",
@@ -890,5 +909,19 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
   }
   pendingConversions() {
     return this.sqlite.pendingConversions();
+  }
+}
+
+/**
+ * Whether the Workflow instance reports a finished status. An instance whose status cannot be read
+ * counts as unfinished, and the warning its failed termination then logs carries the termination
+ * error, which is the one that matters for cost; the status error is dropped.
+ */
+async function hasWorkflowInstanceFinished(instance: TerminableWorkflowInstance) {
+  try {
+    const { status } = await instance.status();
+    return FINISHED_WORKFLOW_STATUSES.has(status);
+  } catch {
+    return false;
   }
 }
