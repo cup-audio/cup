@@ -13,6 +13,11 @@ import { fadeFooterClearance } from "#src/app/components/fade-footer.js";
 import { ShellContent } from "#src/app/components/main.tsx";
 import { PageTitle } from "#src/app/components/page-title.js";
 import { PLAYER_SHEET_HEIGHTS, PlayerSheet } from "#src/app/components/player-sheet.js";
+import {
+  attachSegmentPlayback,
+  SegmentPlayPrototypeChrome,
+  useSegmentPlayVariant,
+} from "#src/app/components/PROTOTYPE-segment-play-variants.js";
 import { TrackSkeleton } from "#src/app/components/track-skeleton.js";
 import { coverTransitionTarget } from "#src/app/cover-transition.js";
 import { DSButton } from "#src/app/design-system/button.js";
@@ -664,6 +669,7 @@ function NarrationDocument({
     [failedUnitIndexes, units, narrationDocumentElementRef],
   );
 
+  const prototypeVariant = useSegmentPlayVariant();
   const selectUnit = React.useEffectEvent((unitIndex: number) => onSelectUnit?.(unitIndex));
 
   React.useEffect(
@@ -675,102 +681,98 @@ function NarrationDocument({
       const narrationDocumentElement = narrationDocumentElementRef.current;
       check.assert(narrationDocumentElement);
 
-      // Units are selectable only with a narration track, which has audio for every unit.
-      const buttons = units.map((unit, unitIndex) => {
-        const segment = narrationDocumentElement.querySelector(`[id="${unit.id}"]`);
+      // PROTOTYPE (#481): the variant decides how a segment starts playback.
+      const segments = units.map((unit) => {
+        const segment = narrationDocumentElement.querySelector<HTMLElement>(`[id="${unit.id}"]`);
         check.assert(segment);
-
-        const button = document.createElement("button");
-        button.type = "button";
-        button.dataset["segmentControl"] = "";
-        button.setAttribute("aria-label", `Play segment ${unitIndex + 1}`);
-        button.addEventListener("click", () => selectUnit(unitIndex));
-        segment.append(button);
-        return button;
+        return segment;
       });
-
-      return () => {
-        for (const button of buttons) {
-          button.remove();
-        }
-      };
+      return attachSegmentPlayback(
+        prototypeVariant,
+        narrationDocumentElement,
+        segments,
+        (unitIndex) => selectUnit(unitIndex),
+      );
     },
-    [units, isSelectable, narrationDocumentElementRef],
+    [units, isSelectable, narrationDocumentElementRef, prototypeVariant],
   );
 
   return (
-    <div
-      ref={narrationDocumentElementRef}
-      className={composeClassnames(
-        textStyles.paragraph,
-        css`
-          color: var(--color-ink-60);
-
-          & > article > * {
-            /* one blank line between blocks, as drawn */
-            margin-block-end: var(--line-height-paragraph);
-          }
-
-          /* the title and the host inserted below it open the page as drawn */
-          /* the title and headings take the h2 and h4 text styles from applyHeadingTextStyles */
-          & > article > h1,
-          & > article > hgroup,
-          & > article > hgroup > h1 {
-            margin-block-end: var(--spacing-gutter);
-            color: var(--color-ink);
-          }
-
-          /* the source subtitle sits closer to the title than the host does, as drawn */
-          & > article > hgroup > h1 {
-            margin-block-end: var(--spacing-base);
-          }
-
-          /* the source subtitle, which only ever follows the title inside the <hgroup> */
-          & > article > hgroup > h1 + p {
+    <>
+      <SegmentPlayPrototypeChrome />
+      <div
+        ref={narrationDocumentElementRef}
+        className={composeClassnames(
+          textStyles.paragraph,
+          css`
             color: var(--color-ink-60);
-          }
 
-          & > article > [data-source-host] {
-            color: var(--color-ink-40);
-          }
+            & > article > * {
+              /* one blank line between blocks, as drawn */
+              margin-block-end: var(--line-height-paragraph);
+            }
 
-          [id]:has(> [data-segment-control]) {
-            /* "anchor" for the absolutely-positioned play-segment buttons */
-            position: relative;
-          }
+            /* the title and the host inserted below it open the page as drawn */
+            /* the title and headings take the h2 and h4 text styles from applyHeadingTextStyles */
+            & > article > h1,
+            & > article > hgroup,
+            & > article > hgroup > h1 {
+              margin-block-end: var(--spacing-gutter);
+              color: var(--color-ink);
+            }
 
-          [data-segment-control] {
-            position: absolute;
-            inset: 0;
-            width: 100%;
-            height: 100%;
-            padding: 0;
-            cursor: pointer;
-            background: transparent;
-            border: 0;
-            border-radius: inherit;
-          }
+            /* the source subtitle sits closer to the title than the host does, as drawn */
+            & > article > hgroup > h1 {
+              margin-block-end: var(--spacing-base);
+            }
 
-          [aria-current="true"] {
-            color: var(--color-ink);
-            background-color: var(--color-ink-8);
+            /* the source subtitle, which only ever follows the title inside the <hgroup> */
+            & > article > hgroup > h1 + p {
+              color: var(--color-ink-60);
+            }
 
-            /*
+            & > article > [data-source-host] {
+              color: var(--color-ink-40);
+            }
+
+            [id]:has(> [data-segment-control]) {
+              /* "anchor" for the absolutely-positioned play-segment buttons */
+              position: relative;
+            }
+
+            [data-segment-control] {
+              position: absolute;
+              inset: 0;
+              width: 100%;
+              height: 100%;
+              padding: 0;
+              cursor: pointer;
+              background: transparent;
+              border: 0;
+              border-radius: inherit;
+            }
+
+            [aria-current="true"] {
+              color: var(--color-ink);
+              background-color: var(--color-ink-8);
+
+              /*
               The highlight extends 12 px past the text on every side without moving it; the spread
               grows the 12 px radius to the drawn 24 px.
             */
-            border-radius: var(--spacing-gutter);
-            box-shadow: 0 0 0 var(--spacing-gutter) var(--color-ink-8);
-          }
+              border-radius: var(--spacing-gutter);
+              box-shadow: 0 0 0 var(--spacing-gutter) var(--color-ink-8);
+            }
 
-          [data-synthesis-failed] {
-            padding-inline-start: var(--spacing-base);
-            border-inline-start: 3px solid var(--color-error);
-          }
-        `,
-      )}
-      dangerouslySetInnerHTML={{ __html: audiobook.narrationDocument.html }}
-    />
+            [data-synthesis-failed] {
+              padding-inline-start: var(--spacing-base);
+              border-inline-start: 3px solid var(--color-error);
+            }
+          `,
+        )}
+        dangerouslySetInnerHTML={{ __html: audiobook.narrationDocument.html }}
+      />
+    </>
   );
 }
 

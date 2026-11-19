@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "ui-gallery",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@cup/web-app", "dev:gallery"],
+      "port": 3100
+    }
+  ]
+}
