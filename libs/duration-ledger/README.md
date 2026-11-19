@@ -6,4 +6,6 @@ The [schema](src/duration-ledger-schema.ts) defines the append-only ledger, its 
 
 An owner's allowance is the sum of its grant and adjustment events, and its spent duration is the sum of its consume events. Because events are only appended, their count is a revision that advances with every change; accounts use it to order the usage projections they push to the registry. A settled segment is charged at most the allowance that is not yet spent, so overruns never spend more than the allowance. Owner-specific rules stay with the owner: accounts issue a welcome allowance and signed operator adjustments, while a conversion grant records an operator's new total as the adjustment from its previous total and refuses new reservations once it has expired or been revoked.
 
+`entries` pages the events in append order. Segment events keep their conversion ID as their cause after the conversion is deleted, so operators read an account's past conversions there with the [operator CLI](../../apps/operator/README.md#read-an-accounts-ledger).
+
 Owner schemas re-export the ledger tables, so each owner's migrations create them. See the [database diagrams](../../docs/architecture/durable-object-storage.md) and the migration guides for [accounts](../accounts/README.md#database-migrations) and [conversion grants](../conversion-grants/README.md).

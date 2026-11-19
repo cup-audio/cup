@@ -44,7 +44,7 @@ Start with the [glossary](GLOSSARY.md) for Cup's vocabulary and the [system over
 | [Listener API contracts](../libs/listener-api.routes/README.md)                      | Change listener routes and error codes, and update the OpenAPI snapshot                                                |
 | [Operator API contracts](../libs/operator-api.routes/README.md)                      | Change operator routes and error codes, and update the OpenAPI snapshot                                                |
 | [Duration ledger](../libs/duration-ledger/README.md)                                 | Shared allowance, reservation, and charge storage for accounts and grants                                              |
-| [Operator CLI](../apps/operator/README.md)                                           | Manage conversion grants, list accounts and account deletions, and adjust allowances                                   |
+| [Operator CLI](../apps/operator/README.md)                                           | Manage conversion grants, list accounts and account deletions, read account ledgers, and adjust allowances             |
 | [Terraform infrastructure](../terraform/README.md)                                   | Manage infrastructure state, provider configuration, and manual prerequisites                                          |
 | [Declaration builds](declaration-builds.md)                                          | Understand source and declaration package scopes, compiler settings, and build caching                                 |
 | [Validation gates](../tooling/validation-gates/README.md)                            | How the gate runner composes gates, runs them and prints the summary; the gates themselves are in AGENTS.md            |

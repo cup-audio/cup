@@ -22,6 +22,7 @@ const DELETED_CONVERSION_ID = "3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f";
 const PENDING_CONVERSION_ID = "5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b";
 const adjustmentBodies: unknown[] = [];
 const conversionDeletionPaths: string[] = [];
+const ledgerQueries: string[] = [];
 let server: http.Server;
 let operatorUrl: string;
 
@@ -206,6 +207,56 @@ describe("actual operator CLI process", () => {
     );
   });
 
+  test("pages an account's ledger and totals each conversion's segments, spent and released duration", async () => {
+    ledgerQueries.length = 0;
+    const result = await runCli(
+      "account",
+      "ledger",
+      ACCOUNT_ID,
+      "--limit",
+      "1000",
+      "--cursor",
+      "7",
+    );
+    expect(result.status).toBe(0);
+    expect(ledgerQueries).toEqual(["?limit=1000&cursor=7"]);
+    expect(result.stdout).toContain(
+      [
+        "2026-11-18T10:00:00.000Z grant 1800000 ms (available +1800000, reserved +0) welcome-v1",
+        `2026-11-18T10:01:00.000Z reserve 7000 ms (available -7000, reserved +7000) ${CONVERSION_ID}`,
+      ].join("\n"),
+    );
+    expect(result.stdout).toContain(
+      [
+        "Conversions on this page:",
+        `Conversion ID: ${CONVERSION_ID}`,
+        "First event: 2026-11-18T10:01:00.000Z",
+        "Last event: 2026-11-18T10:03:00.000Z",
+        "Segments: 2",
+        "Spent minutes: 0.1",
+        "Released minutes: 0.11666666666666667",
+        "",
+        `Conversion ID: ${DELETED_CONVERSION_ID}`,
+        "First event: 2026-11-18T10:04:00.000Z",
+        "Last event: 2026-11-18T10:05:00.000Z",
+        "Segments: 1",
+        "Spent minutes: 1",
+        "Released minutes: 0",
+        "",
+        "Next cursor: 12",
+      ].join("\n"),
+    );
+  });
+
+  test("writes an account's ledger page as JSON and rejects a limit above 1000", async () => {
+    const result = await runCli("--json", "account", "ledger", ACCOUNT_ID);
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout) as unknown).toEqual(ledgerFixture());
+    const refused = await runCli("account", "ledger", ACCOUNT_ID, "--limit", "1001");
+    expect(refused.status).toBe(1);
+    expect(refused.stderr).toContain("--limit must be an integer from 1 through 1000.");
+  });
+
   test("reports API refusals with the API error code, message and trace ID", async () => {
     const result = await runCli("--json", "account", "inspect", GRANT_ID);
     expect(result.status).toBe(1);
@@ -355,6 +406,11 @@ function handleAccountRequest(
 }
 
 function handleAccountRead(url: URL, response: http.ServerResponse): boolean {
+  if (url.pathname === `/api/operator/accounts/${ACCOUNT_ID}/ledger`) {
+    ledgerQueries.push(url.search);
+    send(response, 200, ledgerFixture());
+    return true;
+  }
   if (url.pathname === "/api/operator/accounts") {
     send(response, 200, {
       accounts: [
@@ -477,6 +533,75 @@ function accountInspectionFixture() {
         deletingSinceMs: Temporal.Now.instant().epochMilliseconds - 90 * 60_000 - 5_000,
       },
     ],
+  };
+}
+
+function minute(value: number): number {
+  return Temporal.Instant.from(`2026-11-18T10:0${value}:00Z`).epochMilliseconds;
+}
+function segment(conversionId: string, sequence: number): string {
+  return `segment:${conversionId}:${sequence}:7a0c2f4e-0d55-4b8e-9a43-3c1a8f2b9d1${sequence}`;
+}
+function ledgerFixture() {
+  return {
+    unit: "audio-millisecond",
+    entries: [
+      {
+        eventKind: "grant",
+        operationId: `welcome:${ACCOUNT_ID}:v1`,
+        amount: 1_800_000,
+        availableDelta: 1_800_000,
+        reservedDelta: 0,
+        createdAtMs: minute(0),
+        cause: "welcome-v1",
+      },
+      ...[0, 1].map((sequence) => ({
+        eventKind: "reserve",
+        operationId: segment(CONVERSION_ID, sequence),
+        amount: 7_000,
+        availableDelta: -7_000,
+        reservedDelta: 7_000,
+        createdAtMs: minute(1),
+        cause: CONVERSION_ID,
+      })),
+      {
+        eventKind: "consume",
+        operationId: segment(CONVERSION_ID, 0),
+        amount: 6_000,
+        availableDelta: 1_000,
+        reservedDelta: -7_000,
+        createdAtMs: minute(2),
+        cause: CONVERSION_ID,
+      },
+      {
+        eventKind: "release",
+        operationId: segment(CONVERSION_ID, 1),
+        amount: 7_000,
+        availableDelta: 7_000,
+        reservedDelta: -7_000,
+        createdAtMs: minute(3),
+        cause: CONVERSION_ID,
+      },
+      {
+        eventKind: "reserve",
+        operationId: segment(DELETED_CONVERSION_ID, 0),
+        amount: 70_000,
+        availableDelta: -70_000,
+        reservedDelta: 70_000,
+        createdAtMs: minute(4),
+        cause: DELETED_CONVERSION_ID,
+      },
+      {
+        eventKind: "consume",
+        operationId: segment(DELETED_CONVERSION_ID, 0),
+        amount: 60_000,
+        availableDelta: 10_000,
+        reservedDelta: -70_000,
+        createdAtMs: minute(5),
+        cause: DELETED_CONVERSION_ID,
+      },
+    ],
+    nextCursor: "12",
   };
 }
 

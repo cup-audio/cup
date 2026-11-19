@@ -23,6 +23,7 @@ import {
 } from "#src/domain/account-contracts.ts";
 import type {
   AccountAccountingInspection,
+  AccountLedgerPage,
   AccountConversion,
   AccountConversionDeletion,
   AccountConversionOutcome,
@@ -558,6 +559,31 @@ export class AccountSqlite {
     return {
       ...accounting,
       balance: { unit: "audio-millisecond", ...accounting.balance },
+    };
+  }
+
+  /**
+   * Pages the duration ledger in append order. The cursor is the decimal position of the page's
+   * last event; a malformed cursor fails rather than restarting from the first event. An account
+   * that was never initialized, or was erased with its ledger, fails like `snapshot`.
+   */
+  ledger(page: { limit: number; cursor?: string }): AccountLedgerPage {
+    this.snapshot();
+    let afterPosition: number | undefined;
+    if (page.cursor !== undefined) {
+      afterPosition = Number(page.cursor);
+      if (!/^[1-9]\d*$/.test(page.cursor) || !Number.isSafeInteger(afterPosition)) {
+        throw new CupError("Invalid ledger cursor");
+      }
+    }
+    const { entries, nextPosition } = this.duration.entries({
+      limit: page.limit,
+      ...(afterPosition === undefined ? {} : { afterPosition }),
+    });
+    return {
+      unit: "audio-millisecond",
+      entries,
+      nextCursor: nextPosition === undefined ? null : String(nextPosition),
     };
   }
 

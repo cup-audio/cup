@@ -4,6 +4,7 @@ import type {
   ConversionParams,
   CreateGrantRequest,
   GrantParams,
+  InspectAccountLedgerQuery,
   ListAccountsQuery,
   ListGrantsQuery,
 } from "@cup/operator-api.routes";
@@ -63,6 +64,17 @@ export class OperatorApiClient {
   async inspectAccount(params: AccountParams, signal?: AbortSignal) {
     return this.#honoClient.api.operator.accounts[":accountId"].$get(
       { param: params },
+      this.#options(signal),
+    );
+  }
+
+  async inspectAccountLedger(
+    params: AccountParams,
+    query: InspectAccountLedgerQuery,
+    signal?: AbortSignal,
+  ) {
+    return this.#honoClient.api.operator.accounts[":accountId"].ledger.$get(
+      { param: params, query },
       this.#options(signal),
     );
   }

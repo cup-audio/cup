@@ -5,12 +5,14 @@ import type {
   AccountArtifactWriter,
   AccountConversionDeletion,
   AccountHistoryPage,
+  AccountLedgerPage,
   AccountSnapshot,
 } from "@cup/accounts/contracts";
 import {
   LOCAL_OPERATOR_ACCESS_TOKEN,
   adjustAccountAllowanceResponseSchema,
   inspectAccountResponseSchema,
+  inspectAccountLedgerResponseSchema,
   listAccountDeletionsResponseSchema,
   listAccountsResponseSchema,
   type ListAccountDeletionsResponse,
@@ -177,6 +179,22 @@ type DeleteConversionResult = {
 };
 type ConversionOwner = { kind: "trial"; grantId: string } | { kind: "account"; accountId: string };
 
+const ledgerPage: AccountLedgerPage = {
+  unit: "audio-millisecond",
+  entries: [
+    {
+      eventKind: "consume",
+      operationId: `segment:${conversionId}:0:7a0c2f4e-0d55-4b8e-9a43-3c1a8f2b9d10`,
+      amount: 5_000,
+      availableDelta: 2_000,
+      reservedDelta: -7_000,
+      createdAtMs: 2,
+      cause: conversionId,
+    },
+  ],
+  nextCursor: "8",
+};
+
 function fixture() {
   const deleteConversion = vi.fn<(id: string) => Promise<DeleteConversionResult>>(async () => ({
     result: "marked",
@@ -185,6 +203,9 @@ function fixture() {
     async () => ({ kind: "account", accountId }),
   );
   const readAccount = vi.fn<() => Promise<AccountSnapshot>>(async () => inspection.account);
+  const readLedger = vi.fn<
+    (page: { limit: number; cursor?: string }) => Promise<AccountLedgerPage>
+  >(async () => ledgerPage);
   const adjustAllowance = vi.fn<
     (requestId: string, amount: number, cause: string) => Promise<void>
   >(async () => undefined);
@@ -207,6 +228,7 @@ function fixture() {
         history: async () => inspection.history,
         inspectArtifactWriters: async () => inspection.writers,
         inspectConversionDeletions: async () => inspection.conversionDeletions,
+        ledger: readLedger,
         adjustAllowance,
         deleteConversion,
       }),
@@ -225,7 +247,15 @@ function fixture() {
   if (!isFixtureEnvironment(env)) {
     throw new Error("Invalid operator fixture");
   }
-  return { env, readAccount, adjustAllowance, listAccounts, deleteConversion, findConversionOwner };
+  return {
+    env,
+    readAccount,
+    readLedger,
+    adjustAllowance,
+    listAccounts,
+    deleteConversion,
+    findConversionOwner,
+  };
 }
 
 function adjustmentRequest(body: unknown, id = accountId) {
@@ -298,6 +328,35 @@ test("account routes remain behind operator authentication and reject invalid ac
     (await app.request("https://cup.audio/api/operator/accounts/invalid", {}, env)).status,
   ).toBe(404);
   expect(readAccount).not.toHaveBeenCalled();
+});
+
+test("the account ledger route returns the ledger page and forwards its pagination", async () => {
+  const { env, readLedger } = fixture();
+  const app = createApiServer({ validateOperatorAccess: async () => true });
+  const ledgerUrl = `https://cup.audio/api/operator/accounts/${accountId}/ledger`;
+
+  const response = await app.request(`${ledgerUrl}?limit=2&cursor=7`, {}, env);
+  expect(response.status).toBe(200);
+  expect(inspectAccountLedgerResponseSchema.parse(await response.json())).toEqual(ledgerPage);
+  expect(readLedger).toHaveBeenLastCalledWith({ limit: 2, cursor: "7" });
+
+  expect((await app.request(ledgerUrl, {}, env)).status).toBe(200);
+  expect(readLedger).toHaveBeenLastCalledWith({ limit: 500 });
+
+  const refusals = await Promise.all(
+    ["limit=0", "limit=1001", "cursor=abc", "cursor=0", "limit=2&limit=3"].map(async (query) => {
+      const refused = await app.request(`${ledgerUrl}?${query}`, {}, env);
+      return { query, status: refused.status, body: await refused.json() };
+    }),
+  );
+  for (const refusal of refusals) {
+    expect(refusal).toMatchObject({ status: 400, body: { error: { code: "invalid-input" } } });
+  }
+  expect(readLedger).toHaveBeenCalledTimes(2);
+
+  const denied = createApiServer({ validateOperatorAccess: async () => false });
+  expect((await denied.request(ledgerUrl, {}, env)).status).toBe(401);
+  expect(readLedger).toHaveBeenCalledTimes(2);
 });
 
 test("lists registry accounts with ISO creation times, projected usage, and forwards pagination", async () => {

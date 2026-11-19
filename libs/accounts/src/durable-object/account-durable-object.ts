@@ -213,6 +213,10 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
     return this.sqlite.inspectAccounting();
   }
 
+  ledger(page: { limit: number; cursor?: string }) {
+    return this.sqlite.ledger(page);
+  }
+
   history(cursor?: { createdAtMs: number; conversionId: string }) {
     return this.sqlite.history(cursor);
   }

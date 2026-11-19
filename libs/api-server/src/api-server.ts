@@ -29,6 +29,7 @@ import {
 import {
   createOperatorApi,
   type DeleteConversionResponse,
+  type InspectAccountLedgerResponse,
   type InspectAccountResponse,
   type ListAccountDeletionsResponse,
   type OperatorApiHandlers,
@@ -900,6 +901,28 @@ const operatorApiHandlers: OperatorApiHandlers<ApiServerEnvironment> = {
         writers: await account.inspectArtifactWriters(),
         conversionDeletions: await account.inspectConversionDeletions(),
       } satisfies InspectAccountResponse,
+      200,
+    );
+  },
+  /** Pages the account's duration ledger, which keeps the entries of deleted conversions. */
+  async inspectAccountLedger(context) {
+    const searchParameters = new URL(context.req.url).searchParams;
+    if (["limit", "cursor"].some((name) => searchParameters.getAll(name).length > 1)) {
+      return jsonError(
+        context.get("traceId"),
+        "invalid-input",
+        "Query parameters cannot be repeated.",
+        400,
+      );
+    }
+    const { accountId } = context.req.valid("param");
+    const { limit, cursor } = context.req.valid("query");
+    const account = context.env.ACCOUNTS.get(context.env.ACCOUNTS.idFromName(accountId));
+    return context.json(
+      (await account.ledger({
+        limit,
+        ...(cursor === undefined ? {} : { cursor }),
+      })) satisfies InspectAccountLedgerResponse,
       200,
     );
   },
