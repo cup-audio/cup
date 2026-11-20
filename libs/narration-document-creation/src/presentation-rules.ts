@@ -24,6 +24,28 @@ export const KEPT_INLINE_TAG_NAMES = new Set([
   "var",
 ]);
 
+/**
+ * Inline elements flattened to their text. Every other element that is neither kept nor a link is a
+ * block, which inside a table cell, term or description is flattened with a space on either side.
+ */
+export const FLATTENED_INLINE_TAG_NAMES = new Set([
+  "abbr",
+  "bdi",
+  "bdo",
+  "cite",
+  "data",
+  "dfn",
+  "ins",
+  "label",
+  "mark",
+  "ruby",
+  "small",
+  "span",
+  "time",
+  "u",
+  "wbr",
+]);
+
 /** Serializes the unit attribute of the unit with the given ID. */
 export function serializeUnitAttribute(unitId: string): string {
   return ` ${SYNCHRONIZATION_UNIT_ATTRIBUTE}="${escapeHtmlAttribute(unitId)}"`;

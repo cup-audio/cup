@@ -612,7 +612,7 @@ test.each(["trial", "account"] as const)(
 
     const audiobook = await loadReadyAudiobook(owner, conversionId);
     expect(audiobook.narrationDocument).toEqual({
-      segmentationVersion: 1,
+      segmentationVersion: 2,
       narrationSourceMaterial: {
         key: `${artifactPrefix}narration-source-material.html`,
         contentType: "text/html; charset=utf-8",

@@ -5,6 +5,7 @@ import { CupError } from "@cup/errors";
 import { escapeHtmlAttribute, escapeHtmlText } from "#src/html-escaping.ts";
 import { resolveLink } from "#src/links.ts";
 import {
+  FLATTENED_INLINE_TAG_NAMES,
   KEPT_INLINE_TAG_NAMES,
   serializeUnitAttribute,
   wrapInScrollCard,
@@ -43,6 +44,11 @@ const TABLE_PART_TAG_NAMES = new Set(["caption", "tbody", "td", "tfoot", "th", "
 // Carry the unit attribute themselves when one unit holds all their text; table cells and
 // captions only inside a table.
 const UNIT_CELL_TAG_NAMES = new Set(["caption", "dd", "dt", "pre", "td", "th"]);
+
+// Under segmentation version 2, a table row that is one unit is a narration block of its own, and so
+// is each term and description of a description list group.
+const TABLE_CELL_TAG_NAMES = new Set(["td", "th"]);
+const ITEM_TAG_NAMES = new Set(["dd", "dt", "td", "th"]);
 
 // The separator that segmentation's text ranges count between the blocks of one unit.
 const NARRATION_ELEMENT_SEPARATOR = "\n\n";
@@ -274,8 +280,31 @@ function presentBlocks(
 
 /** The safe display element of a narration block; a run of inline content becomes a paragraph. */
 function createNarrationElement(block: NarrationBlock, baseUrl: string): SafeElement {
+  if (block.type === "element" && block.element.tagName === "tr") {
+    // A row that is one unit keeps its cells, each flattened as one item; the row carries the unit.
+    return {
+      type: "element",
+      tagName: "tr",
+      attributes: [],
+      children: block.element.childNodes
+        .filter(
+          (childNode): childNode is SourceElement =>
+            "tagName" in childNode && TABLE_CELL_TAG_NAMES.has(childNode.tagName),
+        )
+        .map((cell) => createItemElement(cell, baseUrl)),
+    };
+  }
+
+  if (block.type === "element" && ITEM_TAG_NAMES.has(block.element.tagName)) {
+    return createItemElement(block.element, baseUrl);
+  }
+
   const firstNode = block.type === "element" ? block.element : block.nodes[0]!;
-  const context = { baseUrl, isPreformatted: hasPreformattedAncestor(firstNode) };
+  const context = {
+    baseUrl,
+    isPreformatted: hasPreformattedAncestor(firstNode),
+    separatesBlocks: false,
+  };
   const element: SafeElement =
     block.type === "element"
       ? {
@@ -294,6 +323,26 @@ function createNarrationElement(block: NarrationBlock, baseUrl: string): SafeEle
   return { ...element, children: normalizeSafeNodes(element.children) };
 }
 
+/**
+ * A table cell, term or description that segmentation reads as one item of a row or description
+ * list group, with the blocks inside it flattened into its text, separated by a space, as
+ * segmentation narrates them.
+ */
+function createItemElement(item: SourceElement, baseUrl: string): SafeElement {
+  const context = {
+    baseUrl,
+    isPreformatted: hasPreformattedAncestor(item),
+    separatesBlocks: true,
+  };
+
+  return {
+    type: "element",
+    tagName: item.tagName,
+    attributes: [],
+    children: normalizeSafeNodes(item.childNodes.flatMap((node) => sanitizeNode(node, context))),
+  };
+}
+
 function hasPreformattedAncestor(node: SourceNode): boolean {
   let parentNode = node.parentNode;
 
@@ -310,7 +359,7 @@ function hasPreformattedAncestor(node: SourceNode): boolean {
 
 function sanitizeNode(
   node: SourceNode,
-  context: { baseUrl: string; isPreformatted: boolean },
+  context: { baseUrl: string; isPreformatted: boolean; separatesBlocks: boolean },
 ): SafeNode[] {
   if ("value" in node) {
     // Preformatted text keeps its line breaks, which normalization turns into `br` elements. Every
@@ -327,7 +376,11 @@ function sanitizeNode(
     return [];
   }
 
-  const children = node.childNodes.flatMap((childNode) => sanitizeNode(childNode, context));
+  const childContext =
+    context.separatesBlocks && node.tagName === "pre"
+      ? { ...context, isPreformatted: true }
+      : context;
+  const children = node.childNodes.flatMap((childNode) => sanitizeNode(childNode, childContext));
 
   if (node.tagName === "a") {
     const href = resolveLink({
@@ -342,8 +395,12 @@ function sanitizeNode(
       : [{ type: "element", tagName: "a", attributes: [{ name: "href", value: href }], children }];
   }
 
-  return KEPT_INLINE_TAG_NAMES.has(node.tagName)
-    ? [{ type: "element", tagName: node.tagName, attributes: [], children }]
+  if (KEPT_INLINE_TAG_NAMES.has(node.tagName)) {
+    return [{ type: "element", tagName: node.tagName, attributes: [], children }];
+  }
+
+  return context.separatesBlocks && !FLATTENED_INLINE_TAG_NAMES.has(node.tagName)
+    ? [{ type: "text", value: " " }, ...children, { type: "text", value: " " }]
     : children;
 }
 

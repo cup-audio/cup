@@ -1,0 +1,26 @@
+{
+  "sourceTitle": "A table without a header row",
+  "sourceMaterialHtml": "<table>\n  <tr><td>Alpha</td><td></td><td>1</td></tr>\n  <tr><td>Beta <em>two</em></td><td>2<br>3</td></tr>\n  <tr><td>Gamma</td><td><ul><li>first</li><li>second</li></ul></td></tr>\n  <tr><td> </td><td><img src=\"x.png\"></td></tr>\n</table>\n<p>After the table.</p>",
+  "synchronizationUnits": [
+    {
+      "id": "narration-unit-0001",
+      "narrationText": "A table without a header row"
+    },
+    {
+      "id": "narration-unit-0002",
+      "narrationText": "Alpha, 1"
+    },
+    {
+      "id": "narration-unit-0003",
+      "narrationText": "Beta two, 2\n3"
+    },
+    {
+      "id": "narration-unit-0004",
+      "narrationText": "Gamma, first second"
+    },
+    {
+      "id": "narration-unit-0005",
+      "narrationText": "After the table."
+    }
+  ]
+}

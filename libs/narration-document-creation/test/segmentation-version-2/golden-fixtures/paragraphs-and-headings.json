@@ -1,0 +1,38 @@
+{
+  "sourceTitle": "Paragraphs and headings",
+  "sourceMaterialHtml": "<h1>Paragraphs and headings</h1>\n<p>The first <em>paragraph</em> with a <a href=\"https://example.com/a\">link</a>.</p>\n<h2>A section</h2>\n<p>The second <strong>paragraph</strong>,<br>with a line break.</p>\n<h2>Two headings</h2><h3>in a row</h3>\n<p>The third paragraph.</p>\n<div>Direct text in a div <span>with a span</span><div>and a nested div</div> after it.</div>\n<h2>A trailing heading</h2>",
+  "synchronizationUnits": [
+    {
+      "id": "narration-unit-0001",
+      "narrationText": "Paragraphs and headings"
+    },
+    {
+      "id": "narration-unit-0002",
+      "narrationText": "The first paragraph with a link."
+    },
+    {
+      "id": "narration-unit-0003",
+      "narrationText": "A section\n\nThe second paragraph,\nwith a line break."
+    },
+    {
+      "id": "narration-unit-0004",
+      "narrationText": "Two headings\n\nin a row\n\nThe third paragraph."
+    },
+    {
+      "id": "narration-unit-0005",
+      "narrationText": "Direct text in a div with a span"
+    },
+    {
+      "id": "narration-unit-0006",
+      "narrationText": "and a nested div"
+    },
+    {
+      "id": "narration-unit-0007",
+      "narrationText": "after it."
+    },
+    {
+      "id": "narration-unit-0008",
+      "narrationText": "A trailing heading"
+    }
+  ]
+}

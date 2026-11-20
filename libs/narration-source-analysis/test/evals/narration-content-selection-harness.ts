@@ -52,6 +52,10 @@ export function createNarrationContentSelectionHarness(
         sourceMaterialHtml: input.inputHtml,
         ...(signal ? { signal } : {}),
       });
+      // Pinned to segmentation version 1, which the committed goldens were recorded with, although
+      // preparation segments with version 2: these evals measure narration content selection, and
+      // moving them to version 2 would change the goldens of every case whose selection keeps a
+      // table, which only a paid eval run can record.
       const { synchronizationUnits } = segmentNarrationDocument({
         segmentationVersion: 1,
         sourceTitle: input.sourceTitle,

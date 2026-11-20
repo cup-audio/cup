@@ -21,7 +21,10 @@ import {
   type ConversionParams,
 } from "@cup/conversion-contracts";
 import { CupError } from "@cup/errors";
-import { segmentNarrationDocument } from "@cup/narration-document-creation";
+import {
+  CURRENT_SEGMENTATION_VERSION,
+  segmentNarrationDocument,
+} from "@cup/narration-document-creation";
 import type {
   NarrationContentSelectionResult,
   NarrationLanguageDetectionInput,
@@ -200,7 +203,7 @@ export async function runPrepareAudiobookWorkflow({
             ),
         });
 
-      const segmentationVersion = 1;
+      const segmentationVersion = CURRENT_SEGMENTATION_VERSION;
       const synchronizationUnits = await step.do(
         // Named apart from the step that returned the whole narration document, so a run that
         // recorded that step before the deploy runs this one instead of reusing its result.

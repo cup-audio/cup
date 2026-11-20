@@ -332,6 +332,54 @@ test("units inside a restored table, description list and preformatted text high
   );
 });
 
+test("a table row, and a heading with the table's first row, highlight and play as one segment", async ({
+  mount,
+  page,
+}) => {
+  await captureNarrationAudio(page);
+
+  const component = await mount("routes/_shell.audiobooks.$conversionId/RowUnits");
+  const heading = component.getByRole("heading", { name: "Latency" });
+  const rows = component.getByRole("row");
+  const headerRow = rows.nth(0);
+  const europeRow = rows.nth(1);
+  const asiaRow = rows.nth(2);
+
+  await component.getByRole("cell", { name: "380 ms", exact: true }).click();
+  await expect(europeRow).toHaveAttribute("aria-current", "true");
+  await expect(heading).not.toHaveAttribute("aria-current");
+  await expectPlayingFrom(page, 10);
+
+  await component.getByRole("columnheader", { name: "Region", exact: true }).click();
+  await expect(heading).toHaveAttribute("aria-current", "true");
+  await expect(headerRow).toHaveAttribute("aria-current", "true");
+  await expect(europeRow).not.toHaveAttribute("aria-current");
+  await expectPlayingFrom(page, 5);
+
+  await component.getByText("The middle value of all measurements.").click();
+  await expect(component.getByText("Median", { exact: true })).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
+  await expectPlayingFrom(page, 20);
+
+  // A row's Play from here button sits in its first cell, since a row holds only cells.
+  for (const row of [headerRow, europeRow, asiaRow]) {
+    expect(
+      await row.evaluate((element) =>
+        [...element.children].every((child) => ["TD", "TH"].includes(child.tagName)),
+      ),
+    ).toBe(true);
+  }
+  await expect(component.getByRole("button", { name: "Play from here", exact: true })).toHaveCount(
+    5,
+  );
+  await asiaRow.getByRole("button", { name: "Play from here", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await expect(asiaRow).toHaveAttribute("aria-current", "true");
+  await expectPlayingFrom(page, 15);
+});
+
 test("a failed segment is marked across all its elements", async ({ mount }) => {
   const component = await mount(
     "routes/_shell.audiobooks.$conversionId/HeadingBeforeAListWithFailedSegment",

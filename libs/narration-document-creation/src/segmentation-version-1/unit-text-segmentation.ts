@@ -38,7 +38,8 @@ const INLINE_TAG_NAMES = new Set([
   "wbr",
 ]);
 
-const MAX_UNIT_TEXT_CHARACTERS = 2_000;
+/** The most characters one unit's narration text holds, within the narration synthesis limit. */
+export const MAX_UNIT_TEXT_CHARACTERS = 2_000;
 
 /** The narration text of one synchronization unit, within the narration synthesis limit. */
 export type UnitText = {
@@ -181,8 +182,12 @@ function normalizeNarrationText(text: string): string {
     .trim();
 }
 
-/** Splits oversized narration at sentences, falling back to word boundaries when necessary. */
-function splitNarrationBlock(text: string): string[] {
+/**
+ * Splits oversized narration at sentences, falling back to word boundaries when necessary.
+ * Segmentation version 2 splits its new kinds of units with it too, so it is as frozen as the rest
+ * of version 1.
+ */
+export function splitNarrationBlock(text: string): string[] {
   if (text.length <= MAX_UNIT_TEXT_CHARACTERS) {
     return [text];
   }

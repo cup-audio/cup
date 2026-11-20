@@ -247,19 +247,26 @@ function newShapeFixture(
   owner: ConversionOwner,
   {
     fetchedUrl,
+    segmentationVersion = 2,
+    narrationSourceMaterialHtml = NARRATION_SOURCE_MATERIAL_HTML,
     synchronizationUnits = NEW_SHAPE_UNITS,
-  }: { fetchedUrl?: string; synchronizationUnits?: typeof NEW_SHAPE_UNITS } = {},
+  }: {
+    fetchedUrl?: string;
+    segmentationVersion?: 1 | 2;
+    narrationSourceMaterialHtml?: string;
+    synchronizationUnits?: typeof NEW_SHAPE_UNITS;
+  } = {},
 ) {
   const artifactPrefix = createConversionArtifactPrefix(conversionId, owner);
   const narrationSourceMaterialKey = `${artifactPrefix}narration-source-material.html`;
 
   return fixture(owner, synchronizationUnits, {
     narrationDocument: {
-      segmentationVersion: 1,
+      segmentationVersion,
       narrationSourceMaterial: {
         key: narrationSourceMaterialKey,
         contentType: "text/html; charset=utf-8",
-        byteLength: new TextEncoder().encode(NARRATION_SOURCE_MATERIAL_HTML).byteLength,
+        byteLength: new TextEncoder().encode(narrationSourceMaterialHtml).byteLength,
         etag: "source-material-etag",
       },
       ...(fetchedUrl === undefined ? {} : { fetchedUrl }),
@@ -267,7 +274,7 @@ function newShapeFixture(
       synchronizationUnits,
     },
     storedObjects: {
-      [narrationSourceMaterialKey]: NARRATION_SOURCE_MATERIAL_HTML,
+      [narrationSourceMaterialKey]: narrationSourceMaterialHtml,
       [`${artifactPrefix}audiobook-source-material.html`]: AUDIOBOOK_SOURCE_MATERIAL_HTML,
     },
   });
@@ -294,6 +301,54 @@ test.for(["account", "trial"] as const)(
     expect(readKeys.filter((key) => key.endsWith(".html"))).toEqual([
       `${artifactPrefix}narration-source-material.html`,
     ]);
+    expect(captureException).not.toHaveBeenCalled();
+  },
+);
+
+// The same narration source material, with a heading before a table, as segmentation versions 1
+// and 2 divide it: version 1 makes each cell a unit, version 2 each row.
+const TABLE_SOURCE_MATERIAL_HTML =
+  "<h2>Latency</h2><table><tr><th>Region</th><th>Latency</th></tr><tr><td>Europe</td><td>380 ms</td></tr></table>";
+const RENDERED_TABLES_BY_SEGMENTATION_VERSION = {
+  1: {
+    synchronizationUnits: [
+      ...NEW_SHAPE_UNITS.slice(0, 2),
+      { id: "narration-unit-0003", narrationText: "Latency\n\nRegion" },
+      { id: "narration-unit-0004", narrationText: "Latency" },
+      { id: "narration-unit-0005", narrationText: "Europe" },
+      { id: "narration-unit-0006", narrationText: "380 ms" },
+    ],
+    body: '<h2 data-synchronization-unit="narration-unit-0003">Latency</h2><div data-scroll-card=""><table><tbody><tr><th data-synchronization-unit="narration-unit-0003">Region</th><th data-synchronization-unit="narration-unit-0004">Latency</th></tr><tr><td data-synchronization-unit="narration-unit-0005">Europe</td><td data-synchronization-unit="narration-unit-0006">380 ms</td></tr></tbody></table></div>',
+  },
+  2: {
+    synchronizationUnits: [
+      ...NEW_SHAPE_UNITS.slice(0, 2),
+      { id: "narration-unit-0003", narrationText: "Latency\n\nRegion, Latency" },
+      { id: "narration-unit-0004", narrationText: "Europe, 380 ms" },
+    ],
+    body: '<h2 data-synchronization-unit="narration-unit-0003">Latency</h2><div data-scroll-card=""><table><tbody><tr data-synchronization-unit="narration-unit-0003"><th>Region</th><th>Latency</th></tr><tr data-synchronization-unit="narration-unit-0004"><td>Europe</td><td>380 ms</td></tr></tbody></table></div>',
+  },
+} as const;
+
+test.for([1, 2] as const)(
+  "a new conversion prepared with segmentation version %i is rendered from the same narration source material with its own stored units",
+  async (segmentationVersion) => {
+    const { synchronizationUnits, body } =
+      RENDERED_TABLES_BY_SEGMENTATION_VERSION[segmentationVersion];
+
+    const response = await newShapeFixture(OWNERS.account, {
+      segmentationVersion,
+      narrationSourceMaterialHtml: TABLE_SOURCE_MATERIAL_HTML,
+      synchronizationUnits: [...synchronizationUnits],
+    }).request();
+
+    expect(response.status).toBe(200);
+    expect(toStrictSchema(audiobookSchema).parse(await response.json())).toMatchObject({
+      narrationDocument: {
+        html: `<article><hgroup><h1 data-synchronization-unit="narration-unit-0001">A document</h1><p data-synchronization-unit="narration-unit-0002">A subtitle</p></hgroup>${body}</article>`,
+        synchronizationUnits,
+      },
+    });
     expect(captureException).not.toHaveBeenCalled();
   },
 );

@@ -32,7 +32,7 @@ export const storedNarrationDocumentSchema = z.union([
   // with the recorded segmentation version whenever the narration document is rendered.
   z
     .object({
-      segmentationVersion: z.literal(1),
+      segmentationVersion: z.literal([1, 2]),
       narrationSourceMaterial: narrationSourceMaterialReferenceSchema,
       /** The URL the source page was finally loaded from, after redirects. */
       fetchedUrl: z.url().optional(),

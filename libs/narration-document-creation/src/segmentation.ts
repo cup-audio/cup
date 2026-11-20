@@ -2,10 +2,14 @@ import { parseFragment } from "parse5";
 import type { DefaultTreeAdapterMap } from "parse5";
 
 import { segmentWithVersion1 } from "#src/segmentation-version-1/segmentation-version-1.ts";
+import { segmentWithVersion2 } from "#src/segmentation-version-2/segmentation-version-2.ts";
 import type { SynchronizationUnit } from "#src/synchronization-unit.ts";
 
 /** A numbered set of segmentation rules, decided once when a conversion is prepared. */
-export type SegmentationVersion = 1;
+export type SegmentationVersion = 1 | 2;
+
+/** The segmentation version that preparation divides a new conversion's narration document with. */
+export const CURRENT_SEGMENTATION_VERSION = 2 satisfies SegmentationVersion;
 
 /** Supplies the narration source material and the segmentation version to segment it with. */
 export type SegmentOptions = {
@@ -71,7 +75,11 @@ export function segmentNarrationDocument({
   synchronizationUnits: readonly SynchronizationUnit[];
 } {
   const sourceMaterial = parseFragment(sourceMaterialHtml);
-  const segmentation = segmentWithVersion1({ sourceTitle, sourceSubtitle, sourceMaterial });
+  const segmentation = (segmentationVersion === 1 ? segmentWithVersion1 : segmentWithVersion2)({
+    sourceTitle,
+    sourceSubtitle,
+    sourceMaterial,
+  });
 
   return {
     segmentedDocument: {

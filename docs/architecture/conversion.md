@@ -83,11 +83,26 @@ Preparation keeps what the narration document is rendered from, not the rendered
 
 - **Audiobook source material,** written right after source preparation and before narration content selection, so failed preparations keep it too. Nothing in the app reads it; it is kept for possible future evals.
 - **Narration source material,** exactly as selected, written in the "store audiobook" step before the manifest that references it.
-- **The manifest,** whose narration document records the units, segmentation version 1, the narration source material's object reference, the URL source preparation reports the page was finally loaded from after redirects, and the source subtitle.
+- **The manifest,** whose narration document records the units, the segmentation version it was prepared with, the narration source material's object reference, the URL source preparation reports the page was finally loaded from after redirects, and the source subtitle.
 
 Preparation runs only segmentation to get the units, and decides the `content-limit` from them. [R2 objects](r2-storage.md#objects-within-a-conversion) describes the stored objects and both manifest shapes, and [`provider-failure.test.ts`](../../libs/create-audiobook-from-url-workflow/test/provider-failure.test.ts) covers the writes, their reuse on a retry and a failed preparation's audiobook source material.
 
 Preparation outcomes contain no audio duration or speech-provider usage; generated duration is recorded per segment by the owner's duration accounting. Grant outcomes additionally record narration measurements and content-selection provider usage for operator inspection.
+
+### Segmentation versions
+
+Each [segmentation](../GLOSSARY.md#segmentation) version is a frozen module with committed golden fixtures in the [library's tests](../../libs/narration-document-creation/test/), and the manifest records the one a conversion was prepared with ([ADR 0035](../adr/0035-render-the-narration-document-on-request-from-the-stored-narration-source-material-with-versioned-frozen-segmentation.md)). New conversions are prepared with version 2, the library's `CURRENT_SEGMENTATION_VERSION`; the renderer re-runs whichever version a conversion recorded.
+
+- **Version 1** is the unit rules from before segmentation was split out: every table cell, `caption`, `dt` and `dd` is its own unit, `pre` collapses its whitespace and is split mid-line past 2,000 characters, and a heading before a container joins the container's first unit.
+- **Version 2** differs from version 1 only in these rules:
+  - **Table rows:** one unit per `tr`, whose narration text is its non-empty cells' texts joined with `", "`, with blocks nested inside a cell flattened into the cell's text, separated by a space. No header names are added. A row that, with a heading it joins, exceeds 2,000 characters falls back to version 1's unit per cell.
+  - **Captions:** the `caption` is its own unit.
+  - **Description lists:** one unit per group of terms and the descriptions after them, joined like a heading and its paragraph; a `div` that wraps a group ends the groups around it.
+  - **Preformatted text:** `pre` keeps its line breaks as `\n` in the narration text, and a block over 2,000 characters is split at a line break, and mid-line only within a line longer than that.
+  - **Headings before a table or `dl`:** the heading joins the unit of the table's first row, or of its caption when it has one, or of the list's first group.
+- **Unchanged in both:** lists and blockquotes keep their nesting, with each item and each paragraph inside an item or quote its own unit, and no list numbers or quote cues are spoken.
+
+The [narration content selection evals](../../libs/narration-source-analysis/test/evals/README.md) still segment with version 1, which their goldens were recorded with.
 
 ## Narration language
 
@@ -166,8 +181,8 @@ The listener API renders the narration document whenever it builds an audiobook 
 
 The manifest's shape chooses the path. A new conversion is segmented again on every render: the [handler](../../libs/api-server/src/http/narration-document-response.ts) reads `narration-source-material.html` only through the manifest's reference, and the render function runs the recorded segmentation version on it with the manifest's title and source subtitle and presents the result. [Presentation](../../libs/narration-document-creation/src/presentation.ts) follows the spec's [presentation rules](https://github.com/cup-audio/cup/issues/493), and changes no unit:
 
-- **Units:** every element of a unit carries `data-synchronization-unit="<unit ID>"`, and no `section` wrapper is added. The source title and source subtitle open the document in an `<hgroup>`. A heading before a list, blockquote, table or `dl` stays before it and carries the unit of the container's first item, cell or term. A block split into several units becomes one element per unit, and kept inline markup and links that span the split are cloned into each.
-- **Blocks:** `p`, headings, blockquotes and lists stay, and so do tables with their `caption`, row groups, `tr`, `th` and `td`, `pre` with its line breaks, and `dl`, `dt` and `dd`. Under segmentation version 1 every table cell, `caption`, `dt` and `dd` is its own unit, so that element carries the unit attribute, or the paragraphs inside it carry theirs. A `pre` split into several units becomes one `pre` per unit. A table that holds a unit keeps its empty cells, so its columns stay aligned; other containers without a unit are dropped. `hr` is dropped, and every other element, `figure` included, is replaced by what it holds.
+- **Units:** every element of a unit carries `data-synchronization-unit="<unit ID>"`, and no `section` wrapper is added. The source title and source subtitle open the document in an `<hgroup>`. A heading before a list, blockquote, table or `dl` stays before it and carries the unit of the container's first item, row, cell, term or group. A block split into several units becomes one element per unit, and kept inline markup and links that span the split are cloned into each.
+- **Blocks:** `p`, headings, blockquotes and lists stay, and so do tables with their `caption`, row groups, `tr`, `th` and `td`, `pre` with its line breaks, and `dl`, `dt` and `dd`. Under segmentation version 1 every table cell, `caption`, `dt` and `dd` is its own unit, so that element carries the unit attribute, or the paragraphs inside it carry theirs. Under version 2 a row that is one unit carries the attribute on its `tr`, and a description list group on each of its `dt`s and `dd`s; their cells, terms and descriptions show the blocks inside them flattened with a space, as they are narrated, so each unit shows exactly its narration text. A `pre` split into several units becomes one `pre` per unit. A table that holds a unit keeps its empty cells, so its columns stay aligned; other containers without a unit are dropped. `hr` is dropped, and every other element, `figure` included, is replaced by what it holds.
 - **Scroll cards:** every `table` and `pre` sits in a `<div data-scroll-card="">` wrapper, which the reader styles as a card that scrolls sideways. The wrapper carries no unit attribute.
 - **Inline markup:** `em`, `strong`, `b`, `i`, `code`, `kbd`, `samp`, `var`, `sub`, `sup`, `s`, `del`, `q` and `br` stay as themselves; every other inline element, such as `span`, `abbr`, `mark` or `u`, is flattened to its text.
 - **Attributes and links:** the only attributes are `href` on kept links, the unit attribute and the scroll-card wrapper's. Links follow the rules of the existing-conversion path below, resolved against the fetched URL, or against `originalUrl` when the manifest has none.

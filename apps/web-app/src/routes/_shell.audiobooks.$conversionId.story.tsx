@@ -442,6 +442,27 @@ export const RestoredStructure = createPreparedStory({
   ),
 });
 
+// Segmentation version 2's units: a heading before a table with its header row, each table row and
+// a description list group.
+const ROW_UNITS = [
+  { id: "unit-1", narrationText: "A deterministic document about careful testing" },
+  { id: "unit-2", narrationText: "Latency\n\nRegion, Latency" },
+  { id: "unit-3", narrationText: "Europe, 380 ms" },
+  { id: "unit-4", narrationText: "Asia, 420 ms" },
+  { id: "unit-5", narrationText: "Median\n\nThe middle value of all measurements." },
+];
+
+export const RowUnits = createPreparedStory({
+  ...PREPARED_AUDIOBOOK,
+  status: "ready",
+  narrationDocument: {
+    html: '<article><h1 data-synchronization-unit="unit-1">A deterministic document about careful testing</h1><h2 data-synchronization-unit="unit-2">Latency</h2><div data-scroll-card=""><table><thead><tr data-synchronization-unit="unit-2"><th>Region</th><th>Latency</th></tr></thead><tbody><tr data-synchronization-unit="unit-3"><td>Europe</td><td>380 ms</td></tr><tr data-synchronization-unit="unit-4"><td>Asia</td><td>420 ms</td></tr></tbody></table></div><dl><dt data-synchronization-unit="unit-5">Median</dt><dd data-synchronization-unit="unit-5">The middle value of all measurements.</dd></dl></article>',
+    synchronizationUnits: ROW_UNITS,
+  },
+  segments: ROW_UNITS.map((_, sequence) => createReadySegment(sequence)),
+  narrationTrack: createStoryNarrationTrack(ROW_UNITS.map(() => SEGMENT_DURATION_MILLISECONDS)),
+});
+
 function createPendingStory(preparationPhase?: PreparationPhase) {
   return {
     component: () => <GlobalProviders router={router} />,

@@ -120,43 +120,46 @@ test("loads a manifest from before speechConfig with the policy 4 Gemini configu
     policyVersion: "4",
   });
 });
-test("stores and loads a new conversion's manifest, which references its narration source material instead of holding HTML", async () => {
-  const { bucket, storedObjects } = createTestBucket();
-  const narrationDocument = {
-    segmentationVersion: 1,
-    narrationSourceMaterial: {
-      key: "conversions/conversion-id/narration-source-material.html",
-      contentType: "text/html; charset=utf-8",
-      byteLength: 42,
-      etag: "narration-source-material-etag",
-    },
-    fetchedUrl: "https://www.example.com/story",
-    sourceSubtitle: "Subtitle",
-    synchronizationUnits: [
-      { id: "unit-1", narrationText: "Title" },
-      { id: "unit-2", narrationText: "Subtitle" },
-      { id: "unit-3", narrationText: "Body" },
-    ],
-  } satisfies StoredNarrationDocument;
+test.for([1, 2] as const)(
+  "stores and loads a new conversion's manifest prepared with segmentation version %i, which references its narration source material instead of holding HTML",
+  async (segmentationVersion) => {
+    const { bucket, storedObjects } = createTestBucket();
+    const narrationDocument = {
+      segmentationVersion,
+      narrationSourceMaterial: {
+        key: "conversions/conversion-id/narration-source-material.html",
+        contentType: "text/html; charset=utf-8",
+        byteLength: 42,
+        etag: "narration-source-material-etag",
+      },
+      fetchedUrl: "https://www.example.com/story",
+      sourceSubtitle: "Subtitle",
+      synchronizationUnits: [
+        { id: "unit-1", narrationText: "Title" },
+        { id: "unit-2", narrationText: "Subtitle" },
+        { id: "unit-3", narrationText: "Body" },
+      ],
+    } satisfies StoredNarrationDocument;
 
-  const reference = await storeAudiobook({
-    bucket,
-    conversionId: "conversion-id",
-    title: "Title",
-    originalUrl: "https://example.com/story",
-    narrationDocument,
-  });
+    const reference = await storeAudiobook({
+      bucket,
+      conversionId: "conversion-id",
+      title: "Title",
+      originalUrl: "https://example.com/story",
+      narrationDocument,
+    });
 
-  expect(JSON.parse(storedObjects.get(reference.key)!.body)).not.toHaveProperty(
-    "narrationDocument.html",
-  );
-  await expect(loadAudiobook({ bucket, audiobookReference: reference })).resolves.toEqual({
-    title: "Title",
-    originalUrl: "https://example.com/story",
-    narrationDocument,
-    speechConfig: SPEECH_CONFIG,
-  });
-});
+    expect(JSON.parse(storedObjects.get(reference.key)!.body)).not.toHaveProperty(
+      "narrationDocument.html",
+    );
+    await expect(loadAudiobook({ bucket, audiobookReference: reference })).resolves.toEqual({
+      title: "Title",
+      originalUrl: "https://example.com/story",
+      narrationDocument,
+      speechConfig: SPEECH_CONFIG,
+    });
+  },
+);
 test("loads a manifest whose units speech policy 7 marked as continuing a narration block", async () => {
   const { bucket } = createTestBucket();
   const narrationDocument = {

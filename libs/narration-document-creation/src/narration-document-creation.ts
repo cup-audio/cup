@@ -6,7 +6,7 @@ export type {
   NewConversionRenderOptions,
   RenderOptions,
 } from "#src/rendering.ts";
-export { segmentNarrationDocument } from "#src/segmentation.ts";
+export { CURRENT_SEGMENTATION_VERSION, segmentNarrationDocument } from "#src/segmentation.ts";
 export type {
   NarrationBlock,
   SegmentationVersion,

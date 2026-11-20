@@ -100,10 +100,13 @@ function addPlayFromHereButton(
   button.setAttribute("aria-label", "Play from here");
 
   // Inside a heading the button would become part of the heading's name, and an <hgroup> holds
-  // only headings and paragraphs, so a heading's button goes before it, or before its <hgroup>.
+  // only headings and paragraphs, so a heading's button goes before it, or before its <hgroup>. A
+  // table row holds only cells, so a row's button goes into its first cell.
   if (/^H[1-6]$/.test(firstElement.tagName)) {
     const parent = firstElement.parentElement;
     (parent?.tagName === "HGROUP" ? parent : firstElement).before(button);
+  } else if (firstElement instanceof HTMLTableRowElement && firstElement.cells[0]) {
+    firstElement.cells[0].prepend(button);
   } else {
     firstElement.prepend(button);
   }

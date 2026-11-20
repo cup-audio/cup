@@ -1,0 +1,30 @@
+{
+  "sourceTitle": "Description lists",
+  "sourceMaterialHtml": "<dl>\n  <dt>Term one</dt>\n  <dd>Description one.</dd>\n  <dt>Term two</dt>\n  <dt>Term two, again</dt>\n  <dd>Description two.</dd>\n  <dd>Another description two.</dd>\n  <div><dt>Term three</dt><dd><p>First paragraph.</p><p>Second paragraph.</p></dd></div>\n  <dt></dt>\n  <dd> </dd>\n</dl>\n<dl><dd>A description without a term.</dd><dt>Term four</dt><dd>Description four.</dd></dl>",
+  "synchronizationUnits": [
+    {
+      "id": "narration-unit-0001",
+      "narrationText": "Description lists"
+    },
+    {
+      "id": "narration-unit-0002",
+      "narrationText": "Term one\n\nDescription one."
+    },
+    {
+      "id": "narration-unit-0003",
+      "narrationText": "Term two\n\nTerm two, again\n\nDescription two.\n\nAnother description two."
+    },
+    {
+      "id": "narration-unit-0004",
+      "narrationText": "Term three\n\nFirst paragraph. Second paragraph."
+    },
+    {
+      "id": "narration-unit-0005",
+      "narrationText": "A description without a term."
+    },
+    {
+      "id": "narration-unit-0006",
+      "narrationText": "Term four\n\nDescription four."
+    }
+  ]
+}
