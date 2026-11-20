@@ -32,13 +32,19 @@ The detail view renders the audiobook's [narration document](../GLOSSARY.md#narr
 
 The full-size invisible button per segment that this replaced made the links inside segments unreachable ([#481](https://github.com/cup-audio/cup/issues/481)). The [detail view tests](../../apps/web-app/src/routes/_shell.audiobooks.$conversionId.test.ts) pin these rules.
 
-[`narration-markup-styles.ts`](../../apps/web-app/src/app/components/narration-markup-styles.ts) styles the markup the narration document keeps ([presentation rules](conversion.md#rendering-the-narration-document)), with the light-only ink, page and surface tokens only:
+[`narration-markup-styles.ts`](../../apps/web-app/src/app/components/narration-markup-styles.ts) styles the markup the narration document keeps ([presentation rules](conversion.md#presentation)), with the light-only ink, page and surface tokens only:
 
-- **Links:** full ink with a dotted underline and a small ink-40 "↗" marker, which is decorative and stays out of the link's name. The "Open link" popover is a dark box with an arrow that points at the link.
+- **Links:** full ink with a dotted underline and a small ink-60 "↗" marker, which stays out of the link's name. The "Open link" popover is a dark box with an arrow that points at the link.
 - **Inline elements:** `kbd` as a keycap, `code` and `samp` as Space Mono chips, `strong` and `b` semibold in full ink, `s` and `del` struck through in ink-40, `q` with curly quotes, and `sub` and `sup` without changing the line height.
 - **Scroll cards:** the `data-scroll-card` wrapper around each `table` and `pre` is a surface card that scrolls sideways. It has `contain: inline-size`, so its content never sizes it and a wide block cannot widen the page. Table cells don't wrap, the first column stays fixed while the rest scrolls, and header cells and the caption are small ink-60 text. A `pre` keeps its line breaks and does not wrap.
 - **Description lists:** terms in medium weight and full ink, each definition indented below it.
 - **Segment highlight:** every element of the current segment gets the tinted bubble, so a heading and the first item of its container get one each. Inside a scroll card the bubble would be cut off at the card's edge, so a highlighted row tints its cells, and a caption, single cell or `pre` tints its own box. A failed segment's row carries the failed mark on its first cell.
+
+Contrast, measured 2026-11-20 against WCAG 2.2 with ink `rgb(18 18 18)` over the page `#f6f6f3` and the surface `#fff`:
+
+- **Link marker:** the "↗" tells the listener before tapping that the link leaves Cup, so it is a meaningful graphic that needs 3:1 ([SC 1.4.11](https://www.w3.org/TR/WCAG22/#non-text-contrast)). In ink-40 it reached 2.58:1 on the page and 2.61:1 on a card, so it uses ink-60, at 4.77:1 and 4.89:1.
+- **Header cells and caption:** ink-60 on the card, 4.89:1, above 4.5:1 for small text.
+- **`s` and `del`:** ink-40, 2.58:1 on the page and 2.61:1 on a card, below the 4.5:1 text minimum. This is a known gap, kept because the [spec's styling decision](https://github.com/cup-audio/cup/issues/493) set struck-out text in ink-40.
 
 The UI gallery story `KeptMarkup` shows every kept element, and the detail view tests hold its screenshots.
 

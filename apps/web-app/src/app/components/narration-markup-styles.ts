@@ -1,9 +1,10 @@
 import { css } from "@linaria/core";
 
 /**
- * The look of the markup a narration document keeps around its units (spec #493, "Styling"), and of
- * a segment's highlight inside a table or preformatted text. It goes on the element the narration
- * document is rendered into, which sets the body text style and the highlight bubble.
+ * The look of the markup a narration document keeps around its units, and of a segment's highlight
+ * inside a table or preformatted text, as docs/architecture/web-app.md#reader describes it. It goes
+ * on the element the narration document is rendered into, which sets the body text style and the
+ * highlight bubble.
  */
 export const narrationMarkupClassName = css`
   a[href] {
@@ -12,12 +13,15 @@ export const narrationMarkupClassName = css`
     text-underline-offset: 0.25em;
   }
 
-  /* decorative: the underline marks the link, so the marker stays out of the link's name */
+  /*
+    decorative: the underline marks the link, so the marker stays out of the link's name; ink-60, as
+    the marker tells the listener the link leaves Cup and needs 3:1 contrast, which ink-40 misses
+  */
   a[href]::after {
     margin-inline-start: 1px;
     font-size: 0.7em;
     vertical-align: 0.3em;
-    color: var(--color-ink-40);
+    color: var(--color-ink-60);
     content: "↗" / "";
   }
 
@@ -81,7 +85,7 @@ export const narrationMarkupClassName = css`
     margin-block-start: var(--spacing-base);
   }
 
-  /* the server's wrapper of every table and pre (presentation rules, spec #493) */
+  /* the server's wrapper of every table and pre (wrapInScrollCard in @cup/narration-document-creation) */
   [data-scroll-card] {
     /*
       The card's content never sizes it, so a wide block scrolls inside the card instead of widening
