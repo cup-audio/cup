@@ -60,9 +60,9 @@ test("flattens links that aren't web links to other pages to their text", async 
   );
 });
 
-test("keeps a link to the page itself without a fragment", async () => {
+test("flattens a link to the page itself without a fragment to its text", async () => {
   expect(await renderParagraph('<a href="/articles/story">this story</a>', "this story")).toBe(
-    '<article><p data-synchronization-unit="narration-unit-0001"><a href="https://publisher.example/articles/story">this story</a></p></article>',
+    '<article><p data-synchronization-unit="narration-unit-0001">this story</p></article>',
   );
 });
 

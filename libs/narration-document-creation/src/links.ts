@@ -28,9 +28,9 @@ export function resolveLink({
     return undefined;
   }
 
-  // A footnote or other jump within the page would leave Cup only to land on the publisher's copy
-  // of the text the listener is already reading.
-  if (url.hash.length > 0 && withoutHash(url) === withoutHash(pageUrl)) {
+  // A footnote or other jump within the page, or a link to the page itself, would leave Cup only to
+  // land on the publisher's copy of the text the listener is already reading.
+  if (withoutHash(url) === withoutHash(pageUrl)) {
     return undefined;
   }
 

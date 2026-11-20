@@ -194,9 +194,9 @@ test("strips every attribute from kept elements, and keeps only the absolute hre
 test("flattens links that are not kept to their text and drops links without text", async () => {
   expect(
     await renderBody(
-      '<p><a href="#note">Fragment</a>, <a href="mailto:a@b.example">mail</a> and <a href="https://elsewhere.example/"> </a>gap.</p>',
+      '<p><a href="#note">Fragment</a>, <a href="/articles/story">this page</a>, <a href="mailto:a@b.example">mail</a> and <a href="https://elsewhere.example/"> </a>gap.</p>',
     ),
-  ).toBe('<p data-synchronization-unit="narration-unit-0002">Fragment, mail and gap.</p>');
+  ).toBe('<p data-synchronization-unit="narration-unit-0002">Fragment, this page, mail and gap.</p>');
 });
 
 test("clones kept inline markup and links that span a unit boundary into each unit", async () => {
