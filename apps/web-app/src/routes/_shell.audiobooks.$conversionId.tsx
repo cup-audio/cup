@@ -12,6 +12,7 @@ import { ErrorScreen } from "#src/app/components/error-message.js";
 import { fadeFooterClearance } from "#src/app/components/fade-footer.js";
 import { ShellContent } from "#src/app/components/main.tsx";
 import { attachNarrationDocumentInteraction } from "#src/app/components/narration-document-interaction.js";
+import { narrationMarkupClassName } from "#src/app/components/narration-markup-styles.js";
 import { PageTitle } from "#src/app/components/page-title.js";
 import { PLAYER_SHEET_HEIGHTS, PlayerSheet } from "#src/app/components/player-sheet.js";
 import { TrackSkeleton } from "#src/app/components/track-skeleton.js";
@@ -693,6 +694,7 @@ function NarrationDocument({
       ref={narrationDocumentElementRef}
       className={composeClassnames(
         textStyles.paragraph,
+        narrationMarkupClassName,
         css`
           color: var(--color-ink-60);
 
