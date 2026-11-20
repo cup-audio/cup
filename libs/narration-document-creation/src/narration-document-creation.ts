@@ -7,6 +7,8 @@ export { renderNarrationDocument } from "#src/rendering.ts";
 export type {
   NarrationDocumentMismatch,
   RenderedNarrationDocument,
+  ExistingConversionRenderOptions,
+  NewConversionRenderOptions,
   RenderOptions,
 } from "#src/rendering.ts";
 export { segmentNarrationDocument } from "#src/segmentation.ts";

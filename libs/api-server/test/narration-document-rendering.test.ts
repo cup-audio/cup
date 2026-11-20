@@ -82,13 +82,25 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-function fixture(owner: ConversionOwner, synchronizationUnits = SYNCHRONIZATION_UNITS) {
+function fixture(
+  owner: ConversionOwner,
+  synchronizationUnits = SYNCHRONIZATION_UNITS,
+  {
+    narrationDocument = { html: STORED_HTML, synchronizationUnits },
+    storedObjects = {},
+  }: {
+    narrationDocument?: object;
+    /** Further objects in the bucket, by key, each holding HTML. */
+    storedObjects?: Record<string, string>;
+  } = {},
+) {
   const manifest = JSON.stringify({
     title: "A document",
     originalUrl: "https://publisher.example/articles/story",
     speechConfig: SPEECH_CONFIG,
-    narrationDocument: { html: STORED_HTML, synchronizationUnits },
+    narrationDocument,
   });
+  const readKeys: string[] = [];
   const reference = {
     key: `${createConversionArtifactPrefix(conversionId, owner)}audiobook.json`,
     contentType: "application/json",
@@ -123,7 +135,6 @@ function fixture(owner: ConversionOwner, synchronizationUnits = SYNCHRONIZATION_
     account,
   });
 
-  const bucketReads: string[] = [];
   const env = {
     SUPABASE_URL: "https://access-test.supabase.co",
     MEDIA_URL_SIGNING_KEY: "test-media-url-signing-key",
@@ -138,15 +149,24 @@ function fixture(owner: ConversionOwner, synchronizationUnits = SYNCHRONIZATION_
     },
     AUDIO_BUCKET: {
       get: async (key: string) => {
-        bucketReads.push(key);
-        return key === reference.key
-          ? {
-              size: reference.byteLength,
-              etag: reference.etag,
-              httpMetadata: { contentType: reference.contentType },
-              text: async () => manifest,
-            }
-          : null;
+        readKeys.push(key);
+        if (key === reference.key) {
+          return {
+            size: reference.byteLength,
+            etag: reference.etag,
+            httpMetadata: { contentType: reference.contentType },
+            text: async () => manifest,
+          };
+        }
+        const storedObject = storedObjects[key];
+        return storedObject === undefined
+          ? null
+          : {
+              size: new TextEncoder().encode(storedObject).byteLength,
+              etag: "source-material-etag",
+              httpMetadata: { contentType: "text/html; charset=utf-8" },
+              text: async () => storedObject,
+            };
       },
     },
   };
@@ -155,13 +175,9 @@ function fixture(owner: ConversionOwner, synchronizationUnits = SYNCHRONIZATION_
   }
 
   return {
-    bucketReads,
-    request: async (query = "") =>
-      createApiServer().request(
-        origin + audiobookPath + query,
-        { headers: OWNER_HEADERS[owner.kind] },
-        env,
-      ),
+    readKeys,
+    request: async (path = audiobookPath) =>
+      createApiServer().request(origin + path, { headers: OWNER_HEADERS[owner.kind] }, env),
   };
 }
 
@@ -215,37 +231,173 @@ test.for(["account", "trial"] as const)(
   },
 );
 
+// A new conversion stores its narration source material; the attribute stands for markup that
+// presentation never shows, so a response holding it would hold the stored object's content.
+const NARRATION_SOURCE_MATERIAL_HTML =
+  '<h2 data-raw-source-material="kept">A section</h2><p>See <a href="/cited">the source</a>.</p>';
+const AUDIOBOOK_SOURCE_MATERIAL_HTML =
+  '<nav data-raw-source-material="kept">Site navigation</nav><h2>A section</h2><p>See <a href="/cited">the source</a>.</p>';
+const NEW_SHAPE_UNITS = [
+  { id: "narration-unit-0001", narrationText: "A document" },
+  { id: "narration-unit-0002", narrationText: "A subtitle" },
+  { id: "narration-unit-0003", narrationText: "A section\n\nSee the source." },
+];
+
+function newShapeFixture(
+  owner: ConversionOwner,
+  {
+    fetchedUrl,
+    synchronizationUnits = NEW_SHAPE_UNITS,
+  }: { fetchedUrl?: string; synchronizationUnits?: typeof NEW_SHAPE_UNITS } = {},
+) {
+  const artifactPrefix = createConversionArtifactPrefix(conversionId, owner);
+  const narrationSourceMaterialKey = `${artifactPrefix}narration-source-material.html`;
+
+  return fixture(owner, synchronizationUnits, {
+    narrationDocument: {
+      segmentationVersion: 1,
+      narrationSourceMaterial: {
+        key: narrationSourceMaterialKey,
+        contentType: "text/html; charset=utf-8",
+        byteLength: new TextEncoder().encode(NARRATION_SOURCE_MATERIAL_HTML).byteLength,
+        etag: "source-material-etag",
+      },
+      ...(fetchedUrl === undefined ? {} : { fetchedUrl }),
+      sourceSubtitle: "A subtitle",
+      synchronizationUnits,
+    },
+    storedObjects: {
+      [narrationSourceMaterialKey]: NARRATION_SOURCE_MATERIAL_HTML,
+      [`${artifactPrefix}audiobook-source-material.html`]: AUDIOBOOK_SOURCE_MATERIAL_HTML,
+    },
+  });
+}
+
+test.for(["account", "trial"] as const)(
+  "a new %s conversion's narration document is rendered from the narration source material its manifest references, with links resolved against the fetched URL",
+  async (ownerKind) => {
+    const owner = OWNERS[ownerKind];
+    const { readKeys, request } = newShapeFixture(owner, {
+      fetchedUrl: "https://www.publisher.example/2026/story",
+    });
+
+    const response = await request();
+
+    expect(response.status).toBe(200);
+    expect(toStrictSchema(audiobookSchema).parse(await response.json())).toMatchObject({
+      narrationDocument: {
+        html: '<article><hgroup><h1 data-synchronization-unit="narration-unit-0001">A document</h1><p data-synchronization-unit="narration-unit-0002">A subtitle</p></hgroup><h2 data-synchronization-unit="narration-unit-0003">A section</h2><p data-synchronization-unit="narration-unit-0003">See <a href="https://www.publisher.example/cited">the source</a>.</p></article>',
+        synchronizationUnits: NEW_SHAPE_UNITS,
+      },
+    });
+    const artifactPrefix = createConversionArtifactPrefix(conversionId, owner);
+    expect(readKeys.filter((key) => key.endsWith(".html"))).toEqual([
+      `${artifactPrefix}narration-source-material.html`,
+    ]);
+    expect(captureException).not.toHaveBeenCalled();
+  },
+);
+
+test("a new conversion without a fetched URL resolves its links against the submitted source URL", async () => {
+  const response = await newShapeFixture(OWNERS.account).request();
+
+  expect(response.status).toBe(200);
+  expect(toStrictSchema(audiobookSchema).parse(await response.json())).toMatchObject({
+    narrationDocument: {
+      html: expect.stringContaining('<a href="https://publisher.example/cited">the source</a>'),
+    },
+  });
+});
+
+test("a new conversion whose segmentation disagrees with its stored units serves the fallback and reports the first differing unit", async () => {
+  const synchronizationUnits = [
+    ...NEW_SHAPE_UNITS.slice(0, 2),
+    // Differs only in whitespace, which a new conversion's check doesn't ignore.
+    { id: "narration-unit-0003", narrationText: "A section\nSee the source." },
+  ];
+
+  const response = await newShapeFixture(OWNERS.trial, { synchronizationUnits }).request();
+
+  expect(response.status).toBe(200);
+  expect(toStrictSchema(audiobookSchema).parse(await response.json())).toMatchObject({
+    narrationDocument: {
+      html: '<article><p data-synchronization-unit="narration-unit-0001">A document</p><p data-synchronization-unit="narration-unit-0002">A subtitle</p><p data-synchronization-unit="narration-unit-0003">A section<br>See the source.</p></article>',
+      synchronizationUnits,
+    },
+  });
+  expect(captureException).toHaveBeenCalledWith(expect.any(Error), {
+    tags: {
+      "cup.conversion.id": conversionId,
+      "cup.synchronization_unit.id": "narration-unit-0003",
+    },
+  });
+});
+
+test("an existing conversion never reads a narration source material object its manifest doesn't record", async () => {
+  const owner = OWNERS.account;
+  const { readKeys, request } = fixture(owner, SYNCHRONIZATION_UNITS, {
+    storedObjects: {
+      [`${createConversionArtifactPrefix(conversionId, owner)}narration-source-material.html`]:
+        NARRATION_SOURCE_MATERIAL_HTML,
+    },
+  });
+
+  expect((await request()).status).toBe(200);
+  expect(readKeys.filter((key) => key.endsWith(".html"))).toEqual([]);
+});
+
+test.for(["account", "trial"] as const)(
+  "no %s route returns either stored source material's content",
+  async (ownerKind) => {
+    const { request } = newShapeFixture(OWNERS[ownerKind]);
+
+    const paths = [
+      audiobookPath,
+      `${audiobookPath}/narration-source-material.html`,
+      `${audiobookPath}/audiobook-source-material.html`,
+      `${audiobookPath}/narration-source-material`,
+      `${audiobookPath}/source-material`,
+    ];
+    const pathsServingSourceMaterial: string[] = [];
+
+    for (const path of paths) {
+      const body = await (await request(path)).text();
+      if (body.includes("data-raw-source-material") || body.includes("Site navigation")) {
+        pathsServingSourceMaterial.push(path);
+      }
+    }
+
+    expect(pathsServingSourceMaterial).toEqual([]);
+  },
+);
+
 test.for(["account", "trial"] as const)(
   "a %s audiobook requested without its narration document neither reads nor renders it and still answers every other field",
   async (ownerKind) => {
     // Both responses sign their media URLs at the same instant, so they can be compared whole.
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(Temporal.Instant.from("2026-11-20T09:00:00Z").epochMilliseconds);
-    const audiobook = fixture(OWNERS[ownerKind]);
-    const withDocument = toStrictSchema(audiobookSchema).parse(
-      await (await audiobook.request()).json(),
-    );
+    const { readKeys, request } = newShapeFixture(OWNERS[ownerKind]);
+    const withDocument = toStrictSchema(audiobookSchema).parse(await (await request()).json());
     const withoutDocument = Object.fromEntries(
       Object.entries(withDocument).filter(([key]) => key !== "narrationDocument"),
     );
     vi.mocked(renderNarrationDocument).mockClear();
-    audiobook.bucketReads.length = 0;
+    readKeys.length = 0;
 
-    const response = await audiobook.request("?narrationDocument=omit");
+    const response = await request(`${audiobookPath}?narrationDocument=omit`);
 
     expect(response.status).toBe(200);
     expect(toStrictSchema(audiobookResponseSchema).parse(await response.json())).toStrictEqual(
       withoutDocument,
     );
     expect(renderNarrationDocument).not.toHaveBeenCalled();
-    expect(
-      audiobook.bucketReads.filter((key) => key.endsWith("narration-source-material.html")),
-    ).toStrictEqual([]);
+    expect(readKeys.filter((key) => key.endsWith(".html"))).toStrictEqual([]);
   },
 );
 
 test("an audiobook requested with an unknown narration document choice is refused", async () => {
-  const response = await fixture(OWNERS.account).request("?narrationDocument=skip");
+  const response = await fixture(OWNERS.account).request(`${audiobookPath}?narrationDocument=skip`);
 
   expect(response.status).toBe(400);
 });

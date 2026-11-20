@@ -34,6 +34,8 @@ export function createControlledSourceMaterialPreparer({
       documentTitle: "Controlled source fixture",
       ...(coverImage === undefined ? {} : { coverImage }),
       ...(declaredLanguage === undefined ? {} : { declaredLanguage }),
+      // Nothing redirects a controlled source page.
+      fetchedUrl: url,
       responseStatus: 200,
     });
   };

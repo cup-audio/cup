@@ -643,7 +643,11 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
         ...(narrationDocument === "omit"
           ? {}
           : {
-              narrationDocument: toRenderedNarrationDocumentResponse({ conversionId, audiobook }),
+              narrationDocument: await toRenderedNarrationDocumentResponse({
+                bucket: context.env.AUDIO_BUCKET,
+                conversionId,
+                audiobook,
+              }),
             }),
         playbackPosition: toPlaybackPositionResponse(playbackPosition),
       } satisfies AudiobookResponse,
