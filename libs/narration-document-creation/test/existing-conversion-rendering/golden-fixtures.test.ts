@@ -3,10 +3,7 @@ import path from "node:path";
 import { expect, test } from "vitest";
 import { z } from "zod";
 
-import {
-  renderNarrationDocument,
-  SYNCHRONIZATION_UNIT_SCHEMA,
-} from "#src/narration-document-creation.ts";
+import { renderNarrationDocument, SYNCHRONIZATION_UNIT_SCHEMA } from "#src/index.ts";
 
 const EXISTING_CONVERSION_FIXTURE_SCHEMA = z
   .object({

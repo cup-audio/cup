@@ -3,10 +3,7 @@ import path from "node:path";
 import { expect, test } from "vitest";
 import { z } from "zod";
 
-import {
-  segmentNarrationDocument,
-  SYNCHRONIZATION_UNIT_SCHEMA,
-} from "#src/narration-document-creation.ts";
+import { segmentNarrationDocument, SYNCHRONIZATION_UNIT_SCHEMA } from "#src/index.ts";
 
 const SEGMENTATION_FIXTURE_SCHEMA = z
   .object({

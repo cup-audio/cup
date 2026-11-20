@@ -1,7 +1,7 @@
 import process from "node:process";
 import { expect, test } from "vitest";
 
-import { renderNarrationDocument } from "#src/narration-document-creation.ts";
+import { renderNarrationDocument } from "#src/index.ts";
 
 // The largest narration document preparation accepts: its content limit is 40,000 characters of
 // narration text in at most 200 synchronization units.

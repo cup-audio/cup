@@ -5,11 +5,8 @@ import type { DefaultTreeAdapterMap } from "parse5";
 import { expect, test } from "vitest";
 import { z } from "zod";
 
-import {
-  renderNarrationDocument,
-  segmentNarrationDocument,
-} from "#src/narration-document-creation.ts";
-import type { SynchronizationUnit } from "#src/narration-document-creation.ts";
+import { renderNarrationDocument, segmentNarrationDocument } from "#src/index.ts";
+import type { SynchronizationUnit } from "#src/index.ts";
 
 const FETCHED_URL = "https://publisher.example/articles/story";
 

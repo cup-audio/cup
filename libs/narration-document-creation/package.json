@@ -11,8 +11,8 @@
   "exports": {
     "./package.json": "./package.json",
     ".": {
-      "types": "./dist/types/narration-document-creation.d.ts",
-      "default": "./src/narration-document-creation.ts"
+      "types": "./dist/types/index.d.ts",
+      "default": "./src/index.ts"
     }
   },
   "scripts": {

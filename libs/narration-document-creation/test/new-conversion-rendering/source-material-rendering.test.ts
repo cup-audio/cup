@@ -4,7 +4,7 @@ import {
   renderNarrationDocument,
   segmentNarrationDocument,
   SYNCHRONIZATION_UNIT_SCHEMA,
-} from "#src/narration-document-creation.ts";
+} from "#src/index.ts";
 
 /**
  * Segments narration source material with segmentation version 1 and renders it as a new conversion

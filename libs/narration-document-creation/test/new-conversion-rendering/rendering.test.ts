@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 
-import { renderNarrationDocument } from "#src/narration-document-creation.ts";
+import { renderNarrationDocument } from "#src/index.ts";
 
 const ORIGINAL_URL = "https://publisher.example/submitted/story";
 const FETCHED_URL = "https://www.publisher.example/articles/story";

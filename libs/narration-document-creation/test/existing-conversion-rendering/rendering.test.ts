@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 
-import { renderNarrationDocument } from "#src/narration-document-creation.ts";
+import { renderNarrationDocument } from "#src/index.ts";
 
 const ORIGINAL_URL = "https://publisher.example/articles/story";
 // An existing conversion's manifest references no narration source material, so rendering it never
