@@ -1,9 +1,11 @@
 import { captureException } from "@sentry/core";
-import { beforeEach, expect, test, vi } from "vitest";
+import { Temporal } from "temporal-polyfill";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import { SPEECH_CONFIG } from "@cup/audiobook-production";
 import { createConversionArtifactPrefix, type ConversionOwner } from "@cup/conversion-contracts";
-import { audiobookSchema } from "@cup/listener-api.routes";
+import { audiobookResponseSchema, audiobookSchema } from "@cup/listener-api.routes";
+import { renderNarrationDocument } from "@cup/narration-document-creation";
 import { logEvent } from "@cup/telemetry.cloudflare";
 
 import type { ApiServerEnvironment } from "#src/api-server-environment.ts";
@@ -33,6 +35,16 @@ vi.mock(import("@cup/telemetry.cloudflare"), async (importOriginal) => ({
   ...(await importOriginal()),
   logEvent: vi.fn<typeof logEvent>(),
 }));
+// Records the renders and keeps rendering.
+vi.mock(import("@cup/narration-document-creation"), async (importOriginal) => {
+  const original = await importOriginal();
+  return {
+    ...original,
+    renderNarrationDocument: vi.fn<typeof original.renderNarrationDocument>(
+      original.renderNarrationDocument,
+    ),
+  };
+});
 // Records the captures; the Worker integration tests check what reaches Sentry.
 vi.mock(import("@sentry/core"), async (importOriginal) => ({
   ...(await importOriginal()),
@@ -64,6 +76,10 @@ const SYNCHRONIZATION_UNITS = [
 beforeEach(() => {
   vi.mocked(captureException).mockClear();
   vi.mocked(logEvent).mockClear();
+  vi.mocked(renderNarrationDocument).mockClear();
+});
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 function fixture(owner: ConversionOwner, synchronizationUnits = SYNCHRONIZATION_UNITS) {
@@ -107,6 +123,7 @@ function fixture(owner: ConversionOwner, synchronizationUnits = SYNCHRONIZATION_
     account,
   });
 
+  const bucketReads: string[] = [];
   const env = {
     SUPABASE_URL: "https://access-test.supabase.co",
     MEDIA_URL_SIGNING_KEY: "test-media-url-signing-key",
@@ -120,15 +137,17 @@ function fixture(owner: ConversionOwner, synchronizationUnits = SYNCHRONIZATION_
       }),
     },
     AUDIO_BUCKET: {
-      get: async (key: string) =>
-        key === reference.key
+      get: async (key: string) => {
+        bucketReads.push(key);
+        return key === reference.key
           ? {
               size: reference.byteLength,
               etag: reference.etag,
               httpMetadata: { contentType: reference.contentType },
               text: async () => manifest,
             }
-          : null,
+          : null;
+      },
     },
   };
   if (!isFixtureEnvironment(env)) {
@@ -136,9 +155,10 @@ function fixture(owner: ConversionOwner, synchronizationUnits = SYNCHRONIZATION_
   }
 
   return {
-    request: async () =>
+    bucketReads,
+    request: async (query = "") =>
       createApiServer().request(
-        origin + audiobookPath,
+        origin + audiobookPath + query,
         { headers: OWNER_HEADERS[owner.kind] },
         env,
       ),
@@ -194,6 +214,41 @@ test.for(["account", "trial"] as const)(
     });
   },
 );
+
+test.for(["account", "trial"] as const)(
+  "a %s audiobook requested without its narration document neither reads nor renders it and still answers every other field",
+  async (ownerKind) => {
+    // Both responses sign their media URLs at the same instant, so they can be compared whole.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Temporal.Instant.from("2026-11-20T09:00:00Z").epochMilliseconds);
+    const audiobook = fixture(OWNERS[ownerKind]);
+    const withDocument = toStrictSchema(audiobookSchema).parse(
+      await (await audiobook.request()).json(),
+    );
+    const withoutDocument = Object.fromEntries(
+      Object.entries(withDocument).filter(([key]) => key !== "narrationDocument"),
+    );
+    vi.mocked(renderNarrationDocument).mockClear();
+    audiobook.bucketReads.length = 0;
+
+    const response = await audiobook.request("?narrationDocument=omit");
+
+    expect(response.status).toBe(200);
+    expect(toStrictSchema(audiobookResponseSchema).parse(await response.json())).toStrictEqual(
+      withoutDocument,
+    );
+    expect(renderNarrationDocument).not.toHaveBeenCalled();
+    expect(
+      audiobook.bucketReads.filter((key) => key.endsWith("narration-source-material.html")),
+    ).toStrictEqual([]);
+  },
+);
+
+test("an audiobook requested with an unknown narration document choice is refused", async () => {
+  const response = await fixture(OWNERS.account).request("?narrationDocument=skip");
+
+  expect(response.status).toBe(400);
+});
 
 function isFixtureEnvironment(value: unknown): value is ApiServerEnvironment {
   return typeof value === "object" && value !== null && "REGISTRY" in value;

@@ -20,7 +20,7 @@ import {
 import { CupError, assertUnreachable } from "@cup/errors";
 import {
   createListenerApi,
-  type Audiobook,
+  type AudiobookResponse,
   type ListenerApiHandlers,
   type RetryConversionResponse,
   type ScheduleDeletionResponse,
@@ -538,6 +538,7 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
 
   async getAudiobook(context) {
     const { conversionId } = context.req.valid("param");
+    const { narrationDocument = "include" } = context.req.valid("query");
     const owner = await getRegistryStub(context.env).findConversionOwner(conversionId);
     if (!owner) {
       return jsonError(context.get("traceId"), "audiobook-not-found", "Track not found.", 404);
@@ -559,7 +560,7 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
           ...base,
           status: "pending",
           ...toPreparationPhaseField(conversion.lastStartedPhase),
-        } satisfies Audiobook,
+        } satisfies AudiobookResponse,
         200,
       );
     }
@@ -569,7 +570,7 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
           ...base,
           status: "failed",
           explanation: "Preparation failed. Retry to load this track.",
-        } satisfies Audiobook,
+        } satisfies AudiobookResponse,
         200,
       );
     }
@@ -638,9 +639,14 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
                   : undefined,
               ),
             }),
-        narrationDocument: toRenderedNarrationDocumentResponse({ conversionId, audiobook }),
+        // A reader polling with the document it already holds skips reading and rendering it.
+        ...(narrationDocument === "omit"
+          ? {}
+          : {
+              narrationDocument: toRenderedNarrationDocumentResponse({ conversionId, audiobook }),
+            }),
         playbackPosition: toPlaybackPositionResponse(playbackPosition),
-      } satisfies Audiobook,
+      } satisfies AudiobookResponse,
       200,
     );
   },

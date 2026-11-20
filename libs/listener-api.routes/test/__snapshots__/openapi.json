@@ -5378,11 +5378,23 @@
             "required": true,
             "name": "conversionId",
             "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "include",
+                "omit"
+              ]
+            },
+            "required": false,
+            "name": "narrationDocument",
+            "in": "query"
           }
         ],
         "responses": {
           "200": {
-            "description": "Audiobook.",
+            "description": "Audiobook, without its narration document when the request omits it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -5668,7 +5680,6 @@
                         "originalUrl",
                         "canGenerate",
                         "title",
-                        "narrationDocument",
                         "segments",
                         "playbackPosition",
                         "status",
@@ -5889,7 +5900,6 @@
                         "originalUrl",
                         "canGenerate",
                         "title",
-                        "narrationDocument",
                         "segments",
                         "playbackPosition",
                         "status"
@@ -6108,7 +6118,6 @@
                         "originalUrl",
                         "canGenerate",
                         "title",
-                        "narrationDocument",
                         "segments",
                         "playbackPosition",
                         "status"

@@ -1,5 +1,6 @@
 import type {
   AccountConfirmationRequest,
+  AudiobookQuery,
   PlaybackPosition,
   ConversionParams,
   ExchangeCredentialRequest,
@@ -54,9 +55,9 @@ export class ListenerApiClient {
     });
   }
 
-  async getAudiobook(params: ConversionParams, signal?: AbortSignal) {
+  async getAudiobook(params: ConversionParams, query: AudiobookQuery, signal?: AbortSignal) {
     return this.#honoClient.api.audiobooks[":conversionId"].$get(
-      { param: params },
+      { param: params, query },
       signal === undefined ? undefined : { init: { signal } },
     );
   }
@@ -138,9 +139,9 @@ export class AuthenticatedRpcClient {
     );
   }
 
-  async getAudiobook(params: ConversionParams, signal?: AbortSignal) {
+  async getAudiobook(params: ConversionParams, query: AudiobookQuery, signal?: AbortSignal) {
     return this.#honoClient.api.audiobooks[":conversionId"].$get(
-      { param: params },
+      { param: params, query },
       this.#options(signal),
     );
   }

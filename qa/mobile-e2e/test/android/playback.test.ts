@@ -582,12 +582,17 @@ async function startSigningOut(device: AndroidAppDevice, webView: WebdriverIO.Br
   return { webView: signedInWebView, scheduleDeletion };
 }
 
-/** How often the Worker answered a request for the audiobook, which renews its signed URLs. */
+/**
+ * How often the Worker answered a request for the audiobook, which renews its signed URLs. A
+ * renewal omits the narration document the page holds, so the path is compared without its query.
+ */
 function audiobookFetches(conversionId: string): number {
   return app.worker
     .requests()
     .filter(
-      (request) => request.method === "GET" && request.path === `/api/audiobooks/${conversionId}`,
+      (request) =>
+        request.method === "GET" &&
+        request.path.split("?")[0] === `/api/audiobooks/${conversionId}`,
     ).length;
 }
 
