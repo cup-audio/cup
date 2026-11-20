@@ -67,7 +67,8 @@ async function renderBody(sourceMaterialHtml: string): Promise<string> {
 /**
  * The text a listener sees for each unit, in unit order: the text of every element that carries the
  * unit's attribute, joined like narration text joins blocks, with a table row's non-empty cells
- * joined by ", " and a `br` read as a line break.
+ * joined by ", " and a `br` read as a line break. A line's indentation in preformatted text is
+ * shown but not narrated, so it is left out.
  */
 function readShownUnitTexts(html: string): Map<string, string> {
   const elementTexts = new Map<string, string[]>();
@@ -93,7 +94,11 @@ function readShownUnitTexts(html: string): Map<string, string> {
 
   visit(parseFragment(html));
 
-  return new Map([...elementTexts].map(([unitId, texts]) => [unitId, texts.join("\n\n")] as const));
+  return new Map(
+    [...elementTexts].map(
+      ([unitId, texts]) => [unitId, texts.join("\n\n").replace(/\n[\t ]+/gu, "\n")] as const,
+    ),
+  );
 }
 
 function extractShownText(node: DefaultTreeAdapterMap["childNode"]): string {
@@ -149,6 +154,18 @@ test("marks each description list group as one unit across its terms and descrip
 
 test("shows preformatted text split at line breaks as one pre per unit in one scroll card", async () => {
   const lines = Array.from({ length: 100 }, (_, index) => `line ${index + 1} of a long poem`);
+  const body = await renderBody(`<pre>${lines.join("\n")}</pre>`);
+
+  expect(body).toBe(
+    `<div data-scroll-card=""><pre data-synchronization-unit="narration-unit-0002">${lines.slice(0, 87).join("<br>")}</pre><pre data-synchronization-unit="narration-unit-0003">${lines.slice(87).join("<br>")}</pre></div>`,
+  );
+});
+
+test("shows each line's indentation in preformatted text split at line breaks, with the line it starts", async () => {
+  const lines = Array.from(
+    { length: 100 },
+    (_, index) => `${"  ".repeat((index + 1) % 3)}line ${index + 1} of a long poem`,
+  );
   const body = await renderBody(`<pre>${lines.join("\n")}</pre>`);
 
   expect(body).toBe(

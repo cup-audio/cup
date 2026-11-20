@@ -63,7 +63,12 @@ type SafeElement = {
   attributes: readonly SafeAttribute[];
   children: readonly SafeNode[];
 };
-type SafeNode = SafeElement | SafeText;
+/**
+ * The leading whitespace of a line of preformatted text. It shows the line's indentation but is no
+ * part of the narration text, so it counts as no text when units divide a block.
+ */
+type SafeIndentation = { type: "indentation"; value: string };
+type SafeNode = SafeElement | SafeIndentation | SafeText;
 type SafeAttribute = { name: string; value: string };
 
 /** One unit's part of a narration block: the whole block, or a range of its narration text. */
@@ -362,14 +367,20 @@ function sanitizeNode(
   context: { baseUrl: string; isPreformatted: boolean; separatesBlocks: boolean },
 ): SafeNode[] {
   if ("value" in node) {
-    // Preformatted text keeps its line breaks, which normalization turns into `br` elements. Every
-    // whitespace run still becomes one character, so text ranges count the same as segmentation.
-    return [
-      {
-        type: "text",
-        value: node.value.replace(context.isPreformatted ? /[\t\f\r ]+/gu : /[\t\n\f\r ]+/gu, " "),
-      },
-    ];
+    if (!context.isPreformatted) {
+      return [{ type: "text", value: node.value.replace(/[\t\n\f\r ]+/gu, " ") }];
+    }
+
+    // Preformatted text keeps its line breaks, which normalization turns into `br` elements, and
+    // the indentation after them. Every other whitespace run still becomes one character, so text
+    // ranges count the same as segmentation.
+    return node.value
+      .split(/(?<=^|\n)([\t ]+)/u)
+      .map((value, index) =>
+        index % 2 === 1
+          ? { type: "indentation", value }
+          : { type: "text", value: value.replace(/[\t\f\r ]+/gu, " ") },
+      );
   }
 
   if (!("tagName" in node) || DROPPED_TAG_NAMES.has(node.tagName)) {
@@ -414,14 +425,22 @@ function extractSourceText(node: SourceNode): string {
     : "";
 }
 
-function extractSafeText(nodes: readonly SafeNode[]): string {
+/** The text of nodes, which holds no indentation unless asked to. */
+function extractSafeText(
+  nodes: readonly SafeNode[],
+  { withIndentation = false }: { withIndentation?: boolean } = {},
+): string {
   return nodes
     .map((node) => {
       if (node.type === "text") {
         return node.value;
       }
 
-      return node.tagName === "br" ? "\n" : extractSafeText(node.children);
+      if (node.type === "indentation") {
+        return withIndentation ? node.value : "";
+      }
+
+      return node.tagName === "br" ? "\n" : extractSafeText(node.children, { withIndentation });
     })
     .join("");
 }
@@ -441,6 +460,28 @@ function normalizeSafeNodes(nodes: readonly SafeNode[]): SafeNode[] {
   let hasVisibleText = false;
   let ignoreWhitespaceUntilVisibleText = true;
   let pendingSeparator: "line-break" | "space" | undefined;
+  let pendingIndentation: SafeIndentation | undefined;
+
+  function pushLineBreak(output: SafeNode[]): void {
+    output.push({ type: "element", tagName: "br", attributes: [], children: [] });
+    pushPendingIndentation(output);
+  }
+
+  function pushPendingIndentation(output: SafeNode[]): void {
+    if (pendingIndentation !== undefined) {
+      output.push(pendingIndentation);
+      pendingIndentation = undefined;
+    }
+  }
+
+  function normalizeIndentationNode(node: SafeIndentation): void {
+    // Indentation shows only at the start of a line; anywhere else it is whitespace like any other.
+    if (!hasVisibleText || pendingSeparator === "line-break") {
+      pendingIndentation = node;
+    } else if (!ignoreWhitespaceUntilVisibleText) {
+      pendingSeparator ??= "space";
+    }
+  }
 
   function normalizeTextNode(node: SafeText, output: SafeNode[]): void {
     for (const character of node.value.replace(/\u00A0/gu, " ")) {
@@ -461,9 +502,11 @@ function normalizeSafeNodes(nodes: readonly SafeNode[]): SafeNode[] {
       }
 
       if (hasVisibleText && pendingSeparator === "line-break") {
-        output.push({ type: "element", tagName: "br", attributes: [], children: [] });
+        pushLineBreak(output);
       } else if (hasVisibleText && pendingSeparator === "space") {
         appendSafeText(output, " ");
+      } else if (!hasVisibleText) {
+        pushPendingIndentation(output);
       }
 
       appendSafeText(output, character);
@@ -487,15 +530,20 @@ function normalizeSafeNodes(nodes: readonly SafeNode[]): SafeNode[] {
     const hasElementText = normalizeNarrationText(elementText).length > 0;
 
     if (hasElementText) {
-      const leadingWhitespace = elementText.match(/^[\u00A0\t\f\r \n]+/u)?.[0];
+      // Indentation inside the element is whitespace before its text, too.
+      const leadingWhitespace = extractSafeText(node.children, { withIndentation: true }).match(
+        /^[\u00A0\t\f\r \n]+/u,
+      )?.[0];
       const leadingSeparator = leadingWhitespace?.includes("\n") ? "line-break" : "space";
 
       if (hasVisibleText && (pendingSeparator || leadingWhitespace)) {
         if (pendingSeparator === "line-break" || leadingSeparator === "line-break") {
-          output.push({ type: "element", tagName: "br", attributes: [], children: [] });
+          pushLineBreak(output);
         } else {
           appendSafeText(output, " ");
         }
+      } else if (!hasVisibleText) {
+        pushPendingIndentation(output);
       }
 
       pendingSeparator = undefined;
@@ -512,6 +560,11 @@ function normalizeSafeNodes(nodes: readonly SafeNode[]): SafeNode[] {
   function normalizeNode(node: SafeNode, output: SafeNode[]): void {
     if (node.type === "element") {
       normalizeElementNode(node, output);
+      return;
+    }
+
+    if (node.type === "indentation") {
+      normalizeIndentationNode(node);
       return;
     }
 
@@ -562,7 +615,12 @@ function sliceSafeNodes(
     const overlapStart = Math.max(range.start, nodeStart);
     const overlapEnd = Math.min(range.end, nodeEnd);
 
-    if (overlapStart < overlapEnd) {
+    if (node.type === "indentation") {
+      // Indentation holds no text, so it goes with the line it starts.
+      if (range.start <= nodeStart && nodeStart < range.end) {
+        slicedNodes.push(node);
+      }
+    } else if (overlapStart < overlapEnd) {
       const localRange = { start: overlapStart - nodeStart, end: overlapEnd - nodeStart };
 
       if (node.type === "text") {
@@ -584,7 +642,7 @@ function sliceSafeNodes(
 }
 
 function serializeSafeNode(node: SafeNode): string {
-  return node.type === "text" ? escapeHtmlText(node.value) : serializeSafeElement(node);
+  return node.type === "element" ? serializeSafeElement(node) : escapeHtmlText(node.value);
 }
 
 function serializeSafeElement(element: SafeElement, unitId?: string): string {

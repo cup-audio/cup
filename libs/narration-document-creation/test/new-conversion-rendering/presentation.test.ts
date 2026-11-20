@@ -53,11 +53,11 @@ test("restores a description list with each term and description its own unit", 
   );
 });
 
-test("restores preformatted text with its line breaks in a scroll card", async () => {
+test("restores preformatted text with its line breaks and indentation in a scroll card", async () => {
   expect(
     await renderBody("<pre>A short poem\n  with indented lines\n\nand a blank line.</pre>"),
   ).toBe(
-    '<div data-scroll-card=""><pre data-synchronization-unit="narration-unit-0002">A short poem<br>with indented lines<br>and a blank line.</pre></div>',
+    '<div data-scroll-card=""><pre data-synchronization-unit="narration-unit-0002">A short poem<br>  with indented lines<br>and a blank line.</pre></div>',
   );
 });
 
@@ -196,7 +196,9 @@ test("flattens links that are not kept to their text and drops links without tex
     await renderBody(
       '<p><a href="#note">Fragment</a>, <a href="/articles/story">this page</a>, <a href="mailto:a@b.example">mail</a> and <a href="https://elsewhere.example/"> </a>gap.</p>',
     ),
-  ).toBe('<p data-synchronization-unit="narration-unit-0002">Fragment, this page, mail and gap.</p>');
+  ).toBe(
+    '<p data-synchronization-unit="narration-unit-0002">Fragment, this page, mail and gap.</p>',
+  );
 });
 
 test("clones kept inline markup and links that span a unit boundary into each unit", async () => {
