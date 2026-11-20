@@ -3,12 +3,21 @@ import type { DefaultTreeAdapterMap } from "parse5";
 import { CupError } from "@cup/errors";
 
 import { escapeHtmlAttribute, escapeHtmlText } from "#src/html-escaping.ts";
+import { resolveLink } from "#src/links.ts";
+import {
+  KEPT_INLINE_TAG_NAMES,
+  serializeUnitAttribute,
+  wrapInScrollCard,
+} from "#src/presentation-rules.ts";
 import type { NarrationBlock, SegmentedDocument, UnitRange } from "#src/segmentation.ts";
 
-const EXCLUDED_TAG_NAMES = new Set([
+// Dropped with everything inside them. `figure` is not among them, because images and their
+// captions are to be shown later (CUP-82).
+const DROPPED_TAG_NAMES = new Set([
   "audio",
   "canvas",
   "embed",
+  "hr",
   "iframe",
   "img",
   "noscript",
@@ -23,321 +32,329 @@ const EXCLUDED_TAG_NAMES = new Set([
   "video",
 ]);
 
-const HEADING_TAG_NAMES = new Set(["h1", "h2", "h3", "h4", "h5", "h6"]);
+// Kept as themselves around the units inside them, and dropped when no unit is inside.
+const CONTAINER_TAG_NAMES = new Set(["blockquote", "dd", "dl", "dt", "li", "ol", "pre", "ul"]);
 
-const STRUCTURAL_TAG_NAMES = new Set(["blockquote", "li", "ol", "p", "ul"]);
+// Kept as themselves inside a table that holds a unit, even when empty, so that its rows and
+// columns stay aligned. Outside a table they are replaced by what they hold, because a browser
+// would drop them, and with them the unit attribute the reader looks for.
+const TABLE_PART_TAG_NAMES = new Set(["caption", "tbody", "td", "tfoot", "th", "thead", "tr"]);
 
-// Paragraphs are narration blocks, so only the other structural elements wrap units.
-const WRAPPER_TAG_NAMES = new Set(["blockquote", "li", "ol", "ul"]);
-
-const INLINE_TAG_NAMES = new Set(["a", "br", "code", "em", "strong"]);
-
-const FLATTENED_INLINE_TAG_NAMES = new Set([
-  "abbr",
-  "b",
-  "bdi",
-  "bdo",
-  "cite",
-  "data",
-  "del",
-  "dfn",
-  "i",
-  "ins",
-  "kbd",
-  "label",
-  "mark",
-  "q",
-  "ruby",
-  "s",
-  "samp",
-  "small",
-  "span",
-  "sub",
-  "sup",
-  "time",
-  "u",
-  "var",
-  "wbr",
-]);
+// Carry the unit attribute themselves when one unit holds all their text; table cells and
+// captions only inside a table.
+const UNIT_CELL_TAG_NAMES = new Set(["caption", "dd", "dt", "pre", "td", "th"]);
 
 // The separator that segmentation's text ranges count between the blocks of one unit.
 const NARRATION_ELEMENT_SEPARATOR = "\n\n";
 
-type SourceChildNode = DefaultTreeAdapterMap["childNode"];
+type SourceNode = DefaultTreeAdapterMap["childNode"];
+type SourceElement = DefaultTreeAdapterMap["element"];
 
 type SafeText = { type: "text"; value: string };
-type SafeBoundary = { type: "boundary"; children: readonly SafeNode[] };
 type SafeElement = {
   type: "element";
   tagName: string;
   attributes: readonly SafeAttribute[];
   children: readonly SafeNode[];
-  // Identifies a wrapper, so that consecutive units inside one source element share it.
-  source?: object;
 };
-type SafeNode = SafeBoundary | SafeElement | SafeText;
+type SafeNode = SafeElement | SafeText;
 type SafeAttribute = { name: string; value: string };
-type RenderedUnit = { html: string; wrappers: readonly SafeElement[] };
 
-// Groups the source title and source subtitle units; its source differs from every element of the
-// source material, so serializeRenderedUnits never merges it with a body wrapper.
-const SOURCE_HEADING_GROUP: SafeElement = {
-  type: "element",
-  tagName: "hgroup",
-  attributes: [],
-  children: [],
-  source: {},
-};
+/** One unit's part of a narration block: the whole block, or a range of its narration text. */
+type BlockPart = { unitId: string; textRange?: { start: number; end: number } };
 
-/** Turns a segmented document into the narration document's safe display HTML. */
-export function presentNarrationDocument(segmentedDocument: SegmentedDocument): string {
-  const renderedUnits = segmentedDocument.unitRanges.map((unitRange) =>
-    renderUnit(segmentedDocument, unitRange),
-  );
+/** A narration block with its safe display element and the parts the units divide it into. */
+type PresentedBlock = { block: NarrationBlock; element: SafeElement; parts: BlockPart[] };
 
-  return `<article>${serializeRenderedUnits(renderedUnits)}</article>`;
-}
+type PresentedFragment = { html: string; hasUnits: boolean };
 
-function renderUnit(segmentedDocument: SegmentedDocument, unitRange: UnitRange): RenderedUnit {
-  const { id, narrationText } = unitRange.synchronizationUnit;
-  const unitIdAttributes = [{ name: "id", value: id }];
-  const openingWrappers =
-    segmentedDocument.sourceSubtitle === undefined ? [] : [SOURCE_HEADING_GROUP];
+const EMPTY_FRAGMENT: PresentedFragment = { html: "", hasUnits: false };
 
-  if (unitRange.type === "source-title") {
+/**
+ * Turns a segmented document into the narration document's display HTML, following the spec's
+ * presentation rules: the source material's structure and inline markup that the narration document
+ * keeps, with every element of a unit marked with the unit attribute, and links resolved against
+ * `baseUrl`.
+ */
+export function presentNarrationDocument({
+  segmentedDocument,
+  baseUrl,
+}: {
+  segmentedDocument: SegmentedDocument;
+  baseUrl: string;
+}): string {
+  const presentedBlocks = presentBlocks(segmentedDocument.unitRanges, baseUrl);
+  const isInsideTable = new WeakSet<SourceElement>();
+
+  function presentNodes(nodes: readonly SourceNode[]): PresentedFragment {
+    const fragments = nodes.map(presentNode);
+
     return {
-      html: serializeNarrationTextElement("h1", unitIdAttributes, narrationText),
-      wrappers: openingWrappers,
+      html: fragments.map((fragment) => fragment.html).join(""),
+      hasUnits: fragments.some((fragment) => fragment.hasUnits),
     };
   }
 
-  if (unitRange.type === "source-subtitle") {
-    return {
-      html: serializeNarrationTextElement("p", unitIdAttributes, narrationText),
-      wrappers: openingWrappers,
-    };
+  function presentNode(node: SourceNode): PresentedFragment {
+    const presentedBlock = presentedBlocks.get(node);
+
+    if (presentedBlock !== undefined) {
+      return { html: serializeBlockParts(presentedBlock, presentedBlock.element), hasUnits: true };
+    }
+
+    // Text outside narration blocks holds no narration text, such as a heading equal to the source
+    // title, which the source title unit replaces.
+    if (!("tagName" in node) || DROPPED_TAG_NAMES.has(node.tagName)) {
+      return EMPTY_FRAGMENT;
+    }
+
+    const { tagName } = node;
+    const isTablePart = TABLE_PART_TAG_NAMES.has(tagName) && isInsideTable.has(node);
+
+    if (tagName === "table" || isTablePart) {
+      for (const childNode of node.childNodes) {
+        if ("tagName" in childNode) {
+          isInsideTable.add(childNode);
+        }
+      }
+    }
+
+    if (UNIT_CELL_TAG_NAMES.has(tagName) && (!TABLE_PART_TAG_NAMES.has(tagName) || isTablePart)) {
+      const unitCell = presentUnitCell(node);
+
+      if (unitCell !== undefined) {
+        return unitCell;
+      }
+    }
+
+    const content = presentNodes(node.childNodes);
+
+    if (tagName === "table") {
+      return content.hasUnits
+        ? { html: wrapInScrollCard(`<table>${content.html}</table>`), hasUnits: true }
+        : EMPTY_FRAGMENT;
+    }
+
+    if (isTablePart) {
+      return { html: `<${tagName}>${content.html}</${tagName}>`, hasUnits: content.hasUnits };
+    }
+
+    if (CONTAINER_TAG_NAMES.has(tagName) && content.hasUnits) {
+      const html = `<${tagName}>${content.html}</${tagName}>`;
+
+      return { html: tagName === "pre" ? wrapInScrollCard(html) : html, hasUnits: true };
+    }
+
+    // Any other element is replaced by what it holds.
+    return CONTAINER_TAG_NAMES.has(tagName) ? EMPTY_FRAGMENT : content;
   }
 
-  // Headings that no block followed are shown outside any container they sat in.
-  if (unitRange.type === "trailing-headings") {
-    return {
-      html: unitRange.isSplit
-        ? serializeNarrationTextElement("p", unitIdAttributes, narrationText)
-        : serializeUnitElements(unitRange.blocks.map(createNarrationElement), unitIdAttributes),
-      wrappers: [],
-    };
-  }
+  /**
+   * Presents a table cell, `caption`, `dt`, `dd` or `pre` whose text is one run of inline content
+   * as the element of its unit. A `pre` split into several units becomes one `pre` per unit.
+   */
+  function presentUnitCell(cell: SourceElement): PresentedFragment | undefined {
+    const presentedBlock = cell.childNodes
+      .map((childNode) => presentedBlocks.get(childNode))
+      .find((candidate) => candidate !== undefined);
 
-  const narrationElements = unitRange.blocks.map(createNarrationElement);
-  const wrappers = findWrappers(unitRange.blocks[unitRange.blocks.length - 1]!);
+    if (presentedBlock?.block.type !== "inline-run") {
+      return undefined;
+    }
 
-  if (unitRange.textRange === undefined) {
-    return {
-      html: serializeUnitElements(narrationElements, unitIdAttributes),
-      wrappers,
-    };
-  }
+    const runNodes = presentedBlock.block.nodes;
+    const isWholeCell = cell.childNodes.every(
+      (childNode) => runNodes.includes(childNode) || extractSourceText(childNode).trim() === "",
+    );
+    const isOneUnit = presentedBlock.parts.length === 1 && !presentedBlock.parts[0]!.textRange;
 
-  const elementSlices = sliceNarrationElements({
-    narrationElements,
-    narrationElementTexts: narrationElements.map((narrationElement) =>
-      normalizeNarrationText(extractSafeText(narrationElement.children)),
-    ),
-    textRange: unitRange.textRange,
-  });
+    if (!isWholeCell || (cell.tagName !== "pre" && !isOneUnit)) {
+      return undefined;
+    }
 
-  return {
-    html: serializeUnitElements(elementSlices, unitIdAttributes),
-    wrappers,
-  };
-}
-
-function createNarrationElement(block: NarrationBlock): SafeElement {
-  if (block.type === "inline-run") {
-    return normalizeSafeElement({
-      type: "element",
-      tagName: "p",
-      attributes: [],
-      children: block.nodes.flatMap(sanitizeNode),
+    const html = serializeBlockParts(presentedBlock, {
+      ...presentedBlock.element,
+      tagName: cell.tagName,
     });
+
+    return { html: cell.tagName === "pre" ? wrapInScrollCard(html) : html, hasUnits: true };
   }
 
-  const [element] = sanitizeNode(block.element);
+  const body = presentNodes(segmentedDocument.sourceMaterial.childNodes);
 
-  if (element?.type !== "element") {
-    throw new CupError("Expected a narration block element to be kept in the narration document");
-  }
-
-  return normalizeSafeElement(element);
+  return `<article>${presentSourceHeadings(segmentedDocument)}${body.html}</article>`;
 }
 
-/** Finds the containers around a block, outermost first. */
-function findWrappers(block: NarrationBlock): SafeElement[] {
-  const wrappers: SafeElement[] = [];
-  let parentNode = (block.type === "element" ? block.element : block.nodes[0]!).parentNode;
+function presentSourceHeadings({ sourceSubtitle, unitRanges }: SegmentedDocument): string {
+  const [sourceTitleUnit, sourceSubtitleUnit] = unitRanges.map(
+    (unitRange) => unitRange.synchronizationUnit,
+  );
+  const sourceTitleHtml = serializeNarrationTextElement("h1", sourceTitleUnit!);
+
+  return sourceSubtitle === undefined
+    ? sourceTitleHtml
+    : `<hgroup>${sourceTitleHtml}${serializeNarrationTextElement("p", sourceSubtitleUnit!)}</hgroup>`;
+}
+
+/**
+ * Finds every narration block of the body units, keyed by its element or, for a run of inline
+ * content, by the run's first node, together with the parts that the units divide it into.
+ */
+function presentBlocks(
+  unitRanges: readonly UnitRange[],
+  baseUrl: string,
+): Map<SourceNode, PresentedBlock> {
+  const presentedBlocks = new Map<SourceNode, PresentedBlock>();
+  // Where the next unit of split trailing headings starts, in the headings' combined text.
+  const trailingHeadingsSearchStarts = new Map<readonly NarrationBlock[], number>();
+
+  function getPresentedBlock(block: NarrationBlock): PresentedBlock {
+    const blockKey = block.type === "element" ? block.element : block.nodes[0]!;
+    let presentedBlock = presentedBlocks.get(blockKey);
+
+    if (presentedBlock === undefined) {
+      presentedBlock = { block, element: createNarrationElement(block, baseUrl), parts: [] };
+      presentedBlocks.set(blockKey, presentedBlock);
+    }
+
+    return presentedBlock;
+  }
+
+  for (const unitRange of unitRanges) {
+    if (unitRange.type === "source-title" || unitRange.type === "source-subtitle") {
+      continue;
+    }
+
+    const unitId = unitRange.synchronizationUnit.id;
+    const unitBlocks = unitRange.blocks.map(getPresentedBlock);
+    const blockTexts = unitBlocks.map(({ element }) =>
+      normalizeNarrationText(extractSafeText(element.children)),
+    );
+    let textRange = unitRange.type === "body" ? unitRange.textRange : undefined;
+
+    // Segmentation records no text ranges for split trailing headings, so they are found again.
+    if (unitRange.type === "trailing-headings" && unitRange.isSplit) {
+      const searchStart = trailingHeadingsSearchStarts.get(unitRange.blocks) ?? 0;
+      const { narrationText } = unitRange.synchronizationUnit;
+      const start = blockTexts
+        .join(NARRATION_ELEMENT_SEPARATOR)
+        .indexOf(narrationText, searchStart);
+
+      if (start < 0) {
+        throw new CupError("Expected every unit text to occur in its trailing headings");
+      }
+
+      textRange = { start, end: start + narrationText.length };
+      trailingHeadingsSearchStarts.set(unitRange.blocks, textRange.end);
+    }
+
+    let blockStart = 0;
+
+    for (const [blockIndex, presentedBlock] of unitBlocks.entries()) {
+      const blockEnd = blockStart + blockTexts[blockIndex]!.length;
+
+      if (textRange === undefined) {
+        presentedBlock.parts.push({ unitId });
+      } else if (Math.max(textRange.start, blockStart) < Math.min(textRange.end, blockEnd)) {
+        presentedBlock.parts.push({
+          unitId,
+          textRange: {
+            start: Math.max(textRange.start, blockStart) - blockStart,
+            end: Math.min(textRange.end, blockEnd) - blockStart,
+          },
+        });
+      }
+
+      blockStart = blockEnd + NARRATION_ELEMENT_SEPARATOR.length;
+    }
+  }
+
+  return presentedBlocks;
+}
+
+/** The safe display element of a narration block; a run of inline content becomes a paragraph. */
+function createNarrationElement(block: NarrationBlock, baseUrl: string): SafeElement {
+  const firstNode = block.type === "element" ? block.element : block.nodes[0]!;
+  const context = { baseUrl, isPreformatted: hasPreformattedAncestor(firstNode) };
+  const element: SafeElement =
+    block.type === "element"
+      ? {
+          type: "element",
+          tagName: block.element.tagName,
+          attributes: [],
+          children: block.element.childNodes.flatMap((node) => sanitizeNode(node, context)),
+        }
+      : {
+          type: "element",
+          tagName: "p",
+          attributes: [],
+          children: block.nodes.flatMap((node) => sanitizeNode(node, context)),
+        };
+
+  return { ...element, children: normalizeSafeNodes(element.children) };
+}
+
+function hasPreformattedAncestor(node: SourceNode): boolean {
+  let parentNode = node.parentNode;
 
   while (parentNode !== null && "tagName" in parentNode) {
-    if (WRAPPER_TAG_NAMES.has(parentNode.tagName)) {
-      wrappers.unshift({
-        type: "element",
-        tagName: parentNode.tagName,
-        attributes: sanitizeAttributes(parentNode),
-        children: [],
-        source: parentNode,
-      });
+    if (parentNode.tagName === "pre") {
+      return true;
     }
 
     parentNode = parentNode.parentNode;
   }
 
-  return wrappers;
+  return false;
 }
 
-function serializeUnitElements(
-  elements: readonly SafeElement[],
-  unitIdAttributes: readonly SafeAttribute[],
-): string {
-  return elements.length === 1
-    ? serializeSafeElement(elements[0]!, unitIdAttributes)
-    : `<section${serializeSafeAttributes(unitIdAttributes)}>${elements.map((element) => serializeSafeElement(element)).join("")}</section>`;
-}
-
-function sliceNarrationElements({
-  narrationElements,
-  narrationElementTexts,
-  textRange,
-}: {
-  narrationElements: readonly SafeElement[];
-  narrationElementTexts: readonly string[];
-  textRange: { start: number; end: number };
-}): SafeElement[] {
-  const elementSlices: SafeElement[] = [];
-  let elementStart = 0;
-
-  for (const [elementIndex, element] of narrationElements.entries()) {
-    const elementText = narrationElementTexts[elementIndex]!;
-    const elementEnd = elementStart + elementText.length;
-    const overlapStart = Math.max(textRange.start, elementStart);
-    const overlapEnd = Math.min(textRange.end, elementEnd);
-
-    if (overlapStart < overlapEnd) {
-      elementSlices.push({
-        ...element,
-        children: sliceSafeNodes(
-          element.children,
-          overlapStart - elementStart,
-          overlapEnd - elementStart,
-        ),
-      });
-    }
-
-    elementStart = elementEnd + NARRATION_ELEMENT_SEPARATOR.length;
-  }
-
-  return elementSlices;
-}
-
-function sliceSafeNodes(
-  nodes: readonly SafeNode[],
-  rangeStart: number,
-  rangeEnd: number,
+function sanitizeNode(
+  node: SourceNode,
+  context: { baseUrl: string; isPreformatted: boolean },
 ): SafeNode[] {
-  const slicedNodes: SafeNode[] = [];
-  let nodeStart = 0;
-
-  for (const node of nodes) {
-    const nodeText = extractSafeText([node]);
-    const nodeEnd = nodeStart + nodeText.length;
-    const overlapStart = Math.max(rangeStart, nodeStart);
-    const overlapEnd = Math.min(rangeEnd, nodeEnd);
-
-    if (overlapStart < overlapEnd) {
-      const localStart = overlapStart - nodeStart;
-      const localEnd = overlapEnd - nodeStart;
-
-      if (node.type === "text") {
-        slicedNodes.push({ type: "text", value: node.value.slice(localStart, localEnd) });
-      } else if (node.type === "element" && node.tagName === "br") {
-        slicedNodes.push(node);
-      } else {
-        slicedNodes.push({
-          ...node,
-          children: sliceSafeNodes(node.children, localStart, localEnd),
-        });
-      }
-    }
-
-    nodeStart = nodeEnd;
-  }
-
-  return slicedNodes;
-}
-
-function sanitizeNode(node: SourceChildNode): SafeNode[] {
   if ("value" in node) {
-    return [{ type: "text", value: node.value.replace(/[\t\n\f\r ]+/gu, " ") }];
-  }
-
-  if (!("tagName" in node) || EXCLUDED_TAG_NAMES.has(node.tagName)) {
-    return [];
-  }
-
-  const safeChildren = node.childNodes.flatMap(sanitizeNode);
-
-  if (
-    HEADING_TAG_NAMES.has(node.tagName) ||
-    STRUCTURAL_TAG_NAMES.has(node.tagName) ||
-    INLINE_TAG_NAMES.has(node.tagName)
-  ) {
+    // Preformatted text keeps its line breaks, which normalization turns into `br` elements. Every
+    // whitespace run still becomes one character, so text ranges count the same as segmentation.
     return [
       {
-        type: "element",
-        tagName: node.tagName,
-        attributes: sanitizeAttributes(node),
-        children: safeChildren,
+        type: "text",
+        value: node.value.replace(context.isPreformatted ? /[\t\f\r ]+/gu : /[\t\n\f\r ]+/gu, " "),
       },
     ];
   }
 
-  return FLATTENED_INLINE_TAG_NAMES.has(node.tagName)
-    ? safeChildren
-    : [{ type: "boundary", children: safeChildren }];
+  if (!("tagName" in node) || DROPPED_TAG_NAMES.has(node.tagName)) {
+    return [];
+  }
+
+  const children = node.childNodes.flatMap((childNode) => sanitizeNode(childNode, context));
+
+  if (node.tagName === "a") {
+    const href = resolveLink({
+      href: node.attrs.find((attribute) => attribute.name === "href")?.value,
+      baseUrl: context.baseUrl,
+    });
+    // A link without text is dropped; replacing it with its whitespace keeps the text's length.
+    const hasText = normalizeNarrationText(extractSafeText(children)).length > 0;
+
+    return href === undefined || !hasText
+      ? children
+      : [{ type: "element", tagName: "a", attributes: [{ name: "href", value: href }], children }];
+  }
+
+  return KEPT_INLINE_TAG_NAMES.has(node.tagName)
+    ? [{ type: "element", tagName: node.tagName, attributes: [], children }]
+    : children;
 }
 
-function sanitizeAttributes(element: DefaultTreeAdapterMap["element"]): SafeAttribute[] {
-  const safeAttributes: SafeAttribute[] = [];
-
-  for (const attribute of element.attrs) {
-    if (attribute.name === "dir" && ["auto", "ltr", "rtl"].includes(attribute.value)) {
-      safeAttributes.push({ name: attribute.name, value: attribute.value });
-      continue;
-    }
-
-    if (attribute.name === "lang" && attribute.value.trim().length > 0) {
-      safeAttributes.push({ name: attribute.name, value: attribute.value });
-      continue;
-    }
-
-    if (element.tagName === "a" && attribute.name === "href" && isSafeLink(attribute.value)) {
-      safeAttributes.push({ name: attribute.name, value: attribute.value });
-    }
+function extractSourceText(node: SourceNode): string {
+  if ("value" in node) {
+    return node.value;
   }
 
-  return safeAttributes;
-}
-
-function isSafeLink(href: string): boolean {
-  if (href.trim().length === 0) {
-    return false;
-  }
-
-  try {
-    const url = new URL(href, "https://narration-document.invalid");
-
-    return url.protocol === "http:" || url.protocol === "https:" || url.protocol === "mailto:";
-  } catch {
-    return false;
-  }
+  return "tagName" in node && !DROPPED_TAG_NAMES.has(node.tagName)
+    ? node.childNodes.map(extractSourceText).join("")
+    : "";
 }
 
 function extractSafeText(nodes: readonly SafeNode[]): string {
@@ -347,24 +364,18 @@ function extractSafeText(nodes: readonly SafeNode[]): string {
         return node.value;
       }
 
-      return node.type === "element" && node.tagName === "br"
-        ? "\n"
-        : extractSafeText(node.children);
+      return node.tagName === "br" ? "\n" : extractSafeText(node.children);
     })
     .join("");
 }
 
 function normalizeNarrationText(text: string): string {
   return text
-    .replace(/ /gu, " ")
+    .replace(/\u00A0/gu, " ")
     .replace(/[\t\f\r ]+/gu, " ")
     .replace(/ *\n */gu, "\n")
     .replace(/\n+/gu, "\n")
     .trim();
-}
-
-function normalizeSafeElement(element: SafeElement): SafeElement {
-  return { ...element, children: normalizeSafeNodes(element.children) };
 }
 
 // Keep browser-visible whitespace aligned with the units' narration text normalization.
@@ -375,7 +386,7 @@ function normalizeSafeNodes(nodes: readonly SafeNode[]): SafeNode[] {
   let pendingSeparator: "line-break" | "space" | undefined;
 
   function normalizeTextNode(node: SafeText, output: SafeNode[]): void {
-    for (const character of node.value.replace(/ /gu, " ")) {
+    for (const character of node.value.replace(/\u00A0/gu, " ")) {
       if (character === "\n") {
         if (!ignoreWhitespaceUntilVisibleText) {
           pendingSeparator = "line-break";
@@ -419,7 +430,7 @@ function normalizeSafeNodes(nodes: readonly SafeNode[]): SafeNode[] {
     const hasElementText = normalizeNarrationText(elementText).length > 0;
 
     if (hasElementText) {
-      const leadingWhitespace = elementText.match(/^[ \t\f\r \n]+/u)?.[0];
+      const leadingWhitespace = elementText.match(/^[\u00A0\t\f\r \n]+/u)?.[0];
       const leadingSeparator = leadingWhitespace?.includes("\n") ? "line-break" : "space";
 
       if (hasVisibleText && (pendingSeparator || leadingWhitespace)) {
@@ -442,14 +453,6 @@ function normalizeSafeNodes(nodes: readonly SafeNode[]): SafeNode[] {
   }
 
   function normalizeNode(node: SafeNode, output: SafeNode[]): void {
-    if (node.type === "boundary") {
-      for (const childNode of node.children) {
-        normalizeNode(childNode, output);
-      }
-
-      return;
-    }
-
     if (node.type === "element") {
       normalizeElementNode(node, output);
       return;
@@ -475,76 +478,76 @@ function appendSafeText(output: SafeNode[], value: string): void {
   }
 }
 
-function serializeSafeNode(node: SafeNode): string {
-  if (node.type === "text") {
-    return escapeHtmlText(node.value);
-  }
-
-  return node.type === "boundary"
-    ? node.children.map(serializeSafeNode).join("")
-    : serializeSafeElement(node);
+/** One element per part of the block, each holding its part and marked with its unit. */
+function serializeBlockParts(presentedBlock: PresentedBlock, element: SafeElement): string {
+  return presentedBlock.parts
+    .map(({ unitId, textRange }) =>
+      serializeSafeElement(
+        textRange === undefined
+          ? element
+          : { ...element, children: sliceSafeNodes(element.children, textRange) },
+        unitId,
+      ),
+    )
+    .join("");
 }
 
-function serializeSafeElement(
-  element: SafeElement,
-  generatedAttributes: readonly SafeAttribute[] = [],
-): string {
-  const attributes = serializeSafeAttributes([...generatedAttributes, ...element.attributes]);
+/** Slices nodes to a range of their text; an element in the range is cloned into the slice. */
+function sliceSafeNodes(
+  nodes: readonly SafeNode[],
+  range: { start: number; end: number },
+): SafeNode[] {
+  const slicedNodes: SafeNode[] = [];
+  let nodeStart = 0;
+
+  for (const node of nodes) {
+    const nodeEnd = nodeStart + extractSafeText([node]).length;
+    const overlapStart = Math.max(range.start, nodeStart);
+    const overlapEnd = Math.min(range.end, nodeEnd);
+
+    if (overlapStart < overlapEnd) {
+      const localRange = { start: overlapStart - nodeStart, end: overlapEnd - nodeStart };
+
+      if (node.type === "text") {
+        slicedNodes.push({
+          type: "text",
+          value: node.value.slice(localRange.start, localRange.end),
+        });
+      } else if (node.tagName === "br") {
+        slicedNodes.push(node);
+      } else {
+        slicedNodes.push({ ...node, children: sliceSafeNodes(node.children, localRange) });
+      }
+    }
+
+    nodeStart = nodeEnd;
+  }
+
+  return slicedNodes;
+}
+
+function serializeSafeNode(node: SafeNode): string {
+  return node.type === "text" ? escapeHtmlText(node.value) : serializeSafeElement(node);
+}
+
+function serializeSafeElement(element: SafeElement, unitId?: string): string {
+  const unitAttribute = unitId === undefined ? "" : serializeUnitAttribute(unitId);
+  const attributes = element.attributes
+    .map(({ name, value }) => ` ${name}="${escapeHtmlAttribute(value)}"`)
+    .join("");
 
   if (element.tagName === "br") {
-    return `<br${attributes}>`;
+    return `<br${unitAttribute}${attributes}>`;
   }
 
-  return `<${element.tagName}${attributes}>${element.children.map(serializeSafeNode).join("")}</${element.tagName}>`;
-}
-
-function serializeRenderedUnits(renderedUnits: readonly RenderedUnit[]): string {
-  let html = "";
-  let unitIndex = 0;
-
-  while (unitIndex < renderedUnits.length) {
-    const renderedUnit = renderedUnits[unitIndex]!;
-    const firstWrapper = renderedUnit.wrappers[0];
-
-    if (!firstWrapper) {
-      html += renderedUnit.html;
-      unitIndex += 1;
-      continue;
-    }
-
-    const wrappedUnits: RenderedUnit[] = [];
-
-    while (unitIndex < renderedUnits.length) {
-      const candidateUnit = renderedUnits[unitIndex]!;
-      const candidateWrapper = candidateUnit.wrappers[0];
-
-      if (!candidateWrapper || candidateWrapper.source !== firstWrapper.source) {
-        break;
-      }
-
-      wrappedUnits.push({
-        html: candidateUnit.html,
-        wrappers: candidateUnit.wrappers.slice(1),
-      });
-      unitIndex += 1;
-    }
-
-    html += `<${firstWrapper.tagName}${serializeSafeAttributes(firstWrapper.attributes)}>${serializeRenderedUnits(wrappedUnits)}</${firstWrapper.tagName}>`;
-  }
-
-  return html;
-}
-
-function serializeSafeAttributes(attributes: readonly SafeAttribute[]): string {
-  return attributes.map(({ name, value }) => ` ${name}="${escapeHtmlAttribute(value)}"`).join("");
+  return `<${element.tagName}${unitAttribute}${attributes}>${element.children.map(serializeSafeNode).join("")}</${element.tagName}>`;
 }
 
 function serializeNarrationTextElement(
   tagName: string,
-  attributes: readonly SafeAttribute[],
-  text: string,
+  { id, narrationText }: { id: string; narrationText: string },
 ): string {
-  const html = text.split("\n").map(escapeHtmlText).join("<br>");
+  const html = narrationText.split("\n").map(escapeHtmlText).join("<br>");
 
-  return `<${tagName}${serializeSafeAttributes(attributes)}>${html}</${tagName}>`;
+  return `<${tagName}${serializeUnitAttribute(id)}>${html}</${tagName}>`;
 }

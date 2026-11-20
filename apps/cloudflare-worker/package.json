@@ -50,7 +50,6 @@
     "@cup/audiobook-production": "workspace:*",
     "@cup/config-oxlint": "workspace:*",
     "@cup/listener-api.routes": "workspace:*",
-    "@cup/narration-document-creation": "workspace:*",
     "@cup/operator-api.routes": "workspace:*",
     "@cup/prepare-declaration-build": "workspace:*",
     "@cup/sentry-stub": "workspace:*",
