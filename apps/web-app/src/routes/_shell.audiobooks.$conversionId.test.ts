@@ -289,6 +289,47 @@ test("a heading before a list highlights and plays together with the list's firs
   await expectPlayingFrom(page, 10);
 });
 
+test("units inside a restored table, description list and preformatted text highlight and play", async ({
+  mount,
+  page,
+}) => {
+  await captureNarrationAudio(page);
+
+  const component = await mount("routes/_shell.audiobooks.$conversionId/RestoredStructure");
+  const heading = component.getByRole("heading", { name: "Latency" });
+  const caption = component.getByText("Latency by region");
+
+  await heading.click();
+  await expect(heading).toHaveAttribute("aria-current", "true");
+  await expect(caption).toHaveAttribute("aria-current", "true");
+  await expectPlayingFrom(page, 5);
+
+  for (const [text, startSeconds] of [
+    ["Region", 10],
+    ["380 ms", 25],
+    ["Median", 30],
+    ["The middle value of all measurements.", 35],
+  ] as const) {
+    const unitElement = component.getByText(text, { exact: true });
+
+    await unitElement.click();
+    await expect(unitElement).toHaveAttribute("aria-current", "true");
+    await expectPlayingFrom(page, startSeconds);
+  }
+
+  const preformattedText = component.locator("pre");
+
+  // The line break shows, which only the rendered text knows.
+  expect(await preformattedText.evaluate((element: HTMLElement) => element.innerText)).toBe(
+    "A short poem\nin two lines",
+  );
+  await preformattedText.click();
+  await expect(preformattedText).toHaveAttribute("aria-current", "true");
+  await expect(caption).not.toHaveAttribute("aria-current");
+  await expectPlayingFrom(page, 40);
+  await expect(component.getByRole("button", { name: /^Play segment / })).toHaveCount(9);
+});
+
 test("a failed segment is marked across all its elements", async ({ mount }) => {
   const component = await mount(
     "routes/_shell.audiobooks.$conversionId/HeadingBeforeAListWithFailedSegment",

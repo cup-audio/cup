@@ -1,10 +1,7 @@
 import process from "node:process";
 import { expect, test } from "vitest";
 
-import {
-  createNarrationDocument,
-  renderNarrationDocument,
-} from "#src/narration-document-creation.ts";
+import { renderNarrationDocument } from "#src/narration-document-creation.ts";
 
 // The largest narration document preparation accepts: its content limit is 40,000 characters of
 // narration text in at most 200 synchronization units.
@@ -21,14 +18,34 @@ test("renders the largest allowed narration document within the CPU budget", () 
   // close to the limit.
   const sentence =
     'A sentence with <em>emphasis</em> and a <a href="/cited">cited source</a>, too. ';
-  const paragraphHtml = `<p>${sentence.repeat(4)}</p>`;
-  const narrationDocument = createNarrationDocument({
-    sourceTitle: "The largest narration document",
-    sourceMaterialHtml: Array.from(
-      { length: MAX_SYNCHRONIZATION_UNITS - 1 },
-      (_, index) => (index % 10 === 0 ? `<h2>Section ${index}</h2>` : "") + paragraphHtml,
-    ).join(""),
-  });
+  const sentenceText = "A sentence with emphasis and a cited source, too. ";
+  const paragraphHtml = sentence.repeat(4).trim();
+  const paragraphText = sentenceText.repeat(4).trim();
+  const unitIds = Array.from(
+    { length: MAX_SYNCHRONIZATION_UNITS },
+    (_, index) => `narration-unit-${String(index + 1).padStart(4, "0")}`,
+  );
+  // The shape that narration document creation stored before the narration document was rendered
+  // on request: a heading merged into its paragraph sat with it in a section carrying the unit ID.
+  const bodyHtml = unitIds
+    .slice(1)
+    .map((unitId, index) =>
+      index % 10 === 0
+        ? `<section id="${unitId}"><h2>Section ${index}</h2><p>${paragraphHtml}</p></section>`
+        : `<p id="${unitId}">${paragraphHtml}</p>`,
+    );
+  const narrationDocument = {
+    html: `<article><h1 id="${unitIds[0]}">The largest narration document</h1>${bodyHtml.join("")}</article>`,
+    synchronizationUnits: unitIds.map((id, index) => ({
+      id,
+      narrationText:
+        index === 0
+          ? "The largest narration document"
+          : (index - 1) % 10 === 0
+            ? `Section ${index - 1}\n\n${paragraphText}`
+            : paragraphText,
+    })),
+  };
   const narrationCharacters = narrationDocument.synchronizationUnits
     .map(({ narrationText }) => narrationText.length)
     .reduce((sum, length) => sum + length, 0);

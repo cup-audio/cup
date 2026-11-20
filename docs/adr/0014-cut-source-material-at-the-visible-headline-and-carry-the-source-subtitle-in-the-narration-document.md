@@ -28,4 +28,4 @@ This amends [ADR 0001](0001-use-a-canonical-synchronized-audiobook.md)'s "speaks
 
 - Conversions prepared before this decision have no source subtitle and are not backfilled; their narration documents keep the subtitle-like line, if any, as a body unit.
 - Narration content selection eval inputs must be in the prepared shape, with the visible headline and source subtitle already removed, and their goldens change.
-- The [recorded source pages](../../libs/prepare-source-material/test-e2e/fixtures/README.md) and [narration document tests](../../libs/narration-document-creation/test/narration-document-creation.test.ts) cover the cut, the detection and the opening.
+- The [recorded source pages](../../libs/prepare-source-material/test-e2e/fixtures/README.md) and [narration document tests](../../libs/narration-document-creation/test/new-conversion-rendering/source-material-rendering.test.ts) cover the cut, the detection and the opening.

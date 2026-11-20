@@ -112,15 +112,12 @@ function renderNewConversion({
     return { html: "", mismatch };
   }
 
-  // Until presentation marks units and resolves links itself, its HTML takes the shape of an
-  // existing conversion's stored HTML, which the existing-conversion presentation turns into what
-  // the reader expects.
-  const { html } = presentStoredNarrationDocument({
-    storedHtml: presentNarrationDocument(segmentedDocument),
-    baseUrl: narrationDocument.fetchedUrl ?? originalUrl,
-  });
-
-  return { html };
+  return {
+    html: presentNarrationDocument({
+      segmentedDocument,
+      baseUrl: narrationDocument.fetchedUrl ?? originalUrl,
+    }),
+  };
 }
 
 /** Compares stored and rendered units by order, ID, and narration text, after `normalizeText`. */

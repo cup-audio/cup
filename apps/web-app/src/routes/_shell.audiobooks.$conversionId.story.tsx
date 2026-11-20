@@ -415,6 +415,33 @@ export const HeadingBeforeAListWithFailedSegment = createPreparedStory({
   ],
 });
 
+// The structure the narration document keeps, unstyled: a heading before a table, whose caption,
+// header cells and cells are units, a description list and preformatted text in a scroll card.
+const RESTORED_STRUCTURE_UNITS = [
+  { id: "unit-1", narrationText: "A deterministic document about careful testing" },
+  { id: "unit-2", narrationText: "Latency\n\nLatency by region" },
+  { id: "unit-3", narrationText: "Region" },
+  { id: "unit-4", narrationText: "Latency" },
+  { id: "unit-5", narrationText: "Europe" },
+  { id: "unit-6", narrationText: "380 ms" },
+  { id: "unit-7", narrationText: "Median" },
+  { id: "unit-8", narrationText: "The middle value of all measurements." },
+  { id: "unit-9", narrationText: "A short poem in two lines" },
+];
+
+export const RestoredStructure = createPreparedStory({
+  ...PREPARED_AUDIOBOOK,
+  status: "ready",
+  narrationDocument: {
+    html: '<article><h1 data-synchronization-unit="unit-1">A deterministic document about careful testing</h1><h2 data-synchronization-unit="unit-2">Latency</h2><div data-scroll-card=""><table><caption data-synchronization-unit="unit-2">Latency by region</caption><thead><tr><th data-synchronization-unit="unit-3">Region</th><th data-synchronization-unit="unit-4">Latency</th></tr></thead><tbody><tr><td data-synchronization-unit="unit-5">Europe</td><td data-synchronization-unit="unit-6">380 ms</td></tr></tbody></table></div><dl><dt data-synchronization-unit="unit-7">Median</dt><dd data-synchronization-unit="unit-8">The middle value of all measurements.</dd></dl><div data-scroll-card=""><pre data-synchronization-unit="unit-9">A short poem<br>in two lines</pre></div></article>',
+    synchronizationUnits: RESTORED_STRUCTURE_UNITS,
+  },
+  segments: RESTORED_STRUCTURE_UNITS.map((_, sequence) => createReadySegment(sequence)),
+  narrationTrack: createStoryNarrationTrack(
+    RESTORED_STRUCTURE_UNITS.map(() => SEGMENT_DURATION_MILLISECONDS),
+  ),
+});
+
 function createPendingStory(preparationPhase?: PreparationPhase) {
   return {
     component: () => <GlobalProviders router={router} />,

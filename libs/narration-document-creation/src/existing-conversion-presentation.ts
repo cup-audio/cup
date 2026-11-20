@@ -3,11 +3,10 @@ import type { DefaultTreeAdapterMap } from "parse5";
 
 import { escapeHtmlAttribute, escapeHtmlText } from "#src/html-escaping.ts";
 import { resolveLink } from "#src/links.ts";
+import { KEPT_INLINE_TAG_NAMES, serializeUnitAttribute } from "#src/presentation-rules.ts";
 
 /** A unit found in an existing conversion's stored HTML, with the text its elements show. */
 export type PresentedUnit = { id: string; text: string };
-
-const SYNCHRONIZATION_UNIT_ATTRIBUTE = "data-synchronization-unit";
 
 const BLOCK_TAG_NAMES = new Set([
   "article",
@@ -32,9 +31,6 @@ const HEADING_TAG_NAMES = new Set(["h1", "h2", "h3", "h4", "h5", "h6"]);
 const HEADING_CONTAINER_TAG_NAMES = new Set(["blockquote", "ol", "ul"]);
 
 const CONTAINER_TAG_NAMES = new Set(["blockquote", "li", "ol", "ul"]);
-
-// Stored HTML only ever held these inline elements; any other element is flattened to its text.
-const INLINE_TAG_NAMES = new Set(["code", "em", "strong"]);
 
 type Element = DefaultTreeAdapterMap["element"];
 type ChildNode = DefaultTreeAdapterMap["childNode"];
@@ -106,7 +102,7 @@ export function presentStoredNarrationDocument({
     if (BLOCK_TAG_NAMES.has(node.tagName)) {
       const unitAttribute =
         unitId !== undefined && (storedUnitId !== undefined || isUnitElement)
-          ? ` ${SYNCHRONIZATION_UNIT_ATTRIBUTE}="${escapeHtmlAttribute(unitId)}"`
+          ? serializeUnitAttribute(unitId)
           : "";
 
       return `<${node.tagName}${unitAttribute}>${presentNodes(node.childNodes, unitId)}</${node.tagName}>`;
@@ -116,7 +112,9 @@ export function presentStoredNarrationDocument({
       return "<br>";
     }
 
-    if (INLINE_TAG_NAMES.has(node.tagName)) {
+    // Stored HTML only ever held `em`, `strong` and `code` of these. It follows the same rules as
+    // a new conversion's markup, which flatten any other element to its text.
+    if (KEPT_INLINE_TAG_NAMES.has(node.tagName)) {
       return `<${node.tagName}>${presentNodes(node.childNodes, unitId)}</${node.tagName}>`;
     }
 
