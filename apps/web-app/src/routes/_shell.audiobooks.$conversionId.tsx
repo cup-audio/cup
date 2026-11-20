@@ -11,6 +11,7 @@ import type { DetailBack } from "#src/app/components/detail-top-bar.js";
 import { ErrorScreen } from "#src/app/components/error-message.js";
 import { fadeFooterClearance } from "#src/app/components/fade-footer.js";
 import { ShellContent } from "#src/app/components/main.tsx";
+import { attachNarrationDocumentInteraction } from "#src/app/components/narration-document-interaction.js";
 import { PageTitle } from "#src/app/components/page-title.js";
 import { PLAYER_SHEET_HEIGHTS, PlayerSheet } from "#src/app/components/player-sheet.js";
 import { TrackSkeleton } from "#src/app/components/track-skeleton.js";
@@ -672,43 +673,18 @@ function NarrationDocument({
   const selectUnit = React.useEffectEvent((unitIndex: number) => onSelectUnit?.(unitIndex));
 
   React.useEffect(
-    function addSegmentPlaybackButtons() {
-      if (!isSelectable) {
-        return undefined;
-      }
-
+    function makeNarrationDocumentInteractive() {
       const narrationDocumentElement = narrationDocumentElementRef.current;
       check.assert(narrationDocumentElement);
 
-      // Units are selectable only with a narration track, which has audio for every unit.
-      const buttons = units.flatMap((unit, unitIndex) => {
-        const segmentElements = findSegmentElements(narrationDocumentElement, unit.id);
-        check.assert(segmentElements.length > 0, `The narration document has no unit ${unit.id}.`);
-
-        // Every element of a segment plays it, such as a heading and the first item of the list it
-        // introduces; only the first element's button is announced and reached with Tab.
-        return segmentElements.map((segmentElement, elementIndex) => {
-          const button = document.createElement("button");
-          button.type = "button";
-          button.dataset["segmentControl"] = "";
-          if (elementIndex === 0) {
-            button.setAttribute("aria-label", `Play segment ${unitIndex + 1}`);
-          } else {
-            button.setAttribute("aria-hidden", "true");
-            button.tabIndex = -1;
-          }
-          button.addEventListener("click", () => selectUnit(unitIndex));
-          segmentElement.append(button);
-          return button;
-        });
+      return attachNarrationDocumentInteraction({
+        narrationDocumentElement,
+        unitIds: units.map((unit) => unit.id),
+        // Units are selectable only with a narration track, which has audio for every unit.
+        selectUnit: isSelectable ? (unitIndex) => selectUnit(unitIndex) : undefined,
       });
-
-      return () => {
-        for (const button of buttons) {
-          button.remove();
-        }
-      };
     },
+    // A changed document is rendered anew, which drops the buttons.
     [units, isSelectable, narrationDocumentElementRef],
   );
 
@@ -746,23 +722,6 @@ function NarrationDocument({
 
           & > article > [data-source-host] {
             color: var(--color-ink-40);
-          }
-
-          [data-synchronization-unit]:has(> [data-segment-control]) {
-            /* "anchor" for the absolutely-positioned play-segment buttons */
-            position: relative;
-          }
-
-          [data-segment-control] {
-            position: absolute;
-            inset: 0;
-            width: 100%;
-            height: 100%;
-            padding: 0;
-            cursor: pointer;
-            background: transparent;
-            border: 0;
-            border-radius: inherit;
           }
 
           [aria-current="true"] {

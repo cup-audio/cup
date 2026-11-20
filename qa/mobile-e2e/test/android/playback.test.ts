@@ -322,7 +322,8 @@ test("a track URL the server refuses ends the playing session, and the next Play
 
   await timers.setTimeout((SHORT_URL_LIFETIME_SECONDS + 5) * 1_000);
   // A seek past the buffer requests the track again, with the expired URL.
-  await webView.$('button[aria-label="Play segment 4"]').click();
+  const fourthUnitId = (await readUnitIds(webView))[3]!;
+  await webView.$(`[data-synchronization-unit="${fourthUnitId}"]`).click();
   await waitForSessionToEnd(device, 30_000);
   webView = await device.webView();
   await waitForPlayButton(webView, "Play");
@@ -646,14 +647,20 @@ async function waitForSaveAfter(conversionId: string, saveCount: number): Promis
   return saves[saves.length - 1]!;
 }
 
-/** The audiobook's synchronization units in document order, from its segment controls. */
+/**
+ * The audiobook's synchronization units in document order, once each however many elements carry
+ * them.
+ */
 async function readUnitIds(webView: WebdriverIO.Browser): Promise<string[]> {
-  return webView.execute(() =>
-    Array.from(
-      // A segment of several elements announces only its first element's control.
-      document.querySelectorAll("button[data-segment-control][aria-label]"),
-      (button) => button.parentElement?.getAttribute("data-synchronization-unit") ?? "",
-    ),
+  return webView.execute(
+    () =>
+      [
+        ...new Set(
+          Array.from(document.querySelectorAll("[data-synchronization-unit]"), (element) =>
+            element.getAttribute("data-synchronization-unit"),
+          ),
+        ),
+      ] as string[],
   );
 }
 

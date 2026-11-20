@@ -21,6 +21,17 @@ Recents is one newest-first list on a CSS grid with 1 px rows; [`useMasonryRowSp
 
 A ready history item carries its cover's own [signed media URL](authentication.md#signed-media-url), identical for a UTC day and cached by the browser for a day ([ADR 0013](../adr/0013-cache-cover-images-in-the-browser-for-a-day.md)), so polls and app starts download no cover again.
 
+## Reader
+
+The detail view renders the audiobook's [narration document](../GLOSSARY.md#narration-document) and makes it interactive through [`narration-document-interaction.ts`](../../apps/web-app/src/app/components/narration-document-interaction.ts). It reaches a segment only through its `[data-synchronization-unit]` elements ([timeline](playback.md#the-web-player)).
+
+- **Tap on segment text:** plays from that segment, whichever of its elements was tapped, once the audiobook has a narration track. The click that ends a text selection plays nothing, so text can be selected and copied.
+- **Tap on a link:** plays nothing. It opens a popover anchored to the link, below it or above when there is no room below, which shows "Open link ↗" and the link's host, and the link is tinted while the popover is open. The popover is a real link with `target="_blank" rel="noopener noreferrer"`, like **Open original page**, so it opens a new tab without a referrer, or the system browser in the shells ([mobile app](../../apps/mobile-app/README.md#links-and-sharing)). Links open through the popover also while no audio exists yet.
+- **Dismissal:** a transparent backdrop under the popover takes every other tap, so the tap that closes it never reaches a segment and plays nothing. Any scroll closes it too, since the link would move away from it.
+- **Keyboard and screen readers:** links stay real links. Activating one from the keyboard opens the popover with focus on it; Escape closes it and returns focus to the link. Each segment has one "Play from here" button before its text, visually hidden until focused; a heading's button sits before the heading, so it never joins the heading's name.
+
+The full-size invisible button per segment that this replaced made the links inside segments unreachable ([#481](https://github.com/cup-audio/cup/issues/481)). The [detail view tests](../../apps/web-app/src/routes/_shell.audiobooks.$conversionId.test.ts) pin these rules.
+
 ## Account holder's name
 
 The avatar's initials come from the Supabase session's `user_metadata.name`, else `full_name`, which Supabase fills from the Google sign-in and refreshes on each sign-in. Cup stores no name, so account erasure has none to remove ([name source research](../research/avatar-initials-name-source.md)).

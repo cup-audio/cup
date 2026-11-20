@@ -87,7 +87,7 @@ test("generates audio for the whole document, then plays its narration track", a
   await expect(playerSheet.getByText(SOURCE_SUBTITLE)).toHaveCount(0);
 
   // A unit tap seeks the same track to the unit's start offset.
-  await page.getByRole("button", { name: "Play segment 3", exact: true }).click();
+  await page.locator(`[data-synchronization-unit="${units[2]!.id}"]`).click();
   await expect(page.locator(`[data-synchronization-unit="${units[2]!.id}"]`)).toHaveAttribute(
     "aria-current",
     "true",
@@ -100,7 +100,7 @@ test("generates audio for the whole document, then plays its narration track", a
   );
 
   // Tapping the source subtitle plays from it, like any other unit.
-  await page.getByRole("button", { name: "Play segment 2", exact: true }).click();
+  await page.locator(`[data-synchronization-unit="${units[1]!.id}"]`).click();
   await expect(page.locator(`[data-synchronization-unit="${units[1]!.id}"]`)).toHaveAttribute(
     "aria-current",
     "true",
@@ -110,7 +110,7 @@ test("generates audio for the whole document, then plays its narration track", a
     narrationTrack.startMilliseconds[1]!,
   );
   expect(afterSubtitleTap.currentTime * 1_000).toBeLessThan(narrationTrack.startMilliseconds[2]!);
-  await page.getByRole("button", { name: "Play segment 3", exact: true }).click();
+  await page.locator(`[data-synchronization-unit="${units[2]!.id}"]`).click();
   await expect(page.locator(`[data-synchronization-unit="${units[2]!.id}"]`)).toHaveAttribute(
     "aria-current",
     "true",

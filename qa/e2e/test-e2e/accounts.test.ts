@@ -618,7 +618,11 @@ test("account positions restore once and use last-write-wins across players", as
     "aria-current",
     "true",
   );
-  await second.getByRole("button", { name: "Play segment 3", exact: true }).click();
+  await second
+    .locator(
+      `[data-synchronization-unit="${document.narrationDocument.synchronizationUnits[2]!.id}"]`,
+    )
+    .click();
   await expect(second.getByRole("button", { name: "Pause", exact: true })).toBeVisible();
   await second.getByRole("button", { name: "Pause", exact: true }).click();
   await expect
