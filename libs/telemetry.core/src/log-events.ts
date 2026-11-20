@@ -59,6 +59,11 @@ export const LOG_EVENTS = {
    * the listener got the fallback document built from the units alone.
    */
   "narration-document-mismatch": "error",
+  /**
+   * Loading, segmenting or presenting a narration document failed, so the listener got the fallback
+   * document built from the stored synchronization units alone.
+   */
+  "narration-document-render-failure": "error",
   /** The operator changed something through the Operator API. */
   "operator-mutation": "info",
   /**

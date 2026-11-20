@@ -1,36 +1,40 @@
 import { presentStoredNarrationDocument } from "#src/existing-conversion-presentation.ts";
-import { escapeHtmlAttribute, escapeHtmlText } from "#src/html-escaping.ts";
+import { escapeHtmlText } from "#src/html-escaping.ts";
+import { serializeUnitAttribute } from "#src/presentation-rules.ts";
 import { presentNarrationDocument } from "#src/presentation.ts";
 import { segmentNarrationDocument } from "#src/segmentation.ts";
 import type { SegmentationVersion } from "#src/segmentation.ts";
 import type { SynchronizationUnit } from "#src/synchronization-unit.ts";
 
-/** What a conversion's manifest stores to render its narration document. */
-export type RenderOptions = ExistingConversionRenderOptions | NewConversionRenderOptions;
+/**
+ * What a conversion's manifest stores to render its narration document, in one of two shapes, and
+ * how to read a new conversion's narration source material, which the manifest only references.
+ */
+export type RenderOptions<TNewConversion extends NewConversionNarrationDocument> = {
+  narrationDocument: ExistingConversionNarrationDocument | TNewConversion;
+  /** Called only for a new conversion. */
+  loadNarrationSourceMaterial: (narrationDocument: TNewConversion) => Promise<string>;
+  /** The source URL the conversion was submitted with, the link base without a fetched URL. */
+  originalUrl: string;
+  sourceTitle: string;
+};
 
 /** An existing conversion stored the HTML narration document creation produced at preparation. */
-export type ExistingConversionRenderOptions = {
-  narrationDocument: { html: string; synchronizationUnits: readonly SynchronizationUnit[] };
-  /** The source URL the conversion was submitted with, against which relative links resolve. */
-  originalUrl: string;
+export type ExistingConversionNarrationDocument = {
+  html: string;
+  synchronizationUnits: readonly SynchronizationUnit[];
 };
 
 /**
  * A new conversion stored its narration source material, and the segmentation version and units
  * preparation derived from it, so its narration document is segmented again on every render.
  */
-export type NewConversionRenderOptions = {
-  narrationDocument: {
-    segmentationVersion: SegmentationVersion;
-    sourceSubtitle?: string | undefined;
-    /** The URL the source page was finally loaded from, against which relative links resolve. */
-    fetchedUrl?: string | undefined;
-    synchronizationUnits: readonly SynchronizationUnit[];
-  };
-  narrationSourceMaterialHtml: string;
-  /** The source URL the conversion was submitted with, the link base without a fetched URL. */
-  originalUrl: string;
-  sourceTitle: string;
+export type NewConversionNarrationDocument = {
+  segmentationVersion: SegmentationVersion;
+  sourceSubtitle?: string | undefined;
+  /** The fetched URL, against which relative links resolve. */
+  fetchedUrl?: string | undefined;
+  synchronizationUnits: readonly SynchronizationUnit[];
 };
 
 /** The narration document as the listener sees it, together with the stored units. */
@@ -39,6 +43,11 @@ export type RenderedNarrationDocument = {
   synchronizationUnits: readonly SynchronizationUnit[];
   /** Set when the render disagreed with the stored units, so `html` is the fallback document. */
   mismatch?: NarrationDocumentMismatch;
+  /**
+   * Set to what was thrown when loading, segmenting or presenting failed, so `html` is the fallback
+   * document.
+   */
+  failure?: unknown;
 };
 
 /** The first unit at which a render disagreed with the stored units. */
@@ -53,26 +62,59 @@ export type NarrationDocumentMismatch = {
 };
 
 /**
- * Renders a conversion's narration document from what its manifest stores. Units are bound to paid
- * audio and never change after preparation, so a render that disagrees with the stored units is
- * replaced by the fallback document, built from the stored units alone, and never throws.
+ * Renders a conversion's narration document from what its manifest stores, whose shape chooses the
+ * path. Units are bound to paid audio and never change after preparation, so a render that fails or
+ * disagrees with the stored units is replaced by the fallback document, built from the stored units
+ * alone, and never rejects: the listener can still read, listen and see highlighting.
  */
-export function renderNarrationDocument(options: RenderOptions): RenderedNarrationDocument {
-  const { synchronizationUnits } = options.narrationDocument;
-  const { html, mismatch } =
-    "narrationSourceMaterialHtml" in options
-      ? renderNewConversion(options)
-      : renderExistingConversion(options);
+export async function renderNarrationDocument<
+  TNewConversion extends NewConversionNarrationDocument,
+>({
+  narrationDocument,
+  loadNarrationSourceMaterial,
+  originalUrl,
+  sourceTitle,
+}: RenderOptions<TNewConversion>): Promise<RenderedNarrationDocument> {
+  const { synchronizationUnits } = narrationDocument;
+  let rendered: { html: string; mismatch?: NarrationDocumentMismatch };
+
+  try {
+    rendered = isExistingConversion(narrationDocument)
+      ? renderExistingConversion({ narrationDocument, originalUrl })
+      : renderNewConversion({
+          narrationDocument,
+          narrationSourceMaterialHtml: await loadNarrationSourceMaterial(narrationDocument),
+          originalUrl,
+          sourceTitle,
+        });
+  } catch (error) {
+    return {
+      html: createFallbackDocument(synchronizationUnits),
+      synchronizationUnits,
+      failure: error,
+    };
+  }
+
+  const { html, mismatch } = rendered;
 
   return mismatch === undefined
     ? { html, synchronizationUnits }
     : { html: createFallbackDocument(synchronizationUnits), synchronizationUnits, mismatch };
 }
 
+function isExistingConversion(
+  narrationDocument: ExistingConversionNarrationDocument | NewConversionNarrationDocument,
+): narrationDocument is ExistingConversionNarrationDocument {
+  return "html" in narrationDocument;
+}
+
 function renderExistingConversion({
   narrationDocument,
   originalUrl,
-}: ExistingConversionRenderOptions): { html: string; mismatch?: NarrationDocumentMismatch } {
+}: {
+  narrationDocument: ExistingConversionNarrationDocument;
+  originalUrl: string;
+}): { html: string; mismatch?: NarrationDocumentMismatch } {
   const { html, units } = presentStoredNarrationDocument({
     storedHtml: narrationDocument.html,
     baseUrl: originalUrl,
@@ -93,7 +135,12 @@ function renderNewConversion({
   narrationSourceMaterialHtml,
   originalUrl,
   sourceTitle,
-}: NewConversionRenderOptions): { html: string; mismatch?: NarrationDocumentMismatch } {
+}: {
+  narrationDocument: NewConversionNarrationDocument;
+  narrationSourceMaterialHtml: string;
+  originalUrl: string;
+  sourceTitle: string;
+}): { html: string; mismatch?: NarrationDocumentMismatch } {
   const { segmentedDocument, synchronizationUnits } = segmentNarrationDocument({
     segmentationVersion: narrationDocument.segmentationVersion,
     sourceTitle,
@@ -172,7 +219,7 @@ function removeWhitespace(text: string): string {
 function createFallbackDocument(synchronizationUnits: readonly SynchronizationUnit[]): string {
   const paragraphs = synchronizationUnits.map(
     ({ id, narrationText }) =>
-      `<p data-synchronization-unit="${escapeHtmlAttribute(id)}">${narrationText.split("\n").map(escapeHtmlText).join("<br>")}</p>`,
+      `<p${serializeUnitAttribute(id)}>${narrationText.split("\n").map(escapeHtmlText).join("<br>")}</p>`,
   );
 
   return `<article>${paragraphs.join("")}</article>`;

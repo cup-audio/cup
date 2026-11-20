@@ -2,8 +2,8 @@ export { renderNarrationDocument } from "#src/rendering.ts";
 export type {
   NarrationDocumentMismatch,
   RenderedNarrationDocument,
-  ExistingConversionRenderOptions,
-  NewConversionRenderOptions,
+  ExistingConversionNarrationDocument,
+  NewConversionNarrationDocument,
   RenderOptions,
 } from "#src/rendering.ts";
 export { CURRENT_SEGMENTATION_VERSION, segmentNarrationDocument } from "#src/segmentation.ts";

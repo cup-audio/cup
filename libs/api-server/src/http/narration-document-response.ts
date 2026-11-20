@@ -1,9 +1,8 @@
 import { captureException } from "@sentry/core";
 
-import {
-  loadNarrationSourceMaterial,
-  type Audiobook as StoredAudiobook,
-  type SourceMaterialStorage,
+import type {
+  Audiobook as StoredAudiobook,
+  NarrationSourceMaterialReference,
 } from "@cup/audiobook-production";
 import { CupError } from "@cup/errors";
 import type { Audiobook } from "@cup/listener-api.routes";
@@ -14,33 +13,39 @@ import { TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
 type ReadyAudiobook = Extract<Audiobook, { status: "ready" }>;
 
 /**
- * Renders the narration document a conversion's manifest stores into the listener response: an
- * existing conversion's stored HTML, or a new conversion's narration source material, read only
- * through the manifest's reference. A render that disagrees with the stored units still answers,
- * with the fallback document, and is reported to the operator.
+ * Renders the narration document a conversion's manifest stores into the listener response. A
+ * render that fails, or disagrees with the stored units, still answers, with the fallback document,
+ * and is reported to the operator.
  */
 export async function toRenderedNarrationDocumentResponse({
-  bucket,
   conversionId,
   audiobook,
+  readNarrationSourceMaterial,
 }: {
-  bucket: Pick<SourceMaterialStorage, "get">;
   conversionId: string;
   audiobook: Pick<StoredAudiobook, "narrationDocument" | "originalUrl" | "title">;
+  readNarrationSourceMaterial: (reference: NarrationSourceMaterialReference) => Promise<string>;
 }) {
-  const { narrationDocument, originalUrl } = audiobook;
-  const { html, synchronizationUnits, mismatch } =
-    "html" in narrationDocument
-      ? renderNarrationDocument({ narrationDocument, originalUrl })
-      : renderNarrationDocument({
-          narrationDocument,
-          narrationSourceMaterialHtml: await loadNarrationSourceMaterial({
-            bucket,
-            reference: narrationDocument.narrationSourceMaterial,
-          }),
-          originalUrl,
-          sourceTitle: audiobook.title,
-        });
+  const { html, synchronizationUnits, mismatch, failure } = await renderNarrationDocument({
+    narrationDocument: audiobook.narrationDocument,
+    loadNarrationSourceMaterial: ({ narrationSourceMaterial }) =>
+      readNarrationSourceMaterial(narrationSourceMaterial),
+    originalUrl: audiobook.originalUrl,
+    sourceTitle: audiobook.title,
+  });
+
+  if (failure !== undefined) {
+    const message =
+      "Rendering the narration document failed, so the listener got the fallback document.";
+
+    captureException(new CupError(message, { cause: failure }), {
+      tags: { [TELEMETRY_ATTRIBUTES.CONVERSION_ID]: conversionId },
+    });
+    logEvent("narration-document-render-failure", message, {
+      attributes: { [TELEMETRY_ATTRIBUTES.CONVERSION_ID]: conversionId },
+      error: failure,
+    });
+  }
 
   if (mismatch !== undefined) {
     const differingUnitId = mismatch.storedUnitId ?? mismatch.renderedUnitId;

@@ -12,8 +12,16 @@ const MAX_SYNCHRONIZATION_UNITS = 200;
 // in the Worker's Wrangler config), but the listener API renders on every request that carries the
 // narration document, so rendering must stay small next to the request's other work.
 const CPU_BUDGET_MILLISECONDS = 50;
+// An existing conversion's manifest references no narration source material, so rendering it never
+// loads one.
+const WITHOUT_NARRATION_SOURCE_MATERIAL = {
+  sourceTitle: "Title",
+  loadNarrationSourceMaterial: async () => {
+    throw new Error("An existing conversion has no narration source material to load.");
+  },
+};
 
-test("renders the largest allowed narration document within the CPU budget", () => {
+test("renders the largest allowed narration document within the CPU budget", async () => {
   // 50 characters of narration text, so 199 paragraphs of four sentences and their headings come
   // close to the limit.
   const sentence =
@@ -55,18 +63,21 @@ test("renders the largest allowed narration document within the CPU budget", () 
   expect(narrationCharacters).toBeLessThanOrEqual(MAX_NARRATION_CHARACTERS);
 
   // The fastest of several renders, so a busy test machine doesn't fail the budget.
-  const cpuMilliseconds = Array.from({ length: 5 }, () => {
+  const cpuMilliseconds: number[] = [];
+
+  for (let render = 0; render < 5; render += 1) {
     const cpuUsageBefore = process.cpuUsage();
-    const rendered = renderNarrationDocument({
+    const rendered = await renderNarrationDocument({
       narrationDocument,
       originalUrl: "https://publisher.example/articles/story",
+      ...WITHOUT_NARRATION_SOURCE_MATERIAL,
     });
     const cpuUsage = process.cpuUsage(cpuUsageBefore);
 
     expect(rendered.mismatch).toBeUndefined();
 
-    return (cpuUsage.user + cpuUsage.system) / 1000;
-  });
+    cpuMilliseconds.push((cpuUsage.user + cpuUsage.system) / 1000);
+  }
 
   expect(Math.min(...cpuMilliseconds)).toBeLessThan(CPU_BUDGET_MILLISECONDS);
 });

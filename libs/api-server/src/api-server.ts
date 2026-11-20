@@ -45,6 +45,7 @@ import { TELEMETRY_TUNNEL_PATH } from "@cup/telemetry.core";
 import { resolveConversionDispatch } from "#src/adapters/conversion-dispatch.ts";
 import { resolveConversionReader } from "#src/adapters/conversion-reader.ts";
 import { revokeVerifiedGoogleToken } from "#src/adapters/google-token-revocation.ts";
+import { createNarrationSourceMaterialReader } from "#src/adapters/narration-source-material-reader.ts";
 import type { ApiServerEnvironment } from "#src/api-server-environment.ts";
 import { authenticateAccountRequest, localTestAccount } from "#src/http/account-auth.ts";
 import { APPLICATION_ORIGIN, routeApplicationDomain } from "#src/http/domain-routing.ts";
@@ -644,9 +645,9 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
           ? {}
           : {
               narrationDocument: await toRenderedNarrationDocumentResponse({
-                bucket: context.env.AUDIO_BUCKET,
                 conversionId,
                 audiobook,
+                readNarrationSourceMaterial: createNarrationSourceMaterialReader(context.env),
               }),
             }),
         playbackPosition: toPlaybackPositionResponse(playbackPosition),

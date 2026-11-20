@@ -14,16 +14,16 @@ const STORED_UNITS = [
   { id: "narration-unit-0004", narrationText: "Heading\n\nSecond & last paragraph." },
 ];
 
-test("renders a new conversion's narration document from its narration source material, with links resolved against the fetched URL", () => {
+test("renders a new conversion's narration document from its narration source material, with links resolved against the fetched URL", async () => {
   expect(
-    renderNarrationDocument({
+    await renderNarrationDocument({
       narrationDocument: {
         segmentationVersion: 1,
         sourceSubtitle: "A subtitle",
         fetchedUrl: FETCHED_URL,
         synchronizationUnits: STORED_UNITS,
       },
-      narrationSourceMaterialHtml: NARRATION_SOURCE_MATERIAL_HTML,
+      loadNarrationSourceMaterial: async () => NARRATION_SOURCE_MATERIAL_HTML,
       originalUrl: ORIGINAL_URL,
       sourceTitle: SOURCE_TITLE,
     }),
@@ -33,8 +33,8 @@ test("renders a new conversion's narration document from its narration source ma
   });
 });
 
-test("resolves a new conversion's links against the submitted source URL when no fetched URL is stored", () => {
-  const { html, mismatch } = renderNarrationDocument({
+test("resolves a new conversion's links against the submitted source URL when no fetched URL is stored", async () => {
+  const { html, mismatch } = await renderNarrationDocument({
     narrationDocument: {
       segmentationVersion: 1,
       synchronizationUnits: [STORED_UNITS[0]!, STORED_UNITS[2]!].map((unit, unitIndex) => ({
@@ -42,7 +42,7 @@ test("resolves a new conversion's links against the submitted source URL when no
         id: `narration-unit-000${unitIndex + 1}`,
       })),
     },
-    narrationSourceMaterialHtml: '<p>First <a href="../about">paragraph</a>.</p>',
+    loadNarrationSourceMaterial: async () => '<p>First <a href="../about">paragraph</a>.</p>',
     originalUrl: ORIGINAL_URL,
     sourceTitle: SOURCE_TITLE,
   });
@@ -51,21 +51,21 @@ test("resolves a new conversion's links against the submitted source URL when no
   expect(html).toContain('<a href="https://publisher.example/about">paragraph</a>');
 });
 
-test("serves the fallback document when a new conversion's units differ from its stored units only in whitespace", () => {
+test("serves the fallback document when a new conversion's units differ from its stored units only in whitespace", async () => {
   const synchronizationUnits = [
     ...STORED_UNITS.slice(0, 3),
     { id: "narration-unit-0004", narrationText: "Heading\nSecond & last paragraph." },
   ];
 
   expect(
-    renderNarrationDocument({
+    await renderNarrationDocument({
       narrationDocument: {
         segmentationVersion: 1,
         sourceSubtitle: "A subtitle",
         fetchedUrl: FETCHED_URL,
         synchronizationUnits,
       },
-      narrationSourceMaterialHtml: NARRATION_SOURCE_MATERIAL_HTML,
+      loadNarrationSourceMaterial: async () => NARRATION_SOURCE_MATERIAL_HTML,
       originalUrl: ORIGINAL_URL,
       sourceTitle: SOURCE_TITLE,
     }),
@@ -81,22 +81,70 @@ test("serves the fallback document when a new conversion's units differ from its
   });
 });
 
-test("serves the fallback document when a new conversion's stored units no longer match its source subtitle", () => {
+test("serves the fallback document when a new conversion's stored units no longer match its source subtitle", async () => {
   expect(
-    renderNarrationDocument({
-      narrationDocument: {
-        segmentationVersion: 1,
-        fetchedUrl: FETCHED_URL,
-        synchronizationUnits: STORED_UNITS,
-      },
-      narrationSourceMaterialHtml: NARRATION_SOURCE_MATERIAL_HTML,
-      originalUrl: ORIGINAL_URL,
-      sourceTitle: SOURCE_TITLE,
-    }).mismatch,
+    (
+      await renderNarrationDocument({
+        narrationDocument: {
+          segmentationVersion: 1,
+          fetchedUrl: FETCHED_URL,
+          synchronizationUnits: STORED_UNITS,
+        },
+        loadNarrationSourceMaterial: async () => NARRATION_SOURCE_MATERIAL_HTML,
+        originalUrl: ORIGINAL_URL,
+        sourceTitle: SOURCE_TITLE,
+      })
+    ).mismatch,
   ).toEqual({
     reason: "narration-text",
     unitIndex: 1,
     storedUnitId: "narration-unit-0002",
     renderedUnitId: "narration-unit-0002",
   });
+});
+
+test("serves the fallback document and reports the failure when a new conversion's narration source material can't be loaded", async () => {
+  const loadFailure = new Error("Narration source material was not found in storage");
+
+  expect(
+    await renderNarrationDocument({
+      narrationDocument: {
+        segmentationVersion: 1,
+        sourceSubtitle: "A subtitle",
+        fetchedUrl: FETCHED_URL,
+        synchronizationUnits: STORED_UNITS,
+      },
+      loadNarrationSourceMaterial: async () => {
+        throw loadFailure;
+      },
+      originalUrl: ORIGINAL_URL,
+      sourceTitle: SOURCE_TITLE,
+    }),
+  ).toEqual({
+    html: '<article><p data-synchronization-unit="narration-unit-0001">Story title</p><p data-synchronization-unit="narration-unit-0002">A subtitle</p><p data-synchronization-unit="narration-unit-0003">First paragraph.</p><p data-synchronization-unit="narration-unit-0004">Heading<br><br>Second &amp; last paragraph.</p></article>',
+    synchronizationUnits: STORED_UNITS,
+    failure: loadFailure,
+  });
+});
+
+test("serves the fallback document and reports the failure when segmentation throws", async () => {
+  const rendered = await renderNarrationDocument({
+    narrationDocument: {
+      segmentationVersion: 2,
+      sourceSubtitle: "A subtitle",
+      synchronizationUnits: STORED_UNITS,
+    },
+    loadNarrationSourceMaterial: async () => NARRATION_SOURCE_MATERIAL_HTML,
+    originalUrl: ORIGINAL_URL,
+    // A source title without narration text, which segmentation refuses.
+    sourceTitle: " ",
+  });
+
+  expect(rendered.html).toContain(
+    '<p data-synchronization-unit="narration-unit-0001">Story title</p>',
+  );
+  expect(rendered.failure).toEqual(
+    expect.objectContaining({ message: "Expected the source title to contain narration text" }),
+  );
+  expect(rendered.mismatch).toBeUndefined();
 });

@@ -35,9 +35,10 @@ vi.mock(import("@cup/telemetry.cloudflare"), async (importOriginal) => ({
   ...(await importOriginal()),
   logEvent: vi.fn<typeof logEvent>(),
 }));
-// Records the renders and keeps rendering.
-vi.mock(import("@cup/narration-document-creation"), async (importOriginal) => {
-  const original = await importOriginal();
+// Records the renders and keeps rendering. The module is named as a string because the typed form
+// would require the mock to keep the render function's type parameter, which a `Mock` drops.
+vi.mock("@cup/narration-document-creation", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@cup/narration-document-creation")>();
   return {
     ...original,
     renderNarrationDocument: vi.fn<typeof original.renderNarrationDocument>(
@@ -88,14 +89,16 @@ function fixture(
   {
     narrationDocument = { html: STORED_HTML, synchronizationUnits },
     storedObjects = {},
+    title = "A document",
   }: {
     narrationDocument?: object;
+    title?: string;
     /** Further objects in the bucket, by key, each holding HTML. */
     storedObjects?: Record<string, string>;
   } = {},
 ) {
   const manifest = JSON.stringify({
-    title: "A document",
+    title,
     originalUrl: "https://publisher.example/articles/story",
     speechConfig: SPEECH_CONFIG,
     narrationDocument,
@@ -249,12 +252,18 @@ function newShapeFixture(
     fetchedUrl,
     segmentationVersion = 2,
     narrationSourceMaterialHtml = NARRATION_SOURCE_MATERIAL_HTML,
+    storedNarrationSourceMaterialHtml = narrationSourceMaterialHtml,
     synchronizationUnits = NEW_SHAPE_UNITS,
+    title,
   }: {
     fetchedUrl?: string;
     segmentationVersion?: 1 | 2;
+    /** The narration source material the manifest references. */
     narrationSourceMaterialHtml?: string;
+    /** The object stored under the referenced key, `null` for none. */
+    storedNarrationSourceMaterialHtml?: string | null;
     synchronizationUnits?: typeof NEW_SHAPE_UNITS;
+    title?: string;
   } = {},
 ) {
   const artifactPrefix = createConversionArtifactPrefix(conversionId, owner);
@@ -273,8 +282,11 @@ function newShapeFixture(
       sourceSubtitle: "A subtitle",
       synchronizationUnits,
     },
+    ...(title === undefined ? {} : { title }),
     storedObjects: {
-      [narrationSourceMaterialKey]: narrationSourceMaterialHtml,
+      ...(storedNarrationSourceMaterialHtml === null
+        ? {}
+        : { [narrationSourceMaterialKey]: storedNarrationSourceMaterialHtml }),
       [`${artifactPrefix}audiobook-source-material.html`]: AUDIOBOOK_SOURCE_MATERIAL_HTML,
     },
   });
@@ -387,6 +399,52 @@ test("a new conversion whose segmentation disagrees with its stored units serves
     },
   });
 });
+
+const NEW_SHAPE_FALLBACK_HTML =
+  '<article><p data-synchronization-unit="narration-unit-0001">A document</p><p data-synchronization-unit="narration-unit-0002">A subtitle</p><p data-synchronization-unit="narration-unit-0003">A section<br><br>See the source.</p></article>';
+
+test.for([
+  {
+    failure: "the narration source material is missing",
+    options: { storedNarrationSourceMaterialHtml: null },
+    rootCause: "Narration source material was not found in storage",
+  },
+  {
+    failure: "the stored narration source material isn't the object its reference describes",
+    options: { storedNarrationSourceMaterialHtml: `${NARRATION_SOURCE_MATERIAL_HTML}<p>More.</p>` },
+    rootCause: "Stored narration source material does not match its reference",
+  },
+  {
+    failure: "segmentation throws",
+    // A title without narration text, which segmentation refuses.
+    options: { title: " " },
+    rootCause: "Expected the source title to contain narration text",
+  },
+])(
+  "a new conversion whose render fails because $failure serves the fallback and reports the failure",
+  async ({ options, rootCause }) => {
+    const response = await newShapeFixture(OWNERS.account, options).request();
+
+    expect(response.status).toBe(200);
+    expect(toStrictSchema(audiobookSchema).parse(await response.json())).toMatchObject({
+      narrationDocument: {
+        html: NEW_SHAPE_FALLBACK_HTML,
+        synchronizationUnits: NEW_SHAPE_UNITS,
+      },
+    });
+    expect(captureException).toHaveBeenCalledTimes(1);
+    expect(captureException).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cause: expect.objectContaining({ message: expect.stringContaining(rootCause) }),
+      }),
+      { tags: { "cup.conversion.id": conversionId } },
+    );
+    expect(logEvent).toHaveBeenCalledWith("narration-document-render-failure", expect.any(String), {
+      attributes: { "cup.conversion.id": conversionId },
+      error: expect.objectContaining({ message: expect.stringContaining(rootCause) }),
+    });
+  },
+);
 
 test("an existing conversion never reads a narration source material object its manifest doesn't record", async () => {
   const owner = OWNERS.account;

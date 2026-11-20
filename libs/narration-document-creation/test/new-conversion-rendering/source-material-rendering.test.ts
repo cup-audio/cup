@@ -10,19 +10,19 @@ import {
  * Segments narration source material with segmentation version 1 and renders it as a new conversion
  * whose stored units are the derived ones, as preparation and the listener API do.
  */
-function renderSourceMaterial(options: {
+async function renderSourceMaterial(options: {
   sourceTitle: string;
   sourceSubtitle?: string;
   sourceMaterialHtml: string;
 }) {
   const { synchronizationUnits } = segmentNarrationDocument({ ...options, segmentationVersion: 1 });
-  const { html, mismatch } = renderNarrationDocument({
+  const { html, mismatch } = await renderNarrationDocument({
     narrationDocument: {
       segmentationVersion: 1,
       sourceSubtitle: options.sourceSubtitle,
       synchronizationUnits,
     },
-    narrationSourceMaterialHtml: options.sourceMaterialHtml,
+    loadNarrationSourceMaterial: async () => options.sourceMaterialHtml,
     originalUrl: "https://publisher.example/articles/story",
     sourceTitle: options.sourceTitle,
   });
@@ -32,7 +32,7 @@ function renderSourceMaterial(options: {
   return { html, synchronizationUnits };
 }
 
-test("creates deterministic synchronization units from document-style HTML", () => {
+test("creates deterministic synchronization units from document-style HTML", async () => {
   const options = {
     sourceTitle: "A Source Title",
     sourceMaterialHtml: `
@@ -45,7 +45,7 @@ test("creates deterministic synchronization units from document-style HTML", () 
     `,
   };
 
-  const narrationDocument = renderSourceMaterial(options);
+  const narrationDocument = await renderSourceMaterial(options);
 
   expect(narrationDocument).toEqual({
     html: '<article><h1 data-synchronization-unit="narration-unit-0001">A Source Title</h1><p data-synchronization-unit="narration-unit-0002">The first <em>paragraph</em>.</p><h2 data-synchronization-unit="narration-unit-0003">A section</h2><p data-synchronization-unit="narration-unit-0003">The second <strong>paragraph</strong>.</p></article>',
@@ -58,11 +58,11 @@ test("creates deterministic synchronization units from document-style HTML", () 
       },
     ],
   });
-  expect(renderSourceMaterial(options)).toEqual(narrationDocument);
+  expect(await renderSourceMaterial(options)).toEqual(narrationDocument);
 });
 
-test("suppresses an equivalent source heading despite source-formatting whitespace", () => {
-  const narrationDocument = renderSourceMaterial({
+test("suppresses an equivalent source heading despite source-formatting whitespace", async () => {
+  const narrationDocument = await renderSourceMaterial({
     sourceTitle: "A heading wrapped onto two lines",
     sourceMaterialHtml: `<h1>A heading wrapped onto\ntwo lines</h1><p>Body.</p>`,
   });
@@ -74,8 +74,8 @@ test("suppresses an equivalent source heading despite source-formatting whitespa
   expect(narrationDocument.html.match(/A heading wrapped onto two lines/gu)).toHaveLength(1);
 });
 
-test("retains only safe document structure, attributes, and links", () => {
-  const narrationDocument = renderSourceMaterial({
+test("retains only safe document structure, attributes, and links", async () => {
+  const narrationDocument = await renderSourceMaterial({
     sourceTitle: "Safe document",
     sourceMaterialHtml: `
       <div class="layout" onclick="track()">
@@ -109,8 +109,8 @@ test("retains only safe document structure, attributes, and links", () => {
   expect(narrationDocument.html).not.toMatch(/class|onclick|javascript:|script|img|target/iu);
 });
 
-test("preserves explicit line breaks and flattens nested generic element boundaries", () => {
-  const narrationDocument = renderSourceMaterial({
+test("preserves explicit line breaks and flattens nested generic element boundaries", async () => {
+  const narrationDocument = await renderSourceMaterial({
     sourceTitle: "Structured whitespace",
     sourceMaterialHtml: `<p>Before<br>After <custom-inline>the boundary</custom-inline>.</p>`,
   });
@@ -124,9 +124,9 @@ test("preserves explicit line breaks and flattens nested generic element boundar
   });
 });
 
-test("retains structural wrappers when an oversized paragraph becomes multiple units", () => {
+test("retains structural wrappers when an oversized paragraph becomes multiple units", async () => {
   const paragraphText = Array.from({ length: 500 }, (_, index) => `word${index + 1}`).join(" ");
-  const narrationDocument = renderSourceMaterial({
+  const narrationDocument = await renderSourceMaterial({
     sourceTitle: "A long document",
     sourceMaterialHtml: `<blockquote data-source-id="42"><p>${paragraphText}</p></blockquote>`,
   });
@@ -151,8 +151,8 @@ test("retains structural wrappers when an oversized paragraph becomes multiple u
   expect(narrationDocument.html).not.toContain("data-source-id");
 });
 
-test("keeps a final heading as structured text and excludes non-content subtrees", () => {
-  const narrationDocument = renderSourceMaterial({
+test("keeps a final heading as structured text and excludes non-content subtrees", async () => {
+  const narrationDocument = await renderSourceMaterial({
     sourceTitle: "Heading document",
     sourceMaterialHtml: `
       <script><p>Script text.</p></script>
@@ -171,8 +171,8 @@ test("keeps a final heading as structured text and excludes non-content subtrees
   });
 });
 
-test("preserves generic block boundaries and suppresses a matching source heading", () => {
-  const narrationDocument = renderSourceMaterial({
+test("preserves generic block boundaries and suppresses a matching source heading", async () => {
+  const narrationDocument = await renderSourceMaterial({
     sourceTitle: "The source title",
     sourceMaterialHtml: `
       <div>Source summary.</div>
@@ -191,8 +191,8 @@ test("preserves generic block boundaries and suppresses a matching source headin
   expect(narrationDocument.html.match(/The source title/gu)).toHaveLength(1);
 });
 
-test("groups units by their original structural containers", () => {
-  const narrationDocument = renderSourceMaterial({
+test("groups units by their original structural containers", async () => {
+  const narrationDocument = await renderSourceMaterial({
     sourceTitle: "Lists",
     sourceMaterialHtml: `
       <ol><li><p>First paragraph.</p><p>Second paragraph.</p></li></ol>
@@ -205,9 +205,9 @@ test("groups units by their original structural containers", () => {
   );
 });
 
-test("preserves headings and inline markup across oversized synchronization units", () => {
+test("preserves headings and inline markup across oversized synchronization units", async () => {
   const paragraphText = Array.from({ length: 500 }, (_, index) => `word${index + 1}`).join(" ");
-  const narrationDocument = renderSourceMaterial({
+  const narrationDocument = await renderSourceMaterial({
     sourceTitle: "Marked-up document",
     sourceMaterialHtml: `<h2>A long section</h2><p><em>${paragraphText}</em></p>`,
   });
@@ -225,7 +225,7 @@ test("preserves headings and inline markup across oversized synchronization unit
   ).toBe(`A long section\n\n${paragraphText}`);
 });
 
-test("ignores HTML formatting whitespace while preserving explicit breaks", () => {
+test("ignores HTML formatting whitespace while preserving explicit breaks", async () => {
   const sourceTitle = "Whitespace";
   const compactHtml =
     "<p>During my life I played a role in <em>developing software</em>.<br>After the break.</p>";
@@ -235,9 +235,12 @@ test("ignores HTML formatting whitespace while preserving explicit breaks", () =
     software</em>.<br>
     After the break.
   </p>`;
-  const compactDocument = renderSourceMaterial({ sourceTitle, sourceMaterialHtml: compactHtml });
+  const compactDocument = await renderSourceMaterial({
+    sourceTitle,
+    sourceMaterialHtml: compactHtml,
+  });
 
-  expect(renderSourceMaterial({ sourceTitle, sourceMaterialHtml: formattedHtml })).toEqual(
+  expect(await renderSourceMaterial({ sourceTitle, sourceMaterialHtml: formattedHtml })).toEqual(
     compactDocument,
   );
   expect(compactDocument.html).toBe(
@@ -248,8 +251,8 @@ test("ignores HTML formatting whitespace while preserving explicit breaks", () =
   );
 });
 
-test("opens with the source title and source subtitle as two units inside an hgroup", () => {
-  const narrationDocument = renderSourceMaterial({
+test("opens with the source title and source subtitle as two units inside an hgroup", async () => {
+  const narrationDocument = await renderSourceMaterial({
     sourceTitle: "A Source Title",
     sourceSubtitle: "  A short summary beneath the title.  ",
     sourceMaterialHtml: "<p>The first paragraph.</p><p>The second paragraph.</p>",
@@ -266,8 +269,8 @@ test("opens with the source title and source subtitle as two units inside an hgr
   });
 });
 
-test("keeps a heading right after the cut out of the source subtitle unit", () => {
-  const narrationDocument = renderSourceMaterial({
+test("keeps a heading right after the cut out of the source subtitle unit", async () => {
+  const narrationDocument = await renderSourceMaterial({
     sourceTitle: "A Source Title",
     sourceSubtitle: "A short summary.",
     sourceMaterialHtml: "<h2>Introduction</h2><p>The first paragraph.</p>",
@@ -283,8 +286,8 @@ test("keeps a heading right after the cut out of the source subtitle unit", () =
   });
 });
 
-test("opens with the source title alone and no hgroup without a source subtitle", () => {
-  const narrationDocument = renderSourceMaterial({
+test("opens with the source title alone and no hgroup without a source subtitle", async () => {
+  const narrationDocument = await renderSourceMaterial({
     sourceTitle: "A Source Title",
     sourceMaterialHtml: "<h2>Introduction</h2><p>The first paragraph.</p>",
   });
@@ -298,14 +301,14 @@ test("opens with the source title alone and no hgroup without a source subtitle"
   });
 });
 
-test("loads a unit that the withdrawn speech policy 7 marked as continuing its narration block", () => {
+test("loads a unit that the withdrawn speech policy 7 marked as continuing its narration block", async () => {
   const unit = { id: "narration-unit-0002", narrationText: "Rest.", continuesNarrationBlock: true };
 
   expect(SYNCHRONIZATION_UNIT_SCHEMA.parse(unit)).toStrictEqual(unit);
 });
 
-test("never marks a unit as continuing its narration block", () => {
-  const { synchronizationUnits } = renderSourceMaterial({
+test("never marks a unit as continuing its narration block", async () => {
+  const { synchronizationUnits } = await renderSourceMaterial({
     sourceTitle: "Titel",
     sourceMaterialHtml: `<p>${"Ein Satz, der lang genug ist. ".repeat(120)}</p>`,
   });
@@ -314,13 +317,16 @@ test("never marks a unit as continuing its narration block", () => {
   expect(synchronizationUnits.every((unit) => !("continuesNarrationBlock" in unit))).toBe(true);
 });
 
-test("places a heading before the list it introduces, with the unit of the first item", () => {
+test("places a heading before the list it introduces, with the unit of the first item", async () => {
   expect(
-    renderSourceMaterial({
-      sourceTitle: "A Source Title",
-      sourceSubtitle: "A source subtitle",
-      sourceMaterialHtml: "<h2>A list</h2><ul><li>First <b>item</b></li><li>Second item</li></ul>",
-    }).html,
+    (
+      await renderSourceMaterial({
+        sourceTitle: "A Source Title",
+        sourceSubtitle: "A source subtitle",
+        sourceMaterialHtml:
+          "<h2>A list</h2><ul><li>First <b>item</b></li><li>Second item</li></ul>",
+      })
+    ).html,
   ).toBe(
     '<article><hgroup><h1 data-synchronization-unit="narration-unit-0001">A Source Title</h1><p data-synchronization-unit="narration-unit-0002">A source subtitle</p></hgroup><h2 data-synchronization-unit="narration-unit-0003">A list</h2><ul><li><p data-synchronization-unit="narration-unit-0003">First <b>item</b></p></li><li><p data-synchronization-unit="narration-unit-0004">Second item</p></li></ul></article>',
   );

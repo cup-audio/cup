@@ -22,13 +22,21 @@ const EXISTING_CONVERSION_FIXTURE_SCHEMA = z
 // historical shape was written, so the existing-conversion path keeps rendering every audiobook
 // prepared before the narration document was rendered on request.
 const FIXTURES_DIRECTORY = path.join(import.meta.dirname, "golden-fixtures");
+// An existing conversion's manifest references no narration source material, so rendering it never
+// loads one.
+const WITHOUT_NARRATION_SOURCE_MATERIAL = {
+  sourceTitle: "Title",
+  loadNarrationSourceMaterial: async () => {
+    throw new Error("An existing conversion has no narration source material to load.");
+  },
+};
 
 const FIXTURE_FILE_NAMES = fs
   .readdirSync(FIXTURES_DIRECTORY)
   .filter((fileName) => fileName.endsWith(".json"))
   .toSorted();
 
-test("covers every committed existing-conversion golden fixture", () => {
+test("covers every committed existing-conversion golden fixture", async () => {
   expect(FIXTURE_FILE_NAMES).toEqual([
     "before-hgroup.json",
     "block-split-into-several-units.json",
@@ -39,16 +47,17 @@ test("covers every committed existing-conversion golden fixture", () => {
   ]);
 });
 
-test.for(FIXTURE_FILE_NAMES)("renders the stored HTML of %s", (fileName) => {
+test.for(FIXTURE_FILE_NAMES)("renders the stored HTML of %s", async (fileName) => {
   const { originalUrl, storedHtml, synchronizationUnits, expectedHtml } =
     EXISTING_CONVERSION_FIXTURE_SCHEMA.parse(
       JSON.parse(fs.readFileSync(path.join(FIXTURES_DIRECTORY, fileName), "utf8")),
     );
 
   expect(
-    renderNarrationDocument({
+    await renderNarrationDocument({
       narrationDocument: { html: storedHtml, synchronizationUnits },
       originalUrl,
+      ...WITHOUT_NARRATION_SOURCE_MATERIAL,
     }),
   ).toEqual({ html: expectedHtml, synchronizationUnits });
 });

@@ -30,20 +30,20 @@ const SEGMENTATION_FIXTURE_INPUT_SCHEMA = z.object({
  * Segments narration source material with segmentation version 2 and renders it as a new conversion
  * whose stored units are the derived ones, as preparation and the listener API do.
  */
-function renderWithVersion2(options: {
+async function renderWithVersion2(options: {
   sourceTitle: string;
   sourceSubtitle?: string;
   sourceMaterialHtml: string;
-}): { html: string; synchronizationUnits: readonly SynchronizationUnit[] } {
+}): Promise<{ html: string; synchronizationUnits: readonly SynchronizationUnit[] }> {
   const { synchronizationUnits } = segmentNarrationDocument({ ...options, segmentationVersion: 2 });
-  const { html, mismatch } = renderNarrationDocument({
+  const { html, mismatch } = await renderNarrationDocument({
     narrationDocument: {
       segmentationVersion: 2,
       sourceSubtitle: options.sourceSubtitle,
       fetchedUrl: FETCHED_URL,
       synchronizationUnits,
     },
-    narrationSourceMaterialHtml: options.sourceMaterialHtml,
+    loadNarrationSourceMaterial: async () => options.sourceMaterialHtml,
     originalUrl: FETCHED_URL,
     sourceTitle: options.sourceTitle,
   });
@@ -54,9 +54,9 @@ function renderWithVersion2(options: {
 }
 
 /** Returns the narration document's body after the source title. */
-function renderBody(sourceMaterialHtml: string): string {
+async function renderBody(sourceMaterialHtml: string): Promise<string> {
   const sourceTitle = "Story title";
-  const { html } = renderWithVersion2({ sourceTitle, sourceMaterialHtml });
+  const { html } = await renderWithVersion2({ sourceTitle, sourceMaterialHtml });
   const opening = `<article><h1 data-synchronization-unit="narration-unit-0001">${sourceTitle}</h1>`;
 
   expect(html.startsWith(opening) && html.endsWith("</article>")).toBe(true);
@@ -119,9 +119,9 @@ function extractShownText(node: DefaultTreeAdapterMap["childNode"]): string {
   return node.childNodes.map(extractShownText).join("");
 }
 
-test("marks each table row as one unit and the caption as its own, keeping cells and empty cells", () => {
+test("marks each table row as one unit and the caption as its own, keeping cells and empty cells", async () => {
   expect(
-    renderBody(
+    await renderBody(
       '<table class="data">\n  <caption>Latency by region</caption>\n  <thead><tr><th scope="col">Region</th><th>Latency</th></tr></thead>\n  <tbody>\n    <tr><td>Europe</td><td>380 ms</td></tr>\n    <tr><td><p>Asia</p><p>and Oceania</p></td><td>420 <sub>ms</sub></td></tr>\n  </tbody>\n  <tfoot><tr><td></td><td colspan="2">Median</td></tr></tfoot>\n</table>',
     ),
   ).toBe(
@@ -129,15 +129,17 @@ test("marks each table row as one unit and the caption as its own, keeping cells
   );
 });
 
-test("places a heading before its table with the unit of the table's first row", () => {
-  expect(renderBody("<h2>Prices</h2><table><tr><td>Basic</td><td>5 €</td></tr></table>")).toBe(
+test("places a heading before its table with the unit of the table's first row", async () => {
+  expect(
+    await renderBody("<h2>Prices</h2><table><tr><td>Basic</td><td>5 €</td></tr></table>"),
+  ).toBe(
     '<h2 data-synchronization-unit="narration-unit-0002">Prices</h2><div data-scroll-card=""><table><tbody><tr data-synchronization-unit="narration-unit-0002"><td>Basic</td><td>5 €</td></tr></tbody></table></div>',
   );
 });
 
-test("marks each description list group as one unit across its terms and descriptions", () => {
+test("marks each description list group as one unit across its terms and descriptions", async () => {
   expect(
-    renderBody(
+    await renderBody(
       "<h2>Terms</h2><dl>\n  <dt>Term one</dt>\n  <dt>Term one, again</dt>\n  <dd>Description one.</dd>\n  <div><dt>Term two</dt><dd><p>First.</p><p>Second.</p></dd></div>\n  <dd></dd>\n</dl>",
     ),
   ).toBe(
@@ -145,9 +147,9 @@ test("marks each description list group as one unit across its terms and descrip
   );
 });
 
-test("shows preformatted text split at line breaks as one pre per unit in one scroll card", () => {
+test("shows preformatted text split at line breaks as one pre per unit in one scroll card", async () => {
   const lines = Array.from({ length: 100 }, (_, index) => `line ${index + 1} of a long poem`);
-  const body = renderBody(`<pre>${lines.join("\n")}</pre>`);
+  const body = await renderBody(`<pre>${lines.join("\n")}</pre>`);
 
   expect(body).toBe(
     `<div data-scroll-card=""><pre data-synchronization-unit="narration-unit-0002">${lines.slice(0, 87).join("<br>")}</pre><pre data-synchronization-unit="narration-unit-0003">${lines.slice(87).join("<br>")}</pre></div>`,
@@ -159,11 +161,11 @@ test.for(
     .readdirSync(VERSION_2_FIXTURES_DIRECTORY)
     .filter((fileName) => fileName.endsWith(".json"))
     .toSorted(),
-)("shows exactly the narration text of every unit of the golden fixture %s", (fileName) => {
+)("shows exactly the narration text of every unit of the golden fixture %s", async (fileName) => {
   const fixture = SEGMENTATION_FIXTURE_INPUT_SCHEMA.parse(
     JSON.parse(fs.readFileSync(path.join(VERSION_2_FIXTURES_DIRECTORY, fileName), "utf8")),
   );
-  const { html, synchronizationUnits } = renderWithVersion2(fixture);
+  const { html, synchronizationUnits } = await renderWithVersion2(fixture);
 
   expect(readShownUnitTexts(html)).toEqual(
     new Map(synchronizationUnits.map(({ id, narrationText }) => [id, narrationText] as const)),
