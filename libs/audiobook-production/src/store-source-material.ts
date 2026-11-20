@@ -45,40 +45,23 @@ export type StoreSourceMaterialOptions = {
  * Keeps the audiobook source material, as source material preparation produced it, for possible
  * future evals. No manifest records it and nothing in the app reads it.
  */
-export async function storeAudiobookSourceMaterial({
-  artifactPrefix,
-  bucket,
-  conversionId,
-  html,
-}: StoreSourceMaterialOptions): Promise<void> {
-  const key = `${artifactPrefix ?? createConversionArtifactPrefix(conversionId)}audiobook-source-material.html`;
-  const storedObject = await bucket.put(key, html, {
-    httpMetadata: { contentType: SOURCE_MATERIAL_CONTENT_TYPE },
-  });
-
-  if (!storedObject) {
-    throw new CupError(`Audiobook source material upload did not produce an object: ${key}`);
-  }
+export async function storeAudiobookSourceMaterial(
+  options: StoreSourceMaterialOptions,
+): Promise<void> {
+  await storeSourceMaterial({ ...options, fileName: "audiobook-source-material.html" });
 }
 
 /**
  * Stores the narration source material exactly as narration content selection selected it, and
  * returns the reference the manifest records, through which alone it is read.
  */
-export async function storeNarrationSourceMaterial({
-  artifactPrefix,
-  bucket,
-  conversionId,
-  html,
-}: StoreSourceMaterialOptions): Promise<NarrationSourceMaterialReference> {
-  const key = `${artifactPrefix ?? createConversionArtifactPrefix(conversionId)}narration-source-material.html`;
-  const storedObject = await bucket.put(key, html, {
-    httpMetadata: { contentType: SOURCE_MATERIAL_CONTENT_TYPE },
+export async function storeNarrationSourceMaterial(
+  options: StoreSourceMaterialOptions,
+): Promise<NarrationSourceMaterialReference> {
+  const storedObject = await storeSourceMaterial({
+    ...options,
+    fileName: "narration-source-material.html",
   });
-
-  if (!storedObject) {
-    throw new CupError(`Narration source material upload did not produce an object: ${key}`);
-  }
 
   // The account artifact writer answers a repeated write with the object it already stored, so
   // the reference describes the stored object rather than the HTML offered in this attempt.
@@ -115,4 +98,27 @@ export async function loadNarrationSourceMaterial({
   }
 
   return storedObject.text();
+}
+
+async function storeSourceMaterial({
+  artifactPrefix,
+  bucket,
+  conversionId,
+  html,
+  fileName,
+}: StoreSourceMaterialOptions & { fileName: string }): Promise<{
+  key: string;
+  size: number;
+  etag: string;
+}> {
+  const key = `${artifactPrefix ?? createConversionArtifactPrefix(conversionId)}${fileName}`;
+  const storedObject = await bucket.put(key, html, {
+    httpMetadata: { contentType: SOURCE_MATERIAL_CONTENT_TYPE },
+  });
+
+  if (!storedObject) {
+    throw new CupError(`Source material upload did not produce an object: ${key}`);
+  }
+
+  return storedObject;
 }

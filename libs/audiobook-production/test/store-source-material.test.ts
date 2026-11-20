@@ -104,12 +104,12 @@ test("fails when storage produces no object", async () => {
   await expect(
     storeNarrationSourceMaterial({ bucket, conversionId: "conversion-id", html: "<p>x</p>" }),
   ).rejects.toThrow(
-    "Narration source material upload did not produce an object: conversions/conversion-id/narration-source-material.html",
+    "Source material upload did not produce an object: conversions/conversion-id/narration-source-material.html",
   );
   await expect(
     storeAudiobookSourceMaterial({ bucket, conversionId: "conversion-id", html: "<p>x</p>" }),
   ).rejects.toThrow(
-    "Audiobook source material upload did not produce an object: conversions/conversion-id/audiobook-source-material.html",
+    "Source material upload did not produce an object: conversions/conversion-id/audiobook-source-material.html",
   );
 });
 
