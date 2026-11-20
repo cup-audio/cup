@@ -95,7 +95,7 @@ Each [segmentation](../GLOSSARY.md#segmentation) version is a frozen module with
 
 Version 1 is the unit rules from before segmentation was split out, under which every table cell and description list term or description is a unit of its own. Version 2 narrates a table row, a description list group and a line-broken `pre` as the listener reads them: one unit per row or group, and preformatted text that keeps its line breaks. ADR 0035 lists its rules, and the [version 2 golden fixtures](../../libs/narration-document-creation/test/segmentation-version-2/golden-fixtures/) pin them.
 
-The [narration content selection evals](../../libs/narration-source-analysis/test/evals/README.md) still segment with version 1, which their goldens were recorded with.
+The [narration content selection evals](../../libs/narration-source-analysis/test/evals/README.md) segment with the version preparation uses, so a new version needs their goldens rerecorded.
 
 ## Narration language
 

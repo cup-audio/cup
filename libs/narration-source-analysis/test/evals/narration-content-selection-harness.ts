@@ -1,7 +1,10 @@
 import { createHarness, toJsonValue } from "vitest-evals";
 import type { JsonValue, TranscriptEvent } from "vitest-evals";
 
-import { segmentNarrationDocument } from "@cup/narration-document-creation";
+import {
+  CURRENT_SEGMENTATION_VERSION,
+  segmentNarrationDocument,
+} from "@cup/narration-document-creation";
 import type { SynchronizationUnit } from "@cup/narration-document-creation";
 
 import { runSelection } from "#src/narration-content-selection.ts";
@@ -52,12 +55,9 @@ export function createNarrationContentSelectionHarness(
         sourceMaterialHtml: input.inputHtml,
         ...(signal ? { signal } : {}),
       });
-      // Pinned to segmentation version 1, which the committed goldens were recorded with, although
-      // preparation segments with version 2: these evals measure narration content selection, and
-      // moving them to version 2 would change the goldens of every case whose selection keeps a
-      // table, which only a paid eval run can record.
+      // Segments with the version preparation uses, so the goldens hold the units production produces.
       const { synchronizationUnits } = segmentNarrationDocument({
-        segmentationVersion: 1,
+        segmentationVersion: CURRENT_SEGMENTATION_VERSION,
         sourceTitle: input.sourceTitle,
         ...(input.sourceSubtitle === undefined ? {} : { sourceSubtitle: input.sourceSubtitle }),
         sourceMaterialHtml: selection.selectedSourceMaterialHtml,
