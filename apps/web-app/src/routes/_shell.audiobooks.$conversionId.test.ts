@@ -380,6 +380,134 @@ test("a table row, and a heading with the table's first row, highlight and play 
   await expectPlayingFrom(page, 15);
 });
 
+test(
+  "wide tables and preformatted text scroll inside their cards, never the page",
+  { tag: VISUAL_TAG },
+  async ({ mount, page }) => {
+    const component = await mount("routes/_shell.audiobooks.$conversionId/KeptMarkup");
+    const scrollCards = component.locator("[data-scroll-card]");
+    await expect(scrollCards).toHaveCount(3);
+
+    await expectNoHorizontalOverflow(page);
+    for (const scrollCard of await scrollCards.all()) {
+      const { scrollWidth, clientWidth } = await scrollCard.evaluate((element) => ({
+        scrollWidth: element.scrollWidth,
+        clientWidth: element.clientWidth,
+      }));
+      expect(clientWidth).toBeGreaterThan(0);
+      expect(scrollWidth).toBeGreaterThanOrEqual(clientWidth);
+      await expect(scrollCard).toHaveCSS("overflow-x", "auto");
+    }
+  },
+);
+
+/**
+ * Makes the screen as tall as the page, so the whole narration document shows with the shell's top
+ * bar above it and the player sheet below it, none of them over another.
+ */
+async function showWholePage(page: Page) {
+  // The page reaches its height once the narration document is in.
+  await expect(page.getByRole("article")).toBeVisible();
+  const viewport = page.viewportSize();
+  expect(viewport).not.toBeNull();
+  const pageHeight = await page.evaluate(() => document.documentElement.scrollHeight);
+  await page.setViewportSize({ width: viewport!.width, height: pageHeight });
+}
+
+/**
+ * The area of the screen that holds every given element, with room for a highlight bubble, which
+ * reaches 12 px past its element.
+ */
+async function readUnionBounds(page: Page, locators: Locator[]) {
+  const viewport = page.viewportSize();
+  expect(viewport).not.toBeNull();
+  const boxes = await Promise.all(locators.map((locator) => locator.boundingBox()));
+  const left = Math.max(0, Math.min(...boxes.map((box) => box!.x)) - HIGHLIGHT_MARGIN_PIXELS);
+  const top = Math.max(0, Math.min(...boxes.map((box) => box!.y)) - HIGHLIGHT_MARGIN_PIXELS);
+  const right = Math.min(
+    viewport!.width,
+    Math.max(...boxes.map((box) => box!.x + box!.width)) + HIGHLIGHT_MARGIN_PIXELS,
+  );
+  const bottom = Math.min(
+    viewport!.height,
+    Math.max(...boxes.map((box) => box!.y + box!.height)) + HIGHLIGHT_MARGIN_PIXELS,
+  );
+  return { x: left, y: top, width: right - left, height: bottom - top };
+}
+
+const HIGHLIGHT_MARGIN_PIXELS = 16;
+
+test(
+  "renders every kept element of the narration document",
+  { tag: VISUAL_TAG },
+  async ({ mount, page }) => {
+    const component = await mount("routes/_shell.audiobooks.$conversionId/KeptMarkup");
+    await showWholePage(page);
+
+    await expect(component.getByRole("article")).toHaveScreenshot("kept-markup.png");
+  },
+);
+
+test(
+  "a wide table and a long preformatted line scroll sideways inside their cards",
+  { tag: VISUAL_TAG },
+  async ({ mount, page }) => {
+    const component = await mount("routes/_shell.audiobooks.$conversionId/KeptMarkup");
+    await showWholePage(page);
+    const tableCard = component.locator("[data-scroll-card]").filter({ hasText: "Conversions" });
+    const preformattedTextCard = component.locator("[data-scroll-card]:has(pre)");
+
+    for (const [scrollCard, screenshotName] of [
+      [tableCard, "kept-markup-table-scrolled.png"],
+      [preformattedTextCard, "kept-markup-pre-scrolled.png"],
+    ] as const) {
+      await scrollCard.evaluate((element) => {
+        element.scrollLeft = element.scrollWidth;
+      });
+      await expect(scrollCard).toHaveScreenshot(screenshotName);
+    }
+  },
+);
+
+test("a link's popover points at the link", { tag: VISUAL_TAG }, async ({ mount, page }) => {
+  const component = await mount("routes/_shell.audiobooks.$conversionId/KeptMarkup");
+  const link = component.getByRole("link", { name: "postmortem archive", exact: true });
+
+  await link.scrollIntoViewIfNeeded();
+  await link.click();
+  await expect(page.getByRole("link", { name: /^Open link/ })).toBeVisible();
+  await expect(page).toHaveScreenshot("kept-markup-link-popover.png");
+});
+
+test(
+  "a heading with a table's first row and a single cell are highlighted within the table",
+  { tag: VISUAL_TAG },
+  async ({ mount, page }) => {
+    const component = await mount("routes/_shell.audiobooks.$conversionId/KeptMarkup");
+    await showWholePage(page);
+    const position = component.getByRole("slider", {
+      name: "Position in Keeping the pipeline honest",
+    });
+    const heading = component.getByRole("heading", { name: "Monthly figures" });
+    const headerRow = component.getByRole("row").filter({ hasText: "Conversions" });
+    const cell = component.getByRole("cell", { name: "Kept for long-form articles" });
+
+    // The heading's unit is the ninth, which starts at 40 s; the cell's is the sixteenth.
+    await position.fill("41000");
+    await expect(heading).toHaveAttribute("aria-current", "true");
+    await expect(headerRow).toHaveAttribute("aria-current", "true");
+    await expect(page).toHaveScreenshot("kept-markup-heading-and-row-highlight.png", {
+      clip: await readUnionBounds(page, [heading, component.locator("h3 + [data-scroll-card]")]),
+    });
+
+    await position.fill("76000");
+    await expect(cell).toHaveAttribute("aria-current", "true");
+    await expect(
+      component.locator("[data-scroll-card]").filter({ hasText: "Kept for long-form articles" }),
+    ).toHaveScreenshot("kept-markup-cell-highlight.png");
+  },
+);
+
 test("a failed segment is marked across all its elements", async ({ mount }) => {
   const component = await mount(
     "routes/_shell.audiobooks.$conversionId/HeadingBeforeAListWithFailedSegment",

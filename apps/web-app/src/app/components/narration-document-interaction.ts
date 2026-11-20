@@ -1,7 +1,12 @@
 import { css } from "@linaria/core";
 
+import { interTypefaceScope } from "#src/app/global-styles.js";
+
 /** Space kept between the link popover and its link, and between the popover and the screen edge. */
 const POPOVER_MARGIN_PIXELS = 8;
+
+/** Closest the arrow's middle comes to the popover's side, so it stays clear of the rounded corner. */
+const POPOVER_ARROW_INSET_PIXELS = 16;
 
 /**
  * Makes the rendered narration document interactive: a tap on a segment's text plays from it, a tap
@@ -131,6 +136,10 @@ function createLinkPopover(): LinkPopover {
   popover.className = popoverClassName;
   popover.target = "_blank";
   popover.rel = "noopener noreferrer";
+  // Appended to the body, outside the redesigned screen, so it opts out of Space Mono itself.
+  for (const [name, value] of Object.entries(interTypefaceScope)) {
+    popover.setAttribute(name, value);
+  }
   const label = document.createElement("span");
   label.className = popoverLabelClassName;
   label.textContent = "Open link ↗";
@@ -224,6 +233,12 @@ function placePopover(popover: HTMLElement, link: HTMLAnchorElement) {
 
   popover.style.top = `${top}px`;
   popover.style.left = `${left}px`;
+  // The arrow points at the middle of the line it is placed against, unless that is past a corner.
+  const arrowX = Math.min(
+    Math.max(POPOVER_ARROW_INSET_PIXELS, anchorRect.left + anchorRect.width / 2 - left),
+    popoverRect.width - POPOVER_ARROW_INSET_PIXELS,
+  );
+  popover.style.setProperty("--link-popover-arrow-x", `${arrowX}px`);
   popover.dataset["placement"] = fitsBelow ? "below" : "above";
 }
 
@@ -287,18 +302,37 @@ const popoverClassName = css`
   color: var(--color-page);
   text-decoration: none;
   background-color: var(--color-ink);
-  border-radius: 12px;
-  box-shadow: 0 4px 16px rgb(0 0 0 / 30%);
+  border-radius: var(--spacing-gutter);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 25%);
+
+  /* the arrow, a square turned on its corner, half of it under the box; placePopover sets its x */
+  &::before {
+    position: absolute;
+    left: calc(var(--link-popover-arrow-x) - 6px);
+    width: 12px;
+    height: 12px;
+    content: "";
+    background-color: inherit;
+    transform: rotate(45deg);
+  }
+
+  &[data-placement="below"]::before {
+    top: -4px;
+  }
+
+  &[data-placement="above"]::before {
+    bottom: -4px;
+  }
 `;
 
 const popoverLabelClassName = css`
-  font-weight: 500;
+  font-weight: var(--font-weight-inter-figma-medium);
 `;
 
 const popoverHostClassName = css`
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   white-space: nowrap;
   opacity: 0.7;
 `;
