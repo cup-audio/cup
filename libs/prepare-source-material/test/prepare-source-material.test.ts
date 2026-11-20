@@ -108,7 +108,7 @@ test("waits for rendered narration content without requiring an h1", async () =>
             throw new Error("Background requests did not become idle");
           }
 
-          return Promise.resolve({ status: () => 200 });
+          return Promise.resolve({ status: () => 200, url: () => SOURCE_URL });
         },
         evaluate: async () => {},
         waitForFunction: (pageFunction, options) => {
@@ -146,6 +146,7 @@ test("waits for rendered narration content without requiring an h1", async () =>
       "<main><p>The first complete source paragraph contains enough narration text to distinguish it from a loading shell.</p><p>The second complete paragraph makes the rendered source ready even though this page intentionally has no level-one heading.</p></main>",
     documentTitle: "Rendered document | Publisher",
     metadataDescriptions: [],
+    fetchedUrl: SOURCE_URL,
     responseStatus: 200,
   });
 });
@@ -155,10 +156,12 @@ test("takes the source title from the visible headline and cuts the source mater
     bodyHtml: `<h1 class="hidden">Hidden page heading</h1><main><p class="kicker">Kicker</p><header><a href="/hub">Hub</a><h1 class="title" data-cup-visible-headline>  The visible
       headline </h1><p>Summary line</p></header><p>First paragraph.</p></main>`,
     documentTitle: "Document title | Publisher",
+    fetchedUrl: SOURCE_URL,
     responseStatus: 200,
   });
 
   expect(sourceMaterial).toEqual({
+    fetchedUrl: SOURCE_URL,
     html: "<main><header><p>Summary line</p></header><p>First paragraph.</p></main>",
     title: "The visible headline",
   });
@@ -169,6 +172,7 @@ test("removes every visible headline mark from the source material", () => {
     bodyHtml:
       "<main><h1 data-cup-visible-headline>Visible headline</h1><p>First paragraph.</p><h1 data-cup-visible-headline>Later heading</h1><p>Second paragraph.</p></main>",
     documentTitle: "Document title",
+    fetchedUrl: SOURCE_URL,
     responseStatus: 200,
   });
 
@@ -184,9 +188,11 @@ test("falls back to the document title and cuts nothing without a visible headli
     prepareLoadedSourcePage({
       bodyHtml,
       documentTitle: " Document title | Publisher ",
+      fetchedUrl: SOURCE_URL,
       responseStatus: 200,
     }),
   ).toEqual({
+    fetchedUrl: SOURCE_URL,
     html: bodyHtml,
     title: "Document title | Publisher",
   });
@@ -198,10 +204,12 @@ test("detects a source subtitle that equals a metadata description and removes i
       summary line. </p></div></header><p>First paragraph.</p></main>`,
     documentTitle: "Source title | Publisher",
     metadataDescriptions: ["A teaser", "A short summary line."],
+    fetchedUrl: SOURCE_URL,
     responseStatus: 200,
   });
 
   expect(sourceMaterial).toEqual({
+    fetchedUrl: SOURCE_URL,
     html: "<main><p>First paragraph.</p></main>",
     title: "Source title",
     subtitle: "A short summary line.",
@@ -218,10 +226,12 @@ test.each([
   const sourceMaterial = prepareLoadedSourcePage({
     bodyHtml: `<main><h1 data-cup-visible-headline>Source title</h1>${subtitleHtml}<p>First paragraph.</p></main>`,
     documentTitle: "Source title | Publisher",
+    fetchedUrl: SOURCE_URL,
     responseStatus: 200,
   });
 
   expect(sourceMaterial).toEqual({
+    fetchedUrl: SOURCE_URL,
     html: "<main><p>First paragraph.</p></main>",
     title: "Source title",
     subtitle: "Summary line",
@@ -235,8 +245,14 @@ test.each([
   const bodyHtml = `<main><h1 data-cup-visible-headline>Source title</h1>${candidateHtml}<p>First paragraph.</p></main>`;
 
   expect(
-    prepareLoadedSourcePage({ bodyHtml, documentTitle: "Source title", responseStatus: 200 }),
+    prepareLoadedSourcePage({
+      bodyHtml,
+      documentTitle: "Source title",
+      fetchedUrl: SOURCE_URL,
+      responseStatus: 200,
+    }),
   ).toEqual({
+    fetchedUrl: SOURCE_URL,
     html: `<main>${candidateHtml}<p>First paragraph.</p></main>`,
     title: "Source title",
   });
@@ -262,10 +278,12 @@ test.each([
     bodyHtml: `<main><h1 data-cup-visible-headline>Source title</h1><p>${blockHtml}</p><p>Summary line</p><p>First paragraph.</p></main>`,
     documentTitle: "Source title",
     metadataDescriptions: ["Summary line"],
+    fetchedUrl: SOURCE_URL,
     responseStatus: 200,
   });
 
   expect(sourceMaterial).toEqual({
+    fetchedUrl: SOURCE_URL,
     html: `<main><p>${blockHtml}</p><p>First paragraph.</p></main>`,
     title: "Source title",
     subtitle: "Summary line",
@@ -277,10 +295,12 @@ test("detects a source subtitle that only mentions a date in an inline time elem
     bodyHtml:
       '<main><h1 data-cup-visible-headline>Source title</h1><p class="summary">What changed after the vote on <time datetime="2026-01-09">January 9</time>.</p><p>First paragraph.</p></main>',
     documentTitle: "Source title",
+    fetchedUrl: SOURCE_URL,
     responseStatus: 200,
   });
 
   expect(sourceMaterial).toEqual({
+    fetchedUrl: SOURCE_URL,
     html: "<main><p>First paragraph.</p></main>",
     title: "Source title",
     subtitle: "What changed after the vote on January 9.",
@@ -293,6 +313,7 @@ test.each(["article-author", "byline", "PostDate"])(
     const sourceMaterial = prepareLoadedSourcePage({
       bodyHtml: `<main><h1 data-cup-visible-headline>Source title</h1><p class="${className}">Jane Doe, Publisher</p><p class="summary">Summary line</p></main>`,
       documentTitle: "Source title",
+      fetchedUrl: SOURCE_URL,
       responseStatus: 200,
     });
 
@@ -306,10 +327,12 @@ test("detects no source subtitle when the candidate repeats the source title", (
       '<main><h1 data-cup-visible-headline>Source title</h1><p class="summary">Source  title</p><p>First paragraph.</p></main>',
     documentTitle: "Source title",
     metadataDescriptions: ["Source title"],
+    fetchedUrl: SOURCE_URL,
     responseStatus: 200,
   });
 
   expect(sourceMaterial).toEqual({
+    fetchedUrl: SOURCE_URL,
     html: '<main><p class="summary">Source  title</p><p>First paragraph.</p></main>',
     title: "Source title",
   });
@@ -321,6 +344,7 @@ test("detects no source subtitle when the metadata description only nearly equal
       "<main><h1 data-cup-visible-headline>Source title</h1><p>Polls show tight races, making it hard to tell.</p><p>First paragraph.</p></main>",
     documentTitle: "Source title",
     metadataDescriptions: ["Polls show tight races, making it difficult to tell."],
+    fetchedUrl: SOURCE_URL,
     responseStatus: 200,
   });
 
@@ -334,10 +358,12 @@ test("tries no further block when the first candidate is not a source subtitle",
       '<main><h1 data-cup-visible-headline>Source title</h1><p id="siteSub">From the free encyclopedia</p><p class="summary">Summary line</p></main>',
     documentTitle: "Source title",
     metadataDescriptions: ["Summary line"],
+    fetchedUrl: SOURCE_URL,
     responseStatus: 200,
   });
 
   expect(sourceMaterial).toEqual({
+    fetchedUrl: SOURCE_URL,
     html: '<main><p id="siteSub">From the free encyclopedia</p><p class="summary">Summary line</p></main>',
     title: "Source title",
   });
@@ -347,6 +373,7 @@ test("leaves the subtitle field absent when the page has no source subtitle", ()
   const sourceMaterial = prepareLoadedSourcePage({
     bodyHtml: "<main><h1 data-cup-visible-headline>Source title</h1><p>First paragraph.</p></main>",
     documentTitle: "Source title",
+    fetchedUrl: SOURCE_URL,
     responseStatus: 200,
   });
 
@@ -361,9 +388,10 @@ test("detects no source subtitle without a visible headline", () => {
       bodyHtml,
       documentTitle: "Document title",
       metadataDescriptions: ["Summary line"],
+      fetchedUrl: SOURCE_URL,
       responseStatus: 200,
     }),
-  ).toEqual({ html: bodyHtml, title: "Document title" });
+  ).toEqual({ fetchedUrl: SOURCE_URL, html: bodyHtml, title: "Document title" });
 });
 
 test("uses the JavaScript-rendered source page when the static page has no source content", async () => {
@@ -380,11 +408,13 @@ test("uses the JavaScript-rendered source page when the static page has no sourc
             bodyHtml:
               "<main><h1 data-cup-visible-headline>Rendered document</h1><p>Complete source text.</p></main>",
             documentTitle: "Rendered document | Publisher",
+            fetchedUrl: SOURCE_URL,
             responseStatus: 200,
           }
         : {
             bodyHtml: '<div id="__next"></div>',
             documentTitle: "",
+            fetchedUrl: SOURCE_URL,
             responseStatus: 200,
           };
     },
@@ -392,6 +422,7 @@ test("uses the JavaScript-rendered source page when the static page has no sourc
 
   expect(javaScriptModes).toEqual([false, true]);
   expect(sourceMaterial).toEqual({
+    fetchedUrl: SOURCE_URL,
     html: "<main><p>Complete source text.</p></main>",
     title: "Rendered document",
   });
@@ -407,11 +438,13 @@ test("rejects an HTTP error page even when it has an document-style title", asyn
           ? {
               bodyHtml: "<main><h1>Access Denied</h1><p>Reference number 123.</p></main>",
               documentTitle: "Access Denied",
+              fetchedUrl: SOURCE_URL,
               responseStatus: 403,
             }
           : {
               bodyHtml: '<div id="__next"></div>',
               documentTitle: "",
+              fetchedUrl: SOURCE_URL,
               responseStatus: 200,
             },
     }),
@@ -428,17 +461,20 @@ test("uses the source page with more source content when both loads are usable",
             bodyHtml:
               "<main><h1 data-cup-visible-headline>Rendered document</h1><p>First paragraph.</p><p>Second paragraph.</p></main>",
             documentTitle: "Rendered document | Publisher",
+            fetchedUrl: SOURCE_URL,
             responseStatus: 200,
           }
         : {
             bodyHtml:
               "<main><h1 data-cup-visible-headline>Static document</h1><p>Preview.</p></main>",
             documentTitle: "Static document | Publisher",
+            fetchedUrl: SOURCE_URL,
             responseStatus: 200,
           },
   });
 
   expect(sourceMaterial).toEqual({
+    fetchedUrl: SOURCE_URL,
     html: "<main><p>First paragraph.</p><p>Second paragraph.</p></main>",
     title: "Rendered document",
   });
@@ -457,11 +493,13 @@ test.each([
       loadSourcePage: async ({ javaScriptEnabled }) => ({
         bodyHtml: `<main><h1 data-cup-visible-headline>Source title</h1><p class="summary">${javaScriptEnabled ? "Rendered summary" : "Static summary"}</p>${hasRenderedLoadMoreText === javaScriptEnabled ? paragraphs : "<p>Preview.</p>"}</main>`,
         documentTitle: "Source title | Publisher",
+        fetchedUrl: SOURCE_URL,
         responseStatus: 200,
       }),
     });
 
     expect(sourceMaterial).toEqual({
+      fetchedUrl: SOURCE_URL,
       html: `<main>${paragraphs}</main>`,
       title: "Source title",
       subtitle: expectedSubtitle,
@@ -484,11 +522,13 @@ test("keeps the static source page when rendering adds only dynamic page chrome"
         ? staticBodyHtml.replace("Open comments", "Open comments · 998 postings")
         : staticBodyHtml,
       documentTitle: "Source title | Publisher",
+      fetchedUrl: SOURCE_URL,
       responseStatus: 200,
     }),
   });
 
   expect(sourceMaterial).toEqual({
+    fetchedUrl: SOURCE_URL,
     html: staticSourceMaterialHtml,
     title: "Source title",
   });
@@ -507,12 +547,14 @@ test("uses the static source page when the JavaScript-enabled load fails", async
         bodyHtml:
           "<main><h1 data-cup-visible-headline>Static document</h1><p>Complete source text.</p></main>",
         documentTitle: "Static document | Publisher",
+        fetchedUrl: SOURCE_URL,
         responseStatus: 200,
       });
     },
   });
 
   expect(sourceMaterial).toEqual({
+    fetchedUrl: SOURCE_URL,
     html: "<main><p>Complete source text.</p></main>",
     title: "Static document",
   });
@@ -536,7 +578,7 @@ test.each([
         }),
         goto: async () => {
           expect(installedCookies).toEqual(cookies ?? []);
-          return { status: () => 200 };
+          return { status: () => 200, url: () => SOURCE_URL };
         },
         evaluate: async () => {},
         waitForFunction: async () => {},
@@ -556,7 +598,11 @@ test.each([
       url: SOURCE_URL,
       ...(cookies === undefined ? {} : { cookies }),
     }),
-  ).resolves.toEqual({ html: "<p>Source content</p>", title: "Source title" });
+  ).resolves.toEqual({
+    fetchedUrl: SOURCE_URL,
+    html: "<p>Source content</p>",
+    title: "Source title",
+  });
   expect(modes).toEqual([false, true]);
 });
 
@@ -641,11 +687,13 @@ test("takes the cover image from the rendered load even when the static load win
           ? "https://cdn.publisher.example/article.jpg"
           : "https://cdn.publisher.example/site-default.jpg",
       },
+      fetchedUrl: SOURCE_URL,
       responseStatus: 200,
     }),
   });
 
   expect(sourceMaterial).toEqual({
+    fetchedUrl: SOURCE_URL,
     html: "<main><p>Complete source text.</p></main>",
     title: "Source title",
     coverImage: { url: "https://cdn.publisher.example/article.jpg" },
@@ -663,6 +711,7 @@ test("keeps the static load's cover image when the rendered load declares none",
       ...(javaScriptEnabled
         ? {}
         : { coverImage: { url: "https://cdn.publisher.example/static.jpg" } }),
+      fetchedUrl: SOURCE_URL,
       responseStatus: 200,
     }),
   });
@@ -675,7 +724,7 @@ test("reads the metadata descriptions from the loaded page's head and body", asy
     newPage: async () => ({
       route: async () => {},
       context: () => ({ addCookies: async () => {} }),
-      goto: async () => ({ status: () => 200 }),
+      goto: async () => ({ status: () => 200, url: () => SOURCE_URL }),
       evaluate: async () => {},
       waitForFunction: async () => {},
       locator: (selector) => ({
@@ -723,7 +772,7 @@ test("reads the cover image declaration from the loaded page's head", async () =
     newPage: async () => ({
       route: async () => {},
       context: () => ({ addCookies: async () => {} }),
-      goto: async () => ({ status: () => 200 }),
+      goto: async () => ({ status: () => 200, url: () => SOURCE_URL }),
       evaluate: async () => {},
       waitForFunction: async () => {},
       locator: (selector) => ({
@@ -745,6 +794,7 @@ test("reads the cover image declaration from the loaded page's head", async () =
     documentTitle: "Source title",
     metadataDescriptions: [],
     coverImage: { url: "https://cdn.publisher.example/cover.jpg" },
+    fetchedUrl: SOURCE_URL,
     responseStatus: 200,
   });
 });
@@ -760,7 +810,7 @@ function createDeclaringBrowser({
     newPage: async () => ({
       route: async () => {},
       context: () => ({ addCookies: async () => {} }),
-      goto: async () => ({ status: () => 200 }),
+      goto: async () => ({ status: () => 200, url: () => SOURCE_URL }),
       evaluate: async () => {},
       waitForFunction: async () => {},
       locator: (selector) => ({
@@ -823,7 +873,11 @@ test.each([
     url: SOURCE_URL,
   });
 
-  expect(sourceMaterial).toEqual({ html: "<p>Source content</p>", title: "Source title" });
+  expect(sourceMaterial).toEqual({
+    fetchedUrl: SOURCE_URL,
+    html: "<p>Source content</p>",
+    title: "Source title",
+  });
 });
 
 test("takes the declared language from the source page load it keeps", async () => {
@@ -836,9 +890,64 @@ test("takes the declared language from the source page load it keeps", async () 
         : "<main><h1 data-cup-visible-headline>Source title</h1><p>The complete and much longer source text.</p></main>",
       documentTitle: "Source title | Publisher",
       declaredLanguage: { htmlLang: javaScriptEnabled ? "en-US" : "de-AT" },
+      fetchedUrl: SOURCE_URL,
       responseStatus: 200,
     }),
   });
 
   expect(sourceMaterial.declaredLanguage).toEqual({ htmlLang: "de-AT" });
+});
+
+test("reports the URL the source page was finally loaded from after redirects", async () => {
+  const browser = {
+    newPage: async () => ({
+      route: async () => {},
+      context: () => ({ addCookies: async () => {} }),
+      goto: async () => ({
+        status: () => 200,
+        url: () => "https://www.publisher.example/stories/story",
+      }),
+      evaluate: async () => {},
+      waitForFunction: async () => {},
+      locator: () => ({
+        innerHTML: async () => "<p>Source content</p>",
+        getAttribute: async () => null,
+      }),
+      title: async () => "Source title",
+      close: async () => {},
+    }),
+  } satisfies Browser;
+
+  const { fetchedUrl } = await loadPublicSourcePage({
+    browser,
+    javaScriptEnabled: false,
+    url: SOURCE_URL,
+  });
+
+  expect(fetchedUrl).toBe("https://www.publisher.example/stories/story");
+});
+
+test("carries the fetched URL of the kept load to the source material", async () => {
+  const sourceMaterial = await prepareSourceMaterial({
+    browser: UNUSED_BROWSER,
+    url: SOURCE_URL,
+    loadSourcePage: async ({ javaScriptEnabled }) =>
+      javaScriptEnabled
+        ? {
+            bodyHtml:
+              "<main><h1 data-cup-visible-headline>Rendered document</h1><p>First paragraph.</p><p>Second paragraph.</p></main>",
+            documentTitle: "Rendered document | Publisher",
+            fetchedUrl: "https://publisher.example/rendered",
+            responseStatus: 200,
+          }
+        : {
+            bodyHtml:
+              "<main><h1 data-cup-visible-headline>Static document</h1><p>Preview.</p></main>",
+            documentTitle: "Static document | Publisher",
+            fetchedUrl: "https://publisher.example/static",
+            responseStatus: 200,
+          },
+  });
+
+  expect(sourceMaterial.fetchedUrl).toBe("https://publisher.example/rendered");
 });

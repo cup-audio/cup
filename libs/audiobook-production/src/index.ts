@@ -22,7 +22,16 @@ export {
   type AudiobookReference,
   type LoadOptions,
   type StoreOptions,
+  type StoredNarrationDocument,
 } from "#src/store-audiobook.ts";
+export {
+  loadNarrationSourceMaterial,
+  storeAudiobookSourceMaterial,
+  storeNarrationSourceMaterial,
+  type NarrationSourceMaterialReference,
+  type SourceMaterialStorage,
+  type StoreSourceMaterialOptions,
+} from "#src/store-source-material.ts";
 
 export { SPEECH_CONFIG, type SpeechConfig } from "#src/speech-synthesis-config.ts";
 export { getNarrationLanguageSupport } from "#src/narration-language-speakability.ts";

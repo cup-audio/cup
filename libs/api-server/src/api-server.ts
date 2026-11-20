@@ -638,7 +638,11 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
                   : undefined,
               ),
             }),
-        narrationDocument: toRenderedNarrationDocumentResponse({ conversionId, audiobook }),
+        narrationDocument: await toRenderedNarrationDocumentResponse({
+          bucket: context.env.AUDIO_BUCKET,
+          conversionId,
+          audiobook,
+        }),
         playbackPosition: toPlaybackPositionResponse(playbackPosition),
       } satisfies Audiobook,
       200,
