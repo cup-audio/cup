@@ -86,7 +86,7 @@ export async function openNarrationLink(webView: WebdriverIO.Browser): Promise<v
   await link.waitForExist({ timeout: 60_000 });
   // Any scroll closes the popover, so the link is scrolled to before the tap, and the scroll event
   // has fired by the second animation frame.
-  await webView.execute((element) => element.scrollIntoView({ block: "center" }), link);
+  await link.scrollIntoView({ block: "center" });
   await webView.execute(
     () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
   );

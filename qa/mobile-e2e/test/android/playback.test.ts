@@ -323,7 +323,9 @@ test("a track URL the server refuses ends the playing session, and the next Play
   await timers.setTimeout((SHORT_URL_LIFETIME_SECONDS + 5) * 1_000);
   // A seek past the buffer requests the track again, with the expired URL.
   const fourthUnitId = (await readUnitIds(webView))[3]!;
-  await webView.$(`[data-synchronization-unit="${fourthUnitId}"]`).click();
+  // The unit's first element, its heading, holds no link.
+  const [fourthUnitHeading] = await webView.$$(`[data-synchronization-unit="${fourthUnitId}"]`);
+  await fourthUnitHeading!.click();
   await waitForSessionToEnd(device, 30_000);
   webView = await device.webView();
   await waitForPlayButton(webView, "Play");
