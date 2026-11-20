@@ -82,10 +82,10 @@ type PresentedFragment = { html: string; hasUnits: boolean };
 const EMPTY_FRAGMENT: PresentedFragment = { html: "", hasUnits: false };
 
 /**
- * Turns a segmented document into the narration document's display HTML, following the spec's
- * presentation rules: the source material's structure and inline markup that the narration document
- * keeps, with every element of a unit marked with the unit attribute, and links resolved against
- * `baseUrl`.
+ * Turns a segmented document into the narration document's display HTML, following the presentation
+ * rules that docs/architecture/conversion.md ("Rendering the narration document") describes: the
+ * source material's structure and inline markup that the narration document keeps, with every
+ * element of a unit marked with the unit attribute, and links resolved against `baseUrl`.
  */
 export function presentNarrationDocument({
   segmentedDocument,

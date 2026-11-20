@@ -24,6 +24,12 @@ The URL submitted to locate the source page carrying the source content.
 
 _Avoid_: source page URL
 
+## fetched URL
+
+The URL the source page was finally loaded from, after redirects. It may differ from the source URL, and the narration document resolves the source page's relative links against it.
+
+_Avoid_: final URL, redirect URL, page URL
+
 ## source title
 
 The headline the source page gives the source content, taken from its visible headline when it has one.

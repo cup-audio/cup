@@ -1,7 +1,7 @@
 import { escapeHtmlAttribute } from "#src/html-escaping.ts";
 
-// The presentation rules that both rendering paths share: the spec's "Presentation rules" of the
-// narration document (https://github.com/cup-audio/cup/issues/493).
+// The presentation rules that both rendering paths share, which docs/architecture/conversion.md
+// ("Rendering the narration document") describes.
 
 /** Marks every element that belongs to a synchronization unit with the unit's ID. */
 export const SYNCHRONIZATION_UNIT_ATTRIBUTE = "data-synchronization-unit";
