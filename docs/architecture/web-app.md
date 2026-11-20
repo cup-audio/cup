@@ -44,7 +44,7 @@ Contrast, measured 2026-11-20 against WCAG 2.2 with ink `rgb(18 18 18)` over the
 
 - **Link marker:** the "↗" tells the listener before tapping that the link leaves Cup, so it is a meaningful graphic that needs 3:1 ([SC 1.4.11](https://www.w3.org/TR/WCAG22/#non-text-contrast)). In ink-40 it reached 2.58:1 on the page and 2.61:1 on a card, so it uses ink-60, at 4.77:1 and 4.89:1.
 - **Header cells and caption:** ink-60 on the card, 4.89:1, above 4.5:1 for small text.
-- **`s` and `del`:** ink-40, 2.58:1 on the page and 2.61:1 on a card, below the 4.5:1 text minimum. This is a known gap, kept because the [spec's styling decision](https://github.com/cup-audio/cup/issues/493) set struck-out text in ink-40.
+- **`s` and `del`:** ink-40, 2.58:1 on the page and 2.61:1 on a card, below the 4.5:1 text minimum. This is a known gap, kept because the [styling decision](https://github.com/cup-audio/cup/issues/491) set struck-out text in ink-40.
 
 The UI gallery story `KeptMarkup` shows every kept element, and the detail view tests hold its screenshots.
 
