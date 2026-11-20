@@ -1,0 +1,14 @@
+{
+  "sourceTitle": "Only a source title",
+  "sourceMaterialHtml": "<h1>Only a source   title</h1><p>The body.</p>",
+  "synchronizationUnits": [
+    {
+      "id": "narration-unit-0001",
+      "narrationText": "Only a source title"
+    },
+    {
+      "id": "narration-unit-0002",
+      "narrationText": "The body."
+    }
+  ]
+}

@@ -4,6 +4,7 @@ import React from "react";
 
 import type {
   Audiobook,
+  AudiobookResponse,
   ErrorResponse,
   PlaybackPosition,
   PreparationPhase,
@@ -37,7 +38,7 @@ export const ReadyAudiobook = {
 } satisfies Story;
 
 const GATES_NOTES_CONVERSION_ID = "7b1736db-31f7-46ba-b6b5-d965770b355b";
-// The local fixture uses createNarrationDocument on the Gates Notes E2E article's source title, source subtitle and body.
+// The local fixture is renderNarrationDocument's HTML, as the listener API serves it, for what createNarrationDocument made of the Gates Notes E2E article's source title, source subtitle and body.
 const gatesNotesRouter = createAppRouter(
   createMemoryHistory({ initialEntries: [`/app/audiobooks/${GATES_NOTES_CONVERSION_ID}`] }),
 );
@@ -286,7 +287,7 @@ const PREPARED_AUDIOBOOK = {
   title: "A deterministic document about careful testing",
   originalUrl: SOURCE_URL,
   narrationDocument: {
-    html: '<article><h1 id="unit-1">A deterministic document about careful testing</h1><p id="unit-2">Keep the important boundaries real.</p><p id="unit-3">Replace only what you cannot control.</p></article>',
+    html: '<article><h1 data-synchronization-unit="unit-1">A deterministic document about careful testing</h1><p data-synchronization-unit="unit-2">Keep the important boundaries real.</p><p data-synchronization-unit="unit-3">Replace only what you cannot control.</p></article>',
     synchronizationUnits: [
       { id: "unit-1", narrationText: "A deterministic document about careful testing" },
       { id: "unit-2", narrationText: "Keep the important boundaries real." },
@@ -386,6 +387,136 @@ export const AudiobookWithFailedSegment = createPreparedStory({
   ],
 });
 
+// A segment with two elements: a heading before a list, and the list's first item.
+const HEADING_BEFORE_A_LIST_AUDIOBOOK = {
+  ...PREPARED_AUDIOBOOK,
+  narrationDocument: {
+    html: '<article><h1 data-synchronization-unit="unit-1">A deterministic document about careful testing</h1><h2 data-synchronization-unit="unit-2">Two rules</h2><ul><li><p data-synchronization-unit="unit-2">Keep the important boundaries real.</p></li><li><p data-synchronization-unit="unit-3">Replace only what you cannot control.</p></li></ul></article>',
+    synchronizationUnits: [
+      { id: "unit-1", narrationText: "A deterministic document about careful testing" },
+      { id: "unit-2", narrationText: "Two rules\n\nKeep the important boundaries real." },
+      { id: "unit-3", narrationText: "Replace only what you cannot control." },
+    ],
+  },
+};
+
+export const HeadingBeforeAList = createPreparedStory({
+  ...createAudiobook(),
+  ...HEADING_BEFORE_A_LIST_AUDIOBOOK,
+});
+
+export const HeadingBeforeAListWithFailedSegment = createPreparedStory({
+  ...HEADING_BEFORE_A_LIST_AUDIOBOOK,
+  status: "ready",
+  segments: [
+    createReadySegment(0),
+    { sequence: 1, status: "failed", explanation: "The provider rejected this text." },
+    createReadySegment(2),
+  ],
+});
+
+// The structure the narration document keeps, in its smallest form: a heading before a table, whose
+// caption, header cells and cells are units, a description list and preformatted text in a scroll
+// card.
+const RESTORED_STRUCTURE_UNITS = [
+  { id: "unit-1", narrationText: "A deterministic document about careful testing" },
+  { id: "unit-2", narrationText: "Latency\n\nLatency by region" },
+  { id: "unit-3", narrationText: "Region" },
+  { id: "unit-4", narrationText: "Latency" },
+  { id: "unit-5", narrationText: "Europe" },
+  { id: "unit-6", narrationText: "380 ms" },
+  { id: "unit-7", narrationText: "Median" },
+  { id: "unit-8", narrationText: "The middle value of all measurements." },
+  { id: "unit-9", narrationText: "A short poem in two lines" },
+];
+
+export const RestoredStructure = createPreparedStory({
+  ...PREPARED_AUDIOBOOK,
+  status: "ready",
+  narrationDocument: {
+    html: '<article><h1 data-synchronization-unit="unit-1">A deterministic document about careful testing</h1><h2 data-synchronization-unit="unit-2">Latency</h2><div data-scroll-card=""><table><caption data-synchronization-unit="unit-2">Latency by region</caption><thead><tr><th data-synchronization-unit="unit-3">Region</th><th data-synchronization-unit="unit-4">Latency</th></tr></thead><tbody><tr><td data-synchronization-unit="unit-5">Europe</td><td data-synchronization-unit="unit-6">380 ms</td></tr></tbody></table></div><dl><dt data-synchronization-unit="unit-7">Median</dt><dd data-synchronization-unit="unit-8">The middle value of all measurements.</dd></dl><div data-scroll-card=""><pre data-synchronization-unit="unit-9">A short poem<br>in two lines</pre></div></article>',
+    synchronizationUnits: RESTORED_STRUCTURE_UNITS,
+  },
+  segments: RESTORED_STRUCTURE_UNITS.map((_, sequence) => createReadySegment(sequence)),
+  narrationTrack: createStoryNarrationTrack(
+    RESTORED_STRUCTURE_UNITS.map(() => SEGMENT_DURATION_MILLISECONDS),
+  ),
+});
+
+// Segmentation version 2's units: a heading before a table with its header row, each table row and
+// a description list group.
+const ROW_UNITS = [
+  { id: "unit-1", narrationText: "A deterministic document about careful testing" },
+  { id: "unit-2", narrationText: "Latency\n\nRegion, Latency" },
+  { id: "unit-3", narrationText: "Europe, 380 ms" },
+  { id: "unit-4", narrationText: "Asia, 420 ms" },
+  { id: "unit-5", narrationText: "Median\n\nThe middle value of all measurements." },
+];
+
+export const RowUnits = createPreparedStory({
+  ...PREPARED_AUDIOBOOK,
+  status: "ready",
+  narrationDocument: {
+    html: '<article><h1 data-synchronization-unit="unit-1">A deterministic document about careful testing</h1><h2 data-synchronization-unit="unit-2">Latency</h2><div data-scroll-card=""><table><thead><tr data-synchronization-unit="unit-2"><th>Region</th><th>Latency</th></tr></thead><tbody><tr data-synchronization-unit="unit-3"><td>Europe</td><td>380 ms</td></tr><tr data-synchronization-unit="unit-4"><td>Asia</td><td>420 ms</td></tr></tbody></table></div><dl><dt data-synchronization-unit="unit-5">Median</dt><dd data-synchronization-unit="unit-5">The middle value of all measurements.</dd></dl></article>',
+    synchronizationUnits: ROW_UNITS,
+  },
+  segments: ROW_UNITS.map((_, sequence) => createReadySegment(sequence)),
+  narrationTrack: createStoryNarrationTrack(ROW_UNITS.map(() => SEGMENT_DURATION_MILLISECONDS)),
+});
+
+/**
+ * A narration document that uses every element the reader keeps. `u="…"` stands for the unit
+ * attribute. The first table has a unit per row, with the heading before it in the first row's
+ * unit; the second has a unit per cell, as an existing conversion's tables do.
+ */
+const KEPT_MARKUP_HTML_SOURCE = `<article>
+<hgroup><h1 u="kept-1">Keeping the pipeline honest</h1><p u="kept-2">Notes from a year of running speech synthesis at scale</p></hgroup>
+<p u="kept-3">Most of our failures were <em>boring</em>. A cron job ran twice; a cache held on to a <strong>stale manifest</strong>; a vendor quietly changed its <i>de facto</i> rate limit, which we only noticed in <b>bold red</b> on a dashboard. The <a href="https://www.example.org/postmortems">postmortem archive</a> has the details.</p>
+<p u="kept-4">To retry a stuck job, press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>R</kbd> in the console. It prints <samp>job 4812 requeued</samp> and sets <code>retryCount</code> to <var>n</var> + 1.</p>
+<p u="kept-5">Between CO<sub>2</sub> sensors and fans, the rack drew 4.2 × 10<sup>3</sup> W at peak. We <s>planned to move it in March</s> moved it in May. <del>The old server room is still in use.</del></p>
+<p u="kept-6">As one engineer put it, <q>the queue is the product, and <q>done</q> is a state, not a feeling</q>. Everything else<br>is plumbing.</p>
+<h2 u="kept-7">What we measured</h2>
+<ul><li u="kept-7">Median time to first audio</li><li u="kept-8">Segments regenerated per thousand</li></ul>
+<h3 u="kept-9">Monthly figures</h3>
+<div data-scroll-card=""><table><thead><tr u="kept-9"><th>Month</th><th>Conversions</th><th>Median wait</th><th>Regenerated</th><th>Mismatches</th><th>Spend (EUR)</th></tr></thead>
+<tbody><tr u="kept-10"><td>January</td><td>12,480</td><td>41 s</td><td>3.1‰</td><td>14</td><td>1,920.40</td></tr>
+<tr u="kept-11"><td>February</td><td>15,902</td><td>38 s</td><td>2.7‰</td><td>9</td><td>2,311.75</td></tr></tbody></table></div>
+<div data-scroll-card=""><table><caption u="kept-12">Table 2. Providers we tried</caption><thead><tr><th u="kept-13">Provider</th><th u="kept-14">Verdict</th></tr></thead>
+<tbody><tr><td u="kept-15">First</td><td u="kept-16">Kept for long-form articles</td></tr>
+<tr><td u="kept-17">Second</td><td u="kept-18">Dropped: mispronounced every unit of measurement</td></tr></tbody></table></div>
+<h2 u="kept-19">On-call rota</h2>
+<div data-scroll-card=""><pre u="kept-20">Shift   Monday to Friday                                          Weekends
+Early   06:00–14:00 (two engineers, one of them in the office)    07:00–15:00
+Late    14:00–22:00                                               15:00–23:00</pre></div>
+<h2 u="kept-21">Glossary</h2>
+<dl><dt u="kept-21">Segment</dt><dd u="kept-21">The audio for one synchronization unit.</dd><dt u="kept-22">Requeue</dt><dt u="kept-22">Retry</dt><dd u="kept-22">Put a stuck job back on the queue without changing its input.</dd></dl>
+<blockquote><p u="kept-23">Make the boring parts observable, and the interesting parts will find you.</p></blockquote>
+<p u="kept-24">Read the <a href="https://www.example.org/handbook/retries">retry handbook</a> for the <em>backoff</em> rules, the <a href="https://en.wikipedia.org/wiki/Exponential_backoff"><strong>exponential</strong> part</a> especially.</p>
+</article>`;
+
+const KEPT_MARKUP_UNITS = [
+  ...new Set(Array.from(KEPT_MARKUP_HTML_SOURCE.matchAll(/ u="([^"]+)"/g), ([, unitId]) => unitId)),
+].map((unitId) => ({ id: unitId ?? "", narrationText: unitId ?? "" }));
+
+/** Every kept element and both kinds of table units, with ready audio. */
+export const KeptMarkup = createPreparedStory({
+  ...PREPARED_AUDIOBOOK,
+  title: "Keeping the pipeline honest",
+  originalUrl: "https://www.example.org/blog/keeping-the-pipeline-honest",
+  status: "ready",
+  narrationDocument: {
+    html: KEPT_MARKUP_HTML_SOURCE.replaceAll(">\n<", "><").replaceAll(
+      / u="([^"]+)"/g,
+      ' data-synchronization-unit="$1"',
+    ),
+    synchronizationUnits: KEPT_MARKUP_UNITS,
+  },
+  segments: KEPT_MARKUP_UNITS.map((_, sequence) => createReadySegment(sequence)),
+  narrationTrack: createStoryNarrationTrack(
+    KEPT_MARKUP_UNITS.map(() => SEGMENT_DURATION_MILLISECONDS),
+  ),
+});
+
 function createPendingStory(preparationPhase?: PreparationPhase) {
   return {
     component: () => <GlobalProviders router={router} />,
@@ -435,6 +566,68 @@ export const PendingConversionGetsPrepared = {
       } satisfies Audiobook),
     ),
   ],
+} satisfies Story;
+
+/**
+ * Polls a conversion from pending through synthesis to ready, and answers as the Worker does: a
+ * request that omits the narration document gets the audiobook without it. Each request's
+ * `narrationDocument` query is recorded in `window.audiobookRequestQueries`.
+ */
+export const SynthesisPolledWithoutNarrationDocument = {
+  component: () => <GlobalProviders router={router} />,
+  handlers: (() => {
+    const queries: (string | null)[] = [];
+    return [
+      http.get(`/api/audiobooks/${CONVERSION_ID}`, ({ request }) => {
+        const query = new URL(request.url).searchParams.get("narrationDocument");
+        queries.push(query);
+        Object.assign(window, { audiobookRequestQueries: queries });
+
+        if (queries.length === 1) {
+          return HttpResponse.json({
+            status: "pending",
+            originalUrl: SOURCE_URL,
+            canGenerate: true,
+          } satisfies Audiobook);
+        }
+        const { narrationDocument, ...withoutDocument } = {
+          ...PREPARED_AUDIOBOOK,
+          ...(queries.length === 2
+            ? {
+                status: "synthesizing" as const,
+                segments: [
+                  { sequence: 0, status: "generating" as const },
+                  { sequence: 1, status: "generating" as const },
+                  { sequence: 2, status: "generating" as const },
+                ],
+              }
+            : queries.length === 3
+              ? {
+                  status: "synthesizing" as const,
+                  segments: [
+                    createReadySegment(0),
+                    { sequence: 1, status: "generating" as const },
+                    { sequence: 2, status: "generating" as const },
+                  ],
+                }
+              : {
+                  status: "ready" as const,
+                  segments: [createReadySegment(0), createReadySegment(1), createReadySegment(2)],
+                  narrationTrack: createStoryNarrationTrack([
+                    SEGMENT_DURATION_MILLISECONDS,
+                    SEGMENT_DURATION_MILLISECONDS,
+                    SEGMENT_DURATION_MILLISECONDS,
+                  ]),
+                }),
+        };
+        return HttpResponse.json(
+          (query === "omit"
+            ? withoutDocument
+            : { ...withoutDocument, narrationDocument }) satisfies AudiobookResponse,
+        );
+      }),
+    ];
+  })(),
 } satisfies Story;
 
 export const FailedConversion = {
@@ -638,6 +831,60 @@ export const TrackGoneOnRenewal = accountStory({
     ];
   })(),
 });
+
+/**
+ * The first narration track URL fails to load, so Play renews it; the renewal omits the narration
+ * document the page holds and gets a working URL. The renewal's `narrationDocument` query is
+ * recorded in `window.audiobookRequestQueries` and each saved position in `window.savedPositions`.
+ */
+export const TrackRenewedWithoutNarrationDocument = accountStory({
+  path: `/audiobooks/${CONVERSION_ID}`,
+  handlers: (() => {
+    const queries: (string | null)[] = [];
+    const savedPositions: unknown[] = [];
+    return [
+      http.get(`/api/audiobooks/${CONVERSION_ID}`, ({ request }) => {
+        const query = new URL(request.url).searchParams.get("narrationDocument");
+        queries.push(query);
+        Object.assign(window, { audiobookRequestQueries: queries });
+
+        const { narrationDocument, ...withoutDocument } = createAudiobookWithNarrationTrack(
+          queries.length === 1
+            ? `${window.location.origin}/__story/missing-narration-track.mp3`
+            : undefined,
+        );
+        return HttpResponse.json(
+          (query === "omit"
+            ? withoutDocument
+            : { ...withoutDocument, narrationDocument }) satisfies AudiobookResponse,
+        );
+      }),
+      http.get(
+        "/__story/missing-narration-track.mp3",
+        () => new HttpResponse(null, { status: 404 }),
+      ),
+      http.put(`/api/audiobooks/${CONVERSION_ID}/position`, async ({ request }) => {
+        savedPositions.push(await request.json());
+        Object.assign(window, { savedPositions });
+        return new HttpResponse(null, { status: 204 });
+      }),
+    ];
+  })(),
+});
+
+function createAudiobookWithNarrationTrack(url: string | undefined) {
+  const narrationTrack = createStoryNarrationTrack([
+    SEGMENT_DURATION_MILLISECONDS,
+    SEGMENT_DURATION_MILLISECONDS,
+    SEGMENT_DURATION_MILLISECONDS,
+  ]);
+  return {
+    ...PREPARED_AUDIOBOOK,
+    status: "ready" as const,
+    segments: [0, 1, 2].map(createReadySegment),
+    narrationTrack: url === undefined ? narrationTrack : { ...narrationTrack, url },
+  };
+}
 
 function trackNotFoundResponse() {
   return HttpResponse.json(

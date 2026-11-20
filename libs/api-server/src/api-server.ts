@@ -20,7 +20,7 @@ import {
 import { CupError, assertUnreachable } from "@cup/errors";
 import {
   createListenerApi,
-  type Audiobook,
+  type AudiobookResponse,
   type ListenerApiHandlers,
   type RetryConversionResponse,
   type ScheduleDeletionResponse,
@@ -45,6 +45,7 @@ import { TELEMETRY_TUNNEL_PATH } from "@cup/telemetry.core";
 import { resolveConversionDispatch } from "#src/adapters/conversion-dispatch.ts";
 import { resolveConversionReader } from "#src/adapters/conversion-reader.ts";
 import { revokeVerifiedGoogleToken } from "#src/adapters/google-token-revocation.ts";
+import { createNarrationSourceMaterialReader } from "#src/adapters/narration-source-material-reader.ts";
 import type { ApiServerEnvironment } from "#src/api-server-environment.ts";
 import { authenticateAccountRequest, localTestAccount } from "#src/http/account-auth.ts";
 import { APPLICATION_ORIGIN, routeApplicationDomain } from "#src/http/domain-routing.ts";
@@ -56,11 +57,11 @@ import {
   toDeletionChallengeResponse,
   toDurationBalanceResponse,
   toGrantSnapshotResponse,
-  toNarrationDocumentResponse,
   toNarrationTrackResponse,
   toPlaybackPositionResponse,
   toPreparationPhaseField,
 } from "#src/http/listener-responses.ts";
+import { toRenderedNarrationDocumentResponse } from "#src/http/narration-document-response.ts";
 import { isDevelopmentOperatorRequest } from "#src/http/operator-access.ts";
 import {
   loadReadyAudiobookFromEnvironment,
@@ -538,6 +539,7 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
 
   async getAudiobook(context) {
     const { conversionId } = context.req.valid("param");
+    const { narrationDocument = "include" } = context.req.valid("query");
     const owner = await getRegistryStub(context.env).findConversionOwner(conversionId);
     if (!owner) {
       return jsonError(context.get("traceId"), "audiobook-not-found", "Track not found.", 404);
@@ -559,7 +561,7 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
           ...base,
           status: "pending",
           ...toPreparationPhaseField(conversion.lastStartedPhase),
-        } satisfies Audiobook,
+        } satisfies AudiobookResponse,
         200,
       );
     }
@@ -569,7 +571,7 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
           ...base,
           status: "failed",
           explanation: "Preparation failed. Retry to load this track.",
-        } satisfies Audiobook,
+        } satisfies AudiobookResponse,
         200,
       );
     }
@@ -638,9 +640,18 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
                   : undefined,
               ),
             }),
-        narrationDocument: toNarrationDocumentResponse(audiobook.narrationDocument),
+        // A reader polling with the document it already holds skips reading and rendering it.
+        ...(narrationDocument === "omit"
+          ? {}
+          : {
+              narrationDocument: await toRenderedNarrationDocumentResponse({
+                conversionId,
+                audiobook,
+                readNarrationSourceMaterial: createNarrationSourceMaterialReader(context.env),
+              }),
+            }),
         playbackPosition: toPlaybackPositionResponse(playbackPosition),
-      } satisfies Audiobook,
+      } satisfies AudiobookResponse,
       200,
     );
   },

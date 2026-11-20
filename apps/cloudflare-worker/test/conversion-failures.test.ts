@@ -2,7 +2,6 @@ import { Temporal } from "temporal-polyfill";
 import { test } from "vitest";
 
 import { storeAudiobook } from "@cup/audiobook-production";
-import { createNarrationDocument } from "@cup/narration-document-creation";
 import { useSentryStub, type SentryStub } from "@cup/sentry-stub";
 
 import { useWorker, type TestWorker } from "#test/use-worker.ts";
@@ -31,10 +30,13 @@ async function createTrialConversion(worker: TestWorker) {
 async function createPreparedTrialConversion(worker: TestWorker) {
   const conversion = await createTrialConversion(worker);
   const { env, grant, conversionId } = conversion;
-  const narrationDocument = createNarrationDocument({
-    sourceTitle: "A conversion with one segment",
-    sourceMaterialHtml: "",
-  });
+  // An existing conversion's narration document, whose HTML the manifest stores.
+  const narrationDocument = {
+    html: '<article><h1 id="narration-unit-0001">A conversion with one segment</h1></article>',
+    synchronizationUnits: [
+      { id: "narration-unit-0001", narrationText: "A conversion with one segment" },
+    ],
+  };
   const audiobookReference = await storeAudiobook({
     bucket: env.AUDIO_BUCKET,
     conversionId,

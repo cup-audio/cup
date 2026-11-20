@@ -24,6 +24,12 @@ The URL submitted to locate the source page carrying the source content.
 
 _Avoid_: source page URL
 
+## fetched URL
+
+The URL the source page was finally loaded from, after redirects. It may differ from the source URL, and the narration document resolves the source page's relative links against it.
+
+_Avoid_: final URL, redirect URL, page URL
+
 ## source title
 
 The headline the source page gives the source content, taken from its visible headline when it has one.
@@ -224,7 +230,7 @@ _Avoid_: narration script
 
 ## narration document
 
-The structured document presentation of narration text that accompanies narration audio in the audiobook.
+The structured document presentation of narration text that accompanies narration audio in the audiobook. The listener API renders it on every request from what its conversion stored, so a change to how it is presented reaches every audiobook, while its synchronization units never change after preparation.
 
 _Avoid_: transcript, source page, narration source material
 
@@ -305,6 +311,12 @@ _Avoid_: transcript, transcription, recognized text
 The smallest independently navigable portion of a narration document associated with one continuous interval of narration audio. Each unit has its own audio segment and starts in the narration track at the sum of the durations of the preceding segments; a position in the track is that start plus the offset within the unit's audio.
 
 _Avoid_: sentence, paragraph, narration chunk, synchronization cue
+
+## segmentation
+
+How a narration document is divided into synchronization units. A numbered segmentation version is decided once, when a conversion is prepared, so a new version applies only to conversions prepared after it.
+
+_Avoid_: chunking, unit finding
 
 ## segment
 

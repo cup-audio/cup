@@ -4,6 +4,8 @@ import {
   accountConfirmationSchema,
   accountHistorySchema,
   accountSnapshotSchema,
+  audiobookQuerySchema,
+  audiobookResponseSchema,
   audiobookSchema,
   audioSegmentSchema,
   conversionParamsSchema,
@@ -62,6 +64,11 @@ describe("listener API transport contracts", () => {
       name: "conversion parameters",
       schema: conversionParamsSchema,
       request: { conversionId: UUID },
+    },
+    {
+      name: "audiobook query",
+      schema: audiobookQuerySchema,
+      request: { narrationDocument: "omit" },
     },
     {
       name: "signed media URL query",
@@ -353,6 +360,25 @@ describe("listener API transport contracts", () => {
         error: { code: "GrantExpired", message: "Expired.", traceId: TRACE_ID },
       }).success,
     ).toBe(false);
+  });
+
+  test.each([{}, { narrationDocument: "include" }, { narrationDocument: "omit" }])(
+    "accepts the audiobook query %o",
+    (query) => {
+      expect(audiobookQuerySchema.safeParse(query).success).toBe(true);
+    },
+  );
+
+  test("rejects an unknown narration document choice", () => {
+    expect(audiobookQuerySchema.safeParse({ narrationDocument: "skip" }).success).toBe(false);
+  });
+
+  test("a prepared audiobook response may omit its narration document, which a held audiobook carries", () => {
+    const { narrationDocument: _, ...withoutDocument } = PREPARED_AUDIOBOOK;
+
+    expect(audiobookResponseSchema.parse(withoutDocument)).toStrictEqual(withoutDocument);
+    expect(audiobookResponseSchema.parse(PREPARED_AUDIOBOOK)).toStrictEqual(PREPARED_AUDIOBOOK);
+    expect(audiobookSchema.safeParse(withoutDocument).success).toBe(false);
   });
 
   test("accepts prepared narration before audio exists", () => {

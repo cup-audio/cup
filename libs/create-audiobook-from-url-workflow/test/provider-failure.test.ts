@@ -35,6 +35,7 @@ import { NonRetryableError } from "cloudflare:workflows";
 import type { AccountDurableObject } from "@cup/accounts";
 import {
   loadAudiobook,
+  loadNarrationSourceMaterial,
   produceAudioSegment,
   type AudiobookReference,
   type SpeechSynthesisAi,
@@ -110,7 +111,9 @@ test("preparation reserves duration for every segment of the document", async ()
     prefix: "conversions/" + conversionId + "/",
   });
   expect(artifacts.objects.map((object) => object.key)).toEqual([
+    "conversions/" + conversionId + "/audiobook-source-material.html",
     "conversions/" + conversionId + "/audiobook.json",
+    "conversions/" + conversionId + "/narration-source-material.html",
   ]);
 });
 
@@ -569,6 +572,153 @@ test("a narration over the content limit logs one content-limit warning, also wh
   expect(loggedEvents("content-limit")).toHaveLength(1);
 });
 
+test.each(["trial", "account"] as const)(
+  "a %s preparation stores the audiobook and narration source material and records the manifest that renders from them",
+  async (kind) => {
+    const { owner, grantId, accountId, conversionId, artifactPrefix } =
+      await createOwnedConversion(kind);
+
+    await runConversion(grantId, conversionId, accountId, false, undefined, undefined, {
+      html: '<article><h1>Source title</h1><p class="subtitle">A source subtitle.</p><p>A <a href="/about">linked</a> paragraph.</p></article>',
+    });
+
+    const artifacts = await environment.AUDIO_BUCKET.list({ prefix: artifactPrefix });
+    expect(artifacts.objects.map((object) => object.key)).toEqual([
+      `${artifactPrefix}audiobook-source-material.html`,
+      `${artifactPrefix}audiobook.json`,
+      `${artifactPrefix}narration-source-material.html`,
+    ]);
+    const audiobookSourceMaterial = await environment.AUDIO_BUCKET.get(
+      `${artifactPrefix}audiobook-source-material.html`,
+    );
+    const narrationSourceMaterial = await environment.AUDIO_BUCKET.get(
+      `${artifactPrefix}narration-source-material.html`,
+    );
+    if (audiobookSourceMaterial === null || narrationSourceMaterial === null) {
+      throw new Error("Expected both source materials to be stored");
+    }
+    expect(await audiobookSourceMaterial.text()).toContain(
+      '<p>A <a href="/about">linked</a> paragraph.</p>',
+    );
+    expect(await narrationSourceMaterial.text()).toContain(
+      '<a href="/about">linked</a> paragraph.</p>',
+    );
+    for (const object of [audiobookSourceMaterial, narrationSourceMaterial]) {
+      expect(object.httpMetadata?.contentType).toBe("text/html; charset=utf-8");
+      expect(object.customMetadata?.["cup-writer-id"] ?? "none").toMatch(
+        kind === "account" ? /^[a-f0-9]{64}$/ : /^none$/,
+      );
+    }
+
+    const audiobook = await loadReadyAudiobook(owner, conversionId);
+    expect(audiobook.narrationDocument).toEqual({
+      segmentationVersion: 2,
+      narrationSourceMaterial: {
+        key: `${artifactPrefix}narration-source-material.html`,
+        contentType: "text/html; charset=utf-8",
+        byteLength: narrationSourceMaterial.size,
+        etag: narrationSourceMaterial.etag,
+      },
+      fetchedUrl: SOURCE_URL,
+      sourceSubtitle: "A source subtitle.",
+      synchronizationUnits: [
+        { id: "narration-unit-0001", narrationText: "Source title" },
+        { id: "narration-unit-0002", narrationText: "A source subtitle." },
+        { id: "narration-unit-0003", narrationText: "A linked paragraph." },
+      ],
+    });
+  },
+);
+
+test("a preparation that fails in narration content selection still keeps the audiobook source material", async () => {
+  const { owner, grantId, accountId, conversionId, artifactPrefix } =
+    await createOwnedConversion("account");
+
+  await expect(
+    runConversion(grantId, conversionId, accountId, false, undefined, undefined, {
+      selectNarrationContent: createFakeNarrationContentSelector({
+        failure: new Error("Configured selection failure"),
+      }),
+    }),
+  ).rejects.toThrow("Configured selection failure");
+
+  expect(await owner.getConversion(conversionId)).toMatchObject({
+    outcome: { status: "failed", failureCategory: "content-selection" },
+  });
+  const artifacts = await environment.AUDIO_BUCKET.list({ prefix: artifactPrefix });
+  expect(artifacts.objects.map((object) => object.key)).toEqual([
+    `${artifactPrefix}audiobook-source-material.html`,
+  ]);
+});
+
+test("a failed trial preparation's cleanup removes the audiobook source material it kept", async () => {
+  const { grant, grantId, conversionId } = await createConversion();
+  const artifactPrefix = "conversions/" + conversionId + "/";
+
+  await expect(
+    runConversion(grantId, conversionId, undefined, false, undefined, undefined, {
+      selectNarrationContent: createFakeNarrationContentSelector({
+        failure: new Error("Configured selection failure"),
+      }),
+    }),
+  ).rejects.toThrow("Configured selection failure");
+  expect(
+    await environment.AUDIO_BUCKET.head(artifactPrefix + "audiobook-source-material.html"),
+  ).not.toBeNull();
+
+  await environment.CONVERSION_GRANTS.get(
+    environment.CONVERSION_GRANTS.idFromName(grantId),
+  ).reconcileForTest();
+
+  expect((await environment.AUDIO_BUCKET.list({ prefix: artifactPrefix })).objects).toEqual([]);
+  expect(await grant.getConversion(conversionId)).toMatchObject({ cleanupState: "complete" });
+});
+
+test("a retried account preparation step reuses the source material it already stored", async () => {
+  const { owner, grantId, accountId, conversionId, artifactPrefix } =
+    await createOwnedConversion("account");
+  const versionsAfterFirstAttempt = new Map<string, string | undefined>();
+  // Runs each storing step's callback twice, as a retry after a failure late in the first attempt
+  // would, and records what the first attempt stored.
+  const step = createImmediateRetryStep();
+  const runStep = step.do.bind(step);
+  step.do = async (name: string, ...rest: unknown[]) => {
+    const run = (): Promise<unknown> => Reflect.apply(runStep, step, [name, ...rest]);
+    if (
+      name !== "source-material-preparation: store audiobook source material" &&
+      name !== "audiobook-storage: store audiobook"
+    ) {
+      return run();
+    }
+    await run();
+    for (const sourceMaterial of ["audiobook", "narration"]) {
+      const key = `${artifactPrefix}${sourceMaterial}-source-material.html`;
+      const stored = await environment.AUDIO_BUCKET.head(key);
+      if (stored !== null && !versionsAfterFirstAttempt.has(key)) {
+        versionsAfterFirstAttempt.set(key, stored.version);
+      }
+    }
+    return run();
+  };
+
+  await runConversion(grantId, conversionId, accountId, false, step);
+
+  expect(versionsAfterFirstAttempt.size).toBe(2);
+  for (const [key, version] of versionsAfterFirstAttempt) {
+    expect((await environment.AUDIO_BUCKET.head(key))?.version).toBe(version);
+  }
+  const audiobook = await loadReadyAudiobook(owner, conversionId);
+  if ("html" in audiobook.narrationDocument) {
+    throw new Error("Expected a new conversion's manifest");
+  }
+  await expect(
+    loadNarrationSourceMaterial({
+      bucket: environment.AUDIO_BUCKET,
+      reference: audiobook.narrationDocument.narrationSourceMaterial,
+    }),
+  ).resolves.toContain("A short paragraph for narration.");
+});
+
 test.each([
   ["is refused", async () => ({ result: "refused", reason: "unsupported-type" }) as const],
   [
@@ -855,7 +1005,9 @@ test("a stale account execution epoch cannot reserve duration or publish segment
     prefix: `accounts/${accountId}/conversions/${conversionId}/`,
   });
   expect(artifacts.objects.map((object) => object.key)).toEqual([
+    `accounts/${accountId}/conversions/${conversionId}/audiobook-source-material.html`,
     `accounts/${accountId}/conversions/${conversionId}/audiobook.json`,
+    `accounts/${accountId}/conversions/${conversionId}/narration-source-material.html`,
   ]);
 });
 
@@ -1083,9 +1235,13 @@ function runConversion(
   {
     declaredLanguage,
     detectNarrationLanguage = createFakeNarrationLanguageDetector({ answer: "en" }),
+    html = "<article><h1>Failure test</h1><p>A short paragraph for narration.</p></article>",
+    selectNarrationContent = createFakeNarrationContentSelector(),
   }: {
     declaredLanguage?: DeclaredLanguage;
     detectNarrationLanguage?: PrepareAudiobookWorkflowServices["detectNarrationLanguage"];
+    html?: string;
+    selectNarrationContent?: PrepareAudiobookWorkflowServices["selectNarrationContent"];
   } = {},
 ) {
   return runPrepareAudiobookWorkflow({
@@ -1112,7 +1268,7 @@ function runConversion(
           }
         : createControlledSourceMaterialPreparer({
             url: SOURCE_URL,
-            html: "<article><h1>Failure test</h1><p>A short paragraph for narration.</p></article>",
+            html,
             ...(loadCoverImage ? { coverImage: COVER_IMAGE_DECLARATION } : {}),
             ...(declaredLanguage === undefined ? {} : { declaredLanguage }),
           }),
@@ -1121,7 +1277,7 @@ function runConversion(
         (async () => {
           throw new Error("No cover image was declared");
         }),
-      selectNarrationContent: createFakeNarrationContentSelector(),
+      selectNarrationContent,
       detectNarrationLanguage,
     },
   });

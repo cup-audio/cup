@@ -3,7 +3,6 @@ import { z } from "zod";
 import { createConversionArtifactPrefix } from "@cup/conversion-contracts";
 import { CupError } from "@cup/errors";
 import { SYNCHRONIZATION_UNIT_SCHEMA } from "@cup/narration-document-creation";
-import type { NarrationDocument } from "@cup/narration-document-creation";
 
 import { AUDIOBOOK_MANIFEST_CONTENT_TYPE } from "#src/audio-format.ts";
 import { isCanonicalLanguageTag } from "#src/language-tag.ts";
@@ -13,12 +12,43 @@ import {
   type SpeechConfig,
 } from "#src/speech-synthesis-config.ts";
 import { coverImageSchema, type CoverImage } from "#src/store-cover-image.ts";
+import { narrationSourceMaterialReferenceSchema } from "#src/store-source-material.ts";
+
+const synchronizationUnitsSchema = z.array(SYNCHRONIZATION_UNIT_SCHEMA).min(1).readonly();
+
+/**
+ * What the manifest stores to render the narration document, in one of two shapes; the shape
+ * decides how it is rendered.
+ */
+export const storedNarrationDocumentSchema = z.union([
+  // Existing conversions stored the HTML narration document creation produced at preparation.
+  z
+    .object({
+      html: z.string().min(1),
+      synchronizationUnits: synchronizationUnitsSchema,
+    })
+    .strict(),
+  // New conversions store the narration source material beside the manifest and segment it again
+  // with the recorded segmentation version whenever the narration document is rendered.
+  z
+    .object({
+      segmentationVersion: z.literal([1, 2]),
+      narrationSourceMaterial: narrationSourceMaterialReferenceSchema,
+      /** The URL the source page was finally loaded from, after redirects. */
+      fetchedUrl: z.url().optional(),
+      // Stored because recovering it from the units would make the render-time check check itself.
+      sourceSubtitle: z.string().min(1).optional(),
+      synchronizationUnits: synchronizationUnitsSchema,
+    })
+    .strict(),
+]);
+export type StoredNarrationDocument = z.infer<typeof storedNarrationDocumentSchema>;
 
 /** Prepared narration; individual audio segments are published independently. */
 export type Audiobook = {
   title: string;
   originalUrl: string;
-  narrationDocument: NarrationDocument;
+  narrationDocument: StoredNarrationDocument;
   speechConfig: SpeechConfig;
   /** The canonical BCP 47 narration language, absent when the conversion has none. */
   narrationLanguage?: string | undefined;
@@ -64,7 +94,7 @@ export type StoreOptions = {
   conversionId: string;
   title: string;
   originalUrl: string;
-  narrationDocument: NarrationDocument;
+  narrationDocument: StoredNarrationDocument;
   speechConfig?: SpeechConfig;
   narrationLanguage?: string;
   coverImage?: CoverImage;
@@ -79,10 +109,7 @@ export type LoadOptions = {
 export const audiobookSchema = z.object({
   title: z.string().min(1),
   originalUrl: z.url(),
-  narrationDocument: z.object({
-    html: z.string().min(1),
-    synchronizationUnits: z.array(SYNCHRONIZATION_UNIT_SCHEMA).min(1),
-  }),
+  narrationDocument: storedNarrationDocumentSchema,
   speechConfig: z
     .object({
       provider: z.enum(["google-ai-studio", "elevenlabs"]),

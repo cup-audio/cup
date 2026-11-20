@@ -11,6 +11,8 @@ import type { DetailBack } from "#src/app/components/detail-top-bar.js";
 import { ErrorScreen } from "#src/app/components/error-message.js";
 import { fadeFooterClearance } from "#src/app/components/fade-footer.js";
 import { ShellContent } from "#src/app/components/main.tsx";
+import { attachNarrationDocumentInteraction } from "#src/app/components/narration-document-interaction.js";
+import { narrationMarkupClassName } from "#src/app/components/narration-markup-styles.js";
 import { PageTitle } from "#src/app/components/page-title.js";
 import { PLAYER_SHEET_HEIGHTS, PlayerSheet } from "#src/app/components/player-sheet.js";
 import { TrackSkeleton } from "#src/app/components/track-skeleton.js";
@@ -527,9 +529,16 @@ function SegmentHighlight({
       const narrationDocumentElement = narrationDocumentRef.current;
       check.assert(narrationDocumentElement);
 
-      const segment = narrationDocumentElement.querySelector(`[id="${unitId ?? ""}"]`);
-      segment?.setAttribute("aria-current", "true");
-      return () => segment?.removeAttribute("aria-current");
+      const segmentElements =
+        unitId === undefined ? [] : findSegmentElements(narrationDocumentElement, unitId);
+      for (const segmentElement of segmentElements) {
+        segmentElement.setAttribute("aria-current", "true");
+      }
+      return () => {
+        for (const segmentElement of segmentElements) {
+          segmentElement.removeAttribute("aria-current");
+        }
+      };
     },
     [unitId, narrationDocumentRef],
   );
@@ -644,14 +653,12 @@ function NarrationDocument({
 
       const marked = failedUnitIndexes.flatMap((unitIndex) => {
         const unit = units[unitIndex];
-        const segment = unit && narrationDocumentElement.querySelector(`[id="${unit.id}"]`);
-        if (!segment) {
-          return [];
+        const segmentElements = unit ? findSegmentElements(narrationDocumentElement, unit.id) : [];
+        for (const segmentElement of segmentElements) {
+          segmentElement.setAttribute("data-synthesis-failed", "");
+          segmentElement.setAttribute("title", "Audio could not be generated for this segment.");
         }
-
-        segment.setAttribute("data-synthesis-failed", "");
-        segment.setAttribute("title", "Audio could not be generated for this segment.");
-        return [segment];
+        return segmentElements;
       });
 
       return () => {
@@ -667,34 +674,18 @@ function NarrationDocument({
   const selectUnit = React.useEffectEvent((unitIndex: number) => onSelectUnit?.(unitIndex));
 
   React.useEffect(
-    function addSegmentPlaybackButtons() {
-      if (!isSelectable) {
-        return undefined;
-      }
-
+    function makeNarrationDocumentInteractive() {
       const narrationDocumentElement = narrationDocumentElementRef.current;
       check.assert(narrationDocumentElement);
 
-      // Units are selectable only with a narration track, which has audio for every unit.
-      const buttons = units.map((unit, unitIndex) => {
-        const segment = narrationDocumentElement.querySelector(`[id="${unit.id}"]`);
-        check.assert(segment);
-
-        const button = document.createElement("button");
-        button.type = "button";
-        button.dataset["segmentControl"] = "";
-        button.setAttribute("aria-label", `Play segment ${unitIndex + 1}`);
-        button.addEventListener("click", () => selectUnit(unitIndex));
-        segment.append(button);
-        return button;
+      return attachNarrationDocumentInteraction({
+        narrationDocumentElement,
+        unitIds: units.map((unit) => unit.id),
+        // Units are selectable only with a narration track, which has audio for every unit.
+        selectUnit: isSelectable ? (unitIndex) => selectUnit(unitIndex) : undefined,
       });
-
-      return () => {
-        for (const button of buttons) {
-          button.remove();
-        }
-      };
     },
+    // A changed document is rendered anew, which drops the buttons.
     [units, isSelectable, narrationDocumentElementRef],
   );
 
@@ -703,6 +694,7 @@ function NarrationDocument({
       ref={narrationDocumentElementRef}
       className={composeClassnames(
         textStyles.paragraph,
+        narrationMarkupClassName,
         css`
           color: var(--color-ink-60);
 
@@ -732,23 +724,6 @@ function NarrationDocument({
 
           & > article > [data-source-host] {
             color: var(--color-ink-40);
-          }
-
-          [id]:has(> [data-segment-control]) {
-            /* "anchor" for the absolutely-positioned play-segment buttons */
-            position: relative;
-          }
-
-          [data-segment-control] {
-            position: absolute;
-            inset: 0;
-            width: 100%;
-            height: 100%;
-            padding: 0;
-            cursor: pointer;
-            background: transparent;
-            border: 0;
-            border-radius: inherit;
           }
 
           [aria-current="true"] {
@@ -782,9 +757,18 @@ function findTitle(
   narrationDocumentElement: HTMLElement,
   units: PreparedAudiobook["narrationDocument"]["synchronizationUnits"],
 ): Element {
-  const title = narrationDocumentElement.querySelector(`[id="${units[0]?.id ?? ""}"]`);
+  const [title] = units[0] ? findSegmentElements(narrationDocumentElement, units[0].id) : [];
   check.assert(title, "The narration document has no title.");
   return title;
+}
+
+/** Every element of the narration document that belongs to a segment, in document order. */
+function findSegmentElements(narrationDocumentElement: HTMLElement, unitId: string): Element[] {
+  return [
+    ...narrationDocumentElement.querySelectorAll(
+      `[data-synchronization-unit="${CSS.escape(unitId)}"]`,
+    ),
+  ];
 }
 
 /** Notices that explain missing audio, in the reader's flow above the text. */

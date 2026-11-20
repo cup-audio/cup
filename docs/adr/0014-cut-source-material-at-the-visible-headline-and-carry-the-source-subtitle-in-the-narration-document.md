@@ -1,8 +1,10 @@
 ---
-status: accepted
+status: partially superseded by ADR 0035
 ---
 
 # Cut source material at the visible headline and carry the source subtitle in the narration document
+
+[ADR 0035](0035-render-the-narration-document-on-request-from-the-stored-narration-source-material-with-versioned-frozen-segmentation.md) amends "the narration document is the only carrier" (2026-11-20, [cup-audio/cup#496](https://github.com/cup-audio/cup/issues/496)): a conversion prepared since then also records its source subtitle in the audiobook manifest, as an input for rendering its narration document on request. The listener API and the stores still carry the source title alone. The original decision follows.
 
 Many source pages set a [source subtitle](../GLOSSARY.md#source-subtitle) beneath the visible headline. Before this decision cup did not know about it: narration content selection kept it only by chance, spoke it as an ordinary body unit, sometimes fused with a kicker above the visible headline, and the detail view styled it as body text. Source preparation also took the first `<h1>` in the DOM as the source title, so a hidden heading could become it. [cup-audio/cup#109](https://github.com/cup-audio/cup/issues/109) decided how the source subtitle is detected and [cup-audio/cup#118](https://github.com/cup-audio/cup/issues/118) how it travels to the listener (both 2026-10-28, specified in [cup-audio/cup#121](https://github.com/cup-audio/cup/issues/121)). [cup-audio/cup#130](https://github.com/cup-audio/cup/pull/130) implemented it, built from the tickets [cup-audio/cup#126](https://github.com/cup-audio/cup/issues/126) to [cup-audio/cup#129](https://github.com/cup-audio/cup/issues/129).
 
@@ -26,4 +28,4 @@ This amends [ADR 0001](0001-use-a-canonical-synchronized-audiobook.md)'s "speaks
 
 - Conversions prepared before this decision have no source subtitle and are not backfilled; their narration documents keep the subtitle-like line, if any, as a body unit.
 - Narration content selection eval inputs must be in the prepared shape, with the visible headline and source subtitle already removed, and their goldens change.
-- The [recorded source pages](../../libs/prepare-source-material/test-e2e/fixtures/README.md) and [narration document tests](../../libs/narration-document-creation/test/narration-document-creation.test.ts) cover the cut, the detection and the opening.
+- The [recorded source pages](../../libs/prepare-source-material/test-e2e/fixtures/README.md) and [narration document tests](../../libs/narration-document-creation/test/new-conversion-rendering/source-material-rendering.test.ts) cover the cut, the detection and the opening.

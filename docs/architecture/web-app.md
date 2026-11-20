@@ -21,6 +21,33 @@ Recents is one newest-first list on a CSS grid with 1 px rows; [`useMasonryRowSp
 
 A ready history item carries its cover's own [signed media URL](authentication.md#signed-media-url), identical for a UTC day and cached by the browser for a day ([ADR 0013](../adr/0013-cache-cover-images-in-the-browser-for-a-day.md)), so polls and app starts download no cover again.
 
+## Reader
+
+The detail view renders the audiobook's [narration document](../GLOSSARY.md#narration-document) and makes it interactive through [`narration-document-interaction.ts`](../../apps/web-app/src/app/components/narration-document-interaction.ts). It reaches a segment only through its `[data-synchronization-unit]` elements ([timeline](playback.md#the-web-player)).
+
+- **Tap on segment text:** plays from that segment, whichever of its elements was tapped, once the audiobook has a narration track. The click that ends a text selection plays nothing, so text can be selected and copied.
+- **Tap on a link:** plays nothing. It opens a popover anchored to the link, below it or above when there is no room below, which shows "Open link ↗" and the link's host, and the link is tinted while the popover is open. The popover is a real link with `target="_blank" rel="noopener noreferrer"`, like **Open original page**, so it opens a new tab without a referrer, or the system browser in the shells ([mobile app](../../apps/mobile-app/README.md#links-and-sharing)). Links open through the popover also while no audio exists yet.
+- **Dismissal:** a transparent backdrop under the popover takes every other tap, so the tap that closes it never reaches a segment and plays nothing. Any scroll closes it too, since the link would move away from it.
+- **Keyboard and screen readers:** links stay real links. Activating one from the keyboard opens the popover with focus on it; Escape closes it and returns focus to the link. Each segment has one "Play from here" button before its text, visually hidden until focused; a heading's button sits before the heading, so it never joins the heading's name, and a table row's button sits in the row's first cell, since a row holds only cells.
+
+The full-size invisible button per segment that this replaced made the links inside segments unreachable ([#481](https://github.com/cup-audio/cup/issues/481)). The [detail view tests](../../apps/web-app/src/routes/_shell.audiobooks.$conversionId.test.ts) pin these rules.
+
+[`narration-markup-styles.ts`](../../apps/web-app/src/app/components/narration-markup-styles.ts) styles the markup the narration document keeps ([presentation rules](conversion.md#presentation)), with the light-only ink, page and surface tokens only:
+
+- **Links:** full ink with a dotted underline and a small ink-60 "↗" marker, which stays out of the link's name. The "Open link" popover is a dark box with an arrow that points at the link.
+- **Inline elements:** `kbd` as a keycap, `code` and `samp` as Space Mono chips, `strong` and `b` semibold in full ink, `s` and `del` struck through in ink-40, `q` with curly quotes, and `sub` and `sup` without changing the line height.
+- **Scroll cards:** the `data-scroll-card` wrapper around each `table` and `pre` is a surface card that scrolls sideways. It has `contain: inline-size`, so its content never sizes it and a wide block cannot widen the page. Table cells don't wrap, the first column stays fixed while the rest scrolls, and header cells and the caption are small ink-60 text. A `pre` keeps its line breaks and does not wrap.
+- **Description lists:** terms in medium weight and full ink, each definition indented below it.
+- **Segment highlight:** every element of the current segment gets the tinted bubble, so a heading and the first item of its container get one each. Inside a scroll card the bubble would be cut off at the card's edge, so a highlighted row tints its cells, and a caption, single cell or `pre` tints its own box. A failed segment's row carries the failed mark on its first cell.
+
+Contrast, measured 2026-11-20 against WCAG 2.2 with ink `rgb(18 18 18)` over the page `#f6f6f3` and the surface `#fff`:
+
+- **Link marker:** the "↗" tells the listener before tapping that the link leaves Cup, so it is a meaningful graphic that needs 3:1 ([SC 1.4.11](https://www.w3.org/TR/WCAG22/#non-text-contrast)). In ink-40 it reached 2.58:1 on the page and 2.61:1 on a card, so it uses ink-60, at 4.77:1 and 4.89:1.
+- **Header cells and caption:** ink-60 on the card, 4.89:1, above 4.5:1 for small text.
+- **`s` and `del`:** ink-40, 2.58:1 on the page and 2.61:1 on a card, below the 4.5:1 text minimum. This is a known gap, kept because the [spec's styling decision](https://github.com/cup-audio/cup/issues/493) set struck-out text in ink-40.
+
+The UI gallery story `KeptMarkup` shows every kept element, and the detail view tests hold its screenshots.
+
 ## Account holder's name
 
 The avatar's initials come from the Supabase session's `user_metadata.name`, else `full_name`, which Supabase fills from the Google sign-in and refreshes on each sign-in. Cup stores no name, so account erasure has none to remove ([name source research](../research/avatar-initials-name-source.md)).
@@ -39,7 +66,7 @@ The cache must never show the listener something false, including on a screen th
 - **Saving a signed-in listener's listening position** writes it into the cached audiobook and marks it stale without requesting it, since playback saves every few seconds.
 - **Exchanging a trial link's credential** caches the grant it answers with.
 
-A direct edit keeps the cached audiobook's arrival time, which dates its narration track URL for [renewal](authentication.md#signed-media-url). A refetch of shown data answered with _not found_ or _access denied_ drops the cached data, so the screen shows its error screen; other failures keep the content and report a toast. The [web app README](../../apps/web-app/README.md#component-tests-and-visual-coverage) names the tests that guard revisits.
+An audiobook request, a poll or a track URL renewal included, omits the narration document once the cache holds it, and the [reader query](../../apps/web-app/src/data-fetching/reader.ts) puts the held document into the response, so the cached audiobook always carries one and a page load requests it again ([ADR 0036](../adr/0036-omit-the-narration-document-from-the-audiobook-response-on-request.md)). A direct edit keeps the cached audiobook's arrival time, which dates its narration track URL for [renewal](authentication.md#signed-media-url). A refetch of shown data answered with _not found_ or _access denied_ drops the cached data, so the screen shows its error screen; other failures keep the content and report a toast. The [web app README](../../apps/web-app/README.md#component-tests-and-visual-coverage) names the tests that guard revisits.
 
 ## Where screens load
 

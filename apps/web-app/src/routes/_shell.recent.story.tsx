@@ -157,7 +157,7 @@ function createMiniPlayerStory({ hasCover }: { hasCover: boolean }): Story {
             coverImage: { url: `${window.location.origin}${COVER_PATH}/c4733d.svg` },
           }),
           narrationDocument: {
-            html: `<article><h1 id="unit-1">${LOADED_TITLE}</h1><p id="unit-2">Two.</p></article>`,
+            html: `<article><h1 data-synchronization-unit="unit-1">${LOADED_TITLE}</h1><p data-synchronization-unit="unit-2">Two.</p></article>`,
             synchronizationUnits: [
               { id: "unit-1", narrationText: LOADED_TITLE },
               { id: "unit-2", narrationText: "Two." },
@@ -304,7 +304,7 @@ export const RevisitingScreens = accountStory({
         // the card's cover, which moves into this one's place
         coverImage: { url: toStoryCoverUrl(REVISITED_READY_INDEX) },
         narrationDocument: {
-          html: `<article><h1 id="unit-1">${title}</h1><p id="unit-2">Two.</p></article>`,
+          html: `<article><h1 data-synchronization-unit="unit-1">${title}</h1><p data-synchronization-unit="unit-2">Two.</p></article>`,
           synchronizationUnits: [
             { id: "unit-1", narrationText: title },
             { id: "unit-2", narrationText: "Two." },

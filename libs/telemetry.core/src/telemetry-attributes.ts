@@ -8,6 +8,13 @@ export const TELEMETRY_ATTRIBUTES = {
   /** The join key: every conversion-scoped error, span and log carries it. */
   CONVERSION_ID: "cup.conversion.id",
   AUDIO_SEGMENT_SEQUENCE: "cup.audio_segment.sequence",
+  /** A synchronization unit's ID, such as the first one a rendered narration document got wrong. */
+  SYNCHRONIZATION_UNIT_ID: "cup.synchronization_unit.id",
+  /**
+   * How a rendered narration document first disagreed with the stored units, one of the reasons
+   * `NarrationDocumentMismatch` in `@cup/narration-document-creation` lists.
+   */
+  NARRATION_DOCUMENT_MISMATCH_REASON: "cup.narration_document.mismatch_reason",
   /** `account` or `grant`. */
   OWNER_KIND: "cup.owner.kind",
   ACCOUNT_ID: "cup.account.id",

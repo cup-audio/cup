@@ -322,7 +322,10 @@ test("a track URL the server refuses ends the playing session, and the next Play
 
   await timers.setTimeout((SHORT_URL_LIFETIME_SECONDS + 5) * 1_000);
   // A seek past the buffer requests the track again, with the expired URL.
-  await webView.$('button[aria-label="Play segment 4"]').click();
+  const fourthUnitId = (await readUnitIds(webView))[3]!;
+  // The unit's first element, its heading, holds no link.
+  const [fourthUnitHeading] = await webView.$$(`[data-synchronization-unit="${fourthUnitId}"]`);
+  await fourthUnitHeading!.click();
   await waitForSessionToEnd(device, 30_000);
   webView = await device.webView();
   await waitForPlayButton(webView, "Play");
@@ -582,12 +585,17 @@ async function startSigningOut(device: AndroidAppDevice, webView: WebdriverIO.Br
   return { webView: signedInWebView, scheduleDeletion };
 }
 
-/** How often the Worker answered a request for the audiobook, which renews its signed URLs. */
+/**
+ * How often the Worker answered a request for the audiobook, which renews its signed URLs. A
+ * renewal omits the narration document the page holds, so the path is compared without its query.
+ */
 function audiobookFetches(conversionId: string): number {
   return app.worker
     .requests()
     .filter(
-      (request) => request.method === "GET" && request.path === `/api/audiobooks/${conversionId}`,
+      (request) =>
+        request.method === "GET" &&
+        request.path.split("?")[0] === `/api/audiobooks/${conversionId}`,
     ).length;
 }
 
@@ -646,14 +654,19 @@ async function waitForSaveAfter(conversionId: string, saveCount: number): Promis
   return saves[saves.length - 1]!;
 }
 
-/** The audiobook's synchronization units in document order, from its segment controls. */
+/**
+ * The audiobook's synchronization units in document order, once each however many elements carry
+ * them.
+ */
 async function readUnitIds(webView: WebdriverIO.Browser): Promise<string[]> {
-  return webView.execute(() =>
-    Array.from(
-      document.querySelectorAll("button[data-segment-control]"),
-      (button) => button.parentElement?.id ?? "",
+  return webView.execute(() => [
+    ...new Set(
+      Array.from(
+        document.querySelectorAll("[data-synchronization-unit]"),
+        (element) => element.getAttribute("data-synchronization-unit") ?? "",
+      ),
     ),
-  );
+  ]);
 }
 
 /** Orders two saves by where they are in the audiobook: negative, zero or positive. */

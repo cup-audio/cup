@@ -97,7 +97,7 @@ type SourcePage = {
   goto(
     url: string,
     options: { waitUntil: "domcontentloaded" },
-  ): Promise<{ status(): number } | null>;
+  ): Promise<{ status(): number; url(): string } | null>;
   waitForFunction(
     pageFunction: (options: RenderedSourcePageReadinessOptions) => boolean,
     argument: RenderedSourcePageReadinessOptions,
@@ -141,11 +141,13 @@ export type DeclaredLanguage = {
 
 /**
  * Cleaned source HTML, the title used to begin narration, the source subtitle when the page has
- * one, the declared cover image, and the declared language.
+ * one, the URL the page was loaded from, the declared cover image, and the declared language.
  */
 export type SourceMaterial = {
   html: string;
   title: string;
+  /** The URL the source page was finally loaded from, after redirects. */
+  fetchedUrl: string;
   subtitle?: string;
   coverImage?: CoverImageDeclaration;
   declaredLanguage?: DeclaredLanguage;
@@ -173,6 +175,8 @@ export type LoadedSourcePage = {
   metadataDescriptions?: readonly string[];
   coverImage?: CoverImageDeclaration;
   declaredLanguage?: DeclaredLanguage;
+  /** The URL the page was finally loaded from, after redirects. */
+  fetchedUrl: string;
   responseStatus: number;
 };
 
@@ -203,7 +207,8 @@ export async function prepareSourceMaterial({
   if (sourceMaterials.length > 0) {
     // Each load detects its own source subtitle, so it always belongs to the selected HTML.
     // The declared language comes from the load whose source material is kept.
-    const { html, title, subtitle, declaredLanguage } = selectBetterSourceMaterial(sourceMaterials);
+    const { html, title, subtitle, fetchedUrl, declaredLanguage } =
+      selectBetterSourceMaterial(sourceMaterials);
     // Independent of which load has more text: `SOURCE_PAGE_JAVASCRIPT_MODES` puts the rendered
     // load last, and its metadata is the fuller declaration because a static shell often carries
     // none or only a site-wide image.
@@ -213,6 +218,7 @@ export async function prepareSourceMaterial({
       html,
       title,
       ...(subtitle === undefined ? {} : { subtitle }),
+      fetchedUrl,
       ...(coverImage === undefined ? {} : { coverImage }),
       ...(declaredLanguage === undefined ? {} : { declaredLanguage }),
     };
@@ -273,6 +279,7 @@ export function prepareLoadedSourcePage(sourcePage: LoadedSourcePage): SourceMat
     html: serialize(documentFragment),
     title,
     ...(subtitle === undefined ? {} : { subtitle }),
+    fetchedUrl: sourcePage.fetchedUrl,
     ...(sourcePage.coverImage === undefined ? {} : { coverImage: sourcePage.coverImage }),
     ...(sourcePage.declaredLanguage === undefined
       ? {}
@@ -374,6 +381,7 @@ export async function loadPublicSourcePage({
       metadataDescriptions: extractMetadataDescriptions(`${headHtml}${bodyHtml}`),
       ...(coverImage === undefined ? {} : { coverImage }),
       ...(declaredLanguage === undefined ? {} : { declaredLanguage }),
+      fetchedUrl: response.url(),
       responseStatus: response.status(),
     };
   } finally {

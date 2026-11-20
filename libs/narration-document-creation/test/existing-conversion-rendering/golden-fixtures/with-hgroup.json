@@ -1,0 +1,20 @@
+{
+  "description": "Prepared from 2026-10-29: the source title and source subtitle are grouped in an hgroup.",
+  "originalUrl": "https://publisher.example/articles/story?ref=feed",
+  "storedHtml": "<article><hgroup><h1 id=\"narration-unit-0001\">A story with a subtitle</h1><p id=\"narration-unit-0002\">The subtitle that says more</p></hgroup><p id=\"narration-unit-0003\">The first paragraph,<br>with a line break.</p></article>",
+  "synchronizationUnits": [
+    {
+      "id": "narration-unit-0001",
+      "narrationText": "A story with a subtitle"
+    },
+    {
+      "id": "narration-unit-0002",
+      "narrationText": "The subtitle that says more"
+    },
+    {
+      "id": "narration-unit-0003",
+      "narrationText": "The first paragraph,\nwith a line break."
+    }
+  ],
+  "expectedHtml": "<article><hgroup><h1 data-synchronization-unit=\"narration-unit-0001\">A story with a subtitle</h1><p data-synchronization-unit=\"narration-unit-0002\">The subtitle that says more</p></hgroup><p data-synchronization-unit=\"narration-unit-0003\">The first paragraph,<br>with a line break.</p></article>"
+}

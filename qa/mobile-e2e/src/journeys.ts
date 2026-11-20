@@ -77,6 +77,33 @@ export async function waitForLandingPage(webView: WebdriverIO.Browser): Promise<
   });
 }
 
+/** The one link in the narration document of `SOURCE_URL`, which the test Worker's page carries. */
+export const NARRATION_LINK_URL = "https://source.example.test/deterministic-fakes";
+
+/** On an audiobook's page, taps the narration document's link, then "Open link" in its popover. */
+export async function openNarrationLink(webView: WebdriverIO.Browser): Promise<void> {
+  const link = webView.$(`article a[href="${NARRATION_LINK_URL}"]`);
+  await link.waitForExist({ timeout: 60_000 });
+  // Any scroll closes the popover, so the link is scrolled to before the tap, and the scroll event
+  // has fired by the second animation frame.
+  await link.scrollIntoView({ block: "center" });
+  await webView.execute(
+    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+  );
+  await link.click();
+  const popover = webView.$('a[aria-label^="Open link"]');
+  await popover.waitForDisplayed({ timeout: 10_000 });
+  await popover.click();
+}
+
+/** On an audiobook's page, opens the top bar's menu and taps "Open original page". */
+export async function openOriginalPage(webView: WebdriverIO.Browser): Promise<void> {
+  await webView.$('button[aria-label="More"]').click();
+  const openOriginal = webView.$("a=Open original page");
+  await openOriginal.waitForDisplayed({ timeout: 10_000 });
+  await openOriginal.click();
+}
+
 export function pathname(webView: WebdriverIO.Browser): Promise<string> {
   return webView.execute(() => window.location.pathname);
 }

@@ -1,10 +1,10 @@
 import { expect, test } from "vitest";
 
-import { createNarrationChunks } from "#src/narration-chunking.ts";
+import { segmentUnitTexts } from "#src/segmentation-version-1/unit-text-segmentation.ts";
 
-const MAX_CHUNK_CHARACTERS = 2_000;
+const MAX_UNIT_TEXT_CHARACTERS = 2_000;
 
-test("creates one narration chunk per paragraph-like element", () => {
+test("creates one unit text per paragraph-like element", () => {
   const html = `
     <article>
       <h1>A Source Title</h1>
@@ -20,7 +20,7 @@ test("creates one narration chunk per paragraph-like element", () => {
     </article>
   `;
 
-  expect(createNarrationChunks(html)).toMatchInlineSnapshot(`
+  expect(segmentUnitTexts(html)).toMatchInlineSnapshot(`
     [
       {
         "text": "A Source Title
@@ -50,25 +50,25 @@ test("attaches consecutive non-empty headings to the next narration block", () =
     <p>Narration text.</p>
   `;
 
-  expect(createNarrationChunks(html)).toEqual([
+  expect(segmentUnitTexts(html)).toEqual([
     { text: "First heading\n\nSecond heading\n\nNarration text." },
   ]);
 });
 
-test("splits only a paragraph that exceeds the narration chunk limit", () => {
+test("splits only a paragraph that exceeds the unit text limit", () => {
   const paragraphText = Array.from({ length: 500 }, (_, index) => `word${index + 1}`).join(" ");
-  const chunks = createNarrationChunks(`<p>${paragraphText}</p><p>A short paragraph.</p>`);
+  const unitTexts = segmentUnitTexts(`<p>${paragraphText}</p><p>A short paragraph.</p>`);
 
-  expect(chunks.map(({ text }) => text.length)).toMatchInlineSnapshot(`
+  expect(unitTexts.map(({ text }) => text.length)).toMatchInlineSnapshot(`
     [
       1995,
       1895,
       18,
     ]
   `);
-  expect(chunks.every(({ text }) => text.length <= MAX_CHUNK_CHARACTERS)).toBe(true);
+  expect(unitTexts.every(({ text }) => text.length <= MAX_UNIT_TEXT_CHARACTERS)).toBe(true);
   expect(
-    chunks
+    unitTexts
       .slice(0, -1)
       .map(({ text }) => text)
       .join(" "),
@@ -79,7 +79,7 @@ test("splits oversized narration blocks at sentence boundaries", () => {
   const firstSentence = `${"a".repeat(1_198)}.`;
   const secondSentence = `${"b".repeat(898)}.`;
 
-  expect(createNarrationChunks(`<p>${firstSentence} ${secondSentence}</p>`)).toEqual([
+  expect(segmentUnitTexts(`<p>${firstSentence} ${secondSentence}</p>`)).toEqual([
     { text: firstSentence },
     { text: secondSentence },
   ]);
@@ -89,7 +89,7 @@ test("splits oversized narration blocks between Japanese sentences without white
   const firstSentence = `${"甲".repeat(1_199)}。`;
   const secondSentence = `${"乙".repeat(899)}。`;
 
-  expect(createNarrationChunks(`<p>${firstSentence}${secondSentence}</p>`)).toEqual([
+  expect(segmentUnitTexts(`<p>${firstSentence}${secondSentence}</p>`)).toEqual([
     { text: firstSentence },
     { text: secondSentence },
   ]);
@@ -100,9 +100,10 @@ test("does not add whitespace between adjacent Japanese sentences", () => {
   const secondSentence = `${"乙".repeat(499)}。`;
   const thirdSentence = `${"丙".repeat(1_199)}。`;
 
-  expect(createNarrationChunks(`<p>${firstSentence}${secondSentence}${thirdSentence}</p>`)).toEqual(
-    [{ text: `${firstSentence}${secondSentence}` }, { text: thirdSentence }],
-  );
+  expect(segmentUnitTexts(`<p>${firstSentence}${secondSentence}${thirdSentence}</p>`)).toEqual([
+    { text: `${firstSentence}${secondSentence}` },
+    { text: thirdSentence },
+  ]);
 });
 
 test("recognizes question and exclamation marks as sentence boundaries", () => {
@@ -115,39 +116,39 @@ test("recognizes question and exclamation marks as sentence boundaries", () => {
     const sentenceSeparator = firstPunctuation === "?" ? " " : "";
 
     expect(
-      createNarrationChunks(`<p>${firstSentence}${sentenceSeparator}${secondSentence}</p>`),
+      segmentUnitTexts(`<p>${firstSentence}${sentenceSeparator}${secondSentence}</p>`),
     ).toEqual([{ text: firstSentence }, { text: secondSentence }]);
   }
 });
 
 test("preserves the pause after a heading when its narration block is split", () => {
   const paragraphText = "narration ".repeat(250).trim();
-  const chunks = createNarrationChunks(`<h2>A heading</h2><p>${paragraphText}</p>`);
+  const unitTexts = segmentUnitTexts(`<h2>A heading</h2><p>${paragraphText}</p>`);
 
-  expect(chunks[0]?.text.startsWith("A heading\n\n")).toBe(true);
+  expect(unitTexts[0]?.text.startsWith("A heading\n\n")).toBe(true);
 });
 
-test("keeps narration text at the exact chunk limit together", () => {
-  const narrationText = "a".repeat(MAX_CHUNK_CHARACTERS);
+test("keeps narration text at the exact unit text limit together", () => {
+  const narrationText = "a".repeat(MAX_UNIT_TEXT_CHARACTERS);
 
-  expect(createNarrationChunks(`<p>${narrationText}</p>`)).toEqual([{ text: narrationText }]);
+  expect(segmentUnitTexts(`<p>${narrationText}</p>`)).toEqual([{ text: narrationText }]);
 });
 
 test("splits unbroken narration text without separating an emoji surrogate pair", () => {
-  const firstChunkText = "a".repeat(MAX_CHUNK_CHARACTERS - 1);
+  const firstUnitText = "a".repeat(MAX_UNIT_TEXT_CHARACTERS - 1);
 
-  expect(createNarrationChunks(`<p>${firstChunkText}😀</p>`)).toEqual([
-    { text: firstChunkText },
+  expect(segmentUnitTexts(`<p>${firstUnitText}😀</p>`)).toEqual([
+    { text: firstUnitText },
     { text: "😀" },
   ]);
 });
 
 test("retains words surrounding oversized unbroken narration text", () => {
-  const oversizedWord = "a".repeat(MAX_CHUNK_CHARACTERS + 1);
+  const oversizedWord = "a".repeat(MAX_UNIT_TEXT_CHARACTERS + 1);
 
-  expect(createNarrationChunks(`<p>Before ${oversizedWord} after.</p>`)).toEqual([
+  expect(segmentUnitTexts(`<p>Before ${oversizedWord} after.</p>`)).toEqual([
     { text: "Before" },
-    { text: "a".repeat(MAX_CHUNK_CHARACTERS) },
+    { text: "a".repeat(MAX_UNIT_TEXT_CHARACTERS) },
     { text: "a after." },
   ]);
 });
@@ -170,7 +171,7 @@ test("preserves visible text from generic containers", () => {
     <h2>A final heading</h2>
   `;
 
-  expect(createNarrationChunks(html)).toMatchInlineSnapshot(`
+  expect(segmentUnitTexts(html)).toMatchInlineSnapshot(`
     [
       {
         "text": "This unwrapped container text is not a paragraph.",
@@ -198,10 +199,10 @@ test("preserves visible text from generic containers", () => {
 test("preserves line breaks between direct container text", () => {
   const html = `<div>Text before.<br><!-- not visible -->Text after.</div>`;
 
-  expect(createNarrationChunks(html)).toEqual([{ text: "Text before.\nText after." }]);
+  expect(segmentUnitTexts(html)).toEqual([{ text: "Text before.\nText after." }]);
 });
 
-test("returns no narration chunks when the source material has no visible text", () => {
+test("returns no unit texts when the source material has no visible text", () => {
   const html = `
     <!-- not visible -->
     <script>script text</script>
@@ -210,13 +211,13 @@ test("returns no narration chunks when the source material has no visible text",
     <template><p>template text</p></template>
   `;
 
-  expect(createNarrationChunks(html)).toEqual([]);
+  expect(segmentUnitTexts(html)).toEqual([]);
 });
 
 test("collapses presentation whitespace in HTML text", () => {
   const html = "<p> First\tsecond\fthird\r\nfourth\n\n fifth </p>";
 
-  expect(createNarrationChunks(html)).toEqual([{ text: "First second third fourth fifth" }]);
+  expect(segmentUnitTexts(html)).toEqual([{ text: "First second third fourth fifth" }]);
 });
 
 test("preserves text surrounding nested block elements", () => {
@@ -232,7 +233,7 @@ test("preserves text surrounding nested block elements", () => {
     <custom-content>Text in a custom element.</custom-content>
   `;
 
-  expect(createNarrationChunks(html)).toMatchInlineSnapshot(`
+  expect(segmentUnitTexts(html)).toMatchInlineSnapshot(`
     [
       {
         "text": "Text before a nested container.",
@@ -268,6 +269,6 @@ test("collapses HTML text-node whitespace without losing explicit breaks", () =>
     After.
   </div>`;
 
-  expect(createNarrationChunks(formattedHtml)).toEqual(createNarrationChunks(compactHtml));
-  expect(createNarrationChunks(formattedHtml)).toEqual([{ text: "Before inline text.\nAfter." }]);
+  expect(segmentUnitTexts(formattedHtml)).toEqual(segmentUnitTexts(compactHtml));
+  expect(segmentUnitTexts(formattedHtml)).toEqual([{ text: "Before inline text.\nAfter." }]);
 });

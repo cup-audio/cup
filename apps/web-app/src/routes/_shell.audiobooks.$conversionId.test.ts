@@ -46,14 +46,28 @@ async function goBackAsTheSystemDoes(page: Page) {
   });
 }
 
-/** The texts of the first three blocks of the narration document, inside an `<hgroup>` or not. */
+/**
+ * The texts of the first three blocks of the narration document, inside an `<hgroup>` or not. A
+ * segment's Play from here button is no block.
+ */
 async function readOpeningTexts(article: Locator) {
   return article.evaluate((element) =>
     [...element.querySelectorAll(":scope > *, :scope > hgroup > *")]
-      .filter((block) => block.tagName !== "HGROUP")
+      .filter((block) => block.tagName !== "HGROUP" && block.tagName !== "BUTTON")
       .slice(0, 3)
       .map((block) => block.textContent.trim()),
   );
+}
+
+/** The `narrationDocument` query of each audiobook request the story answered, in order. */
+async function readAudiobookRequestQueries(page: Page): Promise<unknown[]> {
+  const queries: unknown = await page.evaluate(() =>
+    Reflect.get(window, "audiobookRequestQueries"),
+  );
+  if (!Array.isArray(queries)) {
+    throw new TypeError("The story recorded no audiobook requests");
+  }
+  return queries;
 }
 
 /** Waits until the element plays within a unit of five seconds that starts at `startSeconds`. */
@@ -74,12 +88,14 @@ test(
 
     const component = await mount("routes/_shell.audiobooks.$conversionId/GatesNotesArticle");
 
-    await component.locator("#narration-unit-0003").click();
-    await expect(component.locator("#narration-unit-0003")).toHaveAttribute("aria-current", "true");
+    await component.locator('[data-synchronization-unit="narration-unit-0003"]').click();
+    await expect(
+      component.locator('[data-synchronization-unit="narration-unit-0003"]'),
+    ).toHaveAttribute("aria-current", "true");
     await expect(component.getByRole("button", { name: "Pause", exact: true })).toBeVisible();
     await expectPlayingFrom(page, 10);
 
-    const nestedText = component.locator("#narration-unit-0010 em");
+    const nestedText = component.locator('[data-synchronization-unit="narration-unit-0010"] em');
     await nestedText.scrollIntoViewIfNeeded();
     const nestedTextBounds = await nestedText.boundingBox();
     expect(nestedTextBounds).not.toBeNull();
@@ -87,40 +103,428 @@ test(
       nestedTextBounds!.x + nestedTextBounds!.width / 2,
       nestedTextBounds!.y + nestedTextBounds!.height / 2,
     );
-    await expect(component.locator("#narration-unit-0010")).toHaveAttribute("aria-current", "true");
+    await expect(
+      component.locator('[data-synchronization-unit="narration-unit-0010"]'),
+    ).toHaveAttribute("aria-current", "true");
     await expectPlayingFrom(page, 45);
 
     await component.getByRole("button", { name: "Pause", exact: true }).click();
     await expect(component.getByRole("button", { name: "Play", exact: true })).toBeVisible();
+    const selectedSegment = component.locator('[data-synchronization-unit="narration-unit-0005"]');
+    await selectedSegment.scrollIntoViewIfNeeded();
+    const selectedSegmentBounds = await selectedSegment.boundingBox();
+    expect(selectedSegmentBounds).not.toBeNull();
+    await page.mouse.move(selectedSegmentBounds!.x + 4, selectedSegmentBounds!.y + 8);
+    await page.mouse.down();
+    await page.mouse.move(
+      selectedSegmentBounds!.x + selectedSegmentBounds!.width / 2,
+      selectedSegmentBounds!.y + 8,
+      {
+        steps: 5,
+      },
+    );
+    await page.mouse.up();
+    expect(await page.evaluate(() => window.getSelection()?.toString().length)).toBeGreaterThan(0);
+    // Ending a text selection is not a request to play.
+    await expect(component.getByRole("button", { name: "Play", exact: true })).toBeVisible();
+    await expect(selectedSegment).not.toHaveAttribute("aria-current");
     expect((await readNarrationAudio(page)).paused).toBe(true);
-    await component.getByRole("button", { name: "Play segment 2", exact: true }).click();
-    await expect(component.getByRole("button", { name: "Pause", exact: true })).toBeVisible();
-    await expectPlayingFrom(page, 5);
-
-    await component.getByRole("button", { name: "Pause", exact: true }).click();
-    const segmentButton = component.getByRole("button", { name: "Play segment 3", exact: true });
-    await component.getByRole("button", { name: "Play segment 2", exact: true }).focus();
-    await page.keyboard.press("Tab");
-    await expect(segmentButton).toBeFocused();
-    expect(
-      await segmentButton.evaluate((button) => getComputedStyle(button).outlineStyle),
-    ).not.toBe("none");
-    await segmentButton.press("Enter");
-    await expect(component.locator("#narration-unit-0003")).toHaveAttribute("aria-current", "true");
-    await expect(component.getByRole("button", { name: "Pause", exact: true })).toBeVisible();
-    await expectPlayingFrom(page, 10);
-
-    await component.getByRole("button", { name: "Pause", exact: true }).click();
-    await segmentButton.focus();
-    await segmentButton.press("Space");
-    await expect(component.getByRole("button", { name: "Pause", exact: true })).toBeVisible();
-    await expect(
-      component.getByRole("heading", {
-        name: "The turbulent AI era is here. The choices we make now are critical.",
-      }),
-    ).toBeVisible();
   },
 );
+
+test("tapping a link plays nothing and offers to open it in a popover", async ({ mount, page }) => {
+  await captureNarrationAudio(page);
+  await page
+    .context()
+    .route("https://www.dol.gov/**", (route) =>
+      route.fulfill({ contentType: "text/html", body: "" }),
+    );
+
+  const component = await mount("routes/_shell.audiobooks.$conversionId/GatesNotesArticle");
+  const segment = component.locator('[data-synchronization-unit="narration-unit-0023"]');
+  const link = segment.getByRole("link", { name: "roughly 25 percent", exact: true });
+  const popover = page.getByRole("link", { name: /^Open link/ });
+
+  await link.scrollIntoViewIfNeeded();
+  await link.click();
+  await expect(popover).toBeVisible();
+  await expect(popover).toHaveAccessibleName("Open link: roughly 25 percent, www.dol.gov");
+  await expect(popover).toContainText("Open link ↗");
+  await expect(popover).toContainText("www.dol.gov");
+  await expect(popover).toHaveAttribute(
+    "href",
+    "https://www.dol.gov/general/aboutdol/history/chapter5",
+  );
+  await expect(popover).toHaveAttribute("target", "_blank");
+  await expect(popover).toHaveAttribute("rel", "noopener noreferrer");
+  await expect(link).toHaveCSS("background-color", "rgba(18, 18, 18, 0.08)");
+  // The popover sits below the link.
+  const linkBounds = await link.boundingBox();
+  const popoverBounds = await popover.boundingBox();
+  expect(popoverBounds!.y).toBeGreaterThan(linkBounds!.y + linkBounds!.height);
+  await expect(segment).not.toHaveAttribute("aria-current");
+  await expect(component.getByRole("button", { name: "Play", exact: true })).toBeVisible();
+
+  const [openedPage] = await Promise.all([page.context().waitForEvent("page"), popover.click()]);
+  await expect
+    .poll(() => openedPage.url())
+    .toBe("https://www.dol.gov/general/aboutdol/history/chapter5");
+  expect(await openedPage.evaluate(() => [window.opener, document.referrer])).toEqual([null, ""]);
+  await expect(popover).toHaveCount(0);
+  await expect(link).not.toHaveCSS("background-color", "rgba(18, 18, 18, 0.08)");
+  await expect(segment).not.toHaveAttribute("aria-current");
+  expect((await readNarrationAudio(page)).paused).toBe(true);
+});
+
+test("tapping beside the link popover or scrolling closes it without playback", async ({
+  mount,
+  page,
+}) => {
+  await captureNarrationAudio(page);
+
+  const component = await mount("routes/_shell.audiobooks.$conversionId/GatesNotesArticle");
+  const segment = component.locator('[data-synchronization-unit="narration-unit-0023"]');
+  const link = segment.getByRole("link", { name: "roughly 25 percent", exact: true });
+  const popover = page.getByRole("link", { name: /^Open link/ });
+
+  await link.scrollIntoViewIfNeeded();
+  await link.click();
+  await expect(popover).toBeVisible();
+  // A tap on the segment's own text lands on the backdrop.
+  const segmentBounds = await segment.boundingBox();
+  await page.mouse.click(segmentBounds!.x + 4, segmentBounds!.y + 8);
+  await expect(popover).toHaveCount(0);
+  await expect(segment).not.toHaveAttribute("aria-current");
+  await expect(component.getByRole("button", { name: "Play", exact: true })).toBeVisible();
+
+  await link.click();
+  await expect(popover).toBeVisible();
+  await page.evaluate(() => window.scrollBy({ top: 200 }));
+  await expect(popover).toHaveCount(0);
+  await expect(segment).not.toHaveAttribute("aria-current");
+  expect((await readNarrationAudio(page)).paused).toBe(true);
+});
+
+test("from the keyboard, a link opens the popover focused, and Play from here plays its segment", async ({
+  mount,
+  page,
+}) => {
+  await captureNarrationAudio(page);
+
+  const component = await mount("routes/_shell.audiobooks.$conversionId/GatesNotesArticle");
+  const link = component
+    .locator('[data-synchronization-unit="narration-unit-0023"]')
+    .getByRole("link", { name: "roughly 25 percent", exact: true });
+  const popover = page.getByRole("link", { name: /^Open link/ });
+
+  // Focus alone would scroll the link into view, and that scroll would close the popover.
+  await link.scrollIntoViewIfNeeded();
+  await link.focus();
+  await page.keyboard.press("Enter");
+  await expect(popover).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(popover).toHaveCount(0);
+  await expect(link).toBeFocused();
+
+  // One button per segment, before its text: the third plays the third segment.
+  const playFromHere = component.getByRole("button", { name: "Play from here", exact: true });
+  await expect(playFromHere).toHaveCount(
+    await component
+      .locator("[data-synchronization-unit]")
+      .evaluateAll(
+        (elements) =>
+          new Set(elements.map((element) => element.getAttribute("data-synchronization-unit")))
+            .size,
+      ),
+  );
+  const thirdSegmentButton = playFromHere.nth(2);
+  expect((await thirdSegmentButton.boundingBox())!.width).toBeLessThanOrEqual(1);
+  await playFromHere.nth(1).focus();
+  await page.keyboard.press("Tab");
+  await expect(thirdSegmentButton).toBeFocused();
+  expect((await thirdSegmentButton.boundingBox())!.width).toBeGreaterThan(1);
+  await page.keyboard.press("Enter");
+  await expect(
+    component.locator('[data-synchronization-unit="narration-unit-0003"]'),
+  ).toHaveAttribute("aria-current", "true");
+  await expectPlayingFrom(page, 10);
+
+  await component.getByRole("button", { name: "Pause", exact: true }).click();
+  await thirdSegmentButton.focus();
+  await page.keyboard.press("Space");
+  await expect(component.getByRole("button", { name: "Pause", exact: true })).toBeVisible();
+  await expectPlayingFrom(page, 10);
+});
+
+test("a heading before a list highlights and plays together with the list's first item", async ({
+  mount,
+  page,
+}) => {
+  await captureNarrationAudio(page);
+
+  const component = await mount("routes/_shell.audiobooks.$conversionId/HeadingBeforeAList");
+  const heading = component.getByRole("heading", { name: "Two rules" });
+  const firstItem = component.getByText("Keep the important boundaries real.");
+
+  await heading.click();
+  await expect(heading).toHaveAttribute("aria-current", "true");
+  await expect(firstItem).toHaveAttribute("aria-current", "true");
+  await expectPlayingFrom(page, 5);
+
+  await component.getByText("Replace only what you cannot control.").click();
+  await expect(heading).not.toHaveAttribute("aria-current");
+  await expect(firstItem).not.toHaveAttribute("aria-current");
+  await expectPlayingFrom(page, 10);
+
+  await firstItem.click();
+  await expect(heading).toHaveAttribute("aria-current", "true");
+  await expect(firstItem).toHaveAttribute("aria-current", "true");
+  await expectPlayingFrom(page, 5);
+  // Each segment is announced and reached with Tab once, not once per element.
+  await expect(component.getByRole("button", { name: "Play from here", exact: true })).toHaveCount(
+    3,
+  );
+  await component.getByRole("button", { name: "Play from here", exact: true }).nth(2).focus();
+  await page.keyboard.press("Enter");
+  await expectPlayingFrom(page, 10);
+});
+
+test("units inside a restored table, description list and preformatted text highlight and play", async ({
+  mount,
+  page,
+}) => {
+  await captureNarrationAudio(page);
+
+  const component = await mount("routes/_shell.audiobooks.$conversionId/RestoredStructure");
+  const heading = component.getByRole("heading", { name: "Latency" });
+  const caption = component.getByText("Latency by region");
+
+  await heading.click();
+  await expect(heading).toHaveAttribute("aria-current", "true");
+  await expect(caption).toHaveAttribute("aria-current", "true");
+  await expectPlayingFrom(page, 5);
+
+  for (const [text, startSeconds] of [
+    ["Region", 10],
+    ["380 ms", 25],
+    ["Median", 30],
+    ["The middle value of all measurements.", 35],
+  ] as const) {
+    const unitElement = component.getByText(text, { exact: true });
+
+    await unitElement.click();
+    await expect(unitElement).toHaveAttribute("aria-current", "true");
+    await expectPlayingFrom(page, startSeconds);
+  }
+
+  const preformattedText = component.locator("pre");
+
+  // The line break shows, which only the rendered text knows.
+  expect(await preformattedText.evaluate((element: HTMLElement) => element.innerText)).toBe(
+    "A short poem\nin two lines",
+  );
+  await preformattedText.click();
+  await expect(preformattedText).toHaveAttribute("aria-current", "true");
+  await expect(caption).not.toHaveAttribute("aria-current");
+  await expectPlayingFrom(page, 40);
+  await expect(component.getByRole("button", { name: "Play from here", exact: true })).toHaveCount(
+    9,
+  );
+});
+
+test("a table row, and a heading with the table's first row, highlight and play as one segment", async ({
+  mount,
+  page,
+}) => {
+  await captureNarrationAudio(page);
+
+  const component = await mount("routes/_shell.audiobooks.$conversionId/RowUnits");
+  const heading = component.getByRole("heading", { name: "Latency" });
+  const rows = component.getByRole("row");
+  const headerRow = rows.nth(0);
+  const europeRow = rows.nth(1);
+  const asiaRow = rows.nth(2);
+
+  await component.getByRole("cell", { name: "380 ms", exact: true }).click();
+  await expect(europeRow).toHaveAttribute("aria-current", "true");
+  await expect(heading).not.toHaveAttribute("aria-current");
+  await expectPlayingFrom(page, 10);
+
+  await component.getByRole("columnheader", { name: "Region", exact: true }).click();
+  await expect(heading).toHaveAttribute("aria-current", "true");
+  await expect(headerRow).toHaveAttribute("aria-current", "true");
+  await expect(europeRow).not.toHaveAttribute("aria-current");
+  await expectPlayingFrom(page, 5);
+
+  await component.getByText("The middle value of all measurements.").click();
+  await expect(component.getByText("Median", { exact: true })).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
+  await expectPlayingFrom(page, 20);
+
+  // A row's Play from here button sits in its first cell, since a row holds only cells.
+  for (const row of [headerRow, europeRow, asiaRow]) {
+    expect(
+      await row.evaluate((element) =>
+        [...element.children].every((child) => ["TD", "TH"].includes(child.tagName)),
+      ),
+    ).toBe(true);
+  }
+  await expect(component.getByRole("button", { name: "Play from here", exact: true })).toHaveCount(
+    5,
+  );
+  await asiaRow.getByRole("button", { name: "Play from here", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await expect(asiaRow).toHaveAttribute("aria-current", "true");
+  await expectPlayingFrom(page, 15);
+});
+
+test(
+  "wide tables and preformatted text scroll inside their cards, never the page",
+  { tag: VISUAL_TAG },
+  async ({ mount, page }) => {
+    const component = await mount("routes/_shell.audiobooks.$conversionId/KeptMarkup");
+    const scrollCards = component.locator("[data-scroll-card]");
+    await expect(scrollCards).toHaveCount(3);
+
+    await expectNoHorizontalOverflow(page);
+    for (const scrollCard of await scrollCards.all()) {
+      const { scrollWidth, clientWidth } = await scrollCard.evaluate((element) => ({
+        scrollWidth: element.scrollWidth,
+        clientWidth: element.clientWidth,
+      }));
+      expect(clientWidth).toBeGreaterThan(0);
+      expect(scrollWidth).toBeGreaterThanOrEqual(clientWidth);
+      await expect(scrollCard).toHaveCSS("overflow-x", "auto");
+    }
+  },
+);
+
+/**
+ * Makes the screen as tall as the page, so the whole narration document shows with the shell's top
+ * bar above it and the player sheet below it, none of them over another.
+ */
+async function showWholePage(page: Page) {
+  // The page reaches its height once the narration document is in.
+  await expect(page.getByRole("article")).toBeVisible();
+  const viewport = page.viewportSize();
+  expect(viewport).not.toBeNull();
+  const pageHeight = await page.evaluate(() => document.documentElement.scrollHeight);
+  await page.setViewportSize({ width: viewport!.width, height: pageHeight });
+}
+
+/**
+ * The area of the screen that holds every given element, with room for a highlight bubble, which
+ * reaches 12 px past its element.
+ */
+async function readUnionBounds(page: Page, locators: Locator[]) {
+  const viewport = page.viewportSize();
+  expect(viewport).not.toBeNull();
+  const boxes = await Promise.all(locators.map((locator) => locator.boundingBox()));
+  const left = Math.max(0, Math.min(...boxes.map((box) => box!.x)) - HIGHLIGHT_MARGIN_PIXELS);
+  const top = Math.max(0, Math.min(...boxes.map((box) => box!.y)) - HIGHLIGHT_MARGIN_PIXELS);
+  const right = Math.min(
+    viewport!.width,
+    Math.max(...boxes.map((box) => box!.x + box!.width)) + HIGHLIGHT_MARGIN_PIXELS,
+  );
+  const bottom = Math.min(
+    viewport!.height,
+    Math.max(...boxes.map((box) => box!.y + box!.height)) + HIGHLIGHT_MARGIN_PIXELS,
+  );
+  return { x: left, y: top, width: right - left, height: bottom - top };
+}
+
+const HIGHLIGHT_MARGIN_PIXELS = 16;
+
+test(
+  "renders every kept element of the narration document",
+  { tag: VISUAL_TAG },
+  async ({ mount, page }) => {
+    const component = await mount("routes/_shell.audiobooks.$conversionId/KeptMarkup");
+    await showWholePage(page);
+
+    await expect(component.getByRole("article")).toHaveScreenshot("kept-markup.png");
+  },
+);
+
+test(
+  "a wide table and a long preformatted line scroll sideways inside their cards",
+  { tag: VISUAL_TAG },
+  async ({ mount, page }) => {
+    const component = await mount("routes/_shell.audiobooks.$conversionId/KeptMarkup");
+    await showWholePage(page);
+    const tableCard = component.locator("[data-scroll-card]").filter({ hasText: "Conversions" });
+    const preformattedTextCard = component.locator("[data-scroll-card]:has(pre)");
+
+    for (const [scrollCard, screenshotName] of [
+      [tableCard, "kept-markup-table-scrolled.png"],
+      [preformattedTextCard, "kept-markup-pre-scrolled.png"],
+    ] as const) {
+      await scrollCard.evaluate((element) => {
+        element.scrollLeft = element.scrollWidth;
+      });
+      await expect(scrollCard).toHaveScreenshot(screenshotName);
+    }
+  },
+);
+
+test("a link's popover points at the link", { tag: VISUAL_TAG }, async ({ mount, page }) => {
+  const component = await mount("routes/_shell.audiobooks.$conversionId/KeptMarkup");
+  const link = component.getByRole("link", { name: "postmortem archive", exact: true });
+
+  await link.scrollIntoViewIfNeeded();
+  await link.click();
+  await expect(page.getByRole("link", { name: /^Open link/ })).toBeVisible();
+  await expect(page).toHaveScreenshot("kept-markup-link-popover.png");
+});
+
+test(
+  "a heading with a table's first row and a single cell are highlighted within the table",
+  { tag: VISUAL_TAG },
+  async ({ mount, page }) => {
+    const component = await mount("routes/_shell.audiobooks.$conversionId/KeptMarkup");
+    await showWholePage(page);
+    const position = component.getByRole("slider", {
+      name: "Position in Keeping the pipeline honest",
+    });
+    const heading = component.getByRole("heading", { name: "Monthly figures" });
+    const headerRow = component.getByRole("row").filter({ hasText: "Conversions" });
+    const cell = component.getByRole("cell", { name: "Kept for long-form articles" });
+
+    // The heading's unit is the ninth, which starts at 40 s; the cell's is the sixteenth.
+    await position.fill("41000");
+    await expect(heading).toHaveAttribute("aria-current", "true");
+    await expect(headerRow).toHaveAttribute("aria-current", "true");
+    await expect(page).toHaveScreenshot("kept-markup-heading-and-row-highlight.png", {
+      clip: await readUnionBounds(page, [heading, component.locator("h3 + [data-scroll-card]")]),
+    });
+
+    await position.fill("76000");
+    await expect(cell).toHaveAttribute("aria-current", "true");
+    await expect(
+      component.locator("[data-scroll-card]").filter({ hasText: "Kept for long-form articles" }),
+    ).toHaveScreenshot("kept-markup-cell-highlight.png");
+  },
+);
+
+test("a failed segment is marked across all its elements", async ({ mount }) => {
+  const component = await mount(
+    "routes/_shell.audiobooks.$conversionId/HeadingBeforeAListWithFailedSegment",
+  );
+
+  await expect(component.getByRole("heading", { name: "Two rules" })).toHaveAttribute(
+    "data-synthesis-failed",
+    "",
+  );
+  await expect(component.getByText("Keep the important boundaries real.")).toHaveAttribute(
+    "data-synthesis-failed",
+    "",
+  );
+  await expect(component.getByText("Replace only what you cannot control.")).not.toHaveAttribute(
+    "data-synthesis-failed",
+  );
+});
 
 test("without a source subtitle the host follows the title directly", async ({ mount }) => {
   const component = await mount("routes/_shell.audiobooks.$conversionId/ReadyAudiobook");
@@ -142,7 +546,10 @@ test("the position bar seeks the narration track", { tag: VISUAL_TAG }, async ({
   });
   await position.fill("11000");
 
-  await expect(component.locator("#unit-3")).toHaveAttribute("aria-current", "true");
+  await expect(component.locator('[data-synchronization-unit="unit-3"]')).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
   await expect.poll(async () => (await readNarrationAudio(page)).currentTime).toBe(11);
   expect((await readNarrationAudio(page)).paused).toBe(true);
 });
@@ -157,7 +564,7 @@ test(
     const playerSheet = component.getByRole("contentinfo", { name: "Player" });
     const miniPlayer = component.getByRole("region", { name: "Player" });
 
-    await component.getByRole("button", { name: "Play segment 2", exact: true }).click();
+    await component.getByText("Keep the important boundaries real.", { exact: true }).click();
     await expect(playerSheet.getByRole("button", { name: "Pause", exact: true })).toBeVisible();
     await expectPlayingFrom(page, 5);
     expect((await readNarrationAudio(page)).src).toContain("audiobook=story");
@@ -228,7 +635,7 @@ test(
     const component = await mount("routes/_shell.audiobooks.$conversionId/ResumingAcrossPages");
     const playerSheet = component.getByRole("contentinfo", { name: "Player" });
 
-    await component.getByRole("button", { name: "Play segment 2", exact: true }).click();
+    await component.getByText("Keep the important boundaries real.", { exact: true }).click();
     await expectPlayingFrom(page, 5);
     await component.getByRole("link", { name: "Back", exact: true }).click();
     await component
@@ -239,7 +646,10 @@ test(
     // The listener stopped 12 s in, in the second unit; showing it loads nothing.
     await expect(playerSheet.getByText("0:12", { exact: true })).toBeVisible();
     await expect(playerSheet.getByText("-0:18", { exact: true })).toBeVisible();
-    await expect(component.locator(`[id="unit-2"]`)).toHaveAttribute("aria-current", "true");
+    await expect(component.locator('[data-synchronization-unit="unit-2"]')).toHaveAttribute(
+      "aria-current",
+      "true",
+    );
     expect((await readNarrationAudio(page)).src).not.toContain("audiobook=second");
 
     await playerSheet.getByRole("button", { name: "Forward 15 seconds", exact: true }).click();
@@ -371,9 +781,9 @@ test(
     const topBar = component.getByRole("banner");
     await expect(component.getByRole("heading", { name: title })).toBeVisible();
 
-    const segment = component.locator("#narration-unit-0005");
+    const segment = component.locator('[data-synchronization-unit="narration-unit-0005"]');
     await segment.scrollIntoViewIfNeeded();
-    await component.getByRole("button", { name: "Play segment 5", exact: true }).click();
+    await segment.click();
     await expect(segment).toHaveAttribute("aria-current", "true");
     await expect(topBar.getByText(title)).toBeVisible();
     await expect(topBar.getByText("gatesnotes.com", { exact: true })).toBeVisible();
@@ -771,7 +1181,7 @@ test("an audiobook opened again loads at the position saved meanwhile, while its
     await component.getByRole("listitem").filter({ hasText: title }).getByRole("link").click();
   };
 
-  await component.getByRole("button", { name: "Play segment 2", exact: true }).click();
+  await component.getByText("Keep the important boundaries real.", { exact: true }).click();
   await expectPlayingFrom(page, 5);
   // Playing another audiobook saves the listening position in this one.
   await openFromRecents("A second document about listening");
@@ -822,7 +1232,7 @@ test(
       component.getByText("Keep the important boundaries real.", { exact: true }),
     ).toBeVisible();
     await expect(component.getByRole("button", { name: "Play", exact: true })).toBeDisabled();
-    await expect(component.getByRole("button", { name: /^Play segment/ })).toHaveCount(0);
+    await expect(component.getByRole("button", { name: "Play from here" })).toHaveCount(0);
     await expect(page).toHaveScreenshot("synthesizing-audiobook.png");
   },
 );
@@ -853,9 +1263,12 @@ test(
     await expect(
       component.getByText("Audio could not be generated for 1 segment, marked in the text."),
     ).toBeVisible();
-    await expect(component.locator("#unit-2")).toHaveAttribute("data-synthesis-failed", "");
+    await expect(component.locator('[data-synchronization-unit="unit-2"]')).toHaveAttribute(
+      "data-synthesis-failed",
+      "",
+    );
     await expect(component.getByRole("button", { name: "Play", exact: true })).toBeDisabled();
-    await expect(component.getByRole("button", { name: /^Play segment/ })).toHaveCount(0);
+    await expect(component.getByRole("button", { name: "Play from here" })).toHaveCount(0);
     await expect(component.getByRole("button", { name: /Play without/ })).toHaveCount(0);
     await expect(component.getByText(/skipped during playback/)).toHaveCount(0);
     await expect(component.getByRole("button", { name: "Retry", exact: true })).toBeEnabled();
@@ -899,7 +1312,7 @@ test(
     await expect(component.getByRole("button", { name: "Retry", exact: true })).toBeEnabled();
     await expect(component.getByRole("button", { name: /Play without/ })).toHaveCount(0);
     await expect(component.getByRole("button", { name: "Play", exact: true })).toBeDisabled();
-    await expect(component.getByRole("button", { name: /^Play segment/ })).toHaveCount(0);
+    await expect(component.getByRole("button", { name: "Play from here" })).toHaveCount(0);
     await expect(page).toHaveScreenshot("audiobook-without-audio.png");
   },
 );
@@ -1082,6 +1495,68 @@ test("failed polling keeps the track and shows one toast until polling recovers"
     .toBe(0);
   expect(Math.max(...toastCounts)).toBe(1);
   await expect(component.getByText("Keep the important boundaries real.")).toBeVisible();
+});
+
+test("polls after the first one that brings the narration document omit it, and the track still plays from the held document", async ({
+  mount,
+  page,
+}) => {
+  await captureNarrationAudio(page);
+  const component = await mount(
+    "routes/_shell.audiobooks.$conversionId/SynthesisPolledWithoutNarrationDocument",
+  );
+
+  // The page loads pending and polls until the track is ready.
+  await expect(component.getByRole("button", { name: "Play", exact: true })).toBeEnabled();
+  // A page load holds no document, and neither does a pending audiobook.
+  const queries = await readAudiobookRequestQueries(page);
+  expect(queries.slice(0, 2)).toStrictEqual([null, null]);
+  expect(queries.length).toBeGreaterThanOrEqual(4);
+  expect(new Set(queries.slice(2))).toStrictEqual(new Set(["omit"]));
+  await expect(component.getByText("Keep the important boundaries real.")).toBeVisible();
+
+  await component.getByRole("button", { name: "Play", exact: true }).click();
+  await expectPlayingFrom(page, 0);
+  await expect(component.locator('[data-synchronization-unit="unit-1"]')).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
+});
+
+test("a track URL renewed without the narration document plays, highlights and saves its position from the held document", async ({
+  mount,
+  page,
+}) => {
+  await captureNarrationAudio(page);
+  const component = await mount(
+    "routes/_shell.audiobooks.$conversionId/TrackRenewedWithoutNarrationDocument",
+  );
+  const playerSheet = component.getByRole("contentinfo", { name: "Player" });
+  await playerSheet.getByRole("button", { name: "Play", exact: true }).click();
+  await expect(playerSheet.getByRole("alert")).toHaveText(
+    "Audio could not be played. Press Play to try again.",
+  );
+
+  await playerSheet.getByRole("button", { name: "Play", exact: true }).click();
+
+  // The element reports playing the failed URL until the renewed one replaces it.
+  await expect
+    .poll(async () => (await readNarrationAudio(page)).src)
+    .not.toContain("missing-narration-track");
+  await expectPlayingFrom(page, 0);
+  // Only the page load requests the document; a refetch on mount and the renewal omit it.
+  const queries = await readAudiobookRequestQueries(page);
+  expect(queries[0]).toBeNull();
+  expect(queries.length).toBeGreaterThanOrEqual(2);
+  expect(new Set(queries.slice(1))).toStrictEqual(new Set(["omit"]));
+  await expect(component.locator('[data-synchronization-unit="unit-1"]')).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
+  await playerSheet.getByRole("button", { name: "Pause", exact: true }).click();
+  await expect
+    .poll(() => page.evaluate(() => Reflect.get(window, "savedPositions")))
+    .toContainEqual(expect.objectContaining({ synchronizationUnitId: "unit-1" }));
 });
 
 test("the page title names the audiobook once it has loaded", async ({ mount, page }) => {

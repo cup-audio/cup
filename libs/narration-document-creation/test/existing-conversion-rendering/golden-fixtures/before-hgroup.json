@@ -1,0 +1,20 @@
+{
+  "description": "Prepared before 2026-10-29: the source title is a bare h1, with no hgroup and no source subtitle.",
+  "originalUrl": "https://publisher.example/articles/story?ref=feed",
+  "storedHtml": "<article><h1 id=\"narration-unit-0001\">A story from before hgroup</h1><p id=\"narration-unit-0002\" lang=\"en\" dir=\"ltr\">An intro with a <a href=\"/about\">relative link</a> and <a href=\"mailto:editor@publisher.example\">an email</a>.</p><section id=\"narration-unit-0003\"><h2>A section</h2><p>The body with <em>emphasis</em>, <strong>strength</strong> and <code>code</code>.</p></section></article>",
+  "synchronizationUnits": [
+    {
+      "id": "narration-unit-0001",
+      "narrationText": "A story from before hgroup"
+    },
+    {
+      "id": "narration-unit-0002",
+      "narrationText": "An intro with a relative link and an email."
+    },
+    {
+      "id": "narration-unit-0003",
+      "narrationText": "A section\n\nThe body with emphasis, strength and code."
+    }
+  ],
+  "expectedHtml": "<article><h1 data-synchronization-unit=\"narration-unit-0001\">A story from before hgroup</h1><p data-synchronization-unit=\"narration-unit-0002\">An intro with a <a href=\"https://publisher.example/about\">relative link</a> and an email.</p><h2 data-synchronization-unit=\"narration-unit-0003\">A section</h2><p data-synchronization-unit=\"narration-unit-0003\">The body with <em>emphasis</em>, <strong>strength</strong> and <code>code</code>.</p></article>"
+}

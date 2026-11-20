@@ -2,7 +2,8 @@ import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import type { RouteHandler } from "@hono/zod-openapi";
 
 import {
-  audiobookSchema,
+  audiobookQuerySchema,
+  audiobookResponseSchema,
   retryConversionResponseSchema,
   scheduleDeletionResponseSchema,
   signedMediaUrlQuerySchema,
@@ -297,11 +298,14 @@ const startTrialConversionRoute = createRoute({
 const audiobookRoute = createRoute({
   method: "get",
   path: "/api/audiobooks/{conversionId}",
-  request: { params: conversionParamsSchema },
+  request: {
+    params: conversionParamsSchema,
+    query: audiobookQuerySchema,
+  },
   responses: {
     200: {
-      content: { "application/json": { schema: audiobookSchema } },
-      description: "Audiobook.",
+      content: { "application/json": { schema: audiobookResponseSchema } },
+      description: "Audiobook, without its narration document when the request omits it.",
     },
     400: errorResponse("Invalid request."),
     404: errorResponse("Audiobook not found."),

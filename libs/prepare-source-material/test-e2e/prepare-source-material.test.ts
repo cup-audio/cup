@@ -192,6 +192,7 @@ for (const {
     expect(sourceMaterial.coverImage).toEqual(coverImage);
     expect(sourceMaterial.declaredLanguage).toEqual(declaredLanguage);
     expect(sourceMaterial.title).toBe(title);
+    expect(sourceMaterial.fetchedUrl).toBe(url);
     expect(sourceMaterial.subtitle).toBe(subtitle);
     if (subtitle !== undefined) {
       expect(extractText(parseFragment(sourceMaterial.html)).replace(/\s+/gu, " ")).not.toContain(

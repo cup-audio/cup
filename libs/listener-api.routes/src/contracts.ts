@@ -170,39 +170,59 @@ const pendingPreparationPhaseSchema = z
   )
   .optional();
 const readerBase = { originalUrl: sourceUrlSchema, canGenerate: z.boolean() };
-const preparedBase = {
-  ...readerBase,
-  title: z.string().min(1),
-  // Absent when the audiobook has no cover image.
-  coverImage: coverImageSchema.optional(),
-  narrationDocument: z.object({
-    html: z.string().min(1),
-    synchronizationUnits: z.array(synchronizationUnitResponseSchema).min(1),
-  }),
-  // One entry per synchronization unit, in document order.
-  segments: z.array(audioSegmentSchema),
-  // Present only when every segment has settled audio.
-  narrationTrack: narrationTrackSchema.optional(),
-  playbackPosition: playbackPositionSchema.nullable(),
-};
-export const audiobookSchema = z.discriminatedUnion("status", [
-  z.object({
+const narrationDocumentSchema = z.object({
+  html: z.string().min(1),
+  synchronizationUnits: z.array(synchronizationUnitResponseSchema).min(1),
+});
+/**
+ * Whether the audiobook response carries the narration document; absent means `include`. A reader
+ * that already holds the document polls with `omit`, so the Worker does not render it again.
+ */
+export const audiobookQuerySchema = z.object({
+  narrationDocument: z.enum(["include", "omit"]).optional(),
+});
+export type AudiobookQuery = z.infer<typeof audiobookQuerySchema>;
+
+function createAudiobookSchema<NarrationDocument extends z.ZodType>(
+  narrationDocument: NarrationDocument,
+) {
+  const preparedBase = {
     ...readerBase,
-    status: z.literal("pending"),
-    preparationPhase: pendingPreparationPhaseSchema,
-  }),
-  z.object({ ...readerBase, status: z.literal("failed"), explanation: z.string() }),
-  // The whole narration document did not fit the available duration; nothing was reserved.
-  z.object({
-    ...preparedBase,
-    status: z.literal("insufficient-duration"),
-    ...insufficientDurationSchema.shape,
-  }),
-  z.object({ ...preparedBase, status: z.literal("synthesizing") }),
-  // Every segment has audio or a final failure, so the total duration is known.
-  z.object({ ...preparedBase, status: z.literal("ready") }),
-]);
+    title: z.string().min(1),
+    // Absent when the audiobook has no cover image.
+    coverImage: coverImageSchema.optional(),
+    narrationDocument,
+    // One entry per synchronization unit, in document order.
+    segments: z.array(audioSegmentSchema),
+    // Present only when every segment has settled audio.
+    narrationTrack: narrationTrackSchema.optional(),
+    playbackPosition: playbackPositionSchema.nullable(),
+  };
+  return z.discriminatedUnion("status", [
+    z.object({
+      ...readerBase,
+      status: z.literal("pending"),
+      preparationPhase: pendingPreparationPhaseSchema,
+    }),
+    z.object({ ...readerBase, status: z.literal("failed"), explanation: z.string() }),
+    // The whole narration document did not fit the available duration; nothing was reserved.
+    z.object({
+      ...preparedBase,
+      status: z.literal("insufficient-duration"),
+      ...insufficientDurationSchema.shape,
+    }),
+    z.object({ ...preparedBase, status: z.literal("synthesizing") }),
+    // Every segment has audio or a final failure, so the total duration is known.
+    z.object({ ...preparedBase, status: z.literal("ready") }),
+  ]);
+}
+
+/** An audiobook with its narration document, as a reader holds it. */
+export const audiobookSchema = createAudiobookSchema(narrationDocumentSchema);
 export type Audiobook = z.infer<typeof audiobookSchema>;
+/** The audiobook route's response: a prepared audiobook lacks its narration document on `omit`. */
+export const audiobookResponseSchema = createAudiobookSchema(narrationDocumentSchema.optional());
+export type AudiobookResponse = z.infer<typeof audiobookResponseSchema>;
 
 /** A refused retry reserves nothing; the durations tell the reader why. */
 export const retryConversionResponseSchema = z.discriminatedUnion("result", [

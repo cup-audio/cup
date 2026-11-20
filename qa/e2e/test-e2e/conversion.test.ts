@@ -36,8 +36,12 @@ test("generates audio for the whole document, then plays its narration track", a
 
   // The source subtitle is the second unit, shown between the source title and the host.
   expect(units[1]!.narrationText).toBe(SOURCE_SUBTITLE);
-  await expect(page.locator(`hgroup > h1[id="${units[0]!.id}"]`)).toHaveText(SOURCE_TITLE);
-  await expect(page.locator(`hgroup > h1 + p[id="${units[1]!.id}"]`)).toHaveText(SOURCE_SUBTITLE);
+  await expect(page.locator(`hgroup > h1[data-synchronization-unit="${units[0]!.id}"]`)).toHaveText(
+    SOURCE_TITLE,
+  );
+  await expect(
+    page.locator(`hgroup > h1 + p[data-synchronization-unit="${units[1]!.id}"]`),
+  ).toHaveText(SOURCE_SUBTITLE);
   await expect(page.locator("hgroup + [data-source-host]")).toHaveText("source.example.test");
 
   const play = page.getByRole("button", { name: "Play", exact: true });
@@ -54,10 +58,17 @@ test("generates audio for the whole document, then plays its narration track", a
   // Each audiobook response signs a fresh URL, so only the track itself is compared.
   const trackPath = new URL(narrationTrack.url).pathname;
   expect(new URL((await readNarrationAudio(page)).src).pathname).toBe(trackPath);
-  await expect(page.locator(`[id="${units[0]!.id}"]`)).toHaveAttribute("aria-current", "true");
-  await expect(page.locator(`[id="${units[1]!.id}"]`)).toHaveAttribute("aria-current", "true", {
-    timeout: 30_000,
-  });
+  await expect(page.locator(`[data-synchronization-unit="${units[0]!.id}"]`)).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
+  await expect(page.locator(`[data-synchronization-unit="${units[1]!.id}"]`)).toHaveAttribute(
+    "aria-current",
+    "true",
+    {
+      timeout: 30_000,
+    },
+  );
   expect((await readNarrationAudio(page)).currentTime * 1_000).toBeGreaterThanOrEqual(
     narrationTrack.startMilliseconds[1]!,
   );
@@ -76,8 +87,11 @@ test("generates audio for the whole document, then plays its narration track", a
   await expect(playerSheet.getByText(SOURCE_SUBTITLE)).toHaveCount(0);
 
   // A unit tap seeks the same track to the unit's start offset.
-  await page.getByRole("button", { name: "Play segment 3", exact: true }).click();
-  await expect(page.locator(`[id="${units[2]!.id}"]`)).toHaveAttribute("aria-current", "true");
+  await page.locator(`[data-synchronization-unit="${units[2]!.id}"]`).click();
+  await expect(page.locator(`[data-synchronization-unit="${units[2]!.id}"]`)).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
   const afterTap = await readNarrationAudio(page);
   expect(new URL(afterTap.src).pathname).toBe(trackPath);
   expect(afterTap.currentTime * 1_000).toBeGreaterThanOrEqual(narrationTrack.startMilliseconds[2]!);
@@ -86,15 +100,21 @@ test("generates audio for the whole document, then plays its narration track", a
   );
 
   // Tapping the source subtitle plays from it, like any other unit.
-  await page.getByRole("button", { name: "Play segment 2", exact: true }).click();
-  await expect(page.locator(`[id="${units[1]!.id}"]`)).toHaveAttribute("aria-current", "true");
+  await page.locator(`[data-synchronization-unit="${units[1]!.id}"]`).click();
+  await expect(page.locator(`[data-synchronization-unit="${units[1]!.id}"]`)).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
   const afterSubtitleTap = await readNarrationAudio(page);
   expect(afterSubtitleTap.currentTime * 1_000).toBeGreaterThanOrEqual(
     narrationTrack.startMilliseconds[1]!,
   );
   expect(afterSubtitleTap.currentTime * 1_000).toBeLessThan(narrationTrack.startMilliseconds[2]!);
-  await page.getByRole("button", { name: "Play segment 3", exact: true }).click();
-  await expect(page.locator(`[id="${units[2]!.id}"]`)).toHaveAttribute("aria-current", "true");
+  await page.locator(`[data-synchronization-unit="${units[2]!.id}"]`).click();
+  await expect(page.locator(`[data-synchronization-unit="${units[2]!.id}"]`)).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
   await page.getByRole("button", { name: "Pause", exact: true }).click();
   await expect(page.getByRole("alert")).toHaveCount(0);
   const pausedAt = (await readNarrationAudio(page)).currentTime;
@@ -114,7 +134,10 @@ test("generates audio for the whole document, then plays its narration track", a
   await page.reload();
   await waitForAudiobook(page);
   await expect(play).toBeEnabled({ timeout: 30_000 });
-  await expect(page.locator(`[id="${units[2]!.id}"]`)).toHaveAttribute("aria-current", "true");
+  await expect(page.locator(`[data-synchronization-unit="${units[2]!.id}"]`)).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
   expect((await readNarrationAudio(page)).src).toBe("");
   await play.click();
   await expect

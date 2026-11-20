@@ -1,0 +1,34 @@
+{
+  "sourceTitle": "Description lists",
+  "sourceMaterialHtml": "<dl>\n  <dt>Term one</dt>\n  <dd>Description one.</dd>\n  <dt>Term two</dt>\n  <dt>Term two, again</dt>\n  <dd>Description two.</dd>\n  <dd>Another description two.</dd>\n</dl>",
+  "synchronizationUnits": [
+    {
+      "id": "narration-unit-0001",
+      "narrationText": "Description lists"
+    },
+    {
+      "id": "narration-unit-0002",
+      "narrationText": "Term one"
+    },
+    {
+      "id": "narration-unit-0003",
+      "narrationText": "Description one."
+    },
+    {
+      "id": "narration-unit-0004",
+      "narrationText": "Term two"
+    },
+    {
+      "id": "narration-unit-0005",
+      "narrationText": "Term two, again"
+    },
+    {
+      "id": "narration-unit-0006",
+      "narrationText": "Description two."
+    },
+    {
+      "id": "narration-unit-0007",
+      "narrationText": "Another description two."
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "sourceTitle": "Table rows and captions",
+  "sourceMaterialHtml": "<table>\n  <caption>Latency by region</caption>\n  <thead><tr><th>Region</th><th>Latency</th></tr></thead>\n  <tbody>\n    <tr><td>Europe</td><td>380 ms</td></tr>\n    <tr><td><p>Asia</p><p>and Oceania</p></td><td>420 <sub>ms</sub></td></tr>\n  </tbody>\n</table>",
+  "synchronizationUnits": [
+    {
+      "id": "narration-unit-0001",
+      "narrationText": "Table rows and captions"
+    },
+    {
+      "id": "narration-unit-0002",
+      "narrationText": "Latency by region"
+    },
+    {
+      "id": "narration-unit-0003",
+      "narrationText": "Region, Latency"
+    },
+    {
+      "id": "narration-unit-0004",
+      "narrationText": "Europe, 380 ms"
+    },
+    {
+      "id": "narration-unit-0005",
+      "narrationText": "Asia and Oceania, 420 ms"
+    }
+  ]
+}

@@ -206,7 +206,7 @@ Cup's WebView fills the whole screen on iOS, under the status bar and the notch.
 
 ## Links and sharing
 
-The apps intentionally don't support trial links ([ADR 0017](../../docs/adr/0017-keep-trial-links-out-of-the-mobile-apps.md)). Neither app claims web links, so tapping a link to `cup.audio`, such as a trial link, opens the browser, and share intake ignores URLs on Cup's hostnames.
+The apps intentionally don't support trial links ([ADR 0017](../../docs/adr/0017-keep-trial-links-out-of-the-mobile-apps.md)). Neither app claims web links, so tapping a link to `cup.audio`, such as a trial link, opens the browser, and share intake ignores URLs on Cup's hostnames. Every link that leaves Cup's origin, such as a narration document link opened through its popover or **Open original page**, opens in the system browser through Capacitor's default handling, not in Cup's WebView; the [mobile E2E suite](../../qa/mobile-e2e/README.md#external-links) checks it on both platforms.
 
 The Android app accepts shared plain text containing an HTTP or HTTPS URL, fills a conversion form with it and submits that form right away. A signed-in account gets the Add dialog over Recents (`/recent/add`), which starts the conversion and closes, so the new track appears on Recents. Signed out, the URL fills the landing page's start form, whose submission asks the listener to sign in and starts the conversion once they have. A share that arrives while a start is still pending or rate-limited waits until the form can submit again.
 

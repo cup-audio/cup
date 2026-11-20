@@ -8,7 +8,9 @@ import {
   getNarrationLanguageSupport,
   SPEECH_CONFIG,
   storeAudiobook,
+  storeAudiobookSourceMaterial,
   storeCoverImage,
+  storeNarrationSourceMaterial,
   type CoverImage,
   type CoverImageStorage,
 } from "@cup/audiobook-production";
@@ -19,7 +21,10 @@ import {
   type ConversionParams,
 } from "@cup/conversion-contracts";
 import { CupError } from "@cup/errors";
-import { createNarrationDocument } from "@cup/narration-document-creation";
+import {
+  CURRENT_SEGMENTATION_VERSION,
+  segmentNarrationDocument,
+} from "@cup/narration-document-creation";
 import type {
   NarrationContentSelectionResult,
   NarrationLanguageDetectionInput,
@@ -147,6 +152,22 @@ export async function runPrepareAudiobookWorkflow({
         },
       );
 
+      // Kept before narration content selection runs, so failed preparations keep it too.
+      await step.do(
+        phaseStepName(
+          ConversionPhase.SOURCE_MATERIAL_PREPARATION,
+          "store audiobook source material",
+        ),
+        PROCESSING_STEP_CONFIG,
+        () =>
+          storeAudiobookSourceMaterial({
+            artifactPrefix,
+            bucket,
+            conversionId,
+            html: sourceMaterial.html,
+          }),
+      );
+
       // Started beside content selection and awaited only before the manifest is stored, so a
       // slow image host does not delay selection.
       coverImagePromise = storeDeclaredCoverImage({
@@ -182,21 +203,29 @@ export async function runPrepareAudiobookWorkflow({
             ),
         });
 
-      const narrationDocument = await step.do(
-        phaseStepName(ConversionPhase.NARRATION_DOCUMENT_CREATION, "create narration document"),
+      const segmentationVersion = CURRENT_SEGMENTATION_VERSION;
+      const synchronizationUnits = await step.do(
+        // Named apart from the step that returned the whole narration document, so a run that
+        // recorded that step before the deploy runs this one instead of reusing its result.
+        phaseStepName(
+          ConversionPhase.NARRATION_DOCUMENT_CREATION,
+          "segment narration source material",
+        ),
         PROCESSING_STEP_CONFIG,
         async () => {
           await execution.phaseStarted(ConversionPhase.NARRATION_DOCUMENT_CREATION);
-          return createNarrationDocument({
+          // Only the units are kept: the listener API renders the narration document on request
+          // from the stored narration source material.
+          return segmentNarrationDocument({
+            segmentationVersion,
             sourceTitle: sourceMaterial.title,
             ...(sourceMaterial.subtitle === undefined
               ? {}
               : { sourceSubtitle: sourceMaterial.subtitle }),
             sourceMaterialHtml: selectedSourceMaterialHtml,
-          });
+          }).synchronizationUnits;
         },
       );
-      const { synchronizationUnits } = narrationDocument;
       const narrationTextCharacters = synchronizationUnits.reduce(
         (total, unit) => total + unit.narrationText.length,
         0,
@@ -228,13 +257,29 @@ export async function runPrepareAudiobookWorkflow({
         PROCESSING_STEP_CONFIG,
         async () => {
           await execution.phaseStarted(ConversionPhase.AUDIOBOOK_STORAGE);
+          // Written before the manifest that references it, so a stored manifest never references
+          // a missing object.
+          const narrationSourceMaterial = await storeNarrationSourceMaterial({
+            artifactPrefix,
+            bucket,
+            conversionId,
+            html: selectedSourceMaterialHtml,
+          });
           return storeAudiobook({
             bucket,
             conversionId,
             artifactPrefix,
             title: sourceMaterial.title,
             originalUrl: sourceUrl,
-            narrationDocument,
+            narrationDocument: {
+              segmentationVersion,
+              narrationSourceMaterial,
+              fetchedUrl: sourceMaterial.fetchedUrl,
+              ...(sourceMaterial.subtitle === undefined
+                ? {}
+                : { sourceSubtitle: sourceMaterial.subtitle }),
+              synchronizationUnits,
+            },
             speechConfig: SPEECH_CONFIG,
             ...(narrationLanguage === undefined ? {} : { narrationLanguage }),
             ...(coverImage === undefined ? {} : { coverImage }),
@@ -244,7 +289,9 @@ export async function runPrepareAudiobookWorkflow({
 
       return {
         audiobookReference,
-        narrationTextCharactersBySegment: countNarrationTextCharactersBySegment(narrationDocument),
+        narrationTextCharactersBySegment: countNarrationTextCharactersBySegment({
+          synchronizationUnits,
+        }),
         readyOutcome: {
           title: sourceMaterial.title,
           audiobookReference,

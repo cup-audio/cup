@@ -1,0 +1,36 @@
+{
+  "description": "A heading that was drawn inside the list, ordered list, blockquote and nested list it introduced.",
+  "originalUrl": "https://publisher.example/articles/story?ref=feed",
+  "storedHtml": "<article><h1 id=\"narration-unit-0001\">Headings inside containers</h1><ul><li><section id=\"narration-unit-0002\"><h2>Before a list</h2><p>List item</p></section></li><li><p id=\"narration-unit-0003\">Second list item</p></li></ul><ol><li><section id=\"narration-unit-0004\"><h2>Before an ordered list</h2><p>Ordered item</p></section></li></ol><blockquote><section id=\"narration-unit-0005\"><h2>Before a quote</h2><p>Quoted.</p></section></blockquote><ul><li><p id=\"narration-unit-0006\">Outer item</p><ol><li><section id=\"narration-unit-0007\"><h3>Before a nested list</h3><p>Nested item</p></section></li></ol></li></ul></article>",
+  "synchronizationUnits": [
+    {
+      "id": "narration-unit-0001",
+      "narrationText": "Headings inside containers"
+    },
+    {
+      "id": "narration-unit-0002",
+      "narrationText": "Before a list\n\nList item"
+    },
+    {
+      "id": "narration-unit-0003",
+      "narrationText": "Second list item"
+    },
+    {
+      "id": "narration-unit-0004",
+      "narrationText": "Before an ordered list\n\nOrdered item"
+    },
+    {
+      "id": "narration-unit-0005",
+      "narrationText": "Before a quote\n\nQuoted."
+    },
+    {
+      "id": "narration-unit-0006",
+      "narrationText": "Outer item"
+    },
+    {
+      "id": "narration-unit-0007",
+      "narrationText": "Before a nested list\n\nNested item"
+    }
+  ],
+  "expectedHtml": "<article><h1 data-synchronization-unit=\"narration-unit-0001\">Headings inside containers</h1><h2 data-synchronization-unit=\"narration-unit-0002\">Before a list</h2><ul><li><p data-synchronization-unit=\"narration-unit-0002\">List item</p></li><li><p data-synchronization-unit=\"narration-unit-0003\">Second list item</p></li></ul><h2 data-synchronization-unit=\"narration-unit-0004\">Before an ordered list</h2><ol><li><p data-synchronization-unit=\"narration-unit-0004\">Ordered item</p></li></ol><h2 data-synchronization-unit=\"narration-unit-0005\">Before a quote</h2><blockquote><p data-synchronization-unit=\"narration-unit-0005\">Quoted.</p></blockquote><ul><li><p data-synchronization-unit=\"narration-unit-0006\">Outer item</p><h3 data-synchronization-unit=\"narration-unit-0007\">Before a nested list</h3><ol><li><p data-synchronization-unit=\"narration-unit-0007\">Nested item</p></li></ol></li></ul></article>"
+}

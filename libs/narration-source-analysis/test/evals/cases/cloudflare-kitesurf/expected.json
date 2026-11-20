@@ -245,218 +245,134 @@
   },
   {
     "id": "narration-unit-0062",
-    "narrationText": "Metric"
+    "narrationText": "Metric, Kitesurf, Chromium (warm pool), Kitesurf, relative"
   },
   {
     "id": "narration-unit-0063",
-    "narrationText": "Kitesurf"
+    "narrationText": "CPU: screenshot, 380 ms, 1,173 ms, 3.1× less CPU than Chromium"
   },
   {
     "id": "narration-unit-0064",
-    "narrationText": "Chromium (warm pool)"
+    "narrationText": "CPU: HTML extraction, 229 ms, 877 ms, 3.8× less than Chromium"
   },
   {
     "id": "narration-unit-0065",
-    "narrationText": "Kitesurf, relative"
+    "narrationText": "Memory: screenshot, 57.8 MiB, 271.0 MiB, 4.7× less than Chromium"
   },
   {
     "id": "narration-unit-0066",
-    "narrationText": "CPU: screenshot"
+    "narrationText": "Memory: HTML extraction, 39.4 MiB, 273.7 MiB, 7.0× less than Chromium"
   },
   {
     "id": "narration-unit-0067",
-    "narrationText": "380 ms"
+    "narrationText": "Wall time: screenshot, 1,148 ms, 637 ms, 1.8× slower than Chromium"
   },
   {
     "id": "narration-unit-0068",
-    "narrationText": "1,173 ms"
+    "narrationText": "Wall time: HTML extraction, 820 ms, 472 ms, 1.7× slower than Chromium"
   },
   {
     "id": "narration-unit-0069",
-    "narrationText": "3.1× less CPU than Chromium"
-  },
-  {
-    "id": "narration-unit-0070",
-    "narrationText": "CPU: HTML extraction"
-  },
-  {
-    "id": "narration-unit-0071",
-    "narrationText": "229 ms"
-  },
-  {
-    "id": "narration-unit-0072",
-    "narrationText": "877 ms"
-  },
-  {
-    "id": "narration-unit-0073",
-    "narrationText": "3.8× less than Chromium"
-  },
-  {
-    "id": "narration-unit-0074",
-    "narrationText": "Memory: screenshot"
-  },
-  {
-    "id": "narration-unit-0075",
-    "narrationText": "57.8 MiB"
-  },
-  {
-    "id": "narration-unit-0076",
-    "narrationText": "271.0 MiB"
-  },
-  {
-    "id": "narration-unit-0077",
-    "narrationText": "4.7× less than Chromium"
-  },
-  {
-    "id": "narration-unit-0078",
-    "narrationText": "Memory: HTML extraction"
-  },
-  {
-    "id": "narration-unit-0079",
-    "narrationText": "39.4 MiB"
-  },
-  {
-    "id": "narration-unit-0080",
-    "narrationText": "273.7 MiB"
-  },
-  {
-    "id": "narration-unit-0081",
-    "narrationText": "7.0× less than Chromium"
-  },
-  {
-    "id": "narration-unit-0082",
-    "narrationText": "Wall time: screenshot"
-  },
-  {
-    "id": "narration-unit-0083",
-    "narrationText": "1,148 ms"
-  },
-  {
-    "id": "narration-unit-0084",
-    "narrationText": "637 ms"
-  },
-  {
-    "id": "narration-unit-0085",
-    "narrationText": "1.8× slower than Chromium"
-  },
-  {
-    "id": "narration-unit-0086",
-    "narrationText": "Wall time: HTML extraction"
-  },
-  {
-    "id": "narration-unit-0087",
-    "narrationText": "820 ms"
-  },
-  {
-    "id": "narration-unit-0088",
-    "narrationText": "472 ms"
-  },
-  {
-    "id": "narration-unit-0089",
-    "narrationText": "1.7× slower than Chromium"
-  },
-  {
-    "id": "narration-unit-0090",
     "narrationText": "Chromium wins the stopwatch because a JIT that has already seen this page always beats a cold software renderer — and today it does, by about 1.7x. Most of that gap comes from rasterization and JPEG/PNG encoding, which we will keep optimizing."
   },
   {
-    "id": "narration-unit-0091",
+    "id": "narration-unit-0070",
     "narrationText": "But Kitesurf wins on memory and CPU, the things that actually drive your bill, by 3-7x compared to what Chromium uses. Less memory means we can run more sessions, scale better, and fundamentally lower both our costs and yours."
   },
   {
-    "id": "narration-unit-0092",
+    "id": "narration-unit-0071",
     "narrationText": "The most important test of all: Kitesurf runs Doom\n\nWe highlighted the importance of testing in our design decisions, but we all know that no matter how many tests you have, a project isn't truly complete until Doom runs on it. Here’s Kitesurf running https://silentspacemarine.com/ from our little Doom experiment a few years ago."
   },
   {
-    "id": "narration-unit-0093",
+    "id": "narration-unit-0072",
     "narrationText": "Try it today in Browser Run\n\nYou can try Kitesurf with Browser Run today, available for free while in beta, behind per-account limits."
   },
   {
-    "id": "narration-unit-0094",
+    "id": "narration-unit-0073",
     "narrationText": "The Browser Run CDP endpoint now supports Kitesurf as an option, so your existing client Puppeteer, Playwright, chrome-remote-interface, or any AI Agent that speaks MCP and CDP, already works. All you need to do is add the browser=kitesurf parameter to our endpoints."
   },
   {
-    "id": "narration-unit-0095",
+    "id": "narration-unit-0074",
     "narrationText": "For example, to use Kitesurf with Opencode see Using with MCP clients (CDP) in our developer documentation and use this configuration:"
   },
   {
-    "id": "narration-unit-0096",
+    "id": "narration-unit-0075",
     "narrationText": "Another way to use Kitesurf is with Browser Run’s Quick Actions. Again, just add browser=kitesurf to the quick action endpoint and it will work. For example, if you need a quick screenshot from Wikipedia, this will work just fine:"
   },
   {
-    "id": "narration-unit-0097",
+    "id": "narration-unit-0076",
     "narrationText": "Use the Kitesurf Playground with Chrome DevTools"
   },
   {
-    "id": "narration-unit-0098",
+    "id": "narration-unit-0077",
     "narrationText": "Another option to start exploring Kitesurf is to use our public playground here. You can type in any URL to see how Kitesurf renders the page and interact with it."
   },
   {
-    "id": "narration-unit-0099",
+    "id": "narration-unit-0078",
     "narrationText": "One interesting feature of the playground is that we inject Chrome DevTools in the UI, so you can inspect expanded DOM elements, read console messages, and watch network activity while Kitesurf renders pages. More interestingly, we implemented the necessary CDP instructions for the Memory panel to report the WebAssembly footprint of each isolate, including frames, so you can gain a clear understanding of the resources each page is consuming."
   },
   {
-    "id": "narration-unit-0100",
+    "id": "narration-unit-0079",
     "narrationText": "Check our Developer Documentation for all the details on how to use Kitesurf with Browser Run."
   },
   {
-    "id": "narration-unit-0101",
+    "id": "narration-unit-0080",
     "narrationText": "When is Kitesurf better?\n\nAs of today, Kitesurf correctly renders pages like TodoMVC (vanilla, React, Vue, Angular, Preact), Wikipedia, Hacker News, the Cloudflare Blog, and much of the Cloudflare dashboard. We will keep improving Kitesurf and increasing the percentage of WPT tests that pass, to improve compatibility for more complex web pages."
   },
   {
-    "id": "narration-unit-0102",
+    "id": "narration-unit-0081",
     "narrationText": "Kitesurf is great for AI agents that need to render pages but can accept the trade-offs of not using a full-featured, pixel-perfect Chromium browser. It is also excellent for automations and applications that rely on one-shot Quick Actions, such as extracting content from a page or generating PDFs or screenshots, for compatible sites."
   },
   {
-    "id": "narration-unit-0103",
+    "id": "narration-unit-0082",
     "narrationText": "Think of Kitesurf as an ephemeral, fully-isolated, stateless engine designed to exist only for the duration of a task, that scales well for bursty, AI-driven workloads."
   },
   {
-    "id": "narration-unit-0104",
+    "id": "narration-unit-0083",
     "narrationText": "What Kitesurf is not yet able to do\n\nIf you need to play video, render WebGL, negotiate a bot-challenge handshake with real TLS fingerprints, or start a ten-minute authenticated session that requires persistent state — Kitesurf isn’t yet the right option. Just use Browser Run’s default, which is powered by Chromium."
   },
   {
-    "id": "narration-unit-0105",
+    "id": "narration-unit-0084",
     "narrationText": "The best way to know if a specific site is compatible with Kitesurf is to try it. You can do this by using the APIs or, more quickly, try it in our public playground."
   },
   {
-    "id": "narration-unit-0106",
+    "id": "narration-unit-0085",
     "narrationText": "Explore the DevTools panels and see what’s happening behind the scenes, with particular attention to the console and the memory metrics."
   },
   {
-    "id": "narration-unit-0107",
+    "id": "narration-unit-0086",
     "narrationText": "Where it goes\n\nKitesurf is twelve weeks old. The first commit was in May. Here are some of the things we're actively working on:"
   },
   {
-    "id": "narration-unit-0108",
+    "id": "narration-unit-0087",
     "narrationText": "Better CDP coverage. Kitesurf implements a subset of the CDP protocol — enough to cover the requirements of most agents and automation tools, including robust DOM and network inspection — and we continue to expand its capabilities to be as complete as possible."
   },
   {
-    "id": "narration-unit-0109",
+    "id": "narration-unit-0088",
     "narrationText": "Rendering fidelity for screenshots and PDFs, because we know that LLMs can often work better from an image than from the underlying text."
   },
   {
-    "id": "narration-unit-0110",
+    "id": "narration-unit-0089",
     "narrationText": "WPT coverage. We are iterating rapidly to add more web APIs and pass more WPT tests on the road to making Kitesurf production-ready."
   },
   {
-    "id": "narration-unit-0111",
+    "id": "narration-unit-0090",
     "narrationText": "Efficiency. We keep CPU, memory, and wall time benchmarks running all the time and are working hand-in-hand with other Developer Platform teams to make Kitesurf as cost-effective and efficient as possible."
   },
   {
-    "id": "narration-unit-0112",
+    "id": "narration-unit-0091",
     "narrationText": "Final notes\n\nThank you for making it all the way here — we know this was a long and technical blog post, but hopefully an interesting one. We went into detail because we don't take lightly how important, but also how complex, it is to build a new browser, even a very specific one."
   },
   {
-    "id": "narration-unit-0113",
+    "id": "narration-unit-0092",
     "narrationText": "Kitesurf is in its early stages, but we wanted to open it up to you as soon as possible and learn from your feedback. The team will be actively improving it with frequent updates focused on performance, efficiency, and compatibility."
   },
   {
-    "id": "narration-unit-0114",
+    "id": "narration-unit-0093",
     "narrationText": "One last thing: we're going to open source Kitesurf once we're ready — hopefully soon. Our goal is to let any customer deploy their own version of Kitesurf on their own accounts, if they want to."
   },
   {
-    "id": "narration-unit-0115",
+    "id": "narration-unit-0094",
     "narrationText": "So give it a try in the playground, keep an eye on our changelog, and come chat with the team on Discord. Share your experience and send us feedback; we’ll be listening."
   }
 ]

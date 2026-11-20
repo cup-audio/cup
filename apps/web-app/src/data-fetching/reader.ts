@@ -2,7 +2,7 @@ import { check } from "@patricktree-stack/utils-ecma/assert.utils";
 import { queryOptions, useMutation } from "@tanstack/react-query";
 
 import {
-  audiobookSchema,
+  audiobookResponseSchema,
   playbackPositionSchema,
   retryConversionResponseSchema,
   type Audiobook,
@@ -32,10 +32,36 @@ export function createAudiobookQuery(conversionId: string) {
   });
 }
 
+/**
+ * Requests the audiobook without its narration document once the cache holds it, so polls during
+ * synthesis do not make the Worker render it again; the held document completes the response. A
+ * page load holds none, so its first request carries the document.
+ */
 async function getAudiobook(conversionId: string, signal?: AbortSignal): Promise<Audiobook> {
-  return audiobookSchema.parse(
-    await requestApi("optional", (client) => client.getAudiobook({ conversionId }, signal)),
+  const heldNarrationDocument = findHeldNarrationDocument(conversionId);
+  const response = audiobookResponseSchema.parse(
+    await requestApi("optional", (client) =>
+      client.getAudiobook(
+        { conversionId },
+        heldNarrationDocument === undefined ? {} : { narrationDocument: "omit" },
+        signal,
+      ),
+    ),
   );
+  if (response.status === "pending" || response.status === "failed") {
+    return response;
+  }
+
+  const narrationDocument = response.narrationDocument ?? heldNarrationDocument;
+  check.assert(narrationDocument, "A prepared audiobook response lacks its narration document.");
+  return { ...response, narrationDocument };
+}
+
+function findHeldNarrationDocument(conversionId: string) {
+  const held = queryClient.getQueryData<Audiobook>(QUERY_KEYS.audiobook(conversionId));
+  return held === undefined || held.status === "pending" || held.status === "failed"
+    ? undefined
+    : held.narrationDocument;
 }
 
 /**

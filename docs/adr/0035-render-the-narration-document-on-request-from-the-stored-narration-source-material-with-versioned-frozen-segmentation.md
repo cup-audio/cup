@@ -1,0 +1,44 @@
+---
+status: accepted
+---
+
+# Render the narration document on request from the stored narration source material, with versioned, frozen segmentation
+
+Until this decision, preparation stored the narration document's sanitized HTML in `audiobook.json`, and the listener API served it unchanged. What the reader shows was therefore fixed at preparation: links pointed at `cup.audio` instead of the publisher, tables and description lists had become bare paragraphs, and `b`, `sub` and similar markup was flattened, and no fix could reach an audiobook already prepared ([findings in cup-audio/cup#479](https://github.com/cup-audio/cup/issues/479)). The narration source material that produced the HTML was not kept. The map [cup-audio/cup#472](https://github.com/cup-audio/cup/issues/472) decided on 2026-11-19 what Cup stores ([cup-audio/cup#485](https://github.com/cup-audio/cup/issues/485)), how rendering guarantees the stored synchronization units ([cup-audio/cup#486](https://github.com/cup-audio/cup/issues/486)) and how existing conversions are rendered ([cup-audio/cup#487](https://github.com/cup-audio/cup/issues/487)), and whether the audiobook source material may be kept ([cup-audio/cup#480](https://github.com/cup-audio/cup/issues/480)). The spec [cup-audio/cup#493](https://github.com/cup-audio/cup/issues/493) collects them; its tickets [cup-audio/cup#494](https://github.com/cup-audio/cup/issues/494), [cup-audio/cup#495](https://github.com/cup-audio/cup/issues/495), [cup-audio/cup#496](https://github.com/cup-audio/cup/issues/496) and [cup-audio/cup#498](https://github.com/cup-audio/cup/issues/498) implement the parts below, landed together in [cup-audio/cup#502](https://github.com/cup-audio/cup/pull/502).
+
+## Decision
+
+- **Units never change.** Synchronization units are bound to paid audio, so their boundaries, IDs and `narrationText` never change after preparation. Everything else about how the narration document is presented may change at any time.
+- **Render on every request.** The listener API renders the narration document whenever it builds a response that carries it, for account and trial access alike, from what the manifest stores. Nothing is stored or cached across requests; a cache can be added later without changing anything here.
+- **Two stages.** [Segmentation](../GLOSSARY.md#segmentation) turns the narration source material, the source title and the source subtitle into units and their ranges in the parsed source material. Presentation alone decides what the HTML keeps, flattens or drops, so a presentation change never needs a new segmentation version. Preparation runs only segmentation, and decides the `content-limit` from its units.
+- **Versioned, frozen segmentation.** The manifest records a numbered segmentation version, decided once at preparation like the speech policy and independent of it. Each version is a frozen module with committed golden fixtures; a change that alters a version's units fails them and must become a new version. Version 1 is the unit rules that existed before the split.
+- **Version 2 for new conversions.** Preparation records version 2 ([cup-audio/cup#498](https://github.com/cup-audio/cup/issues/498)), which differs from version 1 only in these rules; lists, blockquotes, `hr`, `figure` and narration content selection are unchanged:
+  - **Table rows:** one unit per `tr`, whose `narrationText` is the row's cell texts joined with `", "`, with blocks nested inside a cell flattened into the row's text and no header names added. The unit attribute goes on the `tr`.
+  - **Captions:** the `caption` is its own unit.
+  - **Description lists:** one unit per `dl` group, its term(s) and their description(s).
+  - **Preformatted text:** `pre` keeps its line breaks as `\n` in `narrationText`, and a block over 2,000 characters is split at a line break, not mid-line.
+  - **Headings before a table or `dl`:** the heading joins the first row's or the first group's unit (the caption's, when the table has one, so units stay in reading order).
+- **What a new conversion stores.** Preparation writes the narration source material, exactly as selected, to `narration-source-material.html` under the conversion prefix before `audiobook.json`. The manifest no longer holds HTML: it records the units, the segmentation version, the object reference of `narration-source-material.html`, the URL the source page was finally loaded from after redirects, and the source subtitle. The manifest is authoritative, as for the cover image: only the object it references is read, and only by the renderer.
+- **The source subtitle is a manifest field.** Recovering it from unit 2's `narrationText` would make the render-time check below check itself.
+- **Checked on every render.** For a new conversion, the units segmentation derives must equal the stored units exactly, in order, ID and `narrationText`. On a mismatch the response carries a fallback document built from the stored units alone, and the listener API reports a Sentry error naming the conversion and the first differing unit; the request never fails because of it.
+- **Existing conversions keep their path.** A manifest whose narration document holds `html` is an existing conversion's. No migration rewrites it. Its units come from the stored HTML's unit IDs and no segmentation runs, and its check ignores whitespace in each unit's text, because the stored HTML and the narration text normalized it differently. Links resolve against the submitted source URL, since such a conversion has no fetched URL. Nothing the stored HTML already lost is restored.
+- **The audiobook source material is kept too.** Preparation writes it to `audiobook-source-material.html`, right after source preparation and before narration content selection, so failed preparations keep it as well. No manifest records it and nothing in the app reads it; it is kept for possible future evals, whose `input.html` is exactly this material.
+- **Neither object is served.** No listener API route or operator CLI command returns either object's content.
+
+## Considered options
+
+- **Store unit ranges with the narration source material (option B).** Preparation would store the segmented document or the units' ranges, and rendering would read them instead of segmenting again, so old segmentation code could change freely. Rejected: a second stored representation must stay readable forever, and ranges depend on how the HTML is parsed, so a parser upgrade could break them. Versioned segmentation keeps the narration source material as the only source of truth.
+- **Keep storing presentation HTML for new conversions.** Rejected: it fixes presentation at preparation, which is what this decision removes.
+- **Store the rendered page or either browser load's full HTML document.** Rejected ([cup-audio/cup#485](https://github.com/cup-audio/cup/issues/485)): a saved DOM without its resources cannot replay the layout-based visible-headline check, it is the weakest legal case, and two loads of possibly over 1 MiB each would need writes inside the load step.
+- **Keep the audiobook source material only briefly or only for failed preparations,** as the research recommended (not legal advice). Rejected in favour of keeping it for the conversion's lifetime, an accepted legal risk: scripts, styles, images, navigation and footers are already stripped, it is never served, and it is kept per conversion, never shared or deduplicated between listeners.
+
+## Relationship to existing decisions
+
+This amends [ADR 0014](0014-cut-source-material-at-the-visible-headline-and-carry-the-source-subtitle-in-the-narration-document.md)'s "the narration document is the only carrier" of the source subtitle: a new conversion's manifest records the source subtitle, as an input to segmentation. The listener API, the account and grant stores, Recents, the player sheet and the media session still carry the source title alone, and the source subtitle still reaches the listener only through the narration document.
+
+## Consequences
+
+- Both objects live under the conversion prefix, so conversion deletion, account erasure and failed-trial cleanup delete them with no lifecycle of their own. Failed-trial cleanup therefore also deletes the audiobook source material a failed trial preparation kept. Account writes of both carry `cup-writer-id`, so a retried preparation under the same execution epoch reuses the stored objects.
+- Neither object gets a size limit of its own: both already travel in Workflow step results, and the `content-limit` bounds the narration source material further.
+- Existing conversions keep the existing-conversion path for as long as any of them exists.
+- A new conversion's render runs segmentation and presentation on every request; the CPU budget test in the narration document library checks the largest allowed document.

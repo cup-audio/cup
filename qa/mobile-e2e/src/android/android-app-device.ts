@@ -284,6 +284,33 @@ export class AndroidAppDevice implements AppDevice {
     return this.driver.getCurrentPackage();
   }
 
+  /**
+   * The package of the app that Android opens a web link with, as Capacitor hands every link that
+   * leaves Cup's origin to Android, such as the emulator's Chrome.
+   */
+  async browserPackage(url: string): Promise<string> {
+    const { stdout } = await this.adb([
+      "shell",
+      "cmd",
+      "package",
+      "resolve-activity",
+      "--brief",
+      "-a",
+      "android.intent.action.VIEW",
+      "-c",
+      "android.intent.category.BROWSABLE",
+      "-d",
+      url,
+    ]);
+    // The last line is `<package>/<activity>`, after a line with the match's priority.
+    const component = stdout.trim().split("\n").at(-1) ?? "";
+    const [browserPackage] = component.split("/");
+    if (!browserPackage || !component.includes("/")) {
+      throw new Error(`Android resolved no app for ${url}: ${stdout}`);
+    }
+    return browserPackage;
+  }
+
   /** Whether Cup's process runs and whether it is in the foreground. */
   async appState(): Promise<AppiumAppState> {
     await this.driver.switchContext("NATIVE_APP");

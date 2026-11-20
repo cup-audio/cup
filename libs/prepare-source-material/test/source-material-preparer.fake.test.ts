@@ -20,6 +20,7 @@ test("prepares controlled HTML with production cleanup, its first headline as th
 
   await expect(prepareSourceMaterial(CONTROLLED_URL)).resolves.toEqual({
     title: "A controlled source",
+    fetchedUrl: CONTROLLED_URL,
     html: expect.stringContaining("<p>Useful narration content.</p>"),
   });
 

@@ -1,7 +1,10 @@
 import { createHarness, toJsonValue } from "vitest-evals";
 import type { JsonValue, TranscriptEvent } from "vitest-evals";
 
-import { createNarrationDocument } from "@cup/narration-document-creation";
+import {
+  CURRENT_SEGMENTATION_VERSION,
+  segmentNarrationDocument,
+} from "@cup/narration-document-creation";
 import type { SynchronizationUnit } from "@cup/narration-document-creation";
 
 import { runSelection } from "#src/narration-content-selection.ts";
@@ -52,19 +55,19 @@ export function createNarrationContentSelectionHarness(
         sourceMaterialHtml: input.inputHtml,
         ...(signal ? { signal } : {}),
       });
-      const narrationDocument = createNarrationDocument({
+      // Segments with the version preparation uses, so the goldens hold the units production produces.
+      const { synchronizationUnits } = segmentNarrationDocument({
+        segmentationVersion: CURRENT_SEGMENTATION_VERSION,
         sourceTitle: input.sourceTitle,
         ...(input.sourceSubtitle === undefined ? {} : { sourceSubtitle: input.sourceSubtitle }),
         sourceMaterialHtml: selection.selectedSourceMaterialHtml,
       });
       const output = {
         selectedElementIds: [...selection.selectedElementIds],
-        synchronizationUnits: narrationDocument.synchronizationUnits.map(
-          ({ id, narrationText }) => ({
-            id,
-            narrationText,
-          }),
-        ),
+        synchronizationUnits: synchronizationUnits.map(({ id, narrationText }) => ({
+          id,
+          narrationText,
+        })),
       };
       const firstResponse = selection.responses[0];
 
@@ -121,7 +124,7 @@ export function createNarrationContentSelectionHarness(
       setArtifact("chunkCount", selection.chunkCount);
       setArtifact("responseCount", selection.responses.length);
       setArtifact("selectedElementCount", selection.selectedElementIds.length);
-      setArtifact("synchronizationUnitCount", narrationDocument.synchronizationUnits.length);
+      setArtifact("synchronizationUnitCount", synchronizationUnits.length);
 
       return {
         output,
