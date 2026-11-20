@@ -527,9 +527,16 @@ function SegmentHighlight({
       const narrationDocumentElement = narrationDocumentRef.current;
       check.assert(narrationDocumentElement);
 
-      const segment = narrationDocumentElement.querySelector(`[id="${unitId ?? ""}"]`);
-      segment?.setAttribute("aria-current", "true");
-      return () => segment?.removeAttribute("aria-current");
+      const segmentElements =
+        unitId === undefined ? [] : findSegmentElements(narrationDocumentElement, unitId);
+      for (const segmentElement of segmentElements) {
+        segmentElement.setAttribute("aria-current", "true");
+      }
+      return () => {
+        for (const segmentElement of segmentElements) {
+          segmentElement.removeAttribute("aria-current");
+        }
+      };
     },
     [unitId, narrationDocumentRef],
   );
@@ -644,14 +651,12 @@ function NarrationDocument({
 
       const marked = failedUnitIndexes.flatMap((unitIndex) => {
         const unit = units[unitIndex];
-        const segment = unit && narrationDocumentElement.querySelector(`[id="${unit.id}"]`);
-        if (!segment) {
-          return [];
+        const segmentElements = unit ? findSegmentElements(narrationDocumentElement, unit.id) : [];
+        for (const segmentElement of segmentElements) {
+          segmentElement.setAttribute("data-synthesis-failed", "");
+          segmentElement.setAttribute("title", "Audio could not be generated for this segment.");
         }
-
-        segment.setAttribute("data-synthesis-failed", "");
-        segment.setAttribute("title", "Audio could not be generated for this segment.");
-        return [segment];
+        return segmentElements;
       });
 
       return () => {
@@ -676,17 +681,26 @@ function NarrationDocument({
       check.assert(narrationDocumentElement);
 
       // Units are selectable only with a narration track, which has audio for every unit.
-      const buttons = units.map((unit, unitIndex) => {
-        const segment = narrationDocumentElement.querySelector(`[id="${unit.id}"]`);
-        check.assert(segment);
+      const buttons = units.flatMap((unit, unitIndex) => {
+        const segmentElements = findSegmentElements(narrationDocumentElement, unit.id);
+        check.assert(segmentElements.length > 0, `The narration document has no unit ${unit.id}.`);
 
-        const button = document.createElement("button");
-        button.type = "button";
-        button.dataset["segmentControl"] = "";
-        button.setAttribute("aria-label", `Play segment ${unitIndex + 1}`);
-        button.addEventListener("click", () => selectUnit(unitIndex));
-        segment.append(button);
-        return button;
+        // Every element of a segment plays it, such as a heading and the first item of the list it
+        // introduces; only the first element's button is announced and reached with Tab.
+        return segmentElements.map((segmentElement, elementIndex) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.dataset["segmentControl"] = "";
+          if (elementIndex === 0) {
+            button.setAttribute("aria-label", `Play segment ${unitIndex + 1}`);
+          } else {
+            button.setAttribute("aria-hidden", "true");
+            button.tabIndex = -1;
+          }
+          button.addEventListener("click", () => selectUnit(unitIndex));
+          segmentElement.append(button);
+          return button;
+        });
       });
 
       return () => {
@@ -734,7 +748,7 @@ function NarrationDocument({
             color: var(--color-ink-40);
           }
 
-          [id]:has(> [data-segment-control]) {
+          [data-synchronization-unit]:has(> [data-segment-control]) {
             /* "anchor" for the absolutely-positioned play-segment buttons */
             position: relative;
           }
@@ -782,9 +796,18 @@ function findTitle(
   narrationDocumentElement: HTMLElement,
   units: PreparedAudiobook["narrationDocument"]["synchronizationUnits"],
 ): Element {
-  const title = narrationDocumentElement.querySelector(`[id="${units[0]?.id ?? ""}"]`);
+  const [title] = units[0] ? findSegmentElements(narrationDocumentElement, units[0].id) : [];
   check.assert(title, "The narration document has no title.");
   return title;
+}
+
+/** Every element of the narration document that belongs to a segment, in document order. */
+function findSegmentElements(narrationDocumentElement: HTMLElement, unitId: string): Element[] {
+  return [
+    ...narrationDocumentElement.querySelectorAll(
+      `[data-synchronization-unit="${CSS.escape(unitId)}"]`,
+    ),
+  ];
 }
 
 /** Notices that explain missing audio, in the reader's flow above the text. */

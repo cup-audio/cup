@@ -37,7 +37,7 @@ export const ReadyAudiobook = {
 } satisfies Story;
 
 const GATES_NOTES_CONVERSION_ID = "7b1736db-31f7-46ba-b6b5-d965770b355b";
-// The local fixture uses createNarrationDocument on the Gates Notes E2E article's source title, source subtitle and body.
+// The local fixture is renderNarrationDocument's HTML, as the listener API serves it, for what createNarrationDocument made of the Gates Notes E2E article's source title, source subtitle and body.
 const gatesNotesRouter = createAppRouter(
   createMemoryHistory({ initialEntries: [`/app/audiobooks/${GATES_NOTES_CONVERSION_ID}`] }),
 );
@@ -286,7 +286,7 @@ const PREPARED_AUDIOBOOK = {
   title: "A deterministic document about careful testing",
   originalUrl: SOURCE_URL,
   narrationDocument: {
-    html: '<article><h1 id="unit-1">A deterministic document about careful testing</h1><p id="unit-2">Keep the important boundaries real.</p><p id="unit-3">Replace only what you cannot control.</p></article>',
+    html: '<article><h1 data-synchronization-unit="unit-1">A deterministic document about careful testing</h1><p data-synchronization-unit="unit-2">Keep the important boundaries real.</p><p data-synchronization-unit="unit-3">Replace only what you cannot control.</p></article>',
     synchronizationUnits: [
       { id: "unit-1", narrationText: "A deterministic document about careful testing" },
       { id: "unit-2", narrationText: "Keep the important boundaries real." },
@@ -378,6 +378,34 @@ export const AudiobookWithoutAudio = createPreparedStory({
 
 export const AudiobookWithFailedSegment = createPreparedStory({
   ...PREPARED_AUDIOBOOK,
+  status: "ready",
+  segments: [
+    createReadySegment(0),
+    { sequence: 1, status: "failed", explanation: "The provider rejected this text." },
+    createReadySegment(2),
+  ],
+});
+
+// A segment with two elements: a heading before a list, and the list's first item.
+const HEADING_BEFORE_A_LIST_AUDIOBOOK = {
+  ...PREPARED_AUDIOBOOK,
+  narrationDocument: {
+    html: '<article><h1 data-synchronization-unit="unit-1">A deterministic document about careful testing</h1><h2 data-synchronization-unit="unit-2">Two rules</h2><ul><li><p data-synchronization-unit="unit-2">Keep the important boundaries real.</p></li><li><p data-synchronization-unit="unit-3">Replace only what you cannot control.</p></li></ul></article>',
+    synchronizationUnits: [
+      { id: "unit-1", narrationText: "A deterministic document about careful testing" },
+      { id: "unit-2", narrationText: "Two rules\n\nKeep the important boundaries real." },
+      { id: "unit-3", narrationText: "Replace only what you cannot control." },
+    ],
+  },
+};
+
+export const HeadingBeforeAList = createPreparedStory({
+  ...createAudiobook(),
+  ...HEADING_BEFORE_A_LIST_AUDIOBOOK,
+});
+
+export const HeadingBeforeAListWithFailedSegment = createPreparedStory({
+  ...HEADING_BEFORE_A_LIST_AUDIOBOOK,
   status: "ready",
   segments: [
     createReadySegment(0),

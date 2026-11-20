@@ -56,11 +56,11 @@ import {
   toDeletionChallengeResponse,
   toDurationBalanceResponse,
   toGrantSnapshotResponse,
-  toNarrationDocumentResponse,
   toNarrationTrackResponse,
   toPlaybackPositionResponse,
   toPreparationPhaseField,
 } from "#src/http/listener-responses.ts";
+import { toRenderedNarrationDocumentResponse } from "#src/http/narration-document-response.ts";
 import { isDevelopmentOperatorRequest } from "#src/http/operator-access.ts";
 import {
   loadReadyAudiobookFromEnvironment,
@@ -638,7 +638,7 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
                   : undefined,
               ),
             }),
-        narrationDocument: toNarrationDocumentResponse(audiobook.narrationDocument),
+        narrationDocument: toRenderedNarrationDocumentResponse({ conversionId, audiobook }),
         playbackPosition: toPlaybackPositionResponse(playbackPosition),
       } satisfies Audiobook,
       200,

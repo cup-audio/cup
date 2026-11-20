@@ -650,8 +650,9 @@ async function waitForSaveAfter(conversionId: string, saveCount: number): Promis
 async function readUnitIds(webView: WebdriverIO.Browser): Promise<string[]> {
   return webView.execute(() =>
     Array.from(
-      document.querySelectorAll("button[data-segment-control]"),
-      (button) => button.parentElement?.id ?? "",
+      // A segment of several elements announces only its first element's control.
+      document.querySelectorAll("button[data-segment-control][aria-label]"),
+      (button) => button.parentElement?.getAttribute("data-synchronization-unit") ?? "",
     ),
   );
 }

@@ -3,6 +3,12 @@ import { segmentNarrationDocument } from "#src/segmentation.ts";
 import type { SynchronizationUnit } from "#src/synchronization-unit.ts";
 
 export { presentNarrationDocument } from "#src/presentation.ts";
+export { renderNarrationDocument } from "#src/rendering.ts";
+export type {
+  NarrationDocumentMismatch,
+  RenderedNarrationDocument,
+  RenderOptions,
+} from "#src/rendering.ts";
 export { segmentNarrationDocument } from "#src/segmentation.ts";
 export type {
   NarrationBlock,

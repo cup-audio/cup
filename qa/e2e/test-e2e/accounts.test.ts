@@ -599,16 +599,25 @@ test("account positions restore once and use last-write-wins across players", as
   expect(save).toBe(204);
   await page.reload();
   await waitForAudiobook(page);
-  await expect(page.locator(`[id="${unitId}"]`)).toHaveAttribute("aria-current", "true");
+  await expect(page.locator(`[data-synchronization-unit="${unitId}"]`)).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
   // Play resumes there; the loaded player is never moved by another player's save.
   await page.getByRole("button", { name: "Play", exact: true }).click();
   await expect(page.getByRole("button", { name: "Pause", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Pause", exact: true }).click();
-  await expect(page.locator(`[id="${unitId}"]`)).toHaveAttribute("aria-current", "true");
+  await expect(page.locator(`[data-synchronization-unit="${unitId}"]`)).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
   const second = await page.context().newPage();
   await second.goto(url);
   await waitForAudiobook(second);
-  await expect(second.locator(`[id="${unitId}"]`)).toHaveAttribute("aria-current", "true");
+  await expect(second.locator(`[data-synchronization-unit="${unitId}"]`)).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
   await second.getByRole("button", { name: "Play segment 3", exact: true }).click();
   await expect(second.getByRole("button", { name: "Pause", exact: true })).toBeVisible();
   await second.getByRole("button", { name: "Pause", exact: true }).click();
@@ -620,11 +629,16 @@ test("account positions restore once and use last-write-wins across players", as
       return (await result.json()).playbackPosition?.synchronizationUnitId;
     })
     .toBe(document.narrationDocument.synchronizationUnits[2]!.id);
-  await expect(page.locator(`[id="${unitId}"]`)).toHaveAttribute("aria-current", "true");
+  await expect(page.locator(`[data-synchronization-unit="${unitId}"]`)).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
   await page.reload();
   await waitForAudiobook(page);
   await expect(
-    page.locator(`[id="${document.narrationDocument.synchronizationUnits[2]!.id}"]`),
+    page.locator(
+      `[data-synchronization-unit="${document.narrationDocument.synchronizationUnits[2]!.id}"]`,
+    ),
   ).toHaveAttribute("aria-current", "true");
   await expect
     .poll(async () => (await (await fetch(origin + "/__qa/speech-calls")).json()).length)

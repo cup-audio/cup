@@ -224,7 +224,7 @@ _Avoid_: narration script
 
 ## narration document
 
-The structured document presentation of narration text that accompanies narration audio in the audiobook.
+The structured document presentation of narration text that accompanies narration audio in the audiobook. The listener API renders it on every request from what its conversion stored, so a change to how it is presented reaches every audiobook, while its synchronization units never change after preparation.
 
 _Avoid_: transcript, source page, narration source material
 

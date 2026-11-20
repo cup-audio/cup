@@ -36,6 +36,7 @@
     "@cup/conversion-grants": "workspace:*",
     "@cup/errors": "workspace:*",
     "@cup/listener-api.routes": "workspace:*",
+    "@cup/narration-document-creation": "workspace:*",
     "@cup/operator-api.routes": "workspace:*",
     "@cup/registry": "workspace:*",
     "@cup/telemetry.cloudflare": "workspace:*",

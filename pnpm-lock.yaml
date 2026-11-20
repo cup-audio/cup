@@ -1050,6 +1050,9 @@ importers:
       '@cup/listener-api.routes':
         specifier: workspace:*
         version: link:../listener-api.routes
+      '@cup/narration-document-creation':
+        specifier: workspace:*
+        version: link:../narration-document-creation
       '@cup/operator-api.routes':
         specifier: workspace:*
         version: link:../operator-api.routes

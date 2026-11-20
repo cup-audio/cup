@@ -54,6 +54,11 @@ export const LOG_EVENTS = {
   "account-deletion-notice-undelivered": "warn",
   /** A stored audio segment's size differs from the one its settled duration implies. */
   "narration-track-segment-mismatch": "error",
+  /**
+   * A rendered narration document disagreed with the conversion's stored synchronization units, so
+   * the listener got the fallback document built from the units alone.
+   */
+  "narration-document-mismatch": "error",
   /** The operator changed something through the Operator API. */
   "operator-mutation": "info",
   /**

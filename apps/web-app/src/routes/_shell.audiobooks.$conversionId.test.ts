@@ -74,12 +74,14 @@ test(
 
     const component = await mount("routes/_shell.audiobooks.$conversionId/GatesNotesArticle");
 
-    await component.locator("#narration-unit-0003").click();
-    await expect(component.locator("#narration-unit-0003")).toHaveAttribute("aria-current", "true");
+    await component.locator('[data-synchronization-unit="narration-unit-0003"]').click();
+    await expect(
+      component.locator('[data-synchronization-unit="narration-unit-0003"]'),
+    ).toHaveAttribute("aria-current", "true");
     await expect(component.getByRole("button", { name: "Pause", exact: true })).toBeVisible();
     await expectPlayingFrom(page, 10);
 
-    const nestedText = component.locator("#narration-unit-0010 em");
+    const nestedText = component.locator('[data-synchronization-unit="narration-unit-0010"] em');
     await nestedText.scrollIntoViewIfNeeded();
     const nestedTextBounds = await nestedText.boundingBox();
     expect(nestedTextBounds).not.toBeNull();
@@ -87,7 +89,9 @@ test(
       nestedTextBounds!.x + nestedTextBounds!.width / 2,
       nestedTextBounds!.y + nestedTextBounds!.height / 2,
     );
-    await expect(component.locator("#narration-unit-0010")).toHaveAttribute("aria-current", "true");
+    await expect(
+      component.locator('[data-synchronization-unit="narration-unit-0010"]'),
+    ).toHaveAttribute("aria-current", "true");
     await expectPlayingFrom(page, 45);
 
     await component.getByRole("button", { name: "Pause", exact: true }).click();
@@ -106,7 +110,9 @@ test(
       await segmentButton.evaluate((button) => getComputedStyle(button).outlineStyle),
     ).not.toBe("none");
     await segmentButton.press("Enter");
-    await expect(component.locator("#narration-unit-0003")).toHaveAttribute("aria-current", "true");
+    await expect(
+      component.locator('[data-synchronization-unit="narration-unit-0003"]'),
+    ).toHaveAttribute("aria-current", "true");
     await expect(component.getByRole("button", { name: "Pause", exact: true })).toBeVisible();
     await expectPlayingFrom(page, 10);
 
@@ -121,6 +127,54 @@ test(
     ).toBeVisible();
   },
 );
+
+test("a heading before a list highlights and plays together with the list's first item", async ({
+  mount,
+  page,
+}) => {
+  await captureNarrationAudio(page);
+
+  const component = await mount("routes/_shell.audiobooks.$conversionId/HeadingBeforeAList");
+  const heading = component.getByRole("heading", { name: "Two rules" });
+  const firstItem = component.getByText("Keep the important boundaries real.");
+
+  await heading.click();
+  await expect(heading).toHaveAttribute("aria-current", "true");
+  await expect(firstItem).toHaveAttribute("aria-current", "true");
+  await expectPlayingFrom(page, 5);
+
+  await component.getByRole("button", { name: "Play segment 3", exact: true }).click();
+  await expect(heading).not.toHaveAttribute("aria-current");
+  await expect(firstItem).not.toHaveAttribute("aria-current");
+  await expectPlayingFrom(page, 10);
+
+  await firstItem.click();
+  await expect(heading).toHaveAttribute("aria-current", "true");
+  await expect(firstItem).toHaveAttribute("aria-current", "true");
+  await expectPlayingFrom(page, 5);
+  // The segment is announced and reached with Tab once, not once per element.
+  await expect(component.getByRole("button", { name: "Play segment 2", exact: true })).toHaveCount(
+    1,
+  );
+});
+
+test("a failed segment is marked across all its elements", async ({ mount }) => {
+  const component = await mount(
+    "routes/_shell.audiobooks.$conversionId/HeadingBeforeAListWithFailedSegment",
+  );
+
+  await expect(component.getByRole("heading", { name: "Two rules" })).toHaveAttribute(
+    "data-synthesis-failed",
+    "",
+  );
+  await expect(component.getByText("Keep the important boundaries real.")).toHaveAttribute(
+    "data-synthesis-failed",
+    "",
+  );
+  await expect(component.getByText("Replace only what you cannot control.")).not.toHaveAttribute(
+    "data-synthesis-failed",
+  );
+});
 
 test("without a source subtitle the host follows the title directly", async ({ mount }) => {
   const component = await mount("routes/_shell.audiobooks.$conversionId/ReadyAudiobook");
@@ -142,7 +196,10 @@ test("the position bar seeks the narration track", { tag: VISUAL_TAG }, async ({
   });
   await position.fill("11000");
 
-  await expect(component.locator("#unit-3")).toHaveAttribute("aria-current", "true");
+  await expect(component.locator('[data-synchronization-unit="unit-3"]')).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
   await expect.poll(async () => (await readNarrationAudio(page)).currentTime).toBe(11);
   expect((await readNarrationAudio(page)).paused).toBe(true);
 });
@@ -239,7 +296,10 @@ test(
     // The listener stopped 12 s in, in the second unit; showing it loads nothing.
     await expect(playerSheet.getByText("0:12", { exact: true })).toBeVisible();
     await expect(playerSheet.getByText("-0:18", { exact: true })).toBeVisible();
-    await expect(component.locator(`[id="unit-2"]`)).toHaveAttribute("aria-current", "true");
+    await expect(component.locator('[data-synchronization-unit="unit-2"]')).toHaveAttribute(
+      "aria-current",
+      "true",
+    );
     expect((await readNarrationAudio(page)).src).not.toContain("audiobook=second");
 
     await playerSheet.getByRole("button", { name: "Forward 15 seconds", exact: true }).click();
@@ -371,7 +431,7 @@ test(
     const topBar = component.getByRole("banner");
     await expect(component.getByRole("heading", { name: title })).toBeVisible();
 
-    const segment = component.locator("#narration-unit-0005");
+    const segment = component.locator('[data-synchronization-unit="narration-unit-0005"]');
     await segment.scrollIntoViewIfNeeded();
     await component.getByRole("button", { name: "Play segment 5", exact: true }).click();
     await expect(segment).toHaveAttribute("aria-current", "true");
@@ -853,7 +913,10 @@ test(
     await expect(
       component.getByText("Audio could not be generated for 1 segment, marked in the text."),
     ).toBeVisible();
-    await expect(component.locator("#unit-2")).toHaveAttribute("data-synthesis-failed", "");
+    await expect(component.locator('[data-synchronization-unit="unit-2"]')).toHaveAttribute(
+      "data-synthesis-failed",
+      "",
+    );
     await expect(component.getByRole("button", { name: "Play", exact: true })).toBeDisabled();
     await expect(component.getByRole("button", { name: /^Play segment/ })).toHaveCount(0);
     await expect(component.getByRole("button", { name: /Play without/ })).toHaveCount(0);

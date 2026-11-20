@@ -1,0 +1,24 @@
+{
+  "description": "Section wrappers where a heading merged into a block, two headings merged into a block, and several trailing headings that no block followed.",
+  "originalUrl": "https://publisher.example/articles/story?ref=feed",
+  "storedHtml": "<article><h1 id=\"narration-unit-0001\">Section wrappers</h1><section id=\"narration-unit-0002\"><h2>A section</h2><p>The first paragraph.</p></section><section id=\"narration-unit-0003\"><h2>Two headings</h2><h3>in a row</h3><p>The second paragraph.</p></section><section id=\"narration-unit-0004\"><h2>A trailing heading</h2><h3>and another one</h3></section></article>",
+  "synchronizationUnits": [
+    {
+      "id": "narration-unit-0001",
+      "narrationText": "Section wrappers"
+    },
+    {
+      "id": "narration-unit-0002",
+      "narrationText": "A section\n\nThe first paragraph."
+    },
+    {
+      "id": "narration-unit-0003",
+      "narrationText": "Two headings\n\nin a row\n\nThe second paragraph."
+    },
+    {
+      "id": "narration-unit-0004",
+      "narrationText": "A trailing heading\n\nand another one"
+    }
+  ],
+  "expectedHtml": "<article><h1 data-synchronization-unit=\"narration-unit-0001\">Section wrappers</h1><h2 data-synchronization-unit=\"narration-unit-0002\">A section</h2><p data-synchronization-unit=\"narration-unit-0002\">The first paragraph.</p><h2 data-synchronization-unit=\"narration-unit-0003\">Two headings</h2><h3 data-synchronization-unit=\"narration-unit-0003\">in a row</h3><p data-synchronization-unit=\"narration-unit-0003\">The second paragraph.</p><h2 data-synchronization-unit=\"narration-unit-0004\">A trailing heading</h2><h3 data-synchronization-unit=\"narration-unit-0004\">and another one</h3></article>"
+}

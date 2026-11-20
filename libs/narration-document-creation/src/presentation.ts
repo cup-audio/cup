@@ -2,6 +2,7 @@ import type { DefaultTreeAdapterMap } from "parse5";
 
 import { CupError } from "@cup/errors";
 
+import { escapeHtmlAttribute, escapeHtmlText } from "#src/html-escaping.ts";
 import type { NarrationBlock, SegmentedDocument, UnitRange } from "#src/segmentation.ts";
 
 const EXCLUDED_TAG_NAMES = new Set([
@@ -546,12 +547,4 @@ function serializeNarrationTextElement(
   const html = text.split("\n").map(escapeHtmlText).join("<br>");
 
   return `<${tagName}${serializeSafeAttributes(attributes)}>${html}</${tagName}>`;
-}
-
-function escapeHtmlText(text: string): string {
-  return text.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/>/gu, "&gt;");
-}
-
-function escapeHtmlAttribute(text: string): string {
-  return escapeHtmlText(text).replace(/"/gu, "&quot;");
 }

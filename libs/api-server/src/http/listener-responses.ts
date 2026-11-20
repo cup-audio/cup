@@ -4,7 +4,6 @@ import type {
   AccountSnapshot as StoredAccountSnapshot,
 } from "@cup/accounts/contracts";
 import type { AccountLifecycle } from "@cup/accounts/lifecycle";
-import type { Audiobook as StoredAudiobook } from "@cup/audiobook-production";
 import {
   ConversionPhase,
   layOutConsecutively,
@@ -150,16 +149,6 @@ export function toPlaybackPositionResponse(position: PlaybackPosition | null) {
         synchronizationUnitId: position.synchronizationUnitId,
         offsetMilliseconds: position.offsetMilliseconds,
       } satisfies ReadyAudiobook["playbackPosition"]);
-}
-
-export function toNarrationDocumentResponse(document: StoredAudiobook["narrationDocument"]) {
-  return {
-    html: document.html,
-    synchronizationUnits: document.synchronizationUnits.map((unit) => ({
-      id: unit.id,
-      narrationText: unit.narrationText,
-    })),
-  } satisfies ReadyAudiobook["narrationDocument"];
 }
 
 /**
