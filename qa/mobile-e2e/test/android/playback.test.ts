@@ -659,16 +659,14 @@ async function waitForSaveAfter(conversionId: string, saveCount: number): Promis
  * them.
  */
 async function readUnitIds(webView: WebdriverIO.Browser): Promise<string[]> {
-  return webView.execute(
-    () =>
-      [
-        ...new Set(
-          Array.from(document.querySelectorAll("[data-synchronization-unit]"), (element) =>
-            element.getAttribute("data-synchronization-unit"),
-          ),
-        ),
-      ] as string[],
-  );
+  return webView.execute(() => [
+    ...new Set(
+      Array.from(
+        document.querySelectorAll("[data-synchronization-unit]"),
+        (element) => element.getAttribute("data-synchronization-unit") ?? "",
+      ),
+    ),
+  ]);
 }
 
 /** Orders two saves by where they are in the audiobook: negative, zero or positive. */
