@@ -1,16 +1,36 @@
 import { presentStoredNarrationDocument } from "#src/existing-conversion-presentation.ts";
-import type { PresentedUnit } from "#src/existing-conversion-presentation.ts";
 import { escapeHtmlAttribute, escapeHtmlText } from "#src/html-escaping.ts";
+import { presentNarrationDocument } from "#src/presentation.ts";
+import { segmentNarrationDocument } from "#src/segmentation.ts";
+import type { SegmentationVersion } from "#src/segmentation.ts";
 import type { SynchronizationUnit } from "#src/synchronization-unit.ts";
 
-/**
- * What a conversion's manifest stores to render its narration document. An existing conversion
- * stored the HTML narration document creation produced at preparation.
- */
-export type RenderOptions = {
+/** What a conversion's manifest stores to render its narration document. */
+export type RenderOptions = ExistingConversionRenderOptions | NewConversionRenderOptions;
+
+/** An existing conversion stored the HTML narration document creation produced at preparation. */
+export type ExistingConversionRenderOptions = {
   narrationDocument: { html: string; synchronizationUnits: readonly SynchronizationUnit[] };
   /** The source URL the conversion was submitted with, against which relative links resolve. */
   originalUrl: string;
+};
+
+/**
+ * A new conversion stored its narration source material, and the segmentation version and units
+ * preparation derived from it, so its narration document is segmented again on every render.
+ */
+export type NewConversionRenderOptions = {
+  narrationDocument: {
+    segmentationVersion: SegmentationVersion;
+    sourceSubtitle?: string | undefined;
+    /** The URL the source page was finally loaded from, against which relative links resolve. */
+    fetchedUrl?: string | undefined;
+    synchronizationUnits: readonly SynchronizationUnit[];
+  };
+  narrationSourceMaterialHtml: string;
+  /** The source URL the conversion was submitted with, the link base without a fetched URL. */
+  originalUrl: string;
+  sourceTitle: string;
 };
 
 /** The narration document as the listener sees it, together with the stored units. */
@@ -37,25 +57,77 @@ export type NarrationDocumentMismatch = {
  * audio and never change after preparation, so a render that disagrees with the stored units is
  * replaced by the fallback document, built from the stored units alone, and never throws.
  */
-export function renderNarrationDocument({
-  narrationDocument,
-  originalUrl,
-}: RenderOptions): RenderedNarrationDocument {
-  const { synchronizationUnits } = narrationDocument;
-  const { html, units } = presentStoredNarrationDocument({
-    storedHtml: narrationDocument.html,
-    baseUrl: originalUrl,
-  });
-  const mismatch = findFirstMismatch(synchronizationUnits, units);
+export function renderNarrationDocument(options: RenderOptions): RenderedNarrationDocument {
+  const { synchronizationUnits } = options.narrationDocument;
+  const { html, mismatch } =
+    "narrationSourceMaterialHtml" in options
+      ? renderNewConversion(options)
+      : renderExistingConversion(options);
 
   return mismatch === undefined
     ? { html, synchronizationUnits }
     : { html: createFallbackDocument(synchronizationUnits), synchronizationUnits, mismatch };
 }
 
+function renderExistingConversion({
+  narrationDocument,
+  originalUrl,
+}: ExistingConversionRenderOptions): { html: string; mismatch?: NarrationDocumentMismatch } {
+  const { html, units } = presentStoredNarrationDocument({
+    storedHtml: narrationDocument.html,
+    baseUrl: originalUrl,
+  });
+  // Existing conversions' stored HTML and narration text normalized whitespace differently, for
+  // example between a heading and the block it joined.
+  const mismatch = findFirstMismatch(
+    narrationDocument.synchronizationUnits,
+    units.map(({ id, text }) => ({ id, narrationText: text })),
+    removeWhitespace,
+  );
+
+  return mismatch === undefined ? { html } : { html, mismatch };
+}
+
+function renderNewConversion({
+  narrationDocument,
+  narrationSourceMaterialHtml,
+  originalUrl,
+  sourceTitle,
+}: NewConversionRenderOptions): { html: string; mismatch?: NarrationDocumentMismatch } {
+  const { segmentedDocument, synchronizationUnits } = segmentNarrationDocument({
+    segmentationVersion: narrationDocument.segmentationVersion,
+    sourceTitle,
+    ...(narrationDocument.sourceSubtitle === undefined
+      ? {}
+      : { sourceSubtitle: narrationDocument.sourceSubtitle }),
+    sourceMaterialHtml: narrationSourceMaterialHtml,
+  });
+  const mismatch = findFirstMismatch(
+    narrationDocument.synchronizationUnits,
+    synchronizationUnits,
+    (text) => text,
+  );
+
+  if (mismatch !== undefined) {
+    return { html: "", mismatch };
+  }
+
+  // Until presentation marks units and resolves links itself, its HTML takes the shape of an
+  // existing conversion's stored HTML, which the existing-conversion presentation turns into what
+  // the reader expects.
+  const { html } = presentStoredNarrationDocument({
+    storedHtml: presentNarrationDocument(segmentedDocument),
+    baseUrl: narrationDocument.fetchedUrl ?? originalUrl,
+  });
+
+  return { html };
+}
+
+/** Compares stored and rendered units by order, ID, and narration text, after `normalizeText`. */
 function findFirstMismatch(
   storedUnits: readonly SynchronizationUnit[],
-  renderedUnits: readonly PresentedUnit[],
+  renderedUnits: readonly SynchronizationUnit[],
+  normalizeText: (text: string) => string,
 ): NarrationDocumentMismatch | undefined {
   for (
     let unitIndex = 0;
@@ -82,9 +154,7 @@ function findFirstMismatch(
       };
     }
 
-    // Existing conversions' stored HTML and narration text normalized whitespace differently, for
-    // example between a heading and the block it joined.
-    if (removeWhitespace(storedUnit.narrationText) !== removeWhitespace(renderedUnit.text)) {
+    if (normalizeText(storedUnit.narrationText) !== normalizeText(renderedUnit.narrationText)) {
       return {
         reason: "narration-text",
         unitIndex,

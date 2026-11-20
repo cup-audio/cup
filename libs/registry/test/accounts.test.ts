@@ -1706,6 +1706,8 @@ test("a deleted conversion's cleanup drains its writers and removes its objects,
     customMetadata: { "cup-writer-id": writerId },
   });
   await bindings.AUDIO_BUCKET.put(prefix + "cover.jpg", "cover");
+  await bindings.AUDIO_BUCKET.put(prefix + "audiobook-source-material.html", "<p>Source</p>");
+  await bindings.AUDIO_BUCKET.put(prefix + "narration-source-material.html", "<p>Source</p>");
   const ledgerEntries = (await account.inspectAccounting()).entries;
 
   expect(await account.deleteConversion(conversionId)).toEqual({ result: "marked" });
