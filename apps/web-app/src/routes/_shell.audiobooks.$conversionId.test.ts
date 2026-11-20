@@ -327,7 +327,9 @@ test("units inside a restored table, description list and preformatted text high
   await expect(preformattedText).toHaveAttribute("aria-current", "true");
   await expect(caption).not.toHaveAttribute("aria-current");
   await expectPlayingFrom(page, 40);
-  await expect(component.getByRole("button", { name: /^Play segment / })).toHaveCount(9);
+  await expect(component.getByRole("button", { name: "Play from here", exact: true })).toHaveCount(
+    9,
+  );
 });
 
 test("a failed segment is marked across all its elements", async ({ mount }) => {
