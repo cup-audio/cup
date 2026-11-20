@@ -147,7 +147,7 @@ test("optional account authorization sends no token while signed out", async ({ 
   const status = await page.evaluate(async (conversionId) => {
     const path = "/src/data-fetching/api-request.ts";
     const { requestApi, RpcError }: ApiRequestModule = await import(path);
-    return requestApi("optional", (client) => client.getAudiobook({ conversionId })).then(
+    return requestApi("optional", (client) => client.getAudiobook({ conversionId }, {})).then(
       () => null,
       (error: unknown) => (error instanceof RpcError ? error.status : null),
     );
@@ -164,7 +164,7 @@ test("optional account authorization sends the signed-in account's token", async
   await page.evaluate(async (conversionId) => {
     const path = "/src/data-fetching/api-request.ts";
     const { requestApi }: ApiRequestModule = await import(path);
-    await requestApi("optional", (client) => client.getAudiobook({ conversionId })).catch(
+    await requestApi("optional", (client) => client.getAudiobook({ conversionId }, {})).catch(
       () => undefined,
     );
   }, CONVERSION_ID);

@@ -4,6 +4,7 @@ import React from "react";
 
 import type {
   Audiobook,
+  AudiobookResponse,
   ErrorResponse,
   PlaybackPosition,
   PreparationPhase,
@@ -465,6 +466,68 @@ export const PendingConversionGetsPrepared = {
   ],
 } satisfies Story;
 
+/**
+ * Polls a conversion from pending through synthesis to ready, and answers as the Worker does: a
+ * request that omits the narration document gets the audiobook without it. Each request's
+ * `narrationDocument` query is recorded in `window.audiobookRequestQueries`.
+ */
+export const SynthesisPolledWithoutNarrationDocument = {
+  component: () => <GlobalProviders router={router} />,
+  handlers: (() => {
+    const queries: (string | null)[] = [];
+    return [
+      http.get(`/api/audiobooks/${CONVERSION_ID}`, ({ request }) => {
+        const query = new URL(request.url).searchParams.get("narrationDocument");
+        queries.push(query);
+        Object.assign(window, { audiobookRequestQueries: queries });
+
+        if (queries.length === 1) {
+          return HttpResponse.json({
+            status: "pending",
+            originalUrl: SOURCE_URL,
+            canGenerate: true,
+          } satisfies Audiobook);
+        }
+        const { narrationDocument, ...withoutDocument } = {
+          ...PREPARED_AUDIOBOOK,
+          ...(queries.length === 2
+            ? {
+                status: "synthesizing" as const,
+                segments: [
+                  { sequence: 0, status: "generating" as const },
+                  { sequence: 1, status: "generating" as const },
+                  { sequence: 2, status: "generating" as const },
+                ],
+              }
+            : queries.length === 3
+              ? {
+                  status: "synthesizing" as const,
+                  segments: [
+                    createReadySegment(0),
+                    { sequence: 1, status: "generating" as const },
+                    { sequence: 2, status: "generating" as const },
+                  ],
+                }
+              : {
+                  status: "ready" as const,
+                  segments: [createReadySegment(0), createReadySegment(1), createReadySegment(2)],
+                  narrationTrack: createStoryNarrationTrack([
+                    SEGMENT_DURATION_MILLISECONDS,
+                    SEGMENT_DURATION_MILLISECONDS,
+                    SEGMENT_DURATION_MILLISECONDS,
+                  ]),
+                }),
+        };
+        return HttpResponse.json(
+          (query === "omit"
+            ? withoutDocument
+            : { ...withoutDocument, narrationDocument }) satisfies AudiobookResponse,
+        );
+      }),
+    ];
+  })(),
+} satisfies Story;
+
 export const FailedConversion = {
   component: () => <GlobalProviders router={router} />,
   handlers: [
@@ -666,6 +729,60 @@ export const TrackGoneOnRenewal = accountStory({
     ];
   })(),
 });
+
+/**
+ * The first narration track URL fails to load, so Play renews it; the renewal omits the narration
+ * document the page holds and gets a working URL. The renewal's `narrationDocument` query is
+ * recorded in `window.audiobookRequestQueries` and each saved position in `window.savedPositions`.
+ */
+export const TrackRenewedWithoutNarrationDocument = accountStory({
+  path: `/audiobooks/${CONVERSION_ID}`,
+  handlers: (() => {
+    const queries: (string | null)[] = [];
+    const savedPositions: unknown[] = [];
+    return [
+      http.get(`/api/audiobooks/${CONVERSION_ID}`, ({ request }) => {
+        const query = new URL(request.url).searchParams.get("narrationDocument");
+        queries.push(query);
+        Object.assign(window, { audiobookRequestQueries: queries });
+
+        const { narrationDocument, ...withoutDocument } = createAudiobookWithNarrationTrack(
+          queries.length === 1
+            ? `${window.location.origin}/__story/missing-narration-track.mp3`
+            : undefined,
+        );
+        return HttpResponse.json(
+          (query === "omit"
+            ? withoutDocument
+            : { ...withoutDocument, narrationDocument }) satisfies AudiobookResponse,
+        );
+      }),
+      http.get(
+        "/__story/missing-narration-track.mp3",
+        () => new HttpResponse(null, { status: 404 }),
+      ),
+      http.put(`/api/audiobooks/${CONVERSION_ID}/position`, async ({ request }) => {
+        savedPositions.push(await request.json());
+        Object.assign(window, { savedPositions });
+        return new HttpResponse(null, { status: 204 });
+      }),
+    ];
+  })(),
+});
+
+function createAudiobookWithNarrationTrack(url: string | undefined) {
+  const narrationTrack = createStoryNarrationTrack([
+    SEGMENT_DURATION_MILLISECONDS,
+    SEGMENT_DURATION_MILLISECONDS,
+    SEGMENT_DURATION_MILLISECONDS,
+  ]);
+  return {
+    ...PREPARED_AUDIOBOOK,
+    status: "ready" as const,
+    segments: [0, 1, 2].map(createReadySegment),
+    narrationTrack: url === undefined ? narrationTrack : { ...narrationTrack, url },
+  };
+}
 
 function trackNotFoundResponse() {
   return HttpResponse.json(

@@ -59,6 +59,17 @@ async function readOpeningTexts(article: Locator) {
   );
 }
 
+/** The `narrationDocument` query of each audiobook request the story answered, in order. */
+async function readAudiobookRequestQueries(page: Page): Promise<unknown[]> {
+  const queries: unknown = await page.evaluate(() =>
+    Reflect.get(window, "audiobookRequestQueries"),
+  );
+  if (!Array.isArray(queries)) {
+    throw new TypeError("The story recorded no audiobook requests");
+  }
+  return queries;
+}
+
 /** Waits until the element plays within a unit of five seconds that starts at `startSeconds`. */
 async function expectPlayingFrom(page: Page, startSeconds: number) {
   await expect
@@ -1265,6 +1276,68 @@ test("failed polling keeps the track and shows one toast until polling recovers"
     .toBe(0);
   expect(Math.max(...toastCounts)).toBe(1);
   await expect(component.getByText("Keep the important boundaries real.")).toBeVisible();
+});
+
+test("polls after the first one that brings the narration document omit it, and the track still plays from the held document", async ({
+  mount,
+  page,
+}) => {
+  await captureNarrationAudio(page);
+  const component = await mount(
+    "routes/_shell.audiobooks.$conversionId/SynthesisPolledWithoutNarrationDocument",
+  );
+
+  // The page loads pending and polls until the track is ready.
+  await expect(component.getByRole("button", { name: "Play", exact: true })).toBeEnabled();
+  // A page load holds no document, and neither does a pending audiobook.
+  const queries = await readAudiobookRequestQueries(page);
+  expect(queries.slice(0, 2)).toStrictEqual([null, null]);
+  expect(queries.length).toBeGreaterThanOrEqual(4);
+  expect(new Set(queries.slice(2))).toStrictEqual(new Set(["omit"]));
+  await expect(component.getByText("Keep the important boundaries real.")).toBeVisible();
+
+  await component.getByRole("button", { name: "Play", exact: true }).click();
+  await expectPlayingFrom(page, 0);
+  await expect(component.locator('[data-synchronization-unit="unit-1"]')).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
+});
+
+test("a track URL renewed without the narration document plays, highlights and saves its position from the held document", async ({
+  mount,
+  page,
+}) => {
+  await captureNarrationAudio(page);
+  const component = await mount(
+    "routes/_shell.audiobooks.$conversionId/TrackRenewedWithoutNarrationDocument",
+  );
+  const playerSheet = component.getByRole("contentinfo", { name: "Player" });
+  await playerSheet.getByRole("button", { name: "Play", exact: true }).click();
+  await expect(playerSheet.getByRole("alert")).toHaveText(
+    "Audio could not be played. Press Play to try again.",
+  );
+
+  await playerSheet.getByRole("button", { name: "Play", exact: true }).click();
+
+  // The element reports playing the failed URL until the renewed one replaces it.
+  await expect
+    .poll(async () => (await readNarrationAudio(page)).src)
+    .not.toContain("missing-narration-track");
+  await expectPlayingFrom(page, 0);
+  // Only the page load requests the document; a refetch on mount and the renewal omit it.
+  const queries = await readAudiobookRequestQueries(page);
+  expect(queries[0]).toBeNull();
+  expect(queries.length).toBeGreaterThanOrEqual(2);
+  expect(new Set(queries.slice(1))).toStrictEqual(new Set(["omit"]));
+  await expect(component.locator('[data-synchronization-unit="unit-1"]')).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
+  await playerSheet.getByRole("button", { name: "Pause", exact: true }).click();
+  await expect
+    .poll(() => page.evaluate(() => Reflect.get(window, "savedPositions")))
+    .toContainEqual(expect.objectContaining({ synchronizationUnitId: "unit-1" }));
 });
 
 test("the page title names the audiobook once it has loaded", async ({ mount, page }) => {

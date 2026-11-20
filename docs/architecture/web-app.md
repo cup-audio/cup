@@ -50,7 +50,7 @@ The cache must never show the listener something false, including on a screen th
 - **Saving a signed-in listener's listening position** writes it into the cached audiobook and marks it stale without requesting it, since playback saves every few seconds.
 - **Exchanging a trial link's credential** caches the grant it answers with.
 
-A direct edit keeps the cached audiobook's arrival time, which dates its narration track URL for [renewal](authentication.md#signed-media-url). A refetch of shown data answered with _not found_ or _access denied_ drops the cached data, so the screen shows its error screen; other failures keep the content and report a toast. The [web app README](../../apps/web-app/README.md#component-tests-and-visual-coverage) names the tests that guard revisits.
+An audiobook request, a poll or a track URL renewal included, omits the narration document once the cache holds it, and the [reader query](../../apps/web-app/src/data-fetching/reader.ts) puts the held document into the response, so the cached audiobook always carries one and a page load requests it again ([ADR 0036](../adr/0036-omit-the-narration-document-from-the-audiobook-response-on-request.md)). A direct edit keeps the cached audiobook's arrival time, which dates its narration track URL for [renewal](authentication.md#signed-media-url). A refetch of shown data answered with _not found_ or _access denied_ drops the cached data, so the screen shows its error screen; other failures keep the content and report a toast. The [web app README](../../apps/web-app/README.md#component-tests-and-visual-coverage) names the tests that guard revisits.
 
 ## Where screens load
 
