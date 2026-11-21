@@ -604,21 +604,13 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
       owner.kind === "account"
         ? context.env.ACCOUNTS.get(context.env.ACCOUNTS.idFromName(owner.accountId))
         : undefined;
-    const listenerAuth = account
+    const signedInListener = account
       ? undefined
-      : context.req.header("Authorization")
-        ? await authenticateAccountRequest(context.req.raw, context.env)
-        : undefined;
-    // The client signs out and asks again without the token; answering without the position instead
-    // would keep it signed in, refused, and reporting to Sentry on every poll.
-    if (listenerAuth?.result === "not-admitted") {
+      : await resolveSignedInListener(context.req.raw, context.env);
+    if (signedInListener === "not-admitted") {
       return accountAuthError("not-admitted", context.get("traceId"));
     }
-    const listener =
-      account ??
-      (listenerAuth?.result === "authenticated" && listenerAuth.snapshot.state === "active"
-        ? listenerAuth.account
-        : undefined);
+    const listener = account ?? signedInListener;
     const playbackPosition = listener ? await listener.getPlaybackPosition(conversionId) : null;
     return context.json(
       {
@@ -1539,6 +1531,26 @@ export function createApiServer(dependencies: ApiServerDependencies = production
  * the request's trace. Sentry's request wrapper makes the request's span active; without one, as in
  * tests that call the app directly, the scope's propagation context still holds a trace ID.
  */
+/**
+ * The active account whose playback position a trial audiobook's response carries, when the request
+ * sends an account token. An identity off the account allowlist is refused rather than answered
+ * without the position: the client then signs out and asks again without the token, where an answer
+ * without it would keep the client signed in, refused, and reporting to Sentry on every poll.
+ */
+async function resolveSignedInListener(request: Request, env: ApiServerEnvironment) {
+  if (!request.headers.get("Authorization")) {
+    return undefined;
+  }
+
+  const auth = await authenticateAccountRequest(request, env);
+  if (auth.result === "not-admitted") {
+    return "not-admitted";
+  }
+  return auth.result === "authenticated" && auth.snapshot.state === "active"
+    ? auth.account
+    : undefined;
+}
+
 function readTraceId(): string {
   return (
     getActiveSpan()?.spanContext().traceId ?? getCurrentScope().getPropagationContext().traceId

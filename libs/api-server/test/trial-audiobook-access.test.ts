@@ -13,7 +13,9 @@ vi.mock("@cup/conversion-grants", async () => ({
   ...(await import("@cup/conversion-grants/session")),
 }));
 // Only requests with an account token reach it; the other tests send none.
-const mocks = vi.hoisted(() => ({ authenticate: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  authenticate: vi.fn<typeof import("#src/http/account-auth.ts").authenticateAccountRequest>(),
+}));
 vi.mock("#src/http/account-auth.ts", async (original) => ({
   ...(await original<typeof import("#src/http/account-auth.ts")>()),
   authenticateAccountRequest: mocks.authenticate,
