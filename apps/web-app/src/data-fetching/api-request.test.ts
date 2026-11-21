@@ -199,3 +199,78 @@ test("required account authorization rejects a different account before dispatch
   expect(authorization).toHaveLength(1);
   expect(authorization[0]).toMatch(/^Bearer eyJ/);
 });
+
+test("an optional request refused as not admitted signs out and is sent again without a token", async ({
+  page,
+}) => {
+  await routeAuthConfig(page);
+  await signIn(page);
+  await page.route("https://auth.example.com/**", (route) => route.fulfill({ status: 204 }));
+  const authorization: Array<string | null> = [];
+  await page.route(`**/api/audiobooks/${CONVERSION_ID}`, async (route) => {
+    const header = (await route.request().headerValue("authorization")) ?? null;
+    authorization.push(header);
+    await (header === null
+      ? route.fulfill({ status: 404, json: {} })
+      : route.fulfill({
+          status: 403,
+          json: {
+            error: {
+              code: ERROR_CODE.ACCOUNT_NOT_ADMITTED,
+              message: "Cup is invite-only for now.",
+            },
+          },
+        }));
+  });
+  await page.goto("/ui-gallery/index.html");
+  const result = await page.evaluate(async (conversionId) => {
+    const path = "/src/data-fetching/api-request.ts";
+    const sessionPath = "/src/auth/account-session.ts";
+    const { requestApi, RpcError }: ApiRequestModule = await import(path);
+    const { sessionSnapshot }: typeof import("#src/auth/account-session.ts") = await import(
+      sessionPath
+    );
+    const status = await requestApi("optional", (client) =>
+      client.getAudiobook({ conversionId }, {}),
+    ).then(
+      () => null,
+      (error: unknown) => (error instanceof RpcError ? error.status : null),
+    );
+    return { status, isSignedOut: sessionSnapshot() === null };
+  }, CONVERSION_ID);
+  expect(result).toEqual({ status: 404, isSignedOut: true });
+  expect(authorization).toHaveLength(2);
+  expect(authorization[0]).toMatch(/^Bearer eyJ/);
+  expect(authorization[1]).toBeNull();
+});
+
+test("a required request refused as not admitted signs out and keeps its refusal", async ({
+  page,
+}) => {
+  await routeAuthConfig(page);
+  await signIn(page);
+  await page.route("https://auth.example.com/**", (route) => route.fulfill({ status: 204 }));
+  await page.route("**/api/account", (route) =>
+    route.fulfill({
+      status: 403,
+      json: {
+        error: { code: ERROR_CODE.ACCOUNT_NOT_ADMITTED, message: "Cup is invite-only for now." },
+      },
+    }),
+  );
+  await page.goto("/ui-gallery/index.html");
+  const result = await page.evaluate(async (subject) => {
+    const path = "/src/data-fetching/api-request.ts";
+    const sessionPath = "/src/auth/account-session.ts";
+    const { requestApi, RpcError }: ApiRequestModule = await import(path);
+    const { sessionSnapshot }: typeof import("#src/auth/account-session.ts") = await import(
+      sessionPath
+    );
+    const code = await requestApi({ subject }, (client) => client.getAccount()).then(
+      () => null,
+      (error: unknown) => (error instanceof RpcError ? error.code : null),
+    );
+    return { code, isSignedOut: sessionSnapshot() === null };
+  }, SUBJECT);
+  expect(result).toEqual({ code: ERROR_CODE.ACCOUNT_NOT_ADMITTED, isSignedOut: true });
+});

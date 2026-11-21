@@ -60,6 +60,7 @@ async function fixture(state = "active") {
     role: "authenticated",
     is_anonymous: false,
     app_metadata: { provider: "google" },
+    email: "listener@example.test",
   })
     .setProtectedHeader({ alg: "ES256", kid: "delete-conversion" })
     .setSubject(subject)
@@ -79,6 +80,7 @@ async function fixture(state = "active") {
   ]);
   const env = {
     SUPABASE_URL: url,
+    ACCOUNT_ALLOWLIST: "listener@example.test",
     ACCOUNTS: { idFromName: (name: string) => name, get: (name: string) => accounts.get(name) },
     REGISTRY: {
       idFromName: (name: string) => name,

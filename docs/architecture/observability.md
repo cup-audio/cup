@@ -4,7 +4,7 @@ Cup reports production failures to Sentry through Sentry's own SDKs, and only fr
 
 - this page: what the Worker sends, the rules every runtime shares, and the alerts;
 - [client observability](observability-clients.md): the web app, the mobile shells, crash reports and the telemetry tunnel;
-- [observability operations](observability-operations.md): stuck checks, log records, conversion durations, going-live checks, and build and release tracking.
+- [observability operations](observability-operations.md): stuck checks, refused identities, log records, conversion durations, going-live checks, and build and release tracking.
 
 ## What the Worker sends
 
@@ -53,7 +53,7 @@ No runtime sends a listener's email address, IP address, headers, cookies, bodie
 
 Sentry emails the operator, and nobody else, through the alerts in the [Terraform root](../../terraform/README.md#alerts-and-monitors), which also holds each threshold. Each email is Sentry's standard issue email with the issue's tags, such as `cup.conversion.id`.
 
-- **New or regressed issues** of either project, which include client and native crash issues, the stuck checks, and the issues the uptime and volume monitors open.
+- **New or regressed issues** of either project, which include client and native crash issues, the stuck checks, the [refused identities](observability-operations.md#refused-identities), and the issues the uptime and volume monitors open.
 - **Frequent conversion failures**: an issue tagged with a failure category that is seen often within an hour.
 - **Uptime** of `GET https://cup.audio/api/health`, which answers 200 while the Worker runs and calls no binding.
 - **Volume**: each project's daily errors and spans, each monitor set to a day's share of the free plan's monthly quota, so the operator learns before a quota runs out mid-month, after which alerting is blind until the next month. When one fires, the operator finds the source on Sentry's Stats page and fixes it, or lowers span sampling or upgrades when nothing is broken. Spike protection is on in both projects.

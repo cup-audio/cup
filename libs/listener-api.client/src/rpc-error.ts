@@ -14,6 +14,7 @@ export type { ErrorCode } from "@cup/listener-api.routes";
  */
 export const ERROR_CODE = {
   ACCOUNT_BLOCKED: "account-blocked",
+  ACCOUNT_NOT_ADMITTED: "account-not-admitted",
   ACCOUNT_SESSION_REQUIRED: "account-session-required",
   ACCOUNT_SETUP_PENDING: "account-setup-pending",
   ACCOUNT_START_CONFLICT: "account-start-conflict",

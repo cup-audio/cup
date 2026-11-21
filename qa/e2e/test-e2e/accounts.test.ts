@@ -649,3 +649,43 @@ test("account positions restore once and use last-write-wins across players", as
     .toBe(document.narrationDocument.synchronizationUnits.length);
   await second.close();
 });
+
+test.describe("with an account allowlist that leaves the reader out", () => {
+  test.use({ accountAllowlist: "someone-else@example.test" });
+
+  test("a refused sign-in gets no account, says why, and leaves trial links working", async ({
+    expectConsoleError,
+    page,
+    workerEnvironment,
+  }) => {
+    test.setTimeout(60_000);
+    const { origin } = workerEnvironment;
+    expectConsoleError(/^Failed to load resource: the server responded with a status of 403/);
+    await page.goto(`${origin}/app/`);
+    await page.getByRole("textbox", { name: "URL", exact: true }).fill(SOURCE_URL);
+    await page.getByRole("button", { name: "Listen" }).click();
+    await page.getByRole("button", { name: "Continue with Google", exact: true }).click();
+
+    // The resumed start is refused, which signs out and opens the sign-in again to say why.
+    const dialog = page.getByRole("dialog", { name: "Sign in", exact: true });
+    await expect(
+      dialog.getByText("Cup is invite-only for now, and this Google account isn't invited."),
+    ).toBeVisible();
+    await expect(page).toHaveURL(`${origin}/app/`);
+    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    // The refused start is dropped, so a reload offers the empty form and nothing resumes.
+    await page.reload();
+    await expect(page.getByRole("textbox", { name: "URL", exact: true })).toHaveValue("");
+    await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
+
+    const grant = await workerEnvironment.createGrant();
+    await page.goto(`${origin}/app/trials/${grant.grantId}${new URL(grant.trialLink).hash}`);
+    await expect(page).toHaveURL(`${origin}/app/trials/${grant.grantId}`);
+    await page.getByRole("textbox", { name: "URL", exact: true }).fill(SOURCE_URL);
+    await page.getByRole("button", { name: "Listen" }).click();
+    await expect(page).toHaveURL(/\/app\/audiobooks\//, { timeout: 60_000 });
+    await expect(page.getByRole("button", { name: "Play", exact: true })).toBeEnabled({
+      timeout: 60_000,
+    });
+  });
+});

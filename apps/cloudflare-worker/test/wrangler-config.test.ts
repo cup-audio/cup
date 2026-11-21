@@ -181,6 +181,7 @@ test("the production secrets are required, and the integration tests supply each
     "GOOGLE_WEB_CLIENT_ID",
     "RESEND_API_KEY",
     "MEDIA_URL_SIGNING_KEY",
+    "ACCOUNT_ALLOWLIST",
   ];
   expect(production.secrets).toStrictEqual({ required: expectedSecrets });
   expect(Object.keys(TEST_SECRETS)).toStrictEqual(expectedSecrets);

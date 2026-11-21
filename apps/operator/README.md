@@ -173,6 +173,18 @@ The command exits with a nonzero status if any migration is incomplete.
 
 ## Manage accounts
 
+### Manage the account allowlist
+
+Only identities on the [account allowlist](../../docs/architecture/authentication.md#account-allowlist) may use an account. The list is the Worker secret `ACCOUNT_ALLOWLIST`: email addresses separated by commas, compared case-insensitively and exactly. Replace it with the whole new list; Wrangler reads the value from its prompt and keeps it out of the shell history:
+
+```sh
+pnpm --filter '@cup/cloudflare-worker' exec wrangler secret put ACCOUNT_ALLOWLIST
+```
+
+The change takes effect at once, without a deploy, for new sign-ins and for existing accounts alike: removing an address shuts its account out on its next request, and adding it back lets it in again with its data intact. Wrangler lists secret names but never their values, so keep the current list where you keep other operator secrets. The Worker refuses every identity while the secret is empty, and a deploy fails while it is missing.
+
+Each refusal sends a Sentry warning with the identity's Supabase subject ([refused identities](../../docs/architecture/observability-operations.md#refused-identities)); look the subject up in Supabase to see who tried.
+
 ### List accounts
 
 List the Registry's identity-to-account mappings, oldest first:

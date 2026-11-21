@@ -76,6 +76,11 @@ type StartTestWorkerOptions = RestartOptions & {
    * development does, so the sign-in dialog offers "Sign in with test account".
    */
   offersTestAccount?: boolean;
+  /**
+   * Replaces the account allowlist, which by default admits the fake auth provider's Google reader
+   * and the local test account (wrangler.jsonc).
+   */
+  accountAllowlist?: string;
   /** Writes Wrangler's output to stderr while it runs. */
   streamLogs?: boolean;
   /**
@@ -152,6 +157,9 @@ export async function startTestWorker(options: StartTestWorkerOptions = {}): Pro
         ...(options.sentryTunnelDsns === undefined
           ? []
           : ["--var", `SENTRY_TUNNEL_DSNS:${options.sentryTunnelDsns}`]),
+        ...(options.accountAllowlist === undefined
+          ? []
+          : ["--var", `ACCOUNT_ALLOWLIST:${options.accountAllowlist}`]),
         ...(options.offersTestAccount === true
           ? [
               "--var",

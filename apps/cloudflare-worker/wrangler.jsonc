@@ -147,6 +147,9 @@
       "GOOGLE_WEB_CLIENT_ID",
       "RESEND_API_KEY",
       "MEDIA_URL_SIGNING_KEY",
+      // The account allowlist, comma-separated email addresses; a secret, because the repository is
+      // public (apps/operator/README.md#manage-the-account-allowlist).
+      "ACCOUNT_ALLOWLIST",
     ],
   },
 }

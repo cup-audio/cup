@@ -143,17 +143,17 @@ test(
     await mount("routes/index/SignInFromLink");
     const dialog = page.getByRole("dialog", { name: "Sign in", exact: true });
     await expect(dialog).toHaveAccessibleDescription("Sign in to get back to your tracks.");
-    await expect(dialog.getByText("New accounts get 30 free minutes.")).toHaveCount(0);
+    await expect(dialog.getByText("Cup is invite-only for now.")).toHaveCount(0);
     await expect(dialog.getByRole("button", { name: "Continue with Google" })).toBeFocused();
     await expect(page).toHaveScreenshot("sign-in-dialog-from-link.png");
   },
 );
 
-test("a submission's dialog keeps the new account copy", async ({ mount, page }) => {
+test("a submission's dialog says Cup is invite-only", async ({ mount, page }) => {
   await mount("routes/index/SignIn");
   await expect(
     page.getByRole("dialog", { name: "Sign in", exact: true }),
-  ).toHaveAccessibleDescription("Sign in to listen. New accounts get 30 free minutes.");
+  ).toHaveAccessibleDescription("Sign in to listen. Cup is invite-only for now.");
 });
 
 test("Cancel and Escape on the link's dialog return to the link and keep the typed URL", async ({
@@ -224,4 +224,24 @@ test("a URL shared while signed out fills the start form and asks for sign-in", 
   await expect(page.getByRole("dialog", { name: "Sign in", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(component.getByRole("textbox", { name: "URL" })).toHaveValue(sharedUrl);
+});
+
+test("an identity off the account allowlist is signed out, and the sign-in says why", async ({
+  mount,
+  page,
+}) => {
+  await mount("routes/index/RefusedIdentity");
+  const dialog = page.getByRole("dialog", { name: "Sign in", exact: true });
+  await expect(
+    dialog.getByText("Cup is invite-only for now, and this Google account isn't invited."),
+  ).toBeVisible();
+
+  // Home is behind the dialog, signed out: its start form and sign-in link are there once it closes.
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("textbox", { name: "URL" })).toBeVisible();
+  await page.getByRole("link", { name: "Sign in", exact: true }).click();
+  await expect(page.getByText("this Google account isn't invited", { exact: false })).toHaveCount(
+    0,
+  );
 });

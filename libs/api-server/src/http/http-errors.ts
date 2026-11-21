@@ -7,7 +7,7 @@ import type { ErrorCode as OperatorErrorCode } from "@cup/operator-api.routes";
 type ErrorCode = ListenerErrorCode | OperatorErrorCode;
 
 export function accountAuthError(
-  result: "unauthorized" | "unavailable" | "blocked" | "rate-limited",
+  result: "unauthorized" | "unavailable" | "blocked" | "not-admitted" | "rate-limited",
   traceId: string,
   retryAfter = 3600,
 ) {
@@ -25,6 +25,9 @@ export function accountAuthError(
   }
   if (result === "blocked") {
     return jsonError(traceId, "account-blocked", "Account access is blocked.", 403);
+  }
+  if (result === "not-admitted") {
+    return jsonError(traceId, "account-not-admitted", "Cup is invite-only for now.", 403);
   }
   if (result === "unavailable") {
     return jsonError(

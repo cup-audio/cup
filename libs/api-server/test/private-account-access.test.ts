@@ -30,6 +30,7 @@ async function fixture(owner = accountId, state = "active") {
     role: "authenticated",
     is_anonymous: false,
     app_metadata: { provider: "google" },
+    email: "listener@example.test",
   })
     .setProtectedHeader({ alg: "ES256", kid: "private-access" })
     .setSubject(subject)
@@ -54,6 +55,7 @@ async function fixture(owner = accountId, state = "active") {
   };
   const env = {
     SUPABASE_URL: url,
+    ACCOUNT_ALLOWLIST: "listener@example.test",
     ACCOUNTS: { idFromName: (name: string) => name, get: () => account },
     REGISTRY: {
       idFromName: (name: string) => name,
@@ -103,6 +105,20 @@ test("non-owners and blocked accounts cannot read the audiobook", async () => {
       env,
     );
     expect(response.status).toBe(expected);
+    expect(bucketRead).not.toHaveBeenCalled();
+  }
+});
+
+test("the owner cannot read the audiobook once their email is off the account allowlist", async () => {
+  for (const accountAllowlist of ["someone-else@example.test", ""]) {
+    const { app, env, token, bucketRead } = await fixture();
+    const response = await app.request(
+      `https://cup.audio/api/audiobooks/${conversionId}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+      { ...env, ACCOUNT_ALLOWLIST: accountAllowlist },
+    );
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ error: { code: "account-not-admitted" } });
     expect(bucketRead).not.toHaveBeenCalled();
   }
 });

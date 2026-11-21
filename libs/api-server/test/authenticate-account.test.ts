@@ -1,4 +1,4 @@
-import type { captureException } from "@sentry/core";
+import type { captureEvent, captureException } from "@sentry/core";
 import { expect, test, vi } from "vitest";
 
 import type { AccountSnapshot } from "@cup/accounts";
@@ -10,7 +10,11 @@ import type { AuthenticateAccountDependencies } from "#src/use-cases/authenticat
 vi.mock(import("@sentry/core"), async (importOriginal) => ({
   ...(await importOriginal()),
   captureException: vi.fn<typeof captureException>(),
+  captureEvent: vi.fn<typeof captureEvent>(),
 }));
+
+const admitted = { subject: "subject", isOnAccountAllowlist: true };
+const notAdmitted = { subject: "subject", isOnAccountAllowlist: false };
 
 function fixture() {
   const snapshot: AccountSnapshot = {
@@ -43,7 +47,7 @@ function fixture() {
 
 test("first-use identities provision through ingress limits", async () => {
   const { dependencies, snapshot, account } = fixture();
-  expect(await authenticateAccount("subject", dependencies)).toEqual({
+  expect(await authenticateAccount(admitted, dependencies)).toEqual({
     result: "authenticated",
     snapshot,
     account,
@@ -52,13 +56,56 @@ test("first-use identities provision through ingress limits", async () => {
   expect(dependencies.getAccount).toHaveBeenCalledWith(snapshot.accountId);
 });
 
+test("an identity off the account allowlist is refused before provisioning and reported once", async () => {
+  const { dependencies } = fixture();
+  const { useCase, sentry } = await loadWithMockedSentry();
+
+  expect(await useCase.authenticateAccount(notAdmitted, dependencies)).toEqual({
+    result: "not-admitted",
+  });
+  expect(dependencies.registry.provisionFromIngress).not.toHaveBeenCalled();
+  expect(dependencies.getIngressIdentity).not.toHaveBeenCalled();
+  expect(vi.mocked(sentry.captureEvent).mock.calls).toEqual([
+    [
+      {
+        level: "warning",
+        message: "Identity subject is not on the account allowlist",
+        fingerprint: ["account-not-admitted"],
+        tags: { "cup.identity.subject": "subject", "cup.identity.has_account": "false" },
+      },
+    ],
+  ]);
+});
+
+test("an existing account off the account allowlist is refused without being resolved", async () => {
+  const { dependencies } = fixture();
+  dependencies.registry.findIdentity.mockResolvedValue({ accountId: "account", phase: "active" });
+  const { useCase, sentry } = await loadWithMockedSentry();
+
+  expect(await useCase.authenticateAccount(notAdmitted, dependencies)).toEqual({
+    result: "not-admitted",
+  });
+  expect(dependencies.getAccount).not.toHaveBeenCalled();
+  expect(vi.mocked(sentry.captureEvent).mock.calls).toEqual([
+    [
+      expect.objectContaining({
+        tags: {
+          "cup.identity.subject": "subject",
+          "cup.identity.has_account": "true",
+          "cup.account.id": "account",
+        },
+      }),
+    ],
+  ]);
+});
+
 test("unfinished provisioning resumes without charging ingress limits again", async () => {
   const { dependencies, snapshot, account } = fixture();
   dependencies.registry.findIdentity.mockResolvedValue({
     accountId: snapshot.accountId,
     phase: "provisioning",
   });
-  expect(await authenticateAccount("subject", dependencies)).toEqual({
+  expect(await authenticateAccount(admitted, dependencies)).toEqual({
     result: "authenticated",
     snapshot,
     account,
@@ -75,7 +122,7 @@ test("existing accounts retain their lifecycle snapshot for route-specific autho
     accountId: snapshot.accountId,
     phase: "active",
   });
-  expect(await authenticateAccount("subject", dependencies)).toEqual({
+  expect(await authenticateAccount(admitted, dependencies)).toEqual({
     result: "authenticated",
     snapshot,
     account,
@@ -90,14 +137,14 @@ test("deleting identity mappings block account access", async () => {
     accountId: "account",
     phase: "deleting_identity",
   });
-  expect(await authenticateAccount("subject", dependencies)).toEqual({ result: "blocked" });
+  expect(await authenticateAccount(admitted, dependencies)).toEqual({ result: "blocked" });
   expect(dependencies.getAccount).not.toHaveBeenCalled();
 });
 
 test("a missing trusted ingress identity prevents first-use provisioning", async () => {
   const { dependencies } = fixture();
   dependencies.getIngressIdentity.mockResolvedValue(undefined);
-  expect(await authenticateAccount("subject", dependencies)).toEqual({ result: "unavailable" });
+  expect(await authenticateAccount(admitted, dependencies)).toEqual({ result: "unavailable" });
   expect(dependencies.registry.provisionFromIngress).not.toHaveBeenCalled();
 });
 
@@ -107,7 +154,7 @@ test("signup rate limits preserve retry timing", async () => {
     result: "rate-limited",
     retryAfter: 30,
   });
-  expect(await authenticateAccount("subject", dependencies)).toEqual({
+  expect(await authenticateAccount(admitted, dependencies)).toEqual({
     result: "rate-limited",
     retryAfter: 30,
   });
@@ -117,22 +164,30 @@ test("signup rate limits preserve retry timing", async () => {
 test("registry failures remain unavailable", async () => {
   const { dependencies } = fixture();
   dependencies.registry.findIdentity.mockRejectedValue(new Error("Storage unavailable"));
-  expect(await authenticateAccount("subject", dependencies)).toEqual({ result: "unavailable" });
+  expect(await authenticateAccount(admitted, dependencies)).toEqual({ result: "unavailable" });
 });
 
 test("a failing registry answers unavailable and captures the error, since every caller answers 503", async () => {
   const { dependencies } = fixture();
   const failure = new Error("Registry unavailable");
   dependencies.registry.findIdentity.mockRejectedValue(failure);
-  // Test files share loaded modules, so a copy loaded before the mock applied would capture for
-  // real; a fresh load sees the mocked capture.
-  vi.resetModules();
-  const sentry = await import("@sentry/core");
-  const useCase = await import("#src/use-cases/authenticate-account.ts");
-  vi.mocked(sentry.captureException).mockClear();
+  const { useCase, sentry } = await loadWithMockedSentry();
 
-  expect(await useCase.authenticateAccount("subject", dependencies)).toEqual({
+  expect(await useCase.authenticateAccount(admitted, dependencies)).toEqual({
     result: "unavailable",
   });
   expect(vi.mocked(sentry.captureException).mock.calls).toEqual([[failure]]);
 });
+
+/**
+ * Test files share loaded modules, so a copy of the use case loaded before the mock applied would
+ * capture for real; a fresh load sees the mocked captures, cleared of earlier tests' calls.
+ */
+async function loadWithMockedSentry() {
+  vi.resetModules();
+  const sentry = await import("@sentry/core");
+  const useCase = await import("#src/use-cases/authenticate-account.ts");
+  vi.mocked(sentry.captureException).mockClear();
+  vi.mocked(sentry.captureEvent).mockClear();
+  return { useCase, sentry };
+}

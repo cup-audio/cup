@@ -208,6 +208,8 @@ async function run(command: { action: "start"; tailnet: boolean } | { action: "s
       SENTRY_TUNNEL_DSNS: "",
       LOCAL_TEST_ACCOUNT_EMAIL: TEST_ACCOUNT_EMAIL,
       LOCAL_TEST_ACCOUNT_PASSWORD: TEST_ACCOUNT_PASSWORD,
+      // Kept across restarts, so a developer who added their Google address keeps it.
+      ACCOUNT_ALLOWLIST: workerEnv["ACCOUNT_ALLOWLIST"] ?? TEST_ACCOUNT_EMAIL,
     };
     await fs.mkdir(path.dirname(backupPath), { recursive: true });
 

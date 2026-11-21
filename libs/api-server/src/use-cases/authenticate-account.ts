@@ -1,6 +1,7 @@
-import { captureException } from "@sentry/core";
+import { captureEvent, captureException } from "@sentry/core";
 
 import type { AccountSnapshot } from "@cup/accounts";
+import { TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
 
 export type AuthenticateAccountDependencies<Account> = {
   registry: {
@@ -18,14 +19,25 @@ export type AuthenticateAccountDependencies<Account> = {
   getAccount(accountId: string): Account;
 };
 
-/** Resolve a verified identity, provisioning or resuming its account when necessary. */
+/** A verified sign-in identity, and whether its email is on the account allowlist. */
+export type VerifiedIdentity = { subject: string; isOnAccountAllowlist: boolean };
+
+/**
+ * Resolve a verified identity, provisioning or resuming its account when necessary. An identity off
+ * the account allowlist is refused before either, whether or not it already has an account.
+ */
 export async function authenticateAccount<Account extends { inspect(): Promise<AccountSnapshot> }>(
-  subject: string,
+  { subject, isOnAccountAllowlist }: VerifiedIdentity,
   dependencies: AuthenticateAccountDependencies<Account>,
 ) {
   try {
     const { registry } = dependencies;
     const mapping = await registry.findIdentity(subject);
+    if (!isOnAccountAllowlist) {
+      reportIdentityNotAdmitted(subject, mapping?.accountId);
+      return { result: "not-admitted" } as const;
+    }
+
     if (!mapping || mapping.phase === "provisioning") {
       let snapshot;
       if (!mapping) {
@@ -58,4 +70,22 @@ export async function authenticateAccount<Account extends { inspect(): Promise<A
     captureException(error);
     return { result: "unavailable" } as const;
   }
+}
+
+/**
+ * One Sentry warning per refusal, all in one issue through the fixed fingerprint, so the operator
+ * sees how often identities off the account allowlist try. It names the Supabase subject, never the
+ * email address (docs/architecture/observability.md).
+ */
+function reportIdentityNotAdmitted(subject: string, accountId: string | undefined) {
+  captureEvent({
+    level: "warning",
+    message: `Identity ${subject} is not on the account allowlist`,
+    fingerprint: ["account-not-admitted"],
+    tags: {
+      [TELEMETRY_ATTRIBUTES.IDENTITY_SUBJECT]: subject,
+      [TELEMETRY_ATTRIBUTES.IDENTITY_HAS_ACCOUNT]: String(accountId !== undefined),
+      ...(accountId === undefined ? {} : { [TELEMETRY_ATTRIBUTES.ACCOUNT_ID]: accountId }),
+    },
+  });
 }

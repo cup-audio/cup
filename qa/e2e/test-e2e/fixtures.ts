@@ -37,6 +37,11 @@ type Fixtures = {
   qaScenario: TestWorkerScenario;
   /** Whether the Worker offers the fake auth provider's test account, as local development does. */
   offersTestAccount: boolean;
+  /**
+   * Replaces the Worker's account allowlist, which by default admits the fake auth provider's
+   * reader.
+   */
+  accountAllowlist: string | undefined;
   workerEnvironment: WorkerEnvironment;
 };
 
@@ -52,8 +57,12 @@ export const test = base.extend(telemetryRequestGuard).extend<Fixtures>({
   },
   qaScenario: ["success", { option: true }],
   offersTestAccount: [false, { option: true }],
-  workerEnvironment: async ({ qaScenario, offersTestAccount }, use, testInfo) => {
-    const environment = await createWorkerEnvironment(qaScenario, offersTestAccount);
+  accountAllowlist: [undefined, { option: true }],
+  workerEnvironment: async ({ qaScenario, offersTestAccount, accountAllowlist }, use, testInfo) => {
+    const environment = await createWorkerEnvironment(qaScenario, {
+      offersTestAccount,
+      accountAllowlist,
+    });
 
     try {
       await use(environment);
@@ -197,7 +206,10 @@ type InternalWorkerEnvironment = WorkerEnvironment & {
 
 async function createWorkerEnvironment(
   initialScenario: TestWorkerScenario,
-  offersTestAccount: boolean,
+  {
+    offersTestAccount,
+    accountAllowlist,
+  }: { offersTestAccount: boolean; accountAllowlist: string | undefined },
 ): Promise<InternalWorkerEnvironment> {
   const httpsKeyPath = readRequiredEnvironmentVariable(HTTPS_KEY_PATH_ENV_VAR_NAME);
   const httpsCertPath = readRequiredEnvironmentVariable(HTTPS_CERT_PATH_ENV_VAR_NAME);
@@ -208,6 +220,7 @@ async function createWorkerEnvironment(
     scenario: initialScenario,
     authProviderOrigin: authProvider.origin,
     offersTestAccount,
+    ...(accountAllowlist === undefined ? {} : { accountAllowlist }),
     https: { keyPath: httpsKeyPath, certPath: httpsCertPath },
     streamLogs: process.env["E2E_STREAM_WRANGLER"] === "1",
   });

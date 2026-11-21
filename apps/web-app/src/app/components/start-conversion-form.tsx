@@ -35,9 +35,10 @@ export function StartConversionForm(props: StartConversionFormProps): React.Reac
 /** What the sign-in dialog says, by what opened it. */
 const SIGN_IN_DESCRIPTIONS: Record<SignInEntry, React.ReactNode> = {
   "home-link": <>Sign in to get back to your tracks.</>,
+  // Only invited Google accounts get an account while the account allowlist is in place.
   submission: (
     <>
-      Sign in to listen. <strong>New accounts get 30 free minutes.</strong>
+      Sign in to listen. <strong>Cup is invite-only for now.</strong>
     </>
   ),
 };
@@ -90,7 +91,7 @@ function AccountConversionForm(): React.ReactNode {
         signInMethods={submission.signInMethods}
         pendingMethod={submission.signIn.isPending ? submission.signIn.variables : undefined}
         onSignIn={submission.startSignIn}
-        errorMessage={submission.signIn.error?.message}
+        errorMessage={submission.signInError}
       />
     </>
   );

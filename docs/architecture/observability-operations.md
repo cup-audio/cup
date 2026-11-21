@@ -1,6 +1,6 @@
 # Observability operations
 
-What the operator watches and checks in Sentry beyond captured errors: reports of stuck work, log records, conversion durations, the manual going-live checks, and how every release's stack traces resolve to source. The [observability overview](observability.md) holds the capture rule, privacy and alerts.
+What the operator watches and checks in Sentry beyond captured errors: reports of stuck work, refused identities, log records, conversion durations, the manual going-live checks, and how every release's stack traces resolve to source. The [observability overview](observability.md) holds the capture rule, privacy and alerts.
 
 ## Stuck checks
 
@@ -11,6 +11,10 @@ A stuck check reports work that should have finished long ago as one Sentry erro
 - **[Stuck account deletion](../GLOSSARY.md#stuck-account-deletion).** The registry's [deletion coordinator](account-deletion.md#fencing-and-cleanup) reports an attempt still neither erased nor restored well after its recovery deadline, tagged with what is pending: the identity, the account or both. Its retries back off, so the report can arrive later than the threshold by the longest backoff. The Operator CLI's `overdue` listing uses the same threshold.
 
 The [`@cup/telemetry.cloudflare` guide](../../libs/telemetry.cloudflare/README.md#use) names the reports; the code holds every threshold, tag and fingerprint, and no page repeats them.
+
+## Refused identities
+
+Each time the API refuses an identity off the [account allowlist](authentication.md#account-allowlist), it sends one Sentry warning event with a fixed fingerprint, so every refusal lands in one issue, which the [new-or-regressed alert](observability.md#alerts-and-monitors) emails when it first appears or comes back after being resolved; the issue's event count shows how often refused identities try. Each event carries the identity's Supabase subject, whether it already has an account and, if so, the account ID, but never the email address; look the subject up in Supabase to see who it was. There is no per-identity deduplication: the web client signs out on the first refusal, so one sign-in attempt sends about one event, and spike protection caps a client that keeps calling. The [account authentication use case](../../libs/api-server/src/use-cases/authenticate-account.ts) sends it.
 
 ## Log records
 

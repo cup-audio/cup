@@ -1,10 +1,13 @@
 import {
+  ERROR_CODE,
   parseOkResponse,
+  RpcError,
   type AuthenticatedRpcClient,
   type ListenerApiClient,
 } from "@cup/listener-api.client";
 
 import { createListenerApiClient } from "#src/api-client.js";
+import { refuseAccountSession } from "#src/auth/account-admission.js";
 import { getFreshAccountSession, getResourceAccountSession } from "#src/auth/account-session.js";
 import { UserFacingError } from "#src/errors.js";
 
@@ -29,7 +32,9 @@ type AccountAuth = { subject: string };
  *   request is rejected before dispatch.
  *
  * Unsuccessful responses reject with `RpcError`; a missing or changed required account rejects with
- * a plain `Error` before the request is sent.
+ * a plain `Error` before the request is sent. A request refused with `account-not-admitted`,
+ * because the signed-in identity is off the account allowlist, signs out first
+ * (`refuseAccountSession`); an `"optional"` request is then sent again without the account token.
  */
 export function requestApi<Response extends ApiResponse>(
   auth: "none",
@@ -59,14 +64,39 @@ export async function requestApi<Response extends ApiResponse>(
 
   if (auth === "optional") {
     const session = await getResourceAccountSession();
-    return parseOkResponse(
-      send(session ? client.createAuthenticatedRpcClient(session.access_token) : client),
-    );
+    if (!session) {
+      return parseOkResponse(send(client));
+    }
+    try {
+      return await parseOkResponse(send(client.createAuthenticatedRpcClient(session.access_token)));
+    } catch (error) {
+      if (!isNotAdmitted(error)) {
+        throw error;
+      }
+      await refuseQuietly({ shouldGoHome: false });
+      return parseOkResponse(send(client));
+    }
   }
 
   const session = await getFreshAccountSession();
   if (session?.user.id !== auth.subject) {
     throw new UserFacingError({ title: "Sign in to continue." });
   }
-  return parseOkResponse(send(client.createAuthenticatedRpcClient(session.access_token)));
+  try {
+    return await parseOkResponse(send(client.createAuthenticatedRpcClient(session.access_token)));
+  } catch (error) {
+    if (isNotAdmitted(error)) {
+      await refuseQuietly({ shouldGoHome: true });
+    }
+    throw error;
+  }
+}
+
+function isNotAdmitted(error: unknown) {
+  return error instanceof RpcError && error.code === ERROR_CODE.ACCOUNT_NOT_ADMITTED;
+}
+
+/** The sign-out reports its own failure in the auth state; the request keeps its own outcome. */
+async function refuseQuietly(options: { shouldGoHome: boolean }) {
+  await refuseAccountSession(options).catch(() => {});
 }

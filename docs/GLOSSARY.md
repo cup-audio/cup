@@ -60,6 +60,12 @@ A person’s persistent identity in Cup that owns their conversions and conversi
 
 _Avoid_: trial grant, sign-in method
 
+## account allowlist
+
+The email addresses whose sign-in identities may use an account. Anyone else is refused before an account is provisioned for them or their existing account is resolved. It does not affect trial links.
+
+_Avoid_: whitelist, invite list, waitlist
+
 ## account deletion
 
 The complete lifecycle for removing an account: scheduling, possible recovery, removing its sign-in identity and Cup-owned data, and issuing deletion notices. Use this term in user-facing copy.

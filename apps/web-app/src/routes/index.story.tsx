@@ -116,3 +116,25 @@ export const SignedInHomeWithPendingStart = {
     });
   },
 } satisfies Story;
+
+/**
+ * The API refuses the signed-in identity, which is off the account allowlist, as Recents loads: the
+ * app signs out, goes home, and opens the sign-in to say why.
+ */
+export const RefusedIdentity = accountStory({
+  path: "/recent",
+  handlers: [
+    http.get("/api/account/conversions", () =>
+      HttpResponse.json(
+        {
+          error: {
+            code: "account-not-admitted",
+            message: "Cup is invite-only for now.",
+            traceId: "story-trace",
+          },
+        },
+        { status: 403 },
+      ),
+    ),
+  ],
+});

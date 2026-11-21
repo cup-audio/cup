@@ -119,6 +119,7 @@ function fixture(owner: ConversionOwner) {
 
   const env = {
     SUPABASE_URL: supabaseUrl,
+    ACCOUNT_ALLOWLIST: "listener@example.test",
     MEDIA_URL_SIGNING_KEY: SIGNING_KEY,
     ACCOUNTS: { idFromName: (name: string) => name, get: createAccount },
     CONVERSION_GRANTS: { idFromName: (name: string) => name, get: () => grant },
@@ -146,6 +147,7 @@ async function createAccessToken() {
     role: "authenticated",
     is_anonymous: false,
     app_metadata: { provider: "google" },
+    email: "listener@example.test",
   })
     .setProtectedHeader({ alg: "ES256", kid: "signed-position-url" })
     .setSubject(subject)

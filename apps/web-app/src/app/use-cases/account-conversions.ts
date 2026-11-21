@@ -1,5 +1,10 @@
 import React from "react";
 
+import {
+  dismissAccountRefusal,
+  NOT_ADMITTED_MESSAGE,
+  useAccountRefusal,
+} from "#src/auth/account-admission.js";
 import type { SignInMethod } from "#src/auth/account-session.js";
 import { useAccountSession, useAccountAuthState, useSignInMethods } from "#src/auth/hooks.js";
 import {
@@ -52,6 +57,12 @@ export function useAccountConversionSubmission({
   const signInMethods = useSignInMethods();
   const start = useStartAccountConversionMutation(onStarted);
   const retryIn = useRateLimitCountdown(start.error);
+  const { isRefused } = useAccountRefusal();
+  /*
+   * The API refused the last signed-in identity, wherever it was signed in; a refused screen leaves
+   * for home (`__root.tsx`), where the sign-in shows as from the sign-in link to say why.
+   */
+  const isShowingRefusal = isRefused && !session;
 
   const [isSignInOpen, setIsSignInOpen] = React.useState(false);
   // Kept after the sign-in closes, so its copy and the focus it returns to stay with that entry.
@@ -91,18 +102,26 @@ export function useAccountConversionSubmission({
     retryIn,
     error: start.error,
     /** Sign-in explains itself in place of a failed start while it is open. */
-    isSignInOpen: isSignInOpen && !session,
+    isSignInOpen: (isSignInOpen || isShowingRefusal) && !session,
     /** The entry that opened the sign-in last, also after it closed. */
-    signInEntry,
+    signInEntry: isShowingRefusal ? "home-link" : signInEntry,
     /** Signed out once auth has settled, so the listener can choose to sign in. */
     canSignIn: !session && authState.status !== "loading",
     signIn,
+    /** The sign-in's error: why the API refused the last identity, or why the sign-in failed. */
+    signInError: isShowingRefusal ? NOT_ADMITTED_MESSAGE : signIn.error?.message,
     /**
      * Signs in with `method`. From the sign-in link, it first drops a stored request that was never
      * submitted, so the sign-in lands where home sends a signed-in listener.
      */
     startSignIn: (method: SignInMethod) => {
-      if (signInEntry === "home-link") {
+      if (isShowingRefusal) {
+        // Keeps the dialog open, and its sign-in from the link, once the refusal no longer opens it.
+        setSignInEntry("home-link");
+        setIsSignInOpen(true);
+        dismissAccountRefusal();
+      }
+      if (signInEntry === "home-link" || isShowingRefusal) {
         if (requests.read()?.submitted === false) {
           requests.clear();
         }
@@ -147,6 +166,7 @@ export function useAccountConversionSubmission({
       if (signIn.isPending) {
         return;
       }
+      dismissAccountRefusal();
       const request = requests.read();
       if (signInEntry === "submission" && request) {
         requests.store({ ...request, submitted: false });

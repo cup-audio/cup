@@ -4,6 +4,7 @@ import type { JWTVerifyGetKey } from "jose";
 
 import type { ApiServerEnvironment } from "#src/api-server-environment.ts";
 import { ingressIdentity } from "#src/http/ingress-identity.ts";
+import { isOnAccountAllowlist } from "#src/use-cases/account-allowlist.ts";
 import { authenticateAccount as authenticateVerifiedAccount } from "#src/use-cases/authenticate-account.ts";
 
 const keySets = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
@@ -116,7 +117,11 @@ export async function authenticateAccountRequest(request: Request, env: ApiServe
   }
   try {
     const accounts = env.ACCOUNTS;
-    const result = await authenticateVerifiedAccount(identity.subject, {
+    const verifiedIdentity = {
+      subject: identity.subject,
+      isOnAccountAllowlist: isOnAccountAllowlist(identity.email, env.ACCOUNT_ALLOWLIST),
+    };
+    const result = await authenticateVerifiedAccount(verifiedIdentity, {
       registry: env.REGISTRY.get(env.REGISTRY.idFromName("registry")),
       getIngressIdentity: () => ingressIdentity(request, env.LOCAL_DEVELOPMENT === "true"),
       getAccount: (accountId) => accounts.get(accounts.idFromName(accountId)),

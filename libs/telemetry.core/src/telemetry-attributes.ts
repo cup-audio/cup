@@ -18,6 +18,10 @@ export const TELEMETRY_ATTRIBUTES = {
   /** `account` or `grant`. */
   OWNER_KIND: "cup.owner.kind",
   ACCOUNT_ID: "cup.account.id",
+  /** The Supabase subject of a sign-in identity; look it up in Supabase to see who it is. */
+  IDENTITY_SUBJECT: "cup.identity.subject",
+  /** `true` when a sign-in identity already has a Cup account, `false` for a first sign-in. */
+  IDENTITY_HAS_ACCOUNT: "cup.identity.has_account",
   CONVERSION_GRANT_ID: "cup.conversion_grant.id",
   /** Which Worker entry point reported; `WorkerComponent` in `@cup/telemetry.cloudflare` lists them. */
   COMPONENT: "cup.component",
