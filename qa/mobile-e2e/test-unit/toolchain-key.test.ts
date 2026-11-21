@@ -34,7 +34,15 @@ test("writes the same Android key on every run while the toolchain stays the sam
     "Pkg.Revision=7",
   );
   const javaHome = await writeFakeJava(directory, "21.0.8+9-b1038.76", "JetBrains s.r.o.");
-  const env = { ...process.env, ANDROID_HOME: sdkRoot, JAVA_HOME: javaHome };
+  const env = {
+    ...process.env,
+    ANDROID_HOME: sdkRoot,
+    JAVA_HOME: javaHome,
+    // Keeps the CLI's iOS probes off the host's Xcode, which this test does not check:
+    // `xcrun simctl` starts CoreSimulatorService when it is not running, which took the test past
+    // its timeout on a loaded Mac.
+    DEVELOPER_DIR: path.join(directory, "missing"),
+  };
 
   const firstKey = await runCli(path.join(directory, "first"), env);
   const secondKey = await runCli(path.join(directory, "second"), env);
