@@ -14,8 +14,9 @@ test("an email matches only an exact entry", () => {
   expect(isOnAccountAllowlist("reader@example.test.evil", "reader@example.test")).toBe(false);
 });
 
-test("an empty list, and an identity without an email, admit nobody", () => {
+test("an empty or missing list, and an identity without an email, admit nobody", () => {
   expect(isOnAccountAllowlist("reader@example.test", "")).toBe(false);
   expect(isOnAccountAllowlist("reader@example.test", " , ")).toBe(false);
   expect(isOnAccountAllowlist(undefined, "reader@example.test")).toBe(false);
+  expect(isOnAccountAllowlist("reader@example.test", undefined)).toBe(false);
 });

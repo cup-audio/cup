@@ -4,6 +4,8 @@ import { userEvent } from "@testing-library/user-event";
 import { delay, http, HttpResponse } from "msw";
 import React from "react";
 
+import { ERROR_CODE } from "@cup/listener-api.client";
+
 import { createAppRouter, GlobalProviders } from "#src/app/global-providers.js";
 import { storePendingAccountConversion } from "#src/data-fetching/account-conversion-storage.js";
 import { accountStory } from "#src/ui-gallery/account-fixtures.jsx";
@@ -128,7 +130,7 @@ export const RefusedIdentity = accountStory({
       HttpResponse.json(
         {
           error: {
-            code: "account-not-admitted",
+            code: ERROR_CODE.ACCOUNT_NOT_ADMITTED,
             message: "Cup is invite-only for now.",
             traceId: "story-trace",
           },

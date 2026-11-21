@@ -12,6 +12,12 @@ vi.mock("@cup/conversion-grants", async () => ({
   ...(await import("@cup/conversion-grants/contracts")),
   ...(await import("@cup/conversion-grants/session")),
 }));
+// Only requests with an account token reach it; the other tests send none.
+const mocks = vi.hoisted(() => ({ authenticate: vi.fn() }));
+vi.mock("#src/http/account-auth.ts", async (original) => ({
+  ...(await original<typeof import("#src/http/account-auth.ts")>()),
+  authenticateAccountRequest: mocks.authenticate,
+}));
 
 const SIGNING_KEY = "test-media-url-signing-key";
 const conversionId = "f9cc2e59-46a3-4890-b923-bda04d03b4d0";
@@ -155,6 +161,18 @@ test("owning grant sessions can read with exhausted or fully reserved allowance"
     expect(audiobook.headers.get("Access-Control-Allow-Credentials")).toBe("true");
     expect(audiobook.headers.get("Cache-Control")).toBe("private, no-store");
   }
+});
+
+test("a signed-in identity off the account allowlist is refused on a trial audiobook, so the client asks again without its token", async () => {
+  const { app, env } = fixture();
+  mocks.authenticate.mockResolvedValue({ result: "not-admitted" });
+  const audiobook = await app.request(
+    origin + audiobookPath,
+    { headers: { Cookie: cookie, Authorization: "Bearer token" } },
+    env,
+  );
+  expect(audiobook.status).toBe(403);
+  expect(await audiobook.json()).toMatchObject({ error: { code: "account-not-admitted" } });
 });
 
 test("owning grant sessions can read the cover image the audiobook points to", async () => {

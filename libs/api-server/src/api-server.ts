@@ -604,15 +604,21 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
       owner.kind === "account"
         ? context.env.ACCOUNTS.get(context.env.ACCOUNTS.idFromName(owner.accountId))
         : undefined;
-    const listener = account
-      ? account
+    const listenerAuth = account
+      ? undefined
       : context.req.header("Authorization")
-        ? await authenticateAccountRequest(context.req.raw, context.env).then((auth) =>
-            auth.result === "authenticated" && auth.snapshot.state === "active"
-              ? auth.account
-              : undefined,
-          )
+        ? await authenticateAccountRequest(context.req.raw, context.env)
         : undefined;
+    // The client signs out and asks again without the token; answering without the position instead
+    // would keep it signed in, refused, and reporting to Sentry on every poll.
+    if (listenerAuth?.result === "not-admitted") {
+      return accountAuthError("not-admitted", context.get("traceId"));
+    }
+    const listener =
+      account ??
+      (listenerAuth?.result === "authenticated" && listenerAuth.snapshot.state === "active"
+        ? listenerAuth.account
+        : undefined);
     const playbackPosition = listener ? await listener.getPlaybackPosition(conversionId) : null;
     return context.json(
       {

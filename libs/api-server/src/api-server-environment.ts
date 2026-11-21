@@ -15,9 +15,10 @@ export type ApiServerEnvironment = {
   SUPABASE_URL: string;
   /**
    * The account allowlist: the email addresses, comma-separated, whose sign-in identities may use
-   * an account. A secret, because the repository is public; empty refuses every identity.
+   * an account. A secret, because the repository is public; empty or missing refuses every
+   * identity. A deploy fails without it, but deleting the secret afterwards leaves it undefined.
    */
-  ACCOUNT_ALLOWLIST: string;
+  ACCOUNT_ALLOWLIST?: string;
   SUPABASE_SECRET_KEY: string;
   // Signs the stateless tokens of signed media URLs; rotating it invalidates every outstanding URL.
   MEDIA_URL_SIGNING_KEY: string;

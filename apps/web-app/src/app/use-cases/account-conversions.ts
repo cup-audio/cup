@@ -102,7 +102,7 @@ export function useAccountConversionSubmission({
     retryIn,
     error: start.error,
     /** Sign-in explains itself in place of a failed start while it is open. */
-    isSignInOpen: (isSignInOpen || isShowingRefusal) && !session,
+    isSignInOpen: (isSignInOpen && !session) || isShowingRefusal,
     /** The entry that opened the sign-in last, also after it closed. */
     signInEntry: isShowingRefusal ? "home-link" : signInEntry,
     /** Signed out once auth has settled, so the listener can choose to sign in. */

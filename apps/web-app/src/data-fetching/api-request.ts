@@ -73,7 +73,7 @@ export async function requestApi<Response extends ApiResponse>(
       if (!isNotAdmitted(error)) {
         throw error;
       }
-      await refuseQuietly({ shouldGoHome: false });
+      await signOutRefusedSession({ shouldGoHome: false });
       return parseOkResponse(send(client));
     }
   }
@@ -86,7 +86,7 @@ export async function requestApi<Response extends ApiResponse>(
     return await parseOkResponse(send(client.createAuthenticatedRpcClient(session.access_token)));
   } catch (error) {
     if (isNotAdmitted(error)) {
-      await refuseQuietly({ shouldGoHome: true });
+      await signOutRefusedSession({ shouldGoHome: true });
     }
     throw error;
   }
@@ -97,6 +97,6 @@ function isNotAdmitted(error: unknown) {
 }
 
 /** The sign-out reports its own failure in the auth state; the request keeps its own outcome. */
-async function refuseQuietly(options: { shouldGoHome: boolean }) {
+async function signOutRefusedSession(options: { shouldGoHome: boolean }) {
   await refuseAccountSession(options).catch(() => {});
 }
