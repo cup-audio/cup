@@ -22,6 +22,25 @@ The Worker's Resend key is sending-only; Terraform uses a separate management ke
 
 Use Supabase project `evwjipxgacwotgbmqtla` exclusively. Terraform configures its Google provider, JWT lifetime, and redirect settings in the [Supabase configuration](../terraform/production/supabase.tf); see the [Google sign-in configuration](../terraform/README.md#google-sign-in-configuration). Configure ES256 JWT signing, which Terraform does not manage. Keep Google client secrets in Supabase and Terraform.
 
+### Google Auth Platform branding
+
+The Google sign-in consent screen is configured by hand on the Branding page of the Google Auth Platform in the `cup-production` Google Cloud project; Terraform does not manage it. Its developer contact email, where Google sends notices about the project, is `gcp@cup.audio`, which [Email Routing](#email) forwards to the operator. Its user support email, which users see on the consent screen, accepts only the signed-in Google account's own address or a Google Group that account manages ([Google's rule](https://support.google.com/cloud/answer/15549049)), so it is the Google Group `support@cup.audio` in [Cloud Identity](#cloud-identity), picked while signed in as the group's owner `admin@cup.audio`. Save later Branding changes as `admin@cup.audio` too: whether a save by the operator's personal account keeps a group that account does not manage is untested ([research](research/cloud-identity-support-group.md)).
+
+### Cloud Identity
+
+`cup.audio` is a Cloud Identity Free domain, which gives it Google accounts and Google Groups without Gmail; mail to every `cup.audio` address still goes to Cloudflare [Email Routing](#email). Its only account is the administrator `admin@cup.audio`, used for admin tasks only, with 2-Step Verification by security key, the operator's private address as recovery email, and its password and backup codes in the operator's password manager. Its only group is `support@cup.audio`, owned by `admin@cup.audio`, with posting, viewing and joining restricted to the group's owners and no external members; it exists for the Branding page and receives no mail. `admin@cup.audio` has the Editor role on `cup-production`. The [research note](research/cloud-identity-support-group.md) records Google's sources and the open questions.
+
+The first time a `cup.audio` account uses the Google Cloud console, Google creates an Organization resource for `cup.audio`, with that account as Organization Administrator and Google's default security policies for new organizations. `cup-production` stays under "No organization"; moving it into the Organization is a separate decision.
+
+As of 2026-11-22 none of this is set up yet, and the consent screen still shows the operator's personal address ([CUP-35](https://linear.app/cup-audio/issue/CUP-35/change-the-google-oauth-support-email-to-supportcupaudio-before-launch)). Setting it up, once:
+
+1. Apply Terraform so that `admin@cup.audio` forwards to the operator.
+2. Sign up for [Cloud Identity Free](https://workspace.google.com/gcpidentity/signup?sku=identitybasic) with the operator's private address as the current work email, `cup.audio` as the domain and `admin@cup.audio` as the administrator username, and secure the account as above.
+3. In the Admin console under Account, Domains, start the domain verification and copy the `google-site-verification=…` value. Add it as a TXT record on `cup.audio` in the [Cloudflare configuration](../terraform/production/cloudflare.tf), apply, and verify; Google may take up to 72 hours to see it. Keep the record after verification.
+4. Check the Admin console's users and transfer tool for unmanaged accounts with `cup.audio` addresses; none is expected, and one named `support@cup.audio` would block the group.
+5. Create the group `support@cup.audio` under Directory, Groups, with the settings above.
+6. Grant `admin@cup.audio` Editor on `cup-production`, sign in to the Google Cloud console as `admin@cup.audio`, and pick `support@cup.audio` as the user support email on the [Branding page](#google-auth-platform-branding).
+
 ### Android OAuth clients
 
 Native Google sign-in on Android needs an Android OAuth client for package `audio.cup.app` and the SHA-1 of the certificate that signed the installed app; a client registered for the former package `com.cup_audio.app` does not match. A client takes one SHA-1, so each certificate gets its own client, all in `cup-production` next to the web client ([#357](https://github.com/cup-audio/cup/issues/357), [research](research/release-google-sign-in.md)). The app passes only the web client's ID, so the Worker, Supabase and Terraform never see the Android clients' IDs, and an Android client's downloadable JSON, which holds no secret, is not needed. Terraform cannot manage OAuth clients ([#357](https://github.com/cup-audio/cup/issues/357)), so create, rename and delete them in the Google Cloud console. Fingerprints are not secret.
@@ -47,7 +66,7 @@ Builds installed from Google Play carry Play's app signing certificate, not the 
 
 Deletion notices go to the Resend API at the `RESEND_BASE_URL` variable, `https://api.resend.com`, from the Resend domain described in the [Terraform guide](../terraform/README.md#resend-domain). Inspect notification outcomes with the [operator CLI](../apps/operator/README.md#list-account-deletions); provider acceptance is not proof of inbox delivery.
 
-`support@cup.audio`, the Google Play developer email, and `github@cup.audio`, the contact email of the `cup-audio` GitHub organization, are received by Cloudflare Email Routing and forwarded to the operator's private address, as the [Terraform guide](../terraform/README.md#support-mail) describes. No other `cup.audio` address receives mail.
+`support@cup.audio`, the Google Play developer email, `github@cup.audio`, the contact email of the `cup-audio` GitHub organization, `gcp@cup.audio`, the developer contact email of the [Google Auth Platform](#google-auth-platform-branding), and `admin@cup.audio`, the [Cloud Identity](#cloud-identity) administrator, are received by Cloudflare Email Routing and forwarded to the operator's private address, as the [Terraform guide](../terraform/README.md#support-mail) describes. No other `cup.audio` address receives mail.
 
 ## Google Play developer account and app record
 
