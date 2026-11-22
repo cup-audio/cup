@@ -32,11 +32,11 @@ The Google sign-in consent screen is configured by hand on the Branding page of 
 
 The first time a `cup.audio` account uses the Google Cloud console, Google creates an Organization resource for `cup.audio`, with that account as Organization Administrator and Google's default security policies for new organizations. `cup-production` stays under "No organization"; moving it into the Organization is a separate decision.
 
-As of 2026-11-22 none of this is set up yet, and the consent screen still shows the operator's personal address ([CUP-35](https://linear.app/cup-audio/issue/CUP-35/change-the-google-oauth-support-email-to-supportcupaudio-before-launch)). Setting it up, once:
+As of 2026-11-22 the account `admin@cup.audio` exists and the domain verification record is in Terraform (`cloudflare_dns_record.cup_audio_google_site_verification`); the group, the project role and the Branding change are still to do, and the consent screen still shows the operator's personal address ([CUP-35](https://linear.app/cup-audio/issue/CUP-35/change-the-google-oauth-support-email-to-supportcupaudio-before-launch)). Setting it up, once:
 
 1. Apply Terraform so that `admin@cup.audio` forwards to the operator.
 2. Sign up for [Cloud Identity Free](https://workspace.google.com/gcpidentity/signup?sku=identitybasic) with the operator's private address as the current work email, `cup.audio` as the domain and `admin@cup.audio` as the administrator username, and secure the account as above.
-3. In the Admin console under Account, Domains, start the domain verification and copy the `google-site-verification=…` value. Add it as a TXT record on `cup.audio` in the [Cloudflare configuration](../terraform/production/cloudflare.tf), apply, and verify; Google may take up to 72 hours to see it. Keep the record after verification.
+3. In the Admin console under Account, Domains, start the domain verification and copy the `google-site-verification=…` value; decline Google's offer to add the record by signing in to Cloudflare, since Terraform owns the zone. Add it as a TXT record on `cup.audio` in the [Cloudflare configuration](../terraform/production/cloudflare.tf), apply, and verify; Google may take up to 72 hours to see it. Keep the record after verification.
 4. Check the Admin console's users and transfer tool for unmanaged accounts with `cup.audio` addresses; none is expected, and one named `support@cup.audio` would block the group.
 5. Create the group `support@cup.audio` under Directory, Groups, with the settings above.
 6. Grant `admin@cup.audio` Editor on `cup-production`, sign in to the Google Cloud console as `admin@cup.audio`, and pick `support@cup.audio` as the user support email on the [Branding page](#google-auth-platform-branding).

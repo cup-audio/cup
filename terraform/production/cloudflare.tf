@@ -63,6 +63,16 @@ resource "cloudflare_dns_record" "cup_audio_dmarc" {
   ttl     = 1
 }
 
+# Proves to Google that Cup's Cloud Identity account owns cup.audio. Kept after verification, since
+# Google's admin recovery relies on proving ownership of the domain through DNS.
+resource "cloudflare_dns_record" "cup_audio_google_site_verification" {
+  zone_id = local.cup_audio_zone_id
+  name    = "cup.audio"
+  type    = "TXT"
+  content = "\"google-site-verification=pNC_L3CsCGQEVBfMBWTJjReYrPUKsyoPX3dfYRqltqE\""
+  ttl     = 1
+}
+
 # cup-audio.com receives no mail and authorizes no sender through SPF.
 resource "cloudflare_dns_record" "cup_audio_com_null_mx" {
   zone_id  = local.cup_audio_com_zone_id
