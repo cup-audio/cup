@@ -89,15 +89,17 @@ resource "cloudflare_dns_record" "cup_audio_com_dmarc" {
   ttl     = 1
 }
 
-# Email Routing on cup.audio forwards support@cup.audio, the Google Play developer email, and
-# github@cup.audio, the contact email of the cup-audio GitHub organization, to the operator.
+# Email Routing on cup.audio forwards support@cup.audio, the Google Play developer email,
+# github@cup.audio, the contact email of the cup-audio GitHub organization, gcp@cup.audio, the
+# developer contact email of the Google Auth Platform in cup-production, and admin@cup.audio, the
+# Cloud Identity administrator that receives Google's system notifications, to the operator.
 # Enabling it adds and locks Cloudflare's MX, SPF and DKIM records on the zone. With no catch-all
 # rule, mail to any other address is rejected.
 resource "cloudflare_email_routing_dns" "cup_audio" {
   zone_id = local.cup_audio_zone_id
 }
 
-# The operator's private inbox that both addresses forward to. Cloudflare sends it a verification
+# The operator's private inbox that every address forwards to. Cloudflare sends it a verification
 # link that must be clicked once before the rules forward anything.
 variable "support_email_destination" {
   type      = string
@@ -105,7 +107,7 @@ variable "support_email_destination" {
 
   validation {
     condition     = can(regex("^[^@\\s]+@[^@\\s]+$", var.support_email_destination))
-    error_message = "Provide the operator's private email address that support@cup.audio and github@cup.audio forward to."
+    error_message = "Provide the operator's private email address that support@cup.audio, github@cup.audio, gcp@cup.audio and admin@cup.audio forward to."
   }
 }
 
@@ -144,6 +146,48 @@ resource "cloudflare_email_routing_rule" "github" {
       type  = "literal"
       field = "to"
       value = "github@cup.audio"
+    },
+  ]
+  actions = [
+    {
+      type  = "forward"
+      value = [cloudflare_email_routing_address.operator.email]
+    },
+  ]
+
+  depends_on = [cloudflare_email_routing_dns.cup_audio]
+}
+
+resource "cloudflare_email_routing_rule" "gcp" {
+  zone_id = local.cup_audio_zone_id
+  name    = "gcp@cup.audio to the operator"
+  enabled = true
+  matchers = [
+    {
+      type  = "literal"
+      field = "to"
+      value = "gcp@cup.audio"
+    },
+  ]
+  actions = [
+    {
+      type  = "forward"
+      value = [cloudflare_email_routing_address.operator.email]
+    },
+  ]
+
+  depends_on = [cloudflare_email_routing_dns.cup_audio]
+}
+
+resource "cloudflare_email_routing_rule" "admin" {
+  zone_id = local.cup_audio_zone_id
+  name    = "admin@cup.audio to the operator"
+  enabled = true
+  matchers = [
+    {
+      type  = "literal"
+      field = "to"
+      value = "admin@cup.audio"
     },
   ]
   actions = [
