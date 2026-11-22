@@ -85,6 +85,9 @@ function canSeek(element: Pick<NarrationAudioElement, "readyState" | "duration">
   return element.readyState >= HAVE_METADATA && element.duration > 0;
 }
 
+/** How far from its target a finished seek may land, as browsers may snap it to an audio frame. */
+const SEEK_TOLERANCE_MILLISECONDS = 100;
+
 /**
  * Plays a loaded audiobook's narration track on the host's one `<audio>` element.
  *
@@ -99,6 +102,12 @@ export class NarrationTrackPlayer implements Player {
   private readonly playbackChangeListeners = new Set<(change: PlaybackChange) => void>();
   /** Where to seek once the element knows the track's duration; it cannot seek before. */
   private pendingPositionMilliseconds: number | null;
+  /**
+   * Where the element was last asked to seek, until its `seeked` event reports that it got there.
+   * Chromium can drop a seek that a pause interrupts before the track's first data arrived: the
+   * element reports the time as 0 from the pause on, and its `seeked` event lands there.
+   */
+  private seek: { targetMilliseconds: number; isRetry: boolean } | null = null;
   private failure: string | null = null;
   private readonly unsubscribeSaveFailure: () => void;
   private isClosed = false;
@@ -173,7 +182,7 @@ export class NarrationTrackPlayer implements Player {
       // The element can report its metadata before `loadedmetadata` is dispatched, which must
       // then not apply an earlier seek.
       this.pendingPositionMilliseconds = null;
-      this.element.currentTime = position / 1_000;
+      this.seekElement(position);
     }
 
     this.save("now", position);
@@ -186,8 +195,9 @@ export class NarrationTrackPlayer implements Player {
 
   /** The browser saves through the listener's session, so only the track URL is used. */
   replaceUrls = (narrationTrack: NarrationTrack) => {
-    // A new source resets the element to the start and clears a failed load.
+    // A new source resets the element to the start, ends a seek and clears a failed load.
     this.pendingPositionMilliseconds = this.readPosition();
+    this.seek = null;
     this.element.src = narrationTrack.url;
     this.publish();
   };
@@ -233,6 +243,10 @@ export class NarrationTrackPlayer implements Player {
     }
 
     switch (event.type) {
+      case "seeked": {
+        this.confirmSeek();
+        break;
+      }
       case "timeupdate": {
         // While seeking, the time reports where the seek started, not a listening position.
         if (!element.seeking && !element.paused) {
@@ -249,6 +263,7 @@ export class NarrationTrackPlayer implements Player {
       }
       case "ended": {
         // A finished audiobook starts over the next time.
+        this.seek = null;
         element.currentTime = 0;
         this.save("now", 0);
         break;
@@ -270,11 +285,44 @@ export class NarrationTrackPlayer implements Player {
       return;
     }
 
-    this.element.currentTime = position / 1_000;
+    this.seekElement(position);
   }
 
+  private seekElement(positionMilliseconds: number, { isRetry = false } = {}) {
+    this.seek = { targetMilliseconds: positionMilliseconds, isRetry };
+    this.element.currentTime = positionMilliseconds / 1_000;
+  }
+
+  /**
+   * Ends the seek the element finished, or asks for its target again when the element landed
+   * elsewhere. It asks once only, so an element that keeps landing elsewhere, such as one whose
+   * file is shorter than the listed track, is not sent seeking for ever.
+   */
+  private confirmSeek() {
+    const { seek, element } = this;
+    if (seek === null || element.seeking) {
+      return;
+    }
+
+    const landedMilliseconds = element.currentTime * 1_000;
+    if (
+      Math.abs(landedMilliseconds - seek.targetMilliseconds) <= SEEK_TOLERANCE_MILLISECONDS ||
+      seek.isRetry
+    ) {
+      this.seek = null;
+      return;
+    }
+
+    this.seekElement(seek.targetMilliseconds, { isRetry: true });
+  }
+
+  /** A seek the element has not finished counts as its target, whatever time the element reports. */
   private readPosition() {
-    return this.pendingPositionMilliseconds ?? Math.round(this.element.currentTime * 1_000);
+    return (
+      this.pendingPositionMilliseconds ??
+      this.seek?.targetMilliseconds ??
+      Math.round(this.element.currentTime * 1_000)
+    );
   }
 
   /** The session reports failed saves through `getSaveFailure` and retries them itself. */
