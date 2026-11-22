@@ -44,6 +44,9 @@ class FakeAudioElement extends EventTarget implements NarrationAudioElement {
   private source = "";
   private time = 0;
   private loadGeneration = 0;
+  /** Counts the seeks asked for, so a queued `seeked` ends only the latest one. */
+  private seekGeneration = 0;
+  private isSeekPending = false;
 
   get src() {
     return this.source;
@@ -59,9 +62,19 @@ class FakeAudioElement extends EventTarget implements NarrationAudioElement {
     return this.time;
   }
 
+  /** Browsers report the target as the time at once and fire `seeked` from a queued task. */
   set currentTime(value: number) {
     this.calls.push(`currentTime:${value}`);
     this.time = value;
+    this.seeking = true;
+    this.isSeekPending = true;
+    this.seekGeneration += 1;
+    const seekGeneration = this.seekGeneration;
+    queueMicrotask(() => {
+      if (seekGeneration === this.seekGeneration) {
+        this.finishSeek();
+      }
+    });
   }
 
   play() {
@@ -116,6 +129,8 @@ class FakeAudioElement extends EventTarget implements NarrationAudioElement {
 
   /** Moves playback forward without recording a seek, as the browser does while playing. */
   advanceTo(seconds: number) {
+    // Playback goes on from where a seek landed, after the seek finished.
+    this.finishSeek();
     this.readyState = HAVE_ENOUGH_DATA;
     this.time = seconds;
     this.fire("timeupdate");
@@ -132,6 +147,30 @@ class FakeAudioElement extends EventTarget implements NarrationAudioElement {
     this.fire("error");
   }
 
+  /**
+   * Chromium drops a seek that a pause interrupts before the track's first data arrived: from the
+   * pause on, the element reports the time as 0, and `seeked` follows the pause's event there.
+   */
+  dropSeek() {
+    this.seekGeneration += 1;
+    this.isSeekPending = false;
+    this.seeking = false;
+    this.time = 0;
+    this.readyState = HAVE_ENOUGH_DATA;
+    queueMicrotask(() => this.fire("seeked"));
+  }
+
+  /** Ends a seek the element was asked for, where it was asked to land. */
+  finishSeek() {
+    if (!this.isSeekPending) {
+      return;
+    }
+
+    this.isSeekPending = false;
+    this.seeking = false;
+    this.fire("seeked");
+  }
+
   /** The listener changed the playback speed. */
   setPlaybackRate(rate: number) {
     this.playbackRate = rate;
@@ -144,6 +183,10 @@ class FakeAudioElement extends EventTarget implements NarrationAudioElement {
 
   private resetMedia() {
     this.loadGeneration += 1;
+    // Loading a source aborts a seek without a `seeked` event.
+    this.seekGeneration += 1;
+    this.isSeekPending = false;
+    this.seeking = false;
     this.readyState = 0;
     this.duration = Number.NaN;
     this.time = 0;
@@ -463,6 +506,54 @@ test("loading restores the saved unit and offset once metadata is loaded and sta
     durationMilliseconds: 15_200,
     isPlaying: false,
   });
+});
+
+test("a Pause that makes the element drop the seek to the restored position seeks there again and saves it", async () => {
+  const { host, element, player, saved } = createHost({ subject: "user-1" });
+  host.showConversion(
+    "first",
+    createAudiobook("First", { synchronizationUnitId: "unit-2", offsetMilliseconds: 1_500 }),
+  );
+  host.playShown();
+  element.loadMetadata(15);
+  expect(element.calls).toEqual([`src:${FIRST_TRACK_URL}`, "play", "currentTime:5.5"]);
+
+  host.pause();
+  element.dropSeek();
+  await settle();
+
+  expect(element.calls).toEqual([
+    `src:${FIRST_TRACK_URL}`,
+    "play",
+    "currentTime:5.5",
+    "pause",
+    "currentTime:5.5",
+  ]);
+  expect(element.currentTime).toBe(5.5);
+  expect(player().getSnapshot()).toMatchObject({
+    currentUnitIndex: 1,
+    positionMilliseconds: 5_500,
+    isPlaying: false,
+  });
+  expect(saved.map(({ position }) => position)).toEqual([
+    { synchronizationUnitId: "unit-2", offsetMilliseconds: 1_500 },
+  ]);
+});
+
+test("a seek the element drops twice is left where the element landed", async () => {
+  const { host, element, player } = createHost();
+  host.showConversion("first", FIRST);
+  host.loadShown();
+  element.loadMetadata(15);
+
+  player().seekTo(7_000);
+  element.dropSeek();
+  // The player hears the `seeked` first and seeks again; the element drops that seek too.
+  element.addEventListener("seeked", () => element.dropSeek(), { once: true });
+  await settle();
+
+  expect(element.calls.slice(1)).toEqual(["currentTime:7", "currentTime:7"]);
+  expect(player().getSnapshot().positionMilliseconds).toBe(0);
 });
 
 test("Play starts the element within the call, before anything is awaited", () => {
