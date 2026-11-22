@@ -181,6 +181,32 @@ test("removes every visible headline mark from the source material", () => {
   );
 });
 
+test("removes screen-reader-only content from the source material", () => {
+  const { html } = prepareLoadedSourcePage({
+    bodyHtml:
+      '<main><h1 data-cup-visible-headline>Visible headline</h1><p>We paused <a href="/training">internal training⁠<span data-cup-screen-reader-only>(opens in a new window)</span></a> for now.</p></main>',
+    documentTitle: "Document title",
+    fetchedUrl: SOURCE_URL,
+    responseStatus: 200,
+  });
+
+  expect(html).toBe(
+    '<main><p>We paused <a href="/training">internal training⁠</a> for now.</p></main>',
+  );
+});
+
+test("leaves screen-reader-only content out of the source title", () => {
+  const { title } = prepareLoadedSourcePage({
+    bodyHtml:
+      "<main><h1 data-cup-visible-headline>Visible headline<span data-cup-screen-reader-only>, article</span></h1><p>First paragraph.</p></main>",
+    documentTitle: "Document title",
+    fetchedUrl: SOURCE_URL,
+    responseStatus: 200,
+  });
+
+  expect(title).toBe("Visible headline");
+});
+
 test("falls back to the document title and cuts nothing without a visible headline", () => {
   const bodyHtml = "<main><p>Kicker</p><h1>Hidden heading</h1><p>First paragraph.</p></main>";
 

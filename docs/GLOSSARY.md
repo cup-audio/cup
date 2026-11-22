@@ -42,6 +42,12 @@ The first top-level heading of a source page that renders visibly, unlike a hidd
 
 _Avoid_: headline alone, first heading
 
+## screen-reader-only content
+
+The parts of a source page that it hides from sight but exposes to screen readers, such as a link’s “opens in a new window” hint.
+
+_Avoid_: sr-only, visually hidden text, hidden text
+
 ## source subtitle
 
 The short summary line the source page sets directly beneath the source title, such as a news article's dek or a blog post's subtitle. Many source pages have none. It is not a section heading within the source content, a kicker above the source title, a byline, or a date.
@@ -200,7 +206,7 @@ _Avoid_: conversion phase for this reported step, workflow step
 
 ## audiobook source material
 
-An inclusive representation of a source page containing everything that might contribute to the audiobook. Visual material may be replaced with a visual description.
+An inclusive representation of a source page containing everything that might contribute to the audiobook. Visual material may be replaced with a visual description. Screen-reader-only content does not contribute.
 
 _Avoid_: source body, page body, fetched page
 

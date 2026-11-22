@@ -231,34 +231,9 @@ for (const javaScriptEnabled of [false, true]) {
           <p>A second paragraph completes the rendered source content.</p>
         </body>
       </html>`;
-    const browser: SourceMaterialBrowser = {
-      newPage: async (options) => {
-        const page = await playwrightBrowser.newPage(options);
-
-        return {
-          route: (pattern, handler) =>
-            page.route(pattern, (route) =>
-              handler({
-                request: () => route.request(),
-                abort: (errorCode) => route.abort(errorCode),
-                continue: () => route.fulfill({ body: sourcePageHtml, contentType: "text/html" }),
-              }),
-            ),
-          context: () => page.context(),
-          goto: (url, gotoOptions) => page.goto(url, gotoOptions),
-          waitForFunction: (pageFunction, argument, waitOptions) =>
-            page.waitForFunction(pageFunction, argument, waitOptions),
-          evaluate: (pageFunction, attributeName) => page.evaluate(pageFunction, attributeName),
-          locator: (selector) => page.locator(selector),
-          title: () => page.title(),
-          close: () => page.close(),
-        };
-      },
-    };
-
     const sourceMaterial = prepareLoadedSourcePage(
       await loadPublicSourcePage({
-        browser,
+        browser: createSingleSourcePageBrowser(playwrightBrowser, sourcePageHtml),
         javaScriptEnabled,
         url: "https://publisher.example/story",
       }),
@@ -269,6 +244,49 @@ for (const javaScriptEnabled of [false, true]) {
     expect(sourceMaterial.html).toContain(
       "A second paragraph completes the rendered source content.",
     );
+  });
+}
+
+for (const javaScriptEnabled of [false, true]) {
+  test(`leaves screen-reader-only content out of the source material (JavaScript enabled: ${javaScriptEnabled})`, async ({
+    browser: playwrightBrowser,
+  }) => {
+    // The link hint copies openai.com's markup, recorded on 2026-11-22: a Tailwind `sr-only` span
+    // after a word joiner.
+    const sourcePageHtml = `<!doctype html>
+      <html>
+        <head>
+          <title>Document title | Publisher</title>
+          <style>
+            .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border-width: 0; }
+            .off-screen { position: absolute; left: -9999px; }
+            .collapsed { height: 0; overflow: hidden; }
+          </style>
+        </head>
+        <body>
+          <h1>Visible headline</h1>
+          <p>We are pacing the release of our models, including <a href="/pausing">pausing</a> <a href="https://alignment.example/report" target="_blank"><u><span>internal training</span></u>\u2060<span class="sr-only">(opens in a new window)</span></a> for now.</p>
+          <p>An older pattern hides <span class="off-screen">an off-screen label</span>this hint.</p>
+          <p class="collapsed">A collapsed paragraph stays, because it can be source content.</p>
+          <p style="display: none">A paragraph hidden from everyone stays as well.</p>
+          <p>A label<span style="position: relative; display: inline-block; width: 0; height: 0"><span style="position: absolute">shown from a zero-size wrapper</span></span> stays.</p>
+        </body>
+      </html>`;
+
+    const sourceMaterial = prepareLoadedSourcePage(
+      await loadPublicSourcePage({
+        browser: createSingleSourcePageBrowser(playwrightBrowser, sourcePageHtml),
+        javaScriptEnabled,
+        url: "https://publisher.example/story",
+      }),
+    );
+
+    expect(sourceMaterial.html).not.toContain("opens in a new window");
+    expect(sourceMaterial.html).not.toContain("an off-screen label");
+    expect(sourceMaterial.html).toContain("internal training");
+    expect(sourceMaterial.html).toContain("A collapsed paragraph stays");
+    expect(sourceMaterial.html).toContain("A paragraph hidden from everyone stays as well.");
+    expect(sourceMaterial.html).toContain("shown from a zero-size wrapper");
   });
 }
 
@@ -332,6 +350,37 @@ test("loads a cover image as a browser navigation carrying the source page as re
     accept: expect.stringContaining("image/avif"),
   });
 });
+
+/** Answers every source-page request with the given HTML. */
+function createSingleSourcePageBrowser(
+  playwrightBrowser: Browser,
+  sourcePageHtml: string,
+): SourceMaterialBrowser {
+  return {
+    newPage: async (options) => {
+      const page = await playwrightBrowser.newPage(options);
+
+      return {
+        route: (pattern, handler) =>
+          page.route(pattern, (route) =>
+            handler({
+              request: () => route.request(),
+              abort: (errorCode) => route.abort(errorCode),
+              continue: () => route.fulfill({ body: sourcePageHtml, contentType: "text/html" }),
+            }),
+          ),
+        context: () => page.context(),
+        goto: (url, gotoOptions) => page.goto(url, gotoOptions),
+        waitForFunction: (pageFunction, argument, waitOptions) =>
+          page.waitForFunction(pageFunction, argument, waitOptions),
+        evaluate: (pageFunction, attributeName) => page.evaluate(pageFunction, attributeName),
+        locator: (selector) => page.locator(selector),
+        title: () => page.title(),
+        close: () => page.close(),
+      };
+    },
+  };
+}
 
 // Retain public page URLs so production URL checks and relative resource resolution still run.
 // Only the test transport redirects requests to the local recording server.

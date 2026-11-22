@@ -55,6 +55,8 @@ const IRRELEVANT_ELEMENT_TAG_NAMES = new Set<string>([
 ]);
 // The loader marks the visible headline in the source page; `prepareLoadedSourcePage` reads it.
 export const VISIBLE_HEADLINE_ATTRIBUTE = "data-cup-visible-headline";
+// The loader marks screen-reader-only content in the source page; `prepareLoadedSourcePage` drops it.
+export const SCREEN_READER_ONLY_CONTENT_ATTRIBUTE = "data-cup-screen-reader-only";
 // Keep equivalent static pages; rendering often adds small dynamic counters and page chrome.
 const BETTER_SOURCE_MATERIAL_TEXT_FACTOR = 1.1;
 const SOURCE_PAGE_JAVASCRIPT_MODES = [false, true] as const;
@@ -245,6 +247,10 @@ export function prepareLoadedSourcePage(sourcePage: LoadedSourcePage): SourceMat
   }
 
   const documentFragment = parseFragment(sourcePage.bodyHtml);
+
+  // Removed before the source title is read, so hidden text inside the visible headline stays out of it.
+  removeScreenReaderOnlyContent(documentFragment);
+
   const visibleHeadline = findFirstElement(
     documentFragment,
     (element) => getAttribute(element, VISIBLE_HEADLINE_ATTRIBUTE) !== undefined,
@@ -370,8 +376,9 @@ export async function loadPublicSourcePage({
       await page.locator("html").getAttribute("lang"),
       headHtml,
     );
-    // The mark must be in the DOM before the body is serialized below.
+    // The marks must be in the DOM before the body is serialized below.
     await page.evaluate(markVisibleHeadline, VISIBLE_HEADLINE_ATTRIBUTE);
+    await page.evaluate(markScreenReaderOnlyContent, SCREEN_READER_ONLY_CONTENT_ATTRIBUTE);
     const bodyHtml = await page.locator("body").innerHTML();
 
     return {
@@ -408,6 +415,45 @@ function markVisibleHeadline(attributeName: string): void {
   });
 
   visibleHeadline?.setAttribute(attributeName, "");
+}
+
+/**
+ * Marks screen-reader-only content with {@link SCREEN_READER_ONLY_CONTENT_ATTRIBUTE}: each
+ * outermost rendered element that holds text but is visually hidden, either a box of at most one
+ * pixel that clips its content (the `.sr-only` pattern) or placed wholly beyond the page's left or
+ * top edge (the older `left: -9999px` pattern). Content hidden from everyone, such as a collapsed
+ * section, is not marked, because it can be source content. The browser serializes this function
+ * into the source page, so it must stay self-contained.
+ */
+function markScreenReaderOnlyContent(attributeName: string): void {
+  const markScreenReaderOnlyDescendants = (parentElement: Element): void => {
+    for (const element of Array.from(parentElement.children)) {
+      // An element with `display: contents` has no box of its own, so only its children are measured.
+      const style = getComputedStyle(element);
+      const hasOwnBox = style.display !== "contents";
+      const boundingRectangle = element.getBoundingClientRect();
+      // A zero-size wrapper of an absolutely positioned label shows its content; `.sr-only` variants
+      // all clip it, through `overflow`, `clip` or `clip-path`.
+      const clipsContent =
+        style.overflow !== "visible" || style.clip !== "auto" || style.clipPath !== "none";
+      const isScreenReaderOnly =
+        hasOwnBox &&
+        (element.textContent?.trim() ?? "").length > 0 &&
+        // Excludes content hidden from everyone, such as `display: none`, which has no box either.
+        element.checkVisibility() &&
+        ((boundingRectangle.width <= 1 && boundingRectangle.height <= 1 && clipsContent) ||
+          boundingRectangle.right + window.scrollX <= 0 ||
+          boundingRectangle.bottom + window.scrollY <= 0);
+
+      if (isScreenReaderOnly) {
+        element.setAttribute(attributeName, "");
+      } else {
+        markScreenReaderOnlyDescendants(element);
+      }
+    }
+  };
+
+  markScreenReaderOnlyDescendants(document.body);
 }
 
 /** Reads the publisher-declared cover image from page metadata; body images are never considered. */
@@ -524,6 +570,17 @@ function cutBeforeAndIncluding(element: HtmlElement): void {
     node = parentNode;
     parentNode = parentNode.parentNode;
     shouldRemoveNode = false;
+  }
+}
+
+function removeScreenReaderOnlyContent(parentNode: HtmlParentNode): void {
+  const screenReaderOnlyElements = findAllElements(
+    parentNode,
+    (element) => getAttribute(element, SCREEN_READER_ONLY_CONTENT_ATTRIBUTE) !== undefined,
+  );
+
+  for (const element of screenReaderOnlyElements) {
+    element.parentNode?.childNodes.splice(element.parentNode.childNodes.indexOf(element), 1);
   }
 }
 
