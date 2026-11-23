@@ -1,6 +1,6 @@
 # Production configuration
 
-Use this guide to supply the production Worker's configuration and the provider settings that Terraform does not manage, to find those it does, and to deploy. The [authentication](architecture/authentication.md) and [account deletion](architecture/account-deletion.md) pages explain the behavior this configuration enables. The [Terraform guide](../terraform/README.md) covers infrastructure state, the Supabase project, Supabase's Google and Apple providers, the Resend domain's settings and DNS records, and the Cloudflare R2 bucket, DNS records, operator Access application and AI Gateway, the Google Play uploader service account, and [Sentry](../terraform/README.md#sentry)'s projects, keys, inbound filters, spike protection, privacy settings, alerts and monitors. Sentry's personal notification settings are the one Sentry setting set by hand ([personal notifications](../terraform/README.md#personal-notifications)). Sign in with Apple is being built ([spec #519](https://github.com/cup-audio/cup/issues/519)): the web flow and Supabase's Apple provider exist in this checkout, while native iOS and Android Apple sign-in, the Apple revocation on account deletion and the client secret rotation are planned.
+Use this guide to supply the production Worker's configuration and the provider settings that Terraform does not manage, to find those it does, and to deploy. The [authentication](architecture/authentication.md) and [account deletion](architecture/account-deletion.md) pages explain the behavior this configuration enables. The [Terraform guide](../terraform/README.md) covers infrastructure state, the Supabase project, Supabase's Google and Apple providers, the Resend domain's settings and DNS records, and the Cloudflare R2 bucket, DNS records, operator Access application and AI Gateway, the Google Play uploader service account, Supabase's [Apple client secret](#apple-client-secret-rotation) and the identity of the workflow that rotates it, and [Sentry](../terraform/README.md#sentry)'s projects, keys, inbound filters, spike protection, privacy settings, alerts and monitors. Sentry's personal notification settings are the one Sentry setting set by hand ([personal notifications](../terraform/README.md#personal-notifications)). Sign in with Apple is being built ([spec #519](https://github.com/cup-audio/cup/issues/519)): the web flow, Supabase's Apple provider and the client secret rotation exist in this checkout, while native iOS and Android Apple sign-in and the Apple revocation on account deletion are planned.
 
 ## Worker configuration
 
@@ -100,6 +100,45 @@ When the upload key is lost or compromised, Google can replace it; the app signi
 Scripted uploads of Android test builds authenticate as the uploader service account `play-publisher@cup-production.iam.gserviceaccount.com`, which Terraform creates without keys, as the [Terraform guide](../terraform/README.md#google-play-uploader) describes. The release command impersonates it through the operator's application-default credentials (`gcloud auth application-default login`); no JSON key exists to store, back up or rotate. Google Play accepts the impersonated tokens: the first scripted upload succeeded on 2026-11-18 ([#448](https://github.com/cup-audio/cup/issues/448)). It bills minting the account's tokens to `cup-production`, whatever quota project the operator's application-default credentials name: on 2026-11-18 the first scripted upload failed with a 403 because those credentials named another project, which lacked the IAM Service Account Credentials API ([#448](https://github.com/cup-audio/cup/issues/448)).
 
 Google Play grants the account nothing until it is invited, which Terraform cannot do. Once the account exists, invite it in the Play Console under **Users and permissions** → **Invite new users**, with the service account's email as the address. Grant it **View app information and download bulk reports (read-only)** and **Release apps to testing tracks**, either for the `audio.cup.app` app or account-wide, and send the invitation; a service account needs no acceptance. Grant nothing more: the account must not release to production or change the store listing.
+
+## Apple client secret rotation
+
+Supabase's Apple provider needs a client secret for Apple sign-in on the web and on Android, a JWT signed with the Sign in with Apple key `6Y358M9M9A` that Apple accepts for at most six months. The GitHub Actions workflow [`rotate-apple-client-secret.yml`](../.github/workflows/rotate-apple-client-secret.yml), Cup's only CI, replaces it at 06:17 UTC on the 1st of every month, and on demand through **Run workflow** (`workflow_dispatch`) on `main` ([ADR 0118](adr/0118-rotate-supabases-apple-client-secret-from-a-scheduled-github-actions-workflow.md)). Each run:
+
+1. Fetches the source of the commit it runs on with plain `git`, without a token or the submodule.
+2. Fails from 30 days before the Supabase access token expires, with a message to [renew it](#renew-the-supabase-access-token).
+3. Signs a secret valid for 179 days with [`tooling/apple-client-secret`](../tooling/apple-client-secret/README.md), using the runner's `node`, and masks it in the log.
+4. Authenticates to the Terraform state bucket through Workload Identity Federation as `apple-client-secret-rotation@cup-infrastructure.iam.gserviceaccount.com` and applies the [apple-client-secret root](../terraform/README.md#apple-client-secret), which writes only `external_apple_secret`.
+5. Checks in to the Sentry cron monitor `apple-client-secret-rotation` through the public `cup-worker` DSN key.
+
+A run that fails leaves the previous secret in place, valid for about five more months. GitHub mails the failure, and the cron monitor opens an issue, which the [alerts](architecture/observability.md#alerts-and-monitors) email, for a missed or failed month, including when GitHub disables the schedule after 60 days without repository activity. Native iOS sign-in and the Worker do not use this secret.
+
+The job runs with no `GITHUB_TOKEN` permission but `id-token: write`, which Workload Identity Federation needs. It reads secrets only through `env:`, has no pull request trigger, and its only actions are `hashicorp/setup-terraform` v4.0.1 and `google-github-actions/auth` v3.0.0, pinned by commit SHA; the comment ban ([ADR 0037](adr/0037-ban-code-comments-and-ratchet-the-ones-left.md)) leaves out the usual version comment next to each SHA, so record a bumped version here. The review gate's zizmor step audits the workflow; zizmor's auditor persona additionally asks for a comment explaining `id-token: write`, which this paragraph replaces.
+
+### Rollout
+
+These steps need the operator's accounts and are not done by any change; as of 2026-11-23 none has run. Do them in this order:
+
+1. **Bootstrap.** Apply `terraform/bootstrap` ([Terraform guide](../terraform/README.md#github-actions-identity)) and check that its outputs match the `workload_identity_provider` and `service_account` the workflow names.
+2. **Sentry.** Apply `terraform/sentry`, which creates the cron monitor ([Terraform guide](../terraform/README.md#alerts-and-monitors)). In the Sentry UI, check that the monitor's slug is `apple-client-secret-rotation`; if Sentry gave it another, change the check-in URL in the workflow to match.
+3. **Supabase access token.** In the Supabase dashboard under **Account** → **Access Tokens**, create a scoped token limited to project `evwjipxgacwotgbmqtla` with **Auth Config** and **Project Settings**, both Read-write, and nothing else, expiring in at most a year. The endpoint the provider calls needs both permissions; a leaked token can therefore change any auth setting and delete or pause the project, which no narrower Supabase credential avoids. Note its expiry date.
+4. **Environment.** In the repository's **Settings** → **Environments**, create `production`. Under **Deployment branches and tags**, choose **Selected branches and tags** with the single rule `main`; turn **Allow administrators to bypass configured protection rules** off; add no required reviewers, which would block every scheduled run. Add two environment secrets, never repository secrets: `APPLE_SIGN_IN_PRIVATE_KEY`, the whole `.p8` file of key `6Y358M9M9A` as PEM, and `SUPABASE_ACCESS_TOKEN`, the token from step 3.
+5. **Expiry variable.** Under **Settings** → **Secrets and variables** → **Actions** → **Variables**, add the repository variable `SUPABASE_ACCESS_TOKEN_EXPIRES_ON` with the token's expiry date as `YYYY-MM-DD`.
+6. **Actions allow-list.** Under **Settings** → **Actions** → **General**, keep **Allow select actions and reusable workflows** with SHA pinning required, and allow exactly `hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e` and `google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093`. A bumped action needs its new SHA here too.
+7. **First run.** Once the workflow is on `main` and Supabase's Apple provider is configured, run it by hand from the **Actions** tab on `main`, check that the cron monitor shows the check-in, then sign in with Apple on <https://cup.audio/app>.
+
+### Replace the Sign in with Apple key
+
+The key never expires and is never rotated on a schedule. When it leaks, is lost or is revoked:
+
+1. In the Apple Developer console under **Certificates, Identifiers & Profiles** → **Keys**, create a new key with Sign in with Apple enabled for the primary App ID, and download its `.p8` file once; keep it in the password manager.
+2. Replace the Worker's Sign in with Apple key secret with Wrangler, and the `production` environment secret `APPLE_SIGN_IN_PRIVATE_KEY` with the new file.
+3. Change the key ID `6Y358M9M9A` to the new key's ID in [`tooling/apple-client-secret`](../tooling/apple-client-secret/src/client-secret.ts) and in the Worker's configuration, merge, deploy, and run the rotation workflow by hand.
+4. Revoke the old key in the Apple Developer console. Revoking it first breaks web and Android sign-in, and the Worker's exchange and revocation, until both copies are replaced.
+
+### Renew the Supabase access token
+
+About once a year the workflow starts failing 30 days before the token expires. Create a new token as in [rollout step 3](#rollout), replace the `production` environment secret `SUPABASE_ACCESS_TOKEN`, update the repository variable `SUPABASE_ACCESS_TOKEN_EXPIRES_ON`, run the workflow by hand, and delete the old token in the Supabase dashboard.
 
 ## Deploy
 
