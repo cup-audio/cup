@@ -22,7 +22,27 @@ Identity deletion and Cup storage cleanup retry independently; an identity-provi
 
 Deletion and recovery require a one-use challenge and fresh authentication for the same identity, with a method from the challenge's `acceptedMethods`, as described in [authentication](authentication.md#operator-access-and-lifecycle-confirmation). Signing in alone does not restore access.
 
-Lifecycle endpoints belong to the [listener API](README.md#api-definitions). A refused confirmation is an explicit conflict, while unexpected storage or registry failures remain operational errors. The confirmation request may carry a `providerCredential` discriminated by provider; its only variant is Google's access token. After scheduling, the API attempts Google token revocation when the client supplies a Google credential for an identity linked to Google, verifies that the token belongs to the same identity, and records the outcome. Revocation failure does not undo scheduling; a failure to record the outcome is reported as an operational error, not a rejected confirmation.
+Lifecycle endpoints belong to the [listener API](README.md#api-definitions). A refused confirmation is an explicit conflict, while unexpected storage or registry failures remain operational errors. The confirmation request may carry a `providerCredential` discriminated by provider: Google's access token, or the refresh token Apple issued for a web Apple sign-in (Supabase's `provider_refresh_token`). A restore request carries no Apple credential.
+
+### Apple revocation before scheduling
+
+Apple requires that deleting an account created with Sign in with Apple revokes Cup's Apple authorization, and Cup stores no Apple token ([ADR 0119](../adr/0119-confirm-apple-linked-deletion-with-a-fresh-apple-sign-in-and-revoke-its-credential.md)). Deleting an account whose identity has Apple among its linked providers is therefore confirmed only with a fresh Apple sign-in: its challenge accepts Apple alone, also when Google is linked too. The confirmation shows one "Continue with Apple" button and the line "Can't sign in with Apple? Email support\@cup.audio." The Worker then works in this order, and schedules nothing when a step fails:
+
+1. It refuses the request without an Apple credential (`fresh-auth-required`).
+2. It reads the account's Apple subject from the Supabase identity and validates the refresh token at Apple with a `refresh_token` grant as the Services ID, which returns an ID token naming the Apple subject.
+3. It refuses a subject other than the account's Apple identity (`apple-account-mismatch`), and the client asks to use the Apple Account linked to this Cup account.
+4. It revokes the refresh token at Apple.
+5. It schedules the deletion with `appleRevocation: revoked`.
+
+A failed validation or revocation answers the retryable `apple-confirmation-failed`, and the client says that Apple couldn't confirm the deletion, that the account is still active and nothing will be deleted. Either refusal drops the challenge, so a retry starts with a new challenge and a new sign-in. A revocation followed by a failed scheduling is harmless: revocation is idempotent, and the listener signs in with Apple again. Failures are captured as operational errors without the token or Apple's response body, with no Sentry warning type of their own. The [Apple client](../../libs/api-server/src/adapters/apple-sign-in-revocation.ts) signs a five-minute ES256 client secret with the Worker secret `APPLE_SIGN_IN_KEY` for each request and talks to `APPLE_ORIGIN` ([production configuration](../production-configuration.md#worker-configuration)); [`apple-deletion-confirmation.test.ts`](../../libs/api-server/test/apple-deletion-confirmation.test.ts) covers the order, the refusals and the client secret, and the [accounts E2E suite](../../qa/e2e/test-e2e/accounts.test.ts) the flow against the test Worker's fake Apple.
+
+For a Google-only account, nothing changes: after scheduling, the API attempts Google token revocation when the client supplies a Google credential for an identity linked to Google, verifies that the token belongs to the same identity, and records the outcome. Revocation failure does not undo scheduling; a failure to record the outcome is reported as an operational error, not a rejected confirmation.
+
+The deletion job and its receipt record `appleRevocation`, set at scheduling: `unavailable` without an Apple identity, `revoked` after the self-service path above, and `not-revoked` for a deletion the operator schedules for a listener who lost their Apple Account, which the spec plans ([#519](https://github.com/cup-audio/cup/issues/519)). The registry's [`deletion-coordinator.test.ts`](../../libs/registry/test/deletion-coordinator.test.ts) covers both records.
+
+### Recovery
+
+Recovery accepts every linked provider, and the confirmation shows one button per accepted method, Apple first. A Google-only account's deletion or recovery signs in again with Google at once, as before.
 
 Scheduling signs the requesting client out, which stops playback, and blocks subsequent private access checks. Lifecycle inspection and explicit recovery, after signing in again, remain available until the deadline; the scheduled-deletion notice links the web app's [account recovery page](web-app.md#routes-and-navigation), which signs the listener in for that. Recovery preserves history and allowance; once the deadline is reached, recovery is refused. The registry's [`accounts.test.ts`](../../libs/registry/test/accounts.test.ts) covers fresh authentication and recovery, and [`account-lifecycle-api.test.ts`](../../libs/api-server/test/account-lifecycle-api.test.ts) the API's origin checks and revocation outcomes.
 

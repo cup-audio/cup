@@ -4,6 +4,8 @@ import https from "node:https";
 import type net from "node:net";
 import { Temporal } from "temporal-polyfill";
 
+import { createFakeApple, type AppleEndpoint } from "#src/fake-apple.ts";
+
 const SUBJECT = "880ce5b5-6542-40fd-8f2d-380f3066e98a";
 const READER_NAME = "Reader Doe";
 const OTHER_SUBJECT = "70fcf2d9-63c5-48be-b897-d3670f24ed43";
@@ -97,6 +99,7 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
     const claims: unknown = JSON.parse(Buffer.from(payload, "base64url").toString());
     return claims && typeof claims === "object" ? { ...claims } : undefined;
   };
+  const apple = createFakeApple({ signIdToken: sign });
   const tokenFor = (
     user: Pick<User, "id" | "email" | "providers">,
     authenticatedAt = nowSeconds(),
@@ -257,7 +260,7 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
       sessionFor(
         { userId: user.id, authenticatedAt: code.authenticatedAt, method: "oauth" },
         code.provider === "apple"
-          ? { provider_refresh_token: `qa-apple-${crypto.randomUUID()}` }
+          ? { provider_refresh_token: apple.issueRefreshToken(identitySubjectOf(user, "apple")) }
           : {},
       ),
     );
@@ -382,6 +385,13 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
         await exchange(url, request, response);
         return;
       }
+      if (
+        (url.pathname === "/auth/token" || url.pathname === "/auth/revoke") &&
+        request.method === "POST"
+      ) {
+        await apple.handle(url.pathname, request, response);
+        return;
+      }
       if (url.pathname === "/auth/v1/logout") {
         response.writeHead(204).end();
         return;
@@ -391,8 +401,21 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
         request.headers.authorization === "Bearer qa-admin"
       ) {
         const id = url.pathname.split("/").at(-1);
-        if (id === SUBJECT || id === OTHER_SUBJECT || users.some((user) => user.id === id)) {
-          response.end(JSON.stringify({ id }));
+        const user = users.find((candidate) => candidate.id === id);
+        if (user) {
+          response.end(
+            JSON.stringify({
+              id,
+              identities: user.providers.map((provider) => ({
+                provider,
+                identity_data: { sub: identitySubjectOf(user, provider) },
+              })),
+            }),
+          );
+          return;
+        }
+        if (id === SUBJECT || id === OTHER_SUBJECT) {
+          response.end(JSON.stringify({ id, identities: [] }));
           return;
         }
       }
@@ -418,6 +441,13 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
       appleEmail = email;
     },
     authorizationRequests: () => authorizationRequests.map((query) => ({ ...query })),
+    appleRequests: () => apple.requests(),
+    setAppleFailure: (endpoint: AppleEndpoint | undefined) => {
+      apple.setFailure(endpoint);
+    },
+    setAppleTokenSubject: (subject: string | undefined) => {
+      apple.setTokenSubject(subject);
+    },
     exchanges: () => exchanges,
     refreshes: () => refreshes,
     setAccessTokenLifetime: (seconds: number) => {

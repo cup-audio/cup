@@ -18,6 +18,11 @@ for (const state of [
     name: "confirm-deletion",
   },
   {
+    story: "routes/_shell.recent.account/ConfirmAppleDeletion",
+    text: "Can't sign in with Apple? Email support@cup.audio.",
+    name: "confirm-apple-deletion",
+  },
+  {
     story: "routes/_shell.recent.account/RecoveryAvailable",
     text: "Restore account…",
     name: "recovery-available",
@@ -150,3 +155,66 @@ test("in the browser, the account dialog has no crash reports switch", async ({ 
 
   await expect(dialog.getByRole("switch")).toHaveCount(0);
 });
+
+test("an Apple-linked deletion is confirmed with one Continue with Apple button", async ({
+  mount,
+  page,
+}) => {
+  await mount("routes/_shell.recent.account/ConfirmAppleDeletion");
+  const confirmation = page
+    .getByRole("dialog", { name: "Account settings" })
+    .getByRole("region", { name: "Confirm account change" });
+
+  await expect(confirmation.getByRole("button")).toHaveText(["Continue with Apple", "Cancel"]);
+  await expect(confirmation.getByRole("link", { name: "support@cup.audio" })).toHaveAttribute(
+    "href",
+    "mailto:support@cup.audio",
+  );
+});
+
+test("an Apple-linked deletion sends the Apple sign-in's refresh token", async ({
+  mount,
+  page,
+}) => {
+  await mount("routes/_shell.recent.account/ConfirmAppleDeletionFails");
+  const dialog = page.getByRole("dialog", { name: "Account settings" });
+  const deletion = page.waitForRequest(
+    (request) =>
+      request.method() === "POST" && new URL(request.url()).pathname === "/api/account/deletion",
+  );
+
+  await dialog.getByRole("button", { name: "Schedule deletion" }).click();
+
+  expect((await deletion).postDataJSON()).toMatchObject({
+    providerCredential: { provider: "apple", refreshToken: "story-apple-refresh-token" },
+  });
+});
+
+for (const failure of [
+  {
+    story: "routes/_shell.recent.account/ConfirmAppleDeletionFails",
+    message:
+      "Apple couldn't confirm the deletion. Your account is still active, and nothing will be deleted. Try again.",
+  },
+  {
+    story: "routes/_shell.recent.account/ConfirmAppleDeletionWithOtherAppleAccount",
+    message: "Use the Apple Account linked to this Cup account.",
+  },
+]) {
+  test(`an Apple deletion that fails says "${failure.message}" and starts over`, async ({
+    mount,
+    page,
+  }) => {
+    await mount(failure.story);
+    const dialog = page.getByRole("dialog", { name: "Account settings" });
+
+    await dialog.getByRole("button", { name: "Schedule deletion" }).click();
+
+    await expect(dialog.getByRole("alert")).toHaveText(failure.message);
+    await expect(dialog.getByRole("region", { name: "Confirm account change" })).toHaveCount(0);
+    await expect(dialog.getByRole("button", { name: "Delete account…" })).toBeEnabled();
+    expect(
+      await page.evaluate((key) => sessionStorage.getItem(key), ACCOUNT_CONFIRMATION_STORAGE_KEY),
+    ).toBeNull();
+  });
+}

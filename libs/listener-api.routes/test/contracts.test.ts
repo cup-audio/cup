@@ -100,6 +100,14 @@ describe("listener API transport contracts", () => {
       },
     },
     {
+      name: "account confirmation with an Apple refresh token",
+      schema: accountConfirmationSchema,
+      request: {
+        challengeId: UUID,
+        providerCredential: { provider: "apple", refreshToken: "apple-refresh-token" },
+      },
+    },
+    {
       name: "playback position",
       schema: playbackPositionSchema,
       request: { synchronizationUnitId: "one", offsetMilliseconds: 0 },
@@ -117,6 +125,7 @@ describe("listener API transport contracts", () => {
     [startConversionRequestSchema, { extra: true }],
     [accountConfirmationSchema, { providerToken: "token" }],
     [accountConfirmationSchema, { challengeId: UUID, providerCredential: { provider: "google" } }],
+    [accountConfirmationSchema, { challengeId: UUID, providerCredential: { provider: "apple" } }],
     [
       accountConfirmationSchema,
       { challengeId: UUID, providerCredential: { provider: "github", accessToken: "token" } },

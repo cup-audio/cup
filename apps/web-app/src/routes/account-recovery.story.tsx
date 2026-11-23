@@ -17,6 +17,13 @@ export const ConfirmRecovery = accountStory({
   state: "deletion_scheduled",
   confirmation: "restore",
 });
+export const ChooseRecoveryMethod = accountStory({
+  path: "/account-recovery",
+  state: "deletion_scheduled",
+  confirmation: "restore",
+  acceptedMethods: ["google", "apple"],
+  confirmationSignInMethod: null,
+});
 export const ActiveAccount = accountStory({ path: "/account-recovery" });
 export const LeftoverDeletionChallenge = accountStory({
   path: "/account-recovery",

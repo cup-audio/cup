@@ -810,6 +810,7 @@ test("deletion needs fresh authentication and recovery preserves the original le
       challengeId: first.challengeId,
       authenticatedAtSeconds: Math.floor(first.issuedAtMs / 1000),
       email: "user@example.com",
+      appleRevocation: "unavailable",
     }),
   ).resolves.toEqual({ result: "conflict" });
   expect((await account.inspect()).state).toBe("active");
@@ -818,6 +819,7 @@ test("deletion needs fresh authentication and recovery preserves the original le
       challengeId: first.challengeId,
       authenticatedAtSeconds: Math.floor(first.issuedAtMs / 1000) + 1,
       email: "user@example.com",
+      appleRevocation: "unavailable",
     }),
   ).rejects.toThrow(/.+/);
   const scheduled = await account.inspect();

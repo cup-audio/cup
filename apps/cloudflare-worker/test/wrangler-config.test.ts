@@ -177,6 +177,7 @@ test("the production secrets are required, and the integration tests supply each
     "GOOGLE_WEB_CLIENT_ID",
     "RESEND_API_KEY",
     "MEDIA_URL_SIGNING_KEY",
+    "APPLE_SIGN_IN_KEY",
   ];
   expect(production.secrets).toStrictEqual({ required: expectedSecrets });
   expect(Object.keys(TEST_SECRETS)).toStrictEqual(expectedSecrets);
@@ -219,6 +220,18 @@ test("production advertises Apple sign-in with the Services ID as Apple's web cl
   expect,
 }) => {
   expect(readProductionConfig().vars?.["APPLE_WEB_CLIENT_ID"]).toBe("audio.cup.app.web");
+});
+
+test("production signs Apple client secrets for Cup's team and key and talks only to Apple", ({
+  expect,
+}) => {
+  expect(readProductionConfig().vars).toMatchObject({
+    APPLE_NATIVE_CLIENT_ID: "audio.cup.app",
+    APPLE_KEY_ID: "6Y358M9M9A",
+    APPLE_TEAM_ID: "4GQ2V3WJW8",
+    APPLE_ORIGIN: "https://appleid.apple.com",
+  });
+  expect(readTestConfig().vars?.["APPLE_ORIGIN"]).toBe("http://127.0.0.1:9");
 });
 
 function collectSqliteClassNames(migrations: DurableObjectMigration[]): Set<string> {

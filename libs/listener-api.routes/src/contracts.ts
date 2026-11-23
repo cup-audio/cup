@@ -185,6 +185,8 @@ export const ERROR_CODE = {
   ACCOUNT_SESSION_REQUIRED: "account-session-required",
   ACCOUNT_SETUP_PENDING: "account-setup-pending",
   ACCOUNT_START_CONFLICT: "account-start-conflict",
+  APPLE_ACCOUNT_MISMATCH: "apple-account-mismatch",
+  APPLE_CONFIRMATION_FAILED: "apple-confirmation-failed",
   AUDIOBOOK_NOT_FOUND: "audiobook-not-found",
   CONFIRMATION_UNAVAILABLE: "confirmation-unavailable",
   COVER_IMAGE_NOT_FOUND: "cover-image-not-found",
@@ -235,6 +237,7 @@ export type SignInMethod = z.infer<typeof signInMethodSchema>;
 
 export const providerCredentialSchema = z.discriminatedUnion("provider", [
   z.object({ provider: z.literal("google"), accessToken: z.string().min(1).max(8192) }),
+  z.object({ provider: z.literal("apple"), refreshToken: z.string().min(1).max(8192) }),
 ]);
 export type ProviderCredential = z.infer<typeof providerCredentialSchema>;
 

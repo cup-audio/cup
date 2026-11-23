@@ -5,8 +5,11 @@ export function acceptedConfirmationMethods(
   providers: readonly SignInMethod[],
   accountState: AccountSnapshot["state"],
 ): SignInMethod[] {
-  if (accountState === "active") {
-    return providers.includes("google") ? ["google"] : [...providers];
+  if (accountState !== "active") {
+    return [...providers];
   }
-  return [...providers];
+  if (providers.includes("apple")) {
+    return ["apple"];
+  }
+  return providers.includes("google") ? ["google"] : [...providers];
 }

@@ -538,6 +538,7 @@ export class DeletionCoordinator {
               identityDeleted: job.identityDone,
               accountErased: job.accountDone,
               googleRevocation: job.googleRevocation,
+              appleRevocation: job.appleRevocation,
               notifications: notifications.map((notification) => notification.state),
             }),
           })

@@ -3,9 +3,13 @@ import { Link } from "@tanstack/react-router";
 import React from "react";
 import { Temporal } from "temporal-polyfill";
 
+import { SignInButtons } from "#src/app/components/sign-in-dialog.js";
 import { DSButton } from "#src/app/design-system/button.js";
+import type { SignInMethod } from "#src/auth/account-session.js";
 import { useAccountConfirmation } from "#src/data-fetching/account-confirmation.js";
 import { accountQuery } from "#src/data-fetching/account.js";
+
+const SIGN_IN_METHOD_ORDER: readonly SignInMethod[] = ["apple", "google", "test-account"];
 
 export function AccountSettings({
   subject,
@@ -18,7 +22,7 @@ export function AccountSettings({
 }): React.ReactNode {
   const account = useSuspenseQuery(accountQuery(subject));
   const confirmation = useAccountConfirmation(subject);
-  const { isPending: pending, error, result, begin, confirm, cancel } = confirmation;
+  const { isPending: pending, error, result, begin, signIn, confirm, cancel } = confirmation;
   const data = account.data;
   if (account.error && !account.isFetching) {
     throw account.error;
@@ -76,8 +80,11 @@ export function AccountSettings({
       {challenge && (
         <ConfirmAccountChange
           action={challenge.action}
+          acceptedMethods={challenge.acceptedMethods}
+          signInMethod={challenge.signInMethod}
           isForThisAccount={challenge.subject === subject}
           isPending={pending}
+          onSignIn={signIn}
           onConfirm={confirm}
           onCancel={cancel}
         />
@@ -100,26 +107,54 @@ function ActiveAccountNotice({ result }: { result: string | null | undefined }):
 
 function ConfirmAccountChange({
   action,
+  acceptedMethods,
+  signInMethod,
   isForThisAccount,
   isPending,
+  onSignIn,
   onConfirm,
   onCancel,
 }: {
   action: "delete" | "restore";
+  acceptedMethods: readonly SignInMethod[];
+  signInMethod: SignInMethod | undefined;
   isForThisAccount: boolean;
   isPending: boolean;
+  onSignIn: (method: SignInMethod) => void;
   onConfirm: () => void;
   onCancel: () => void;
 }): React.ReactNode {
+  const change = action === "delete" ? "account deletion" : "account recovery";
   return (
     <section aria-label="Confirm account change">
-      <p>
-        After signing in again with the same Google account, confirm{" "}
-        {action === "delete" ? "account deletion" : "account recovery"}.
-      </p>
-      <DSButton disabled={isPending || !isForThisAccount} onClick={onConfirm}>
-        {action === "delete" ? "Schedule deletion" : "Confirm recovery"}
-      </DSButton>
+      {signInMethod === undefined ? (
+        <>
+          <p>Sign in again to confirm {change}.</p>
+          <SignInButtons
+            signInMethods={SIGN_IN_METHOD_ORDER.filter((method) =>
+              acceptedMethods.includes(method),
+            )}
+            pendingMethod={undefined}
+            onSignIn={onSignIn}
+          />
+          {action === "delete" && acceptedMethods.includes("apple") && (
+            <p>
+              Can&apos;t sign in with Apple? Email{" "}
+              <a href="mailto:support@cup.audio">support@cup.audio</a>.
+            </p>
+          )}
+        </>
+      ) : (
+        <>
+          <p>
+            After signing in again with the same {signInMethod === "apple" ? "Apple" : "Google"}{" "}
+            account, confirm {change}.
+          </p>
+          <DSButton disabled={isPending || !isForThisAccount} onClick={onConfirm}>
+            {action === "delete" ? "Schedule deletion" : "Confirm recovery"}
+          </DSButton>
+        </>
+      )}
       <DSButton disabled={isPending} onClick={onCancel}>
         Cancel
       </DSButton>

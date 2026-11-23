@@ -1,7 +1,9 @@
 import crypto from "node:crypto";
 import { setTimeout } from "node:timers/promises";
+import { Temporal } from "temporal-polyfill";
 import { afterAll, beforeAll, expect, test } from "vitest";
 
+import { APPLE_SIGN_IN_KEY } from "#src/apple-sign-in-key.ts";
 import { startAuthProvider, TEST_ACCOUNT, type AuthProvider } from "#src/auth-provider.ts";
 
 let sharedAuthProvider: AuthProvider | undefined;
@@ -273,6 +275,105 @@ test("an Apple sign-in through Hide My Email is a user of its own that the admin
   }
 });
 
+test("stands in for Apple: validates a web sign-in's refresh token with the linked Apple subject, then revokes it", async () => {
+  const authProvider = await startAuthProvider();
+  try {
+    const apple = await signInWithProvider("apple", authProvider.origin);
+    const refreshToken = apple.provider_refresh_token ?? "";
+    const user = await adminUser(authProvider.origin, String(claimsOf(apple.access_token)["sub"]));
+
+    const validated = await postToApple(authProvider.origin, "/auth/token", {
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+    });
+    expect(validated.status).toBe(200);
+    expect(claimsOf(await idTokenOf(validated))["sub"]).toBe(appleSubjectOf(user));
+    const revoked = await postToApple(authProvider.origin, "/auth/revoke", {
+      token: refreshToken,
+      token_type_hint: "refresh_token",
+    });
+    expect(revoked.status).toBe(200);
+
+    expect(authProvider.appleRequests()).toStrictEqual([
+      {
+        path: "/auth/token",
+        clientId: "audio.cup.app.web",
+        grantType: "refresh_token",
+        token: refreshToken,
+        atMs: expect.any(Number),
+      },
+      {
+        path: "/auth/revoke",
+        clientId: "audio.cup.app.web",
+        tokenTypeHint: "refresh_token",
+        token: refreshToken,
+        atMs: expect.any(Number),
+      },
+    ]);
+    const afterRevocation = await postToApple(authProvider.origin, "/auth/token", {
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+    });
+    expect(afterRevocation.status).toBe(400);
+  } finally {
+    await authProvider.close();
+  }
+});
+
+test("refuses Apple requests whose client secret the test Worker's key did not sign", async () => {
+  const authProvider = await startAuthProvider();
+  try {
+    const apple = await signInWithProvider("apple", authProvider.origin);
+    const forgedKey = crypto.generateKeyPairSync("ec", { namedCurve: "prime256v1" }).privateKey;
+
+    const response = await postToApple(
+      authProvider.origin,
+      "/auth/token",
+      { grant_type: "refresh_token", refresh_token: apple.provider_refresh_token ?? "" },
+      forgedKey,
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toStrictEqual({ error: "invalid_client" });
+  } finally {
+    await authProvider.close();
+  }
+});
+
+test("lets a test make Apple fail a step or answer with another Apple Account's subject", async () => {
+  const authProvider = await startAuthProvider();
+  try {
+    const apple = await signInWithProvider("apple", authProvider.origin);
+    const validate = () =>
+      postToApple(authProvider.origin, "/auth/token", {
+        grant_type: "refresh_token",
+        refresh_token: apple.provider_refresh_token ?? "",
+      });
+    const revoke = () =>
+      postToApple(authProvider.origin, "/auth/revoke", {
+        token: apple.provider_refresh_token ?? "",
+        token_type_hint: "refresh_token",
+      });
+
+    authProvider.setAppleFailure("/auth/token");
+    expect((await validate()).status).toBe(400);
+    authProvider.setAppleFailure("/auth/revoke");
+    expect((await validate()).status).toBe(200);
+    expect((await revoke()).status).toBe(503);
+    authProvider.setAppleFailure(undefined);
+    authProvider.setAppleTokenSubject("000999.other-apple.0789");
+    expect(claimsOf(await idTokenOf(await validate()))["sub"]).toBe("000999.other-apple.0789");
+    expect(authProvider.appleRequests().map(({ path }) => path)).toStrictEqual([
+      "/auth/token",
+      "/auth/token",
+      "/auth/revoke",
+      "/auth/token",
+    ]);
+  } finally {
+    await authProvider.close();
+  }
+});
+
 test("issues access tokens for 300 seconds by default", async () => {
   const session = await signIn("pkce");
 
@@ -311,6 +412,66 @@ function authorize(
     code_challenge_method: "s256",
   }).toString();
   return fetch(url, { redirect: "manual" });
+}
+
+function encode(value: unknown): string {
+  return Buffer.from(JSON.stringify(value)).toString("base64url");
+}
+
+async function adminUser(origin: string, id: string): Promise<unknown> {
+  const response = await fetch(`${origin}/auth/v1/admin/users/${id}`, {
+    headers: { Authorization: "Bearer qa-admin" },
+  });
+  return response.json();
+}
+
+function appleSubjectOf(user: unknown): unknown {
+  if (!isRecord(user) || !Array.isArray(user["identities"])) {
+    throw new Error("The admin API returned no identities.");
+  }
+  const apple: unknown = user["identities"].find(
+    (identity: unknown) => isRecord(identity) && identity["provider"] === "apple",
+  );
+  return isRecord(apple) && isRecord(apple["identity_data"])
+    ? apple["identity_data"]["sub"]
+    : undefined;
+}
+
+async function idTokenOf(response: Response): Promise<string> {
+  const body: unknown = await response.json();
+  if (!isRecord(body) || typeof body["id_token"] !== "string") {
+    throw new Error("Apple returned no ID token.");
+  }
+  return body["id_token"];
+}
+
+function postToApple(
+  origin: string,
+  path: "/auth/token" | "/auth/revoke",
+  form: Record<string, string>,
+  key: crypto.KeyObject = crypto.createPrivateKey(APPLE_SIGN_IN_KEY.privateKey),
+): Promise<Response> {
+  const clientId = "audio.cup.app.web";
+  const now = Math.floor(Temporal.Now.instant().epochMilliseconds / 1000);
+  const message = `${encode({ alg: "ES256", kid: APPLE_SIGN_IN_KEY.keyId })}.${encode({
+    iss: APPLE_SIGN_IN_KEY.teamId,
+    aud: "https://appleid.apple.com",
+    sub: clientId,
+    iat: now,
+    exp: now + 300,
+  })}`;
+  const signature = crypto
+    .sign("sha256", Buffer.from(message), { key, dsaEncoding: "ieee-p1363" })
+    .toString("base64url");
+  return fetch(`${origin}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: `${message}.${signature}`,
+      ...form,
+    }),
+  });
 }
 
 function hashForPkce(verifier: string): string {

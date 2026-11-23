@@ -42,6 +42,7 @@ import {
 } from "@cup/telemetry.cloudflare";
 import { TELEMETRY_TUNNEL_PATH } from "@cup/telemetry.core";
 
+import { revokeVerifiedAppleRefreshToken } from "#src/adapters/apple-sign-in-revocation.ts";
 import { resolveConversionDispatch } from "#src/adapters/conversion-dispatch.ts";
 import { resolveConversionReader } from "#src/adapters/conversion-reader.ts";
 import { revokeVerifiedGoogleToken } from "#src/adapters/google-token-revocation.ts";
@@ -147,10 +148,46 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
         400,
       );
     }
+    const appleLinked = auth.identity.providers.includes("apple");
+    if (appleLinked) {
+      if (input.providerCredential?.provider !== "apple") {
+        return jsonError(
+          context.get("traceId"),
+          "fresh-auth-required",
+          "Confirm deletion with a fresh Apple sign-in.",
+          400,
+        );
+      }
+      const revocation = await revokeVerifiedAppleRefreshToken(
+        context.env,
+        auth.identity.subject,
+        input.providerCredential.refreshToken,
+      ).catch((error: unknown) => {
+        captureException(error);
+        return "failed" as const;
+      });
+      if (revocation === "failed") {
+        return jsonError(
+          context.get("traceId"),
+          "apple-confirmation-failed",
+          "Apple couldn't confirm the deletion. Your account is still active, and nothing will be deleted. Try again.",
+          503,
+        );
+      }
+      if (revocation === "mismatch") {
+        return jsonError(
+          context.get("traceId"),
+          "apple-account-mismatch",
+          "Use the Apple Account linked to this Cup account.",
+          409,
+        );
+      }
+    }
     const result = await auth.account.scheduleDeletion({
       challengeId: input.challengeId,
       authenticatedAtSeconds: auth.identity.authenticatedAtSeconds,
       email: auth.identity.email,
+      appleRevocation: appleLinked ? "revoked" : "unavailable",
     });
     if (result.result === "conflict") {
       return jsonError(

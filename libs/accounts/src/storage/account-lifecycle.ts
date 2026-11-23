@@ -20,7 +20,10 @@ export type DeletionAttempt = {
   scheduledAtMs: number;
   deadlineMs: number;
   state: "scheduled" | "restored" | "deleting" | "erased";
+  appleRevocation: AppleRevocation;
 };
+
+export type AppleRevocation = "unavailable" | "revoked" | "not-revoked";
 
 type StoredDeletionAttemptState = (typeof deletionAttempts.$inferSelect)["state"];
 
@@ -68,7 +71,12 @@ export class AccountLifecycle {
   }
 
   schedule(
-    input: { challengeId: string; authenticatedAtSeconds: number; email: string },
+    input: {
+      challengeId: string;
+      authenticatedAtSeconds: number;
+      email: string;
+      appleRevocation: AppleRevocation;
+    },
     nowMs = Temporal.Now.instant().epochMilliseconds,
   ) {
     z.email().parse(input.email);
@@ -89,6 +97,7 @@ export class AccountLifecycle {
         scheduledAtMs: nowMs,
         deadlineMs: nowMs + 7 * 24 * 60 * 60 * 1_000,
         state: "scheduled",
+        appleRevocation: input.appleRevocation,
       };
       this.database
         .insert(deletionAttempts)
@@ -233,4 +242,5 @@ export const deletionAttemptSchema = z.object({
   scheduledAtMs: z.number().int(),
   deadlineMs: z.number().int(),
   state: z.enum(["scheduled", "restored", "deleting", "erased"]),
+  appleRevocation: z.enum(["unavailable", "revoked", "not-revoked"]).default("unavailable"),
 });
