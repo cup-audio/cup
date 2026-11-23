@@ -22,11 +22,29 @@ export const signInWithGoogle =
 export const signInWithApple =
   platform === "android"
     ? android.signInWithApple
-    : platform === "web"
-      ? web.signInWithApple
-      : undefined;
+    : platform === "ios"
+      ? ios.signInWithApple
+      : platform === "web"
+        ? web.signInWithApple
+        : undefined;
 export const completePendingSignIn =
   platform === "android" ? android.completePendingSignIn : async () => {};
+export const takeCompletedAppleSignIn =
+  platform === "android"
+    ? android.takeCompletedAppleSignIn
+    : platform === "ios"
+      ? ios.takeCompletedAppleSignIn
+      : platform === "web"
+        ? web.takeCompletedAppleSignIn
+        : () => false;
+export const appleCredentialOf =
+  platform === "android"
+    ? android.appleCredentialOf
+    : platform === "ios"
+      ? ios.appleCredentialOf
+      : platform === "web"
+        ? web.appleCredentialOf
+        : () => undefined;
 export const watchAppState =
   platform === "android"
     ? android.watchAppState

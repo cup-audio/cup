@@ -172,6 +172,14 @@ Google Play shows a default icon until the store listing has one. `store-assets/
 
 After building, open `apps/mobile-app/ios/App/App.xcodeproj` in Xcode and choose a simulator or a device. The project uses Swift Package Manager, matching Content Relay. Both targets, `App` and `CupShare`, sign automatically with the Apple Developer team `4GQ2V3WJW8`, which owns both bundle identifiers; signing for a device or the App Store needs an Xcode account in that team.
 
+The `App` target carries the Sign in with Apple capability in every configuration: the tracked [`App/App.entitlements`](ios/App/App/App.entitlements), referenced by `CODE_SIGN_ENTITLEMENTS`, holds `com.apple.developer.applesignin`. `CupShare` has no entitlements. Automatic signing adds the capability to the App ID `audio.cup.app` in team `4GQ2V3WJW8`'s provisioning profiles. A developer outside that team builds for their own device by clearing the entitlement next to their own team, without changing the project:
+
+```sh
+xcodebuild -project App.xcodeproj -scheme App -destination 'generic/platform=iOS' DEVELOPMENT_TEAM=<team-id> CODE_SIGN_ENTITLEMENTS= build
+```
+
+Sign in with Apple doesn't work on such a build: Apple's sheet fails with its unknown error (1000), and Cup shows its ordinary "Apple sign-in could not be completed. Try again." Cup has no code that detects the missing entitlement. Simulator builds, the mobile E2E suite's included, keep the entitlement and need no override.
+
 The app's `Info.plist` names it Cup in both `CFBundleDisplayName`, shown under its icon, and `CFBundleName`, which iOS shows in system prompts such as the one before the sign-in sheet; the target and its product stay named `App`. It declares `ITSAppUsesNonExemptEncryption` as false, because Cup uses only the encryption iOS provides, such as HTTPS and the Keychain, so App Store Connect asks no export compliance question for an uploaded build.
 
 The [mobile E2E tests](../../qa/mobile-e2e/README.md) launch the debug build on their own simulator against a local test Worker; [automated and manual checks](#automated-and-manual-checks) lists what they cover.
@@ -200,9 +208,19 @@ As on Android, the second argument, `-cupTestSentryDsn <dsn>`, makes the debug b
 xcrun simctl launch <simulator> audio.cup.app -cupTestApiOrigin http://localhost:8787 -cupTestSentryDsn http://public@127.0.0.1:9000/2
 ```
 
+With the test origin, the debug build also replaces the [Apple sign-in plugin](#ios-sign-in) with a fake of the same JavaScript name (`FakeAppleSignInPlugin`, compiled only under `#if DEBUG`), as Android's debug build does for Google. Its `signIn` asks the test Worker's fake auth provider, found as the `supabaseUrl` of the Worker's auth configuration, for an Apple identity token carrying the hashed nonce it was given and an authorization code, so the web app's unchanged sign-in, the Keychain and the Worker's token check run without Apple. The boolean argument `-cupTestCancelAppleSignIn YES` makes the fake reject as if the person closed Apple's sheet:
+
+```sh
+xcrun simctl launch <simulator> audio.cup.app -cupTestApiOrigin http://localhost:8787 -cupTestCancelAppleSignIn YES
+```
+
+A debug build launched without the test origin keeps the real plugin.
+
 ### iOS sign-in
 
 The iOS app signs in with Google through Supabase's OAuth flow in an `ASWebAuthenticationSession`, a system browser sheet over Cup, not natively as on Android ([ADR 0019](../../docs/adr/0019-sign-in-on-ios-through-supabase-oauth-in-a-system-browser-sheet.md)). The app's own [`WebAuthenticationPlugin`](ios/App/App/WebAuthenticationPlugin.swift), registered in `MainViewController`, opens the authorization URL and returns the `audio.cup.app://auth/callback` URL the sheet ends at; the web app exchanges its code. Before the sheet opens, iOS asks whether Cup may use the auth provider's site to sign in. The plugin opens only HTTPS URLs; a debug build also opens `http://localhost`, the mobile E2E suite's fake auth provider. The Capacitor configuration leaves the Google sign-in plugin out of the iOS app.
+
+Sign in with Apple uses Apple's native sheet instead. The app's own [`AppleSignInPlugin`](ios/App/App/AppleSignInPlugin.swift), registered in `MainViewController` under the JavaScript name `AppleSignIn`, runs `ASAuthorizationAppleIDProvider` with the email scope and the hashed nonce the web app passes, and returns Apple's `identityToken` and `authorizationCode`. It rejects with `CANCELED` when the person closes the sheet, `IN_PROGRESS` while another request runs, and `FAILED` otherwise. The web app exchanges the identity token with Supabase and keeps the authorization code in memory, for the Worker to exchange and revoke when the sign-in confirms a deletion or lands in an account scheduled for deletion ([authentication](../../docs/architecture/authentication.md#sign-in-and-account-provisioning)). It needs the [entitlement](#ios).
 
 ## Safe area
 
@@ -296,7 +314,7 @@ The [mobile E2E tests](../../qa/mobile-e2e/README.md) run the debug build of eac
 - **iOS, telemetry**: against the test's Sentry stub, a shell JS error arrives through the telemetry tunnel without client IP headers, two native crashes arrive with the account ID as their user, two launches hold different installation IDs, and `Library/Caches/INSTALLATION` is an empty directory ([`test/ios/telemetry.test.ts`](../../qa/mobile-e2e/test/ios/telemetry.test.ts)).
 - **Both platforms, crash reports switch**: turning "Send crash reports" off in the account settings and restarting leaves no Sentry files on the device, and a native crash then sends nothing while JS errors still arrive.
 - **Android**: sign-in through the native adapter with a fake of the Google sign-in plugin, cancelling Google's real add-account screen, [Apple sign-in](#android-sign-in-with-apple) in Chrome's real browser tab against the fake auth provider: an immediate redirect, Back on Apple's page, and Android killing Cup while the page is open ([`test/android/apple-sign-in.test.ts`](../../qa/mobile-e2e/test/android/apple-sign-in.test.ts)), share intake through `ACTION_SEND` intents (signed in with Cup stopped or running, `&`, `+` and fragments, a URL inside text, and signed out), the back button, and [playback](#playback): no session before the first Play, then a foreground `mediaPlayback` service whose session shows the title, cover, whole duration and position; media keys and the notification's buttons and seek bar acting on the player, and its Close ending a playing session; a listen of about two minutes with the screen off and Cup unfrozen; a call and focus requests pausing and resuming it; failure paths: expired or refused track URLs ending the session, and a lost connection showing the playback error, reporting `ERROR` to the system and playing on after Play from the notification or the page; the lifecycle: a playing session surviving a swipe from recents and taken over on reopening, a swipe while paused, sign-out and hiding the media controls after the shortened grace ending it; and every case's saves arriving through the position URL, never from the page ([`test/android/playback.test.ts`](../../qa/mobile-e2e/test/android/playback.test.ts)).
-- **iOS**: sign-in through the real `ASWebAuthenticationSession` against the fake auth provider, share links starting a conversion when signed in and filling the landing page's start form and asking to sign in when signed out, each with Cup started by the link or running, sharing from Safari through the Share Sheet and `CupShare`, which starts Cup and, signed in, the conversion with no tap after **Cup**, and the audiobook page's sticky header staying below the status bar, at rest and scrolled, and the status bar backdrop on Recents ([`test/ios/safe-area.test.ts`](../../qa/mobile-e2e/test/ios/safe-area.test.ts)).
+- **iOS**: sign-in through the real `ASWebAuthenticationSession` against the fake auth provider, Sign in with Apple through the fake of the Apple sign-in plugin and closing its sheet ([`test/ios/apple-sign-in.test.ts`](../../qa/mobile-e2e/test/ios/apple-sign-in.test.ts)), share links starting a conversion when signed in and filling the landing page's start form and asking to sign in when signed out, each with Cup started by the link or running, sharing from Safari through the Share Sheet and `CupShare`, which starts Cup and, signed in, the conversion with no tap after **Cup**, and the audiobook page's sticky header staying below the status bar, at rest and scrolled, and the status bar backdrop on Recents ([`test/ios/safe-area.test.ts`](../../qa/mobile-e2e/test/ios/safe-area.test.ts)).
 
 The [iOS WebContent check](#ios-webcontent-check) stays a one-time manual check in the simulator.
 

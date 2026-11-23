@@ -115,6 +115,10 @@
     "CONVERSION_OWNER_LIMIT": "10",
     "SUPABASE_URL": "https://evwjipxgacwotgbmqtla.supabase.co",
     "APPLE_WEB_CLIENT_ID": "audio.cup.app.web",
+    "APPLE_NATIVE_CLIENT_ID": "audio.cup.app",
+    "APPLE_KEY_ID": "6Y358M9M9A",
+    "APPLE_TEAM_ID": "4GQ2V3WJW8",
+    "APPLE_ORIGIN": "https://appleid.apple.com",
     "RESEND_BASE_URL": "https://api.resend.com",
     "CLOUDFLARE_ACCOUNT_ID": "a7648178b6a63bb8a13f0c9de89d253f",
     "OPERATOR_ACCESS_ISSUER": "https://patricktree.cloudflareaccess.com",
@@ -136,6 +140,7 @@
       "GOOGLE_WEB_CLIENT_ID",
       "RESEND_API_KEY",
       "MEDIA_URL_SIGNING_KEY",
+      "APPLE_SIGN_IN_KEY",
     ],
   },
 }

@@ -1,12 +1,16 @@
 import { Temporal } from "temporal-polyfill";
 import { z } from "zod";
 
-import { deletionChallengeSchema } from "@cup/listener-api.routes";
+import { deletionChallengeSchema, signInMethodSchema } from "@cup/listener-api.routes";
 
 export const ACCOUNT_CONFIRMATION_STORAGE_KEY = "cup_account_confirmation";
-const challengeSchema = deletionChallengeSchema.extend({ action: z.enum(["delete", "restore"]) });
+const challengeSchema = deletionChallengeSchema.extend({
+  action: z.enum(["delete", "restore"]),
+  signInMethod: signInMethodSchema.optional(),
+});
+export type AccountChallenge = z.infer<typeof challengeSchema>;
 
-export function storeAccountChallenge(challenge: z.infer<typeof challengeSchema>) {
+export function storeAccountChallenge(challenge: AccountChallenge) {
   window.sessionStorage.setItem(ACCOUNT_CONFIRMATION_STORAGE_KEY, JSON.stringify(challenge));
 }
 

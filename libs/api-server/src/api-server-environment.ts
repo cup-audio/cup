@@ -11,6 +11,11 @@ export type ApiServerEnvironment = {
   SUPABASE_PUBLISHABLE_KEY: string;
   GOOGLE_WEB_CLIENT_ID: string;
   APPLE_WEB_CLIENT_ID: string;
+  APPLE_NATIVE_CLIENT_ID: string;
+  APPLE_KEY_ID: string;
+  APPLE_TEAM_ID: string;
+  APPLE_ORIGIN: string;
+  APPLE_SIGN_IN_KEY: string;
   SUPABASE_URL: string;
   SUPABASE_SECRET_KEY: string;
   MEDIA_URL_SIGNING_KEY: string;

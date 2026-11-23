@@ -258,9 +258,27 @@ pnpm operator account adjust-allowance "ACCOUNT_ID" \
 
 Reusing a request ID with a different amount or reason is rejected.
 
+### Delete the account of a listener who lost their Apple Account
+
+An account with an Apple identity confirms deletion only with a fresh Apple sign-in ([account deletion](../../docs/architecture/account-deletion.md#apple-revocation-before-scheduling)). A listener who can no longer sign in with Apple writes to `support@cup.audio`, and the operator schedules the deletion after an ownership check:
+
+1. Support asks the listener to write from, or reply to support at, the email address the account holds. That is often a Hide My Email relay address ending in `@privaterelay.appleid.com`; Cup's mail to it reaches the listener only while the relay forwards.
+2. In the Supabase dashboard, under **Authentication** > **Users**, find the user with that address and copy its user ID. Find that ID as `Subject` in `pnpm operator account list` and take its account ID.
+3. Only when the address the listener wrote from or replied from matches the account's address, schedule the deletion with that address:
+
+   ```sh
+   pnpm operator account delete-lost-apple-account "ACCOUNT_ID" \
+     --email "ADDRESS_THE_ACCOUNT_HOLDS" \
+     --yes
+   ```
+
+If the relay address no longer forwards, or the listener cannot write from the account's address, ownership can't be proven and the account stays.
+
+The Worker schedules the deletion exactly as self-service deletion does, with the same seven-day recovery period and the same scheduled-deletion notice to the account's address, but revokes nothing at Apple and records `appleRevocation: not-revoked`. The command prints the account ID, the attempt ID, the recovery deadline and the Apple revocation. It refuses an unknown account with `account-not-found`, an account without an Apple identity with `account-not-apple-linked` (its owner deletes it in the app), an address other than the one the account holds with `email-mismatch`, and an account already scheduled for deletion or being deleted with `account-not-active`. The address comparison ignores case and surrounding spaces. Follow the deletion with `pnpm operator account deletions`.
+
 ### List account deletions
 
-List unfinished deletion cleanup and completed deletion receipts. Each receipt records its notification outcomes:
+List unfinished deletion cleanup and completed deletion receipts. Each attempt shows its `googleRevocation` and `appleRevocation`, and each receipt records both and its notification outcomes:
 
 ```sh
 pnpm operator account deletions

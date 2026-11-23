@@ -1,15 +1,19 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Session, SupabaseClient } from "@supabase/supabase-js";
+
+import type { AppleProviderCredential } from "@cup/listener-api.routes";
 
 import type { GoogleSignInOptions } from "#src/platform/account-auth.js";
 import { reportFailure } from "#src/report-failure.js";
 
 const APPLE_SIGN_IN_MARKER_STORAGE_KEY = "cup_apple_sign_in_pending";
 
+let completedAppleSignIn = false;
+
 export async function initializeAuthStorage(
   storageKeys: readonly string[],
   report: typeof reportFailure = reportFailure,
 ) {
-  reportFailedAppleSignIn(report);
+  readAppleSignInReturn(report);
   const storage = window.localStorage;
   return {
     storage,
@@ -53,7 +57,19 @@ export async function signInWithApple(client: Pick<SupabaseClient, "auth">) {
   }
 }
 
-function reportFailedAppleSignIn(report: typeof reportFailure) {
+export function appleCredentialOf(session: Session): AppleProviderCredential | undefined {
+  return session.provider_refresh_token
+    ? { provider: "apple", refreshToken: session.provider_refresh_token }
+    : undefined;
+}
+
+export function takeCompletedAppleSignIn(): boolean {
+  const completed = completedAppleSignIn;
+  completedAppleSignIn = false;
+  return completed;
+}
+
+function readAppleSignInReturn(report: typeof reportFailure) {
   if (window.sessionStorage.getItem(APPLE_SIGN_IN_MARKER_STORAGE_KEY) === null) {
     return;
   }
@@ -62,6 +78,7 @@ function reportFailedAppleSignIn(report: typeof reportFailure) {
   const fragment = new URLSearchParams(window.location.hash.slice(1));
   const error = query.get("error") ?? fragment.get("error");
   if (error === null) {
+    completedAppleSignIn = query.has("code");
     return;
   }
   const errorCode = query.get("error_code") ?? fragment.get("error_code");

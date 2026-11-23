@@ -23,9 +23,9 @@ export class UserFacingError extends Error {
 
 export class SignInCancelledError extends UserFacingError {
   constructor({
-    cause,
     provider = "Google",
-  }: { cause?: unknown; provider?: "Google" | "Apple" } = {}) {
+    cause,
+  }: { provider?: "Apple" | "Google"; cause?: unknown } = {}) {
     super({ title: `${provider} sign-in was cancelled.`, cause });
     this.name = "SignInCancelledError";
   }

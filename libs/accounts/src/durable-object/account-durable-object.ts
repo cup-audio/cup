@@ -33,7 +33,11 @@ import type {
 } from "#src/domain/account-contracts.ts";
 import type { AccountRegistry } from "#src/durable-object/account-registry.ts";
 import { AccountArtifactWriters } from "#src/storage/account-artifact-writers.ts";
-import { AccountLifecycle, AccountLifecycleConflictError } from "#src/storage/account-lifecycle.ts";
+import {
+  AccountLifecycle,
+  AccountLifecycleConflictError,
+  type AppleRevocation,
+} from "#src/storage/account-lifecycle.ts";
 import { AccountSqlite } from "#src/storage/account-sqlite.ts";
 
 const USAGE_PUBLICATION_RETRY_MS = 60_000;
@@ -753,11 +757,26 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
     challengeId: string;
     authenticatedAtSeconds: number;
     email: string;
+    appleRevocation: AppleRevocation;
   }) {
     await this.ctx.storage.setAlarm(Temporal.Now.instant().epochMilliseconds + 60_000);
     let attempt;
     try {
       attempt = this.lifecycle.schedule(input);
+    } catch (error) {
+      if (error instanceof AccountLifecycleConflictError) {
+        return { result: "conflict" } as const;
+      }
+      throw error;
+    }
+    await this.reconcileLifecycle();
+    return { result: "scheduled", attempt } as const;
+  }
+  async scheduleOperatorDeletion(email: string) {
+    await this.ctx.storage.setAlarm(Temporal.Now.instant().epochMilliseconds + 60_000);
+    let attempt;
+    try {
+      attempt = this.lifecycle.scheduleByOperator(email);
     } catch (error) {
       if (error instanceof AccountLifecycleConflictError) {
         return { result: "conflict" } as const;

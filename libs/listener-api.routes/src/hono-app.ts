@@ -16,6 +16,7 @@ import {
   accountStartResponseSchema,
   deletionChallengeSchema,
   accountConfirmationSchema,
+  appleSignInRevocationSchema,
   browserMutationHeadersSchema,
   conversionParamsSchema,
   errorResponseSchema,
@@ -153,6 +154,29 @@ const restoreAccountRoute = createRoute({
       description: "Account restored.",
       content: { "application/json": { schema: accountSnapshotSchema } },
     },
+  },
+});
+const appleSignInRevocationRoute = createRoute({
+  method: "post",
+  path: "/api/account/apple-sign-in-revocation",
+  request: {
+    headers: routeBrowserMutationHeadersSchema,
+    body: {
+      required: true,
+      content: { "application/json": { schema: appleSignInRevocationSchema } },
+    },
+  },
+  responses: {
+    204: {
+      description:
+        "Handled. The Apple sign-in was revoked if the account is scheduled for deletion and the Apple Account matches; otherwise nothing happened.",
+    },
+    400: errorResponse("Invalid request."),
+    401: errorResponse("Sign in required."),
+    403: errorResponse("Access blocked."),
+    429: errorResponse("Rate limited."),
+    500: errorResponse("Operational error."),
+    503: errorResponse("Account setup unavailable."),
   },
 });
 const historyRoute = createRoute({
@@ -413,6 +437,7 @@ export type ListenerApiHandlers<Bindings extends object> = {
   deletionChallenge: ListenerApiRouteHandler<typeof deletionChallengeRoute, Bindings>;
   scheduleDeletion: ListenerApiRouteHandler<typeof scheduleDeletionRoute, Bindings>;
   restoreAccount: ListenerApiRouteHandler<typeof restoreAccountRoute, Bindings>;
+  revokeAppleSignIn: ListenerApiRouteHandler<typeof appleSignInRevocationRoute, Bindings>;
   health: ListenerApiRouteHandler<typeof healthRoute, Bindings>;
   authConfig: ListenerApiRouteHandler<typeof authConfigRoute, Bindings>;
   getHistory: ListenerApiRouteHandler<typeof historyRoute, Bindings>;
@@ -438,6 +463,7 @@ export function createListenerApi<Bindings extends object>(
     .openapi(deletionChallengeRoute, handlers.deletionChallenge)
     .openapi(scheduleDeletionRoute, handlers.scheduleDeletion)
     .openapi(restoreAccountRoute, handlers.restoreAccount)
+    .openapi(appleSignInRevocationRoute, handlers.revokeAppleSignIn)
     .openapi(healthRoute, handlers.health)
     .openapi(authConfigRoute, handlers.authConfig)
     .openapi(historyRoute, handlers.getHistory)
@@ -465,6 +491,7 @@ export function createListenerContractApp() {
     deletionChallenge: unavailable,
     scheduleDeletion: unavailable,
     restoreAccount: unavailable,
+    revokeAppleSignIn: unavailable,
     health: unavailable,
     authConfig: unavailable,
     getHistory: unavailable,

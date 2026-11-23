@@ -21,6 +21,20 @@ for (const state of [
   });
 }
 
+test("recovery of an account with Apple and Google offers one button per method, Apple first", async ({
+  mount,
+}) => {
+  const component = await mount("routes/account-recovery/ChooseRecoveryMethod");
+  const confirmation = component.getByRole("region", { name: "Confirm account change" });
+
+  await expect(confirmation.getByRole("button")).toHaveText([
+    "Continue with Apple",
+    "Continue with Google",
+    "Cancel",
+  ]);
+  await expect(confirmation.getByText("support@cup.audio")).toHaveCount(0);
+});
+
 test("the page shows no account chrome", async ({ mount, page }) => {
   const component = await mount("routes/account-recovery/SignedOut");
   await expect(component.getByRole("heading", { name: "Restore your account" })).toBeVisible();

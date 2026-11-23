@@ -80,12 +80,13 @@ test("an Apple sign-in asks Supabase for Apple's OAuth flow with the email scope
 test("after Apple's web flow, reports an error that Supabase's callback returns as a failure, once", async ({
   page,
 }) => {
-  const reports = await returnFromApple(page, {
+  const { reports, completedSignIns } = await returnFromApple(page, {
     error: "server_error",
     error_code: "unexpected_failure",
     error_description: "Unable to exchange external code",
   });
 
+  expect(completedSignIns).toEqual([false, false]);
   expect(reports).toEqual([
     [
       expect.stringContaining("Unable to exchange external code"),
@@ -97,16 +98,40 @@ test("after Apple's web flow, reports an error that Supabase's callback returns 
 test("after Apple's web flow, reports nothing when Supabase's callback returns a code", async ({
   page,
 }) => {
-  const reports = await returnFromApple(page, { code: "an authorization code" });
+  const { reports } = await returnFromApple(page, { code: "an authorization code" });
 
   expect(reports).toEqual([]);
+});
+
+test("after Apple's web flow returns a code, tells once that an Apple sign-in completed", async ({
+  page,
+}) => {
+  const { completedSignIns } = await returnFromApple(page, { code: "an authorization code" });
+
+  expect(completedSignIns).toEqual([true, false]);
+});
+
+test("a callback code without a pending Apple sign-in is no completed Apple sign-in", async ({
+  page,
+}) => {
+  await page.goto("?code=a-google-code");
+  const completedSignIn = await page.evaluate(async () => {
+    const modulePath = "/src/platform/account-auth.web.ts";
+    const { initializeAuthStorage, takeCompletedAppleSignIn } = await import(modulePath);
+    await initializeAuthStorage([], () => () => undefined);
+    return takeCompletedAppleSignIn();
+  });
+
+  expect(completedSignIn).toBe(false);
 });
 
 async function returnFromApple(page: Page, callbackParams: Record<string, string>) {
   await page.goto("");
   return page.evaluate(async (params) => {
     const modulePath = "/src/platform/account-auth.web.ts";
-    const { signInWithApple, initializeAuthStorage } = await import(modulePath);
+    const { signInWithApple, initializeAuthStorage, takeCompletedAppleSignIn } = await import(
+      modulePath
+    );
     const reports: unknown[] = [];
     const report = (message: string) => (error: unknown) => {
       reports.push([error instanceof Error ? error.message : error, message]);
@@ -118,7 +143,9 @@ async function returnFromApple(page: Page, callbackParams: Record<string, string
     }
     window.history.replaceState(null, "", url);
     await initializeAuthStorage([], report);
+    const completedSignIns = [takeCompletedAppleSignIn()];
     await initializeAuthStorage([], report);
-    return reports;
+    completedSignIns.push(takeCompletedAppleSignIn());
+    return { reports, completedSignIns };
   }, callbackParams);
 }

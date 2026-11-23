@@ -17,6 +17,11 @@ const BUNDLE_ID = "audio.cup.app";
 const SAFARI_BUNDLE_ID = "com.apple.mobilesafari";
 const API_ORIGIN_KEY = "cupTestApiOrigin";
 const SENTRY_DSN_KEY = "cupTestSentryDsn";
+const CANCEL_APPLE_SIGN_IN_KEY = "cupTestCancelAppleSignIn";
+
+export type IosLaunchArguments = LaunchArguments & {
+  readonly cancelAppleSignIn?: boolean;
+};
 const DEVICE_LOG_PREDICATE = [
   'process == "App"',
   'process == "CupShare"',
@@ -62,7 +67,7 @@ export class IosAppDevice implements AppDevice {
   private readonly target: IosTarget;
   private readonly driver: WebdriverIO.Browser;
   private readonly relays = new Map<number, LoopbackRelay>();
-  private lastLaunchArguments: LaunchArguments | undefined;
+  private lastLaunchArguments: IosLaunchArguments | undefined;
   private testStart: number | undefined;
 
   constructor(target: IosTarget, driver: WebdriverIO.Browser) {
@@ -84,7 +89,7 @@ export class IosAppDevice implements AppDevice {
     this.relays.delete(port);
   }
 
-  async launch(launchArguments: LaunchArguments): Promise<void> {
+  async launch(launchArguments: IosLaunchArguments): Promise<void> {
     this.lastLaunchArguments = launchArguments;
     await this.terminate();
     await this.driver.execute("mobile: launchApp", {
@@ -95,6 +100,9 @@ export class IosAppDevice implements AppDevice {
         ...(launchArguments.testSentryDsn === undefined
           ? []
           : [`-${SENTRY_DSN_KEY}`, launchArguments.testSentryDsn]),
+        ...(launchArguments.cancelAppleSignIn === true
+          ? [`-${CANCEL_APPLE_SIGN_IN_KEY}`, "YES"]
+          : []),
       ],
     });
   }

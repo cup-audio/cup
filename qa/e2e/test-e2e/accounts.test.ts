@@ -1,7 +1,7 @@
 import type { Page, Response } from "@playwright/test";
 import { Temporal } from "temporal-polyfill";
 
-import { accountSnapshotSchema } from "@cup/listener-api.routes";
+import { accountSnapshotSchema, scheduleDeletionResponseSchema } from "@cup/listener-api.routes";
 
 import { VISUAL_TAG } from "#test-e2e/browser-project-tags.ts";
 import { expect, test } from "#test-e2e/fixtures.ts";
@@ -144,15 +144,8 @@ test("an Apple sign-in with a Google user's email opens that account, and a Hide
   workerEnvironment,
 }) => {
   const { origin, authProvider } = workerEnvironment;
-  const signInFromLink = async (method: "Apple" | "Google") => {
-    await page.evaluate(() => localStorage.removeItem("cup_supabase_session"));
-    await page.goto(`${origin}/app/`);
-    await page.getByRole("link", { name: "Sign in", exact: true }).click();
-    await page
-      .getByRole("dialog", { name: "Sign in", exact: true })
-      .getByRole("button", { name: `Continue with ${method}`, exact: true })
-      .click();
-    await expect(page).toHaveURL(`${origin}/app/recent`);
+  const signInAs = async (method: "Apple" | "Google") => {
+    await signInFromLink(page, origin, method);
     return {
       accountId: (await readAccount(page, origin)).accountId,
       claims: claimsOf(await readAccessToken(page)),
@@ -160,10 +153,10 @@ test("an Apple sign-in with a Google user's email opens that account, and a Hide
   };
   await page.goto(`${origin}/app/`);
 
-  const google = await signInFromLink("Google");
-  const apple = await signInFromLink("Apple");
+  const google = await signInAs("Google");
+  const apple = await signInAs("Apple");
   authProvider.setAppleEmail("qa-relay@privaterelay.appleid.com");
-  const hideMyEmail = await signInFromLink("Apple");
+  const hideMyEmail = await signInAs("Apple");
 
   expect(apple.accountId).toBe(google.accountId);
   expect(apple.claims).toMatchObject({ app_metadata: { providers: ["google", "apple"] } });
@@ -521,6 +514,206 @@ test("a listener deletes a track from its detail view, and the duration it used 
   await expect(page.getByText("Track not found.")).toBeVisible();
   expect((await readAccount(page, origin)).balance.available).toBe(remainingAllowance);
 });
+
+test("an Apple-linked account confirms deletion with Apple, whose sign-in is revoked before the deletion is scheduled", async ({
+  page,
+  workerEnvironment,
+}) => {
+  const { origin, authProvider } = workerEnvironment;
+  await signInFromLink(page, origin, "Apple");
+  await page.goto(`${origin}/app/recent/account`);
+  await page.getByRole("button", { name: "Delete account…", exact: true }).click();
+  const confirmation = page.getByRole("region", { name: "Confirm account change" });
+  await expect(confirmation.getByRole("button")).toHaveText(["Continue with Apple", "Cancel"]);
+  await expect(confirmation.getByText("Can't sign in with Apple?")).toBeVisible();
+
+  await confirmation.getByRole("button", { name: "Continue with Apple", exact: true }).click();
+  await expect.poll(() => authProvider.exchanges()).toBe(2);
+  expect(authProvider.authorizationRequests().at(-1)).toMatchObject({ provider: "apple" });
+  const scheduled = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname === "/api/account/deletion",
+  );
+  await scheduleDeletion(page);
+  const response = await scheduled;
+  await expect(page).toHaveURL(`${origin}/app/`);
+
+  expect(response.status()).toBe(200);
+  const { recoveryDeadlineMs = 0 } = scheduleDeletionResponseSchema.parse(await response.json());
+  expect(recoveryDeadlineMs).toBeGreaterThan(0);
+  const appleRequests = authProvider.appleRequests();
+  expect(appleRequests.map(({ path, clientId }) => ({ path, clientId }))).toStrictEqual([
+    { path: "/auth/token", clientId: "audio.cup.app.web" },
+    { path: "/auth/revoke", clientId: "audio.cup.app.web" },
+  ]);
+  expect(appleRequests[1]?.token).toBe(appleRequests[0]?.token);
+  expect(appleRequests[1]?.atMs).toBeLessThanOrEqual(recoveryDeadlineMs - 7 * 86_400_000);
+});
+
+test("an Apple deletion confirmed with another Apple Account or failed at Apple keeps the account active", async ({
+  expectConsoleError,
+  page,
+  workerEnvironment,
+}) => {
+  const { origin, authProvider } = workerEnvironment;
+  await signInFromLink(page, origin, "Apple");
+  await page.goto(`${origin}/app/recent/account`);
+  const confirmWithApple = async () => {
+    await page.getByRole("button", { name: "Delete account…", exact: true }).click();
+    await page
+      .getByRole("region", { name: "Confirm account change" })
+      .getByRole("button", { name: "Continue with Apple", exact: true })
+      .click();
+    await scheduleDeletion(page);
+  };
+
+  authProvider.setAppleTokenSubject("000999.other-apple.0789");
+  await confirmWithApple();
+  await expect(page.getByRole("alert")).toHaveText(
+    "Use the Apple Account linked to this Cup account.",
+  );
+  authProvider.setAppleTokenSubject(undefined);
+  authProvider.setAppleFailure("/auth/revoke");
+  await confirmWithApple();
+  await expect(page.getByRole("alert")).toHaveText(
+    "Apple couldn't confirm the deletion. Your account is still active, and nothing will be deleted. Try again.",
+  );
+
+  expect((await readAccount(page, origin)).state).toBe("active");
+  expect(authProvider.appleRequests().map(({ path }) => path)).toStrictEqual([
+    "/auth/token",
+    "/auth/token",
+    "/auth/revoke",
+  ]);
+  expectConsoleError(/^Failed to load resource: the server responded with a status of 409/);
+  expectConsoleError(/^Failed to load resource: the server responded with a status of 503/);
+});
+
+test("an Apple-linked account scheduled for deletion is recovered with Apple, and again with Google", async ({
+  page,
+  workerEnvironment,
+}) => {
+  test.setTimeout(60_000);
+  const { origin, authProvider } = workerEnvironment;
+  await signInFromLink(page, origin, "Google");
+  await signInFromLink(page, origin, "Apple");
+  const deleteWithApple = async () => {
+    await page.goto(`${origin}/app/recent/account`);
+    await page.getByRole("button", { name: "Delete account…", exact: true }).click();
+    await page
+      .getByRole("region", { name: "Confirm account change" })
+      .getByRole("button", { name: "Continue with Apple", exact: true })
+      .click();
+    await scheduleDeletion(page);
+    await expect(page).toHaveURL(`${origin}/app/`);
+  };
+  const recoverWith = async (method: "Apple" | "Google") => {
+    await page.goto(`${origin}/app/account-recovery`);
+    await page.getByRole("button", { name: `Continue with ${method}`, exact: true }).click();
+    await page.getByRole("button", { name: "Restore account…", exact: true }).click();
+    const confirmation = page.getByRole("region", { name: "Confirm account change" });
+    await expect(confirmation.getByRole("button")).toHaveText([
+      "Continue with Apple",
+      "Continue with Google",
+      "Cancel",
+    ]);
+    await confirmation
+      .getByRole("button", { name: `Continue with ${method}`, exact: true })
+      .click();
+    const restored = page.waitForRequest(
+      (request) =>
+        request.method() === "POST" &&
+        new URL(request.url()).pathname === "/api/account/deletion/restore",
+    );
+    await page.getByRole("button", { name: "Confirm recovery", exact: true }).click();
+    await expect(
+      page.getByText(
+        "Your account is restored. Your existing minutes and conversions are available again.",
+      ),
+    ).toBeVisible();
+    return (await restored).postDataJSON();
+  };
+
+  await deleteWithApple();
+  expect(await recoverWith("Apple")).not.toHaveProperty("providerCredential");
+  expect((await readAccount(page, origin)).state).toBe("active");
+  await deleteWithApple();
+  await recoverWith("Google");
+
+  expect((await readAccount(page, origin)).state).toBe("active");
+  expect(
+    authProvider
+      .appleRequests()
+      .filter(({ path }) => path === "/auth/revoke")
+      .map(({ path }) => path),
+  ).toStrictEqual(["/auth/revoke", "/auth/revoke", "/auth/revoke", "/auth/revoke"]);
+});
+
+test("Apple sign-ins during the seven days are revoked at Apple, the one that confirms recovery too", async ({
+  page,
+  workerEnvironment,
+}) => {
+  test.setTimeout(60_000);
+  const { origin, authProvider } = workerEnvironment;
+  const revokedTokens = () =>
+    authProvider
+      .appleRequests()
+      .filter(({ path }) => path === "/auth/revoke")
+      .map(({ token }) => token);
+  await signInFromLink(page, origin, "Apple");
+  await page.goto(`${origin}/app/recent/account`);
+  await page.getByRole("button", { name: "Delete account…", exact: true }).click();
+  await page
+    .getByRole("region", { name: "Confirm account change" })
+    .getByRole("button", { name: "Continue with Apple", exact: true })
+    .click();
+  await scheduleDeletion(page);
+  await expect(page).toHaveURL(`${origin}/app/`);
+  expect(revokedTokens()).toHaveLength(1);
+
+  await page.goto(`${origin}/app/account-recovery`);
+  await page.getByRole("button", { name: "Continue with Apple", exact: true }).click();
+  await expect.poll(revokedTokens).toHaveLength(2);
+  expect((await readAccount(page, origin)).state).toBe("deletion_scheduled");
+
+  await page.getByRole("button", { name: "Restore account…", exact: true }).click();
+  await page
+    .getByRole("region", { name: "Confirm account change" })
+    .getByRole("button", { name: "Continue with Apple", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Confirm recovery", exact: true }).click();
+  await expect(
+    page.getByText(
+      "Your account is restored. Your existing minutes and conversions are available again.",
+    ),
+  ).toBeVisible();
+
+  expect((await readAccount(page, origin)).state).toBe("active");
+  const tokens = revokedTokens();
+  expect(new Set(tokens).size).toBe(3);
+  expect(
+    authProvider
+      .appleRequests()
+      .filter(({ token }) => token === tokens[2])
+      .map(({ path, clientId }) => ({ path, clientId })),
+  ).toStrictEqual([
+    { path: "/auth/token", clientId: "audio.cup.app.web" },
+    { path: "/auth/revoke", clientId: "audio.cup.app.web" },
+  ]);
+});
+
+async function signInFromLink(page: Page, origin: string, method: "Apple" | "Google") {
+  await page.goto(`${origin}/app/`);
+  await page.evaluate(() => localStorage.removeItem("cup_supabase_session"));
+  await page.reload();
+  await page.getByRole("link", { name: "Sign in", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "Sign in", exact: true })
+    .getByRole("button", { name: `Continue with ${method}`, exact: true })
+    .click();
+  await expect(page).toHaveURL(`${origin}/app/recent`);
+}
 
 async function scheduleDeletion(page: Page) {
   const confirm = page.getByRole("button", { name: "Schedule deletion", exact: true });

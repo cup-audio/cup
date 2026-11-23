@@ -213,6 +213,7 @@ test.each([
   ["active", ["test-account"], ["test-account"]],
   ["deletion_scheduled", ["test-account"], ["test-account"]],
   ["active", ["apple"], ["apple"]],
+  ["active", ["google", "apple"], ["apple"]],
   ["deletion_scheduled", ["google", "apple"], ["google", "apple"]],
 ])(
   "the challenge for a %s account linked to %j accepts %j",

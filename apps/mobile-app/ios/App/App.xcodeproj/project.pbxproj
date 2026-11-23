@@ -21,6 +21,8 @@
 		C0B000000000000000000004 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000000000000000000003 /* SceneDelegate.swift */; };
 		C0B000000000000000000006 /* WebAuthenticationPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000000000000000000005 /* WebAuthenticationPlugin.swift */; };
 		C0B000000000000000419002 /* CrashReportingPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000000000000000419001 /* CrashReportingPlugin.swift */; };
+		C0B000000000000000524002 /* AppleSignInPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000000000000000524001 /* AppleSignInPlugin.swift */; };
+		C0B000000000000000524004 /* FakeAppleSignInPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000000000000000524003 /* FakeAppleSignInPlugin.swift */; };
 		C0B000000000000000000008 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = C0B000000000000000000007 /* PrivacyInfo.xcprivacy */; };
 /* End PBXBuildFile section */
 
@@ -66,6 +68,9 @@
 		C0B000000000000000000003 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		C0B000000000000000000005 /* WebAuthenticationPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebAuthenticationPlugin.swift; sourceTree = "<group>"; };
 		C0B000000000000000419001 /* CrashReportingPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrashReportingPlugin.swift; sourceTree = "<group>"; };
+		C0B000000000000000524001 /* AppleSignInPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSignInPlugin.swift; sourceTree = "<group>"; };
+		C0B000000000000000524003 /* FakeAppleSignInPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeAppleSignInPlugin.swift; sourceTree = "<group>"; };
+		C0B000000000000000524005 /* App.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
 		C0B000000000000000000007 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -116,6 +121,9 @@
 				C0B000000000000000000003 /* SceneDelegate.swift */,
 				C0B000000000000000000005 /* WebAuthenticationPlugin.swift */,
 				C0B000000000000000419001 /* CrashReportingPlugin.swift */,
+				C0B000000000000000524001 /* AppleSignInPlugin.swift */,
+				C0B000000000000000524003 /* FakeAppleSignInPlugin.swift */,
+				C0B000000000000000524005 /* App.entitlements */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -242,6 +250,8 @@
 				C0B000000000000000000004 /* SceneDelegate.swift in Sources */,
 				C0B000000000000000000006 /* WebAuthenticationPlugin.swift in Sources */,
 				C0B000000000000000419002 /* CrashReportingPlugin.swift in Sources */,
+				C0B000000000000000524002 /* AppleSignInPlugin.swift in Sources */,
+				C0B000000000000000524004 /* FakeAppleSignInPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -397,6 +407,7 @@
 			baseConfigurationReference = 958DCC722DB07C7200EA8C5F /* debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 4GQ2V3WJW8;
@@ -420,6 +431,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 4GQ2V3WJW8;

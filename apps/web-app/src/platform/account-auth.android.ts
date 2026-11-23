@@ -8,9 +8,12 @@ import { AUTH_CALLBACK_URL, webAuthentication } from "#src/platform/web-authenti
 import { reportFailure } from "#src/report-failure.js";
 
 export { initializeAuthStorage, watchAppState } from "#src/platform/account-auth.native.js";
+export { appleCredentialOf } from "#src/platform/account-auth.web.js";
 
 const CANCELLATION_GRACE_PERIOD_MILLISECONDS = 3_000;
 const APPLE_SIGN_IN_FAILED = "Apple sign-in could not be completed. Try again.";
+
+let completedAppleSignIn = false;
 
 type ExchangingClient = { auth: Pick<SupabaseClient["auth"], "exchangeCodeForSession"> };
 
@@ -139,6 +142,13 @@ async function exchangeCallback(client: ExchangingClient, callbackUrl: string): 
   if (exchange.error) {
     throw exchange.error;
   }
+  completedAppleSignIn = true;
+}
+
+export function takeCompletedAppleSignIn(): boolean {
+  const completed = completedAppleSignIn;
+  completedAppleSignIn = false;
+  return completed;
 }
 
 function isCancelledAuthentication(error: unknown): boolean {

@@ -1,5 +1,6 @@
 import type {
   AccountConfirmationRequest,
+  AppleSignInRevocationRequest,
   AudiobookQuery,
   PlaybackPosition,
   ConversionParams,
@@ -132,6 +133,13 @@ export class AuthenticatedRpcClient {
 
   async restoreAccount(input: AccountConfirmationRequest) {
     return this.#honoClient.api.account.deletion.restore.$post(
+      { json: input, header: browserHeaders() },
+      this.#options(),
+    );
+  }
+
+  async revokeAppleSignIn(input: AppleSignInRevocationRequest) {
+    return this.#honoClient.api.account["apple-sign-in-revocation"].$post(
       { json: input, header: browserHeaders() },
       this.#options(),
     );

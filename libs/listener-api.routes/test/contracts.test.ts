@@ -4,6 +4,7 @@ import {
   accountConfirmationSchema,
   accountHistorySchema,
   accountSnapshotSchema,
+  appleSignInRevocationSchema,
   audiobookQuerySchema,
   audiobookResponseSchema,
   audiobookSchema,
@@ -100,6 +101,34 @@ describe("listener API transport contracts", () => {
       },
     },
     {
+      name: "account confirmation with an Apple refresh token",
+      schema: accountConfirmationSchema,
+      request: {
+        challengeId: UUID,
+        providerCredential: { provider: "apple", refreshToken: "apple-refresh-token" },
+      },
+    },
+    {
+      name: "account confirmation with an Apple authorization code",
+      schema: accountConfirmationSchema,
+      request: {
+        challengeId: UUID,
+        providerCredential: { provider: "apple", authorizationCode: "apple-authorization-code" },
+      },
+    },
+    {
+      name: "Apple sign-in revocation",
+      schema: appleSignInRevocationSchema,
+      request: { providerCredential: { provider: "apple", refreshToken: "apple-refresh-token" } },
+    },
+    {
+      name: "Apple sign-in revocation with an authorization code",
+      schema: appleSignInRevocationSchema,
+      request: {
+        providerCredential: { provider: "apple", authorizationCode: "apple-authorization-code" },
+      },
+    },
+    {
       name: "playback position",
       schema: playbackPositionSchema,
       request: { synchronizationUnitId: "one", offsetMilliseconds: 0 },
@@ -117,9 +146,20 @@ describe("listener API transport contracts", () => {
     [startConversionRequestSchema, { extra: true }],
     [accountConfirmationSchema, { providerToken: "token" }],
     [accountConfirmationSchema, { challengeId: UUID, providerCredential: { provider: "google" } }],
+    [accountConfirmationSchema, { challengeId: UUID, providerCredential: { provider: "apple" } }],
     [
       accountConfirmationSchema,
       { challengeId: UUID, providerCredential: { provider: "github", accessToken: "token" } },
+    ],
+    [appleSignInRevocationSchema, {}],
+    [appleSignInRevocationSchema, { providerCredential: { provider: "apple" } }],
+    [
+      appleSignInRevocationSchema,
+      { providerCredential: { provider: "apple", authorizationCode: "" } },
+    ],
+    [
+      appleSignInRevocationSchema,
+      { providerCredential: { provider: "google", accessToken: "token" } },
     ],
     [
       deletionChallengeSchema,

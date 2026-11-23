@@ -24,6 +24,7 @@ export const TEST_SECRETS = {
   GOOGLE_WEB_CLIENT_ID: "test-google-web-client-id",
   RESEND_API_KEY: "test-resend-api-key",
   MEDIA_URL_SIGNING_KEY: "test-media-url-signing-key",
+  APPLE_SIGN_IN_KEY: "test-apple-sign-in-key",
 } as const;
 
 export async function useWorker({

@@ -33,6 +33,7 @@ import {
   type InspectAccountResponse,
   type ListAccountDeletionsResponse,
   type OperatorApiHandlers,
+  type ScheduleLostAppleAccountDeletionResponse,
 } from "@cup/operator-api.routes";
 import type { RegistryDurableObject } from "@cup/registry";
 import {
@@ -42,10 +43,12 @@ import {
 } from "@cup/telemetry.cloudflare";
 import { TELEMETRY_TUNNEL_PATH } from "@cup/telemetry.core";
 
+import { revokeVerifiedAppleCredential } from "#src/adapters/apple-sign-in-revocation.ts";
 import { resolveConversionDispatch } from "#src/adapters/conversion-dispatch.ts";
 import { resolveConversionReader } from "#src/adapters/conversion-reader.ts";
 import { revokeVerifiedGoogleToken } from "#src/adapters/google-token-revocation.ts";
 import { createNarrationSourceMaterialReader } from "#src/adapters/narration-source-material-reader.ts";
+import { readSupabaseUser } from "#src/adapters/supabase-user.ts";
 import type { ApiServerEnvironment } from "#src/api-server-environment.ts";
 import { authenticateAccountRequest, localTestAccount } from "#src/http/account-auth.ts";
 import { APPLICATION_ORIGIN, routeApplicationDomain } from "#src/http/domain-routing.ts";
@@ -147,10 +150,46 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
         400,
       );
     }
+    const appleLinked = auth.identity.providers.includes("apple");
+    if (appleLinked) {
+      if (input.providerCredential?.provider !== "apple") {
+        return jsonError(
+          context.get("traceId"),
+          "fresh-auth-required",
+          "Confirm deletion with a fresh Apple sign-in.",
+          400,
+        );
+      }
+      const revocation = await revokeVerifiedAppleCredential(
+        context.env,
+        auth.identity.subject,
+        input.providerCredential,
+      ).catch((error: unknown) => {
+        captureException(error);
+        return "failed" as const;
+      });
+      if (revocation === "failed") {
+        return jsonError(
+          context.get("traceId"),
+          "apple-confirmation-failed",
+          "Apple couldn't confirm the deletion. Your account is still active, and nothing will be deleted. Try again.",
+          503,
+        );
+      }
+      if (revocation === "mismatch") {
+        return jsonError(
+          context.get("traceId"),
+          "apple-account-mismatch",
+          "Use the Apple Account linked to this Cup account.",
+          409,
+        );
+      }
+    }
     const result = await auth.account.scheduleDeletion({
       challengeId: input.challengeId,
       authenticatedAtSeconds: auth.identity.authenticatedAtSeconds,
       email: auth.identity.email,
+      appleRevocation: appleLinked ? "revoked" : "unavailable",
     });
     if (result.result === "conflict") {
       return jsonError(
@@ -215,6 +254,26 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
       );
     }
     return context.json(toAccountSnapshotResponse(result.account), 200);
+  },
+  async revokeAppleSignIn(context) {
+    const auth = await authenticateAccountRequest(context.req.raw, context.env);
+    if (auth.result !== "authenticated") {
+      return accountAuthError(auth.result, context.get("traceId"));
+    }
+    const { providerCredential } = context.req.valid("json");
+    if (
+      (auth.snapshot.state === "deletion_scheduled" || auth.snapshot.state === "deleting") &&
+      auth.identity.providers.includes("apple")
+    ) {
+      await revokeVerifiedAppleCredential(
+        context.env,
+        auth.identity.subject,
+        providerCredential,
+      ).catch((error: unknown) => {
+        captureException(error);
+      });
+    }
+    return context.body(null, 204);
   },
   health(context) {
     return context.json({ status: "ok" as const }, 200);
@@ -903,6 +962,50 @@ const operatorApiHandlers: OperatorApiHandlers<ApiServerEnvironment> = {
       200,
     );
   },
+  async scheduleLostAppleAccountDeletion(context) {
+    const { accountId } = context.req.valid("param");
+    const { email } = context.req.valid("json");
+    const identity = await getRegistryStub(context.env).findAccount(accountId);
+    if (identity === undefined) {
+      return jsonError(context.get("traceId"), "account-not-found", "Account not found.", 404);
+    }
+    const user = await readSupabaseUser(context.env, identity.subject);
+    if (!user.providers.includes("apple")) {
+      return jsonError(
+        context.get("traceId"),
+        "account-not-apple-linked",
+        "The account has no Apple identity; its owner confirms deletion in the app.",
+        409,
+      );
+    }
+    if (user.email !== email) {
+      return jsonError(
+        context.get("traceId"),
+        "email-mismatch",
+        "The email address is not the one the account holds.",
+        409,
+      );
+    }
+    const account = context.env.ACCOUNTS.get(context.env.ACCOUNTS.idFromName(accountId));
+    const result = await account.scheduleOperatorDeletion(user.email);
+    if (result.result === "conflict") {
+      return jsonError(
+        context.get("traceId"),
+        "account-not-active",
+        "The account is already scheduled for deletion or being deleted.",
+        409,
+      );
+    }
+    return context.json(
+      {
+        accountId,
+        attemptId: result.attempt.attemptId,
+        recoveryDeadlineMs: result.attempt.deadlineMs,
+        appleRevocation: "not-revoked",
+      } satisfies ScheduleLostAppleAccountDeletionResponse,
+      200,
+    );
+  },
   async inspectAccount(context) {
     const { accountId } = context.req.valid("param");
     const account = context.env.ACCOUNTS.get(context.env.ACCOUNTS.idFromName(accountId));
@@ -1497,6 +1600,7 @@ export function createApiServer(dependencies: ApiServerDependencies = production
 
   app.use("/api/account/deletion", validateAccountLifecycleRequest);
   app.use("/api/account/deletion/*", validateAccountLifecycleRequest);
+  app.use("/api/account/apple-sign-in-revocation", validateAccountLifecycleRequest);
 
   return app
     .route("/", createListenerApi(listenerApiHandlers))

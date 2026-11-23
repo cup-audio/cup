@@ -429,4 +429,48 @@ test("a callback Android delivered while Cup was not running is exchanged on sta
   expect(exchanges).toEqual([
     { code: "the-delivered-code", pendingConversion: "the submitted request" },
   ]);
+  expect(await takeCompletedAppleSignIn(page)).toEqual([true, false]);
 });
+
+test("a completed Apple sign-in is reported once, with Apple's refresh token as its credential", async ({
+  page,
+}) => {
+  await startAppleSignIn(page);
+  expect(await takeCompletedAppleSignIn(page)).toEqual([false, false]);
+
+  await finishAuthentication(page, { url: "audio.cup.app://auth/callback?code=the-code" });
+  await expect
+    .poll(() => appleSignInRecord(page).then((record) => record.outcome))
+    .toEqual({ status: "resolved" });
+
+  expect(await takeCompletedAppleSignIn(page)).toEqual([true, false]);
+  expect(
+    await page.evaluate(async () => {
+      const modulePath = "/src/platform/account-auth.android.ts";
+      const { appleCredentialOf } = await import(modulePath);
+      return [
+        appleCredentialOf({ provider_refresh_token: "the-apple-refresh-token" }),
+        appleCredentialOf({}),
+      ];
+    }),
+  ).toEqual([{ provider: "apple", refreshToken: "the-apple-refresh-token" }, undefined]);
+});
+
+test("a cancelled Apple sign-in is not reported as completed", async ({ page }) => {
+  await startAppleSignIn(page);
+
+  await finishAuthentication(page, { code: "CANCELED", message: "Sign-in was cancelled." });
+  await expect
+    .poll(() => appleSignInRecord(page).then((record) => record.outcome?.status))
+    .toBe("rejected");
+
+  expect(await takeCompletedAppleSignIn(page)).toEqual([false, false]);
+});
+
+function takeCompletedAppleSignIn(page: Page): Promise<boolean[]> {
+  return page.evaluate(async () => {
+    const modulePath = "/src/platform/account-auth.android.ts";
+    const module = await import(modulePath);
+    return [module.takeCompletedAppleSignIn(), module.takeCompletedAppleSignIn()];
+  });
+}
