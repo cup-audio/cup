@@ -1,5 +1,9 @@
 import React from "react";
 
+import {
+  PrototypeSignInButtons,
+  usePrototypeSignInParams,
+} from "#src/app/components/sign-in-buttons.prototype.js";
 import { DSButton } from "#src/app/design-system/button.js";
 import { DSDialog, type DSDialogProps } from "#src/app/design-system/dialog.js";
 import type { SignInMethod } from "#src/auth/account-session.js";
@@ -63,6 +67,17 @@ export function SignInButtons({
 }: Pick<SignInDialogProps, "signInMethods" | "pendingMethod" | "onSignIn"> & {
   refs?: { firstButton?: React.Ref<HTMLButtonElement> | undefined };
 }): React.JSX.Element {
+  const prototypeParams = usePrototypeSignInParams();
+  if (prototypeParams) {
+    return (
+      <PrototypeSignInButtons
+        params={prototypeParams}
+        pendingMethod={pendingMethod}
+        onSignIn={onSignIn}
+      />
+    );
+  }
+
   return (
     <>
       {signInMethods.map((method, index) => (
