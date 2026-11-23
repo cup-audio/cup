@@ -106,13 +106,14 @@ type AppleSignInRecord = {
   oauthOptions?: unknown;
   authenticatedUrl?: unknown;
   authenticatedSessionStorage?: unknown;
+  authenticatedEphemeral?: unknown;
   exchangedCodes: string[];
   outcome?: { status: "resolved" } | { status: "rejected"; name: string; message: string };
 };
 
 type AuthenticationOutcome = { url: string } | { code: string; message: string };
 
-async function startAppleSignIn(page: Page): Promise<void> {
+async function startAppleSignIn(page: Page, { fresh = false } = {}): Promise<void> {
   await page.clock.install();
   await page.addInitScript(() => {
     const appStateListeners: Array<(state: { isActive: boolean }) => void> = [];
@@ -164,7 +165,7 @@ async function startAppleSignIn(page: Page): Promise<void> {
         nativePromise: async (
           plugin: string,
           method: string,
-          options: { url: string; sessionStorage?: string },
+          options: { url: string; sessionStorage?: string; ephemeral?: boolean },
         ) => {
           if (plugin === "App") {
             return method === "getState" ? { isActive: true } : {};
@@ -175,6 +176,11 @@ async function startAppleSignIn(page: Page): Promise<void> {
               Reflect.get(window, "appleSignIn"),
               "authenticatedSessionStorage",
               options.sessionStorage,
+            );
+            Reflect.set(
+              Reflect.get(window, "appleSignIn"),
+              "authenticatedEphemeral",
+              options.ephemeral,
             );
             const outcome = await new Promise<{ url: string } | { error: Error }>((resolve) => {
               finish = resolve;
@@ -191,7 +197,7 @@ async function startAppleSignIn(page: Page): Promise<void> {
   });
   await page.goto("");
   await page.clock.pauseAt(Date.now() + 60_000);
-  await page.evaluate(() => {
+  await page.evaluate((isFresh) => {
     const record: AppleSignInRecord = Reflect.get(window, "appleSignIn");
     const client = {
       auth: {
@@ -212,7 +218,7 @@ async function startAppleSignIn(page: Page): Promise<void> {
     const signIn = async () => {
       try {
         const { signInWithApple } = await import(modulePath);
-        await signInWithApple(client);
+        await signInWithApple(client, { fresh: isFresh });
         record.outcome = { status: "resolved" };
       } catch (error) {
         record.outcome = {
@@ -223,7 +229,7 @@ async function startAppleSignIn(page: Page): Promise<void> {
       }
     };
     void signIn();
-  });
+  }, fresh);
   await expect
     .poll(() => appleSignInRecord(page).then((record) => record.authenticatedUrl))
     .toBe("https://auth.example.test/auth/v1/authorize?provider=apple");
@@ -264,9 +270,18 @@ test("Apple sign-in runs Supabase's Apple OAuth in a browser tab and exchanges t
       },
       authenticatedUrl: "https://auth.example.test/auth/v1/authorize?provider=apple",
       authenticatedSessionStorage: "{}",
+      authenticatedEphemeral: false,
       exchangedCodes: ["the-code"],
       outcome: { status: "resolved" },
     });
+});
+
+test("a fresh Apple sign-in, as the deletion confirmation asks for, opens an ephemeral browser tab", async ({
+  page,
+}) => {
+  await startAppleSignIn(page, { fresh: true });
+
+  expect((await appleSignInRecord(page)).authenticatedEphemeral).toBe(true);
 });
 
 test("cancelling the Auth Tab ends Apple sign-in as a cancellation", async ({ page }) => {

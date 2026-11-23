@@ -5,6 +5,7 @@ import * as ios from "#src/platform/account-auth.ios.js";
 import * as web from "#src/platform/account-auth.web.js";
 
 export type GoogleSignInOptions = { fresh: boolean; chooseAccount: boolean };
+export type AppleSignInOptions = { fresh: boolean };
 
 const platform = Capacitor.getPlatform();
 export const initializeAuthStorage =

@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
 import { SignInCancelledError, UserFacingError } from "#src/errors.js";
-import type { GoogleSignInOptions } from "#src/platform/account-auth.js";
+import type { AppleSignInOptions, GoogleSignInOptions } from "#src/platform/account-auth.js";
 import { watchAppState } from "#src/platform/account-auth.native.js";
 import { AUTH_CALLBACK_URL, webAuthentication } from "#src/platform/web-authentication.js";
 import { reportFailure } from "#src/report-failure.js";
@@ -17,9 +17,10 @@ let completedAppleSignIn = false;
 
 type ExchangingClient = { auth: Pick<SupabaseClient["auth"], "exchangeCodeForSession"> };
 
-export async function signInWithApple(client: {
-  auth: Pick<SupabaseClient["auth"], "signInWithOAuth" | "exchangeCodeForSession">;
-}) {
+export async function signInWithApple(
+  client: { auth: Pick<SupabaseClient["auth"], "signInWithOAuth" | "exchangeCodeForSession"> },
+  { fresh }: AppleSignInOptions,
+) {
   const authorization = await client.auth.signInWithOAuth({
     provider: "apple",
     options: { redirectTo: AUTH_CALLBACK_URL, skipBrowserRedirect: true, scopes: "email" },
@@ -28,7 +29,11 @@ export async function signInWithApple(client: {
     throw authorization.error;
   }
   const signedIn = webAuthentication
-    .authenticate({ url: authorization.data.url, sessionStorage: sessionStorageSnapshot() })
+    .authenticate({
+      url: authorization.data.url,
+      sessionStorage: sessionStorageSnapshot(),
+      ephemeral: fresh,
+    })
     .then(
       ({ url }) => exchangeCallback(client, url),
       (error: unknown) => {

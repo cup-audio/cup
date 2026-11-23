@@ -180,7 +180,7 @@ async function loadConnection(): Promise<AccountAuthConnection> {
         if (!signInWithApple) {
           throw new Error("Sign-in is temporarily unavailable.");
         }
-        await signInWithApple(client);
+        await signInWithApple(client, { fresh });
         return;
       }
       if (method === "google") {

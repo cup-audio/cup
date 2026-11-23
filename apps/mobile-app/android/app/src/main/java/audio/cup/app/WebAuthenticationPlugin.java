@@ -46,7 +46,8 @@ public class WebAuthenticationPlugin extends Plugin {
             return;
         }
         keepSessionStorage(call.getString(SESSION_STORAGE));
-        getActivity().runOnUiThread(() -> open(call, url));
+        boolean ephemeral = Boolean.TRUE.equals(call.getBoolean("ephemeral", false));
+        getActivity().runOnUiThread(() -> open(call, url, ephemeral));
     }
 
     @PluginMethod
@@ -90,7 +91,7 @@ public class WebAuthenticationPlugin extends Plugin {
         }
     }
 
-    private void open(PluginCall call, Uri url) {
+    private void open(PluginCall call, Uri url, boolean ephemeral) {
         if (customTabCall != null) {
             customTabCall.reject("Sign-in was cancelled.", "CANCELED");
             customTabCall = null;
@@ -98,7 +99,7 @@ public class WebAuthenticationPlugin extends Plugin {
         String browser = CustomTabsClient.getPackageName(getContext(), null);
         try {
             if (browser != null && CustomTabsClient.isAuthTabSupported(getContext(), browser)) {
-                Intent intent = new AuthTabIntent.Builder().build().intent;
+                Intent intent = new AuthTabIntent.Builder().setEphemeralBrowsingEnabled(ephemeral).build().intent;
                 intent.setPackage(browser);
                 intent.setData(url);
                 intent.putExtra(AuthTabIntent.EXTRA_REDIRECT_SCHEME, CALLBACK_SCHEME);
@@ -106,7 +107,7 @@ public class WebAuthenticationPlugin extends Plugin {
                 return;
             }
             customTabCall = call;
-            CustomTabsIntent customTab = new CustomTabsIntent.Builder().build();
+            CustomTabsIntent customTab = new CustomTabsIntent.Builder().setEphemeralBrowsingEnabled(ephemeral).build();
             if (browser != null) {
                 customTab.intent.setPackage(browser);
             }

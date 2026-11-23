@@ -2,7 +2,13 @@ import { expect, test } from "vitest";
 
 import { asAndroidAppDevice, type AndroidAppDevice } from "#src/android/android-app-device.ts";
 import { useMobileApp } from "#src/fixtures.ts";
-import { pathname, SOURCE_URL, startSignInFromLandingPage } from "#src/journeys.ts";
+import {
+  pathname,
+  SOURCE_URL,
+  startSignInFromLandingPage,
+  waitForLandingPage,
+  waitForRecents,
+} from "#src/journeys.ts";
 import { conversionStartsSince } from "#src/share-assertions.ts";
 
 const app = useMobileApp();
@@ -69,6 +75,97 @@ test("an Apple sign-in finishes and starts the submitted request when Android ki
   expect(app.authProvider.exchanges()).toBe(1);
   expect(conversionStartsSince(app.worker, 0)).toEqual([SOURCE_URL]);
 });
+
+test("confirms an Apple-linked deletion with Apple's refresh token from a fresh sign-in, which the Worker validates and revokes before scheduling", async () => {
+  const device = asAndroidAppDevice(app.device);
+  await device.launch({ apiOrigin: app.apiOrigin });
+  let webView = await device.webView();
+  await startSignInFromLandingPage(webView);
+  await webView.$("button=Continue with Apple").click();
+  await waitForStartedConversion(device);
+  webView = await device.webView();
+  await webView.$('a[aria-label="Back"]').click();
+  await waitForRecents(webView, 1);
+  await webView.$('a[aria-label="Account"]').click();
+  await webView.$("button=Delete account…").click();
+  const confirmation = webView.$('section[aria-label="Confirm account change"]');
+  const continueWithApple = confirmation.$("button=Continue with Apple");
+  await continueWithApple.waitForEnabled({ timeout: 30_000 });
+
+  await continueWithApple.click();
+  await expect
+    .poll(() => device.focusedPackage(), { timeout: 30_000, interval: 500 })
+    .toBe(APP_PACKAGE);
+  webView = await device.webView();
+  const scheduleDeletion = webView.$("button=Schedule deletion");
+  await scheduleDeletion.waitForEnabled({ timeout: 30_000 });
+  await scheduleDeletion.click();
+  await waitForLandingPage(webView);
+
+  expect(app.authProvider.exchanges()).toBe(2);
+  const deletions = app.worker
+    .requests()
+    .filter((request) => request.method === "POST" && request.path === "/api/account/deletion");
+  expect(deletions).toHaveLength(1);
+  const refreshToken = appleRefreshTokenOf(deletions[0]?.body);
+  const appleRequests = app.authProvider.appleRequests();
+  expect(
+    appleRequests.map(({ path, clientId, grantType, token }) => ({
+      path,
+      clientId,
+      grantType,
+      token,
+    })),
+  ).toStrictEqual([
+    {
+      path: "/auth/token",
+      clientId: "audio.cup.app.web",
+      grantType: "refresh_token",
+      token: refreshToken,
+    },
+    {
+      path: "/auth/revoke",
+      clientId: "audio.cup.app.web",
+      grantType: undefined,
+      token: refreshToken,
+    },
+  ]);
+  const account = await readAccount(deletions[0]?.headers["authorization"]);
+  expect(account["state"]).toBe("deletion_scheduled");
+  expect(appleRequests[1]?.atMs).toBeLessThanOrEqual(
+    Number(account["recoveryDeadlineMs"]) - 7 * 86_400_000,
+  );
+});
+
+function appleRefreshTokenOf(body: string | undefined): string {
+  const confirmation: unknown = JSON.parse(body ?? "{}");
+  const credential = isRecord(confirmation) ? confirmation["providerCredential"] : undefined;
+  if (
+    !isRecord(credential) ||
+    credential["provider"] !== "apple" ||
+    typeof credential["refreshToken"] !== "string" ||
+    "authorizationCode" in credential
+  ) {
+    throw new Error(`The deletion carried no Apple refresh token: ${String(body)}`);
+  }
+  return credential["refreshToken"];
+}
+
+async function readAccount(authorization: string | undefined): Promise<Record<string, unknown>> {
+  const response = await fetch(`${app.worker.origin}/api/account`, {
+    headers: { Authorization: authorization ?? "" },
+  });
+  expect(response.status).toBe(200);
+  const account: unknown = await response.json();
+  if (!isRecord(account)) {
+    throw new Error("The Worker answered no account.");
+  }
+  return account;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
 
 async function waitForStartedConversion(device: AndroidAppDevice): Promise<void> {
   await expect
