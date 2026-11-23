@@ -280,7 +280,7 @@ beforeEach(() => {
     identity: {
       subject,
       email: "listener@example.com",
-      provider: "google",
+      providers: ["google"],
       authenticatedAtSeconds: 10,
     },
     snapshot: { ...accountSnapshot, internalRevision: 7 },

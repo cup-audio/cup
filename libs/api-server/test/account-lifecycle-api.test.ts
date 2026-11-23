@@ -49,7 +49,7 @@ function authenticatedAs(identity: Record<string, unknown>) {
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.authenticate.mockResolvedValue(
-    authenticatedAs({ email: "user@example.com", provider: "google" }),
+    authenticatedAs({ email: "user@example.com", providers: ["google"] }),
   );
   account.scheduleDeletion.mockResolvedValue({
     result: "scheduled",
@@ -134,7 +134,10 @@ test.each(["", "/restore"])(
 test("revocation recording failure does not report invalid confirmation after scheduling", async () => {
   mocks.revoke.mockResolvedValue(true);
   recordGoogleRevocation.mockRejectedValue(new Error("Registry unavailable"));
-  const response = await request("", { challengeId, providerToken: "google-token" });
+  const response = await request("", {
+    challengeId,
+    providerCredential: { provider: "google", accessToken: "google-token" },
+  });
   expect(account.scheduleDeletion).toHaveBeenCalledOnce();
   expect(response.status).toBe(500);
   expect(await response.json()).toMatchObject({ error: { code: "operational-error" } });
@@ -142,16 +145,43 @@ test("revocation recording failure does not report invalid confirmation after sc
 
 test("provider revocation failure is recorded without failing deletion", async () => {
   mocks.revoke.mockRejectedValue(new Error("Google unavailable"));
-  const response = await request("", { challengeId, providerToken: "google-token" });
+  const response = await request("", {
+    challengeId,
+    providerCredential: { provider: "google", accessToken: "google-token" },
+  });
   expect(response.status).toBe(200);
   expect(recordGoogleRevocation).toHaveBeenCalledWith(challengeId, challengeId, "failed");
 });
 
+test("a Google credential is revoked after scheduling and the outcome recorded", async () => {
+  mocks.revoke.mockResolvedValue(true);
+  const response = await request("", {
+    challengeId,
+    providerCredential: { provider: "google", accessToken: "google-token" },
+  });
+  expect(response.status).toBe(200);
+  expect(mocks.revoke).toHaveBeenCalledWith(env, challengeId, "google-token");
+  expect(account.scheduleDeletion.mock.invocationCallOrder[0]).toBeLessThan(
+    mocks.revoke.mock.invocationCallOrder[0] ?? 0,
+  );
+  expect(recordGoogleRevocation).toHaveBeenCalledWith(challengeId, challengeId, "revoked");
+});
+
+test("the former providerToken field is ignored as an unknown key", async () => {
+  const response = await request("", { challengeId, providerToken: "google-token" });
+  expect(response.status).toBe(200);
+  expect(account.scheduleDeletion).toHaveBeenCalledOnce();
+  expect(mocks.revoke).not.toHaveBeenCalled();
+});
+
 test("the local test account never triggers Google token revocation", async () => {
   mocks.authenticate.mockResolvedValue(
-    authenticatedAs({ email: "test@cup.local", provider: "test-account" }),
+    authenticatedAs({ email: "test@cup.local", providers: ["test-account"] }),
   );
-  const response = await request("", { challengeId, providerToken: "google-token" });
+  const response = await request("", {
+    challengeId,
+    providerCredential: { provider: "google", accessToken: "google-token" },
+  });
   expect(response.status).toBe(200);
   expect(account.scheduleDeletion).toHaveBeenCalledOnce();
   expect(mocks.revoke).not.toHaveBeenCalled();
@@ -160,7 +190,11 @@ test("the local test account never triggers Google token revocation", async () =
 
 test.each(["", "/restore"])("%s requires fresh authentication", async (path) => {
   mocks.authenticate.mockResolvedValue(
-    authenticatedAs({ email: "user@example.com", provider: "google", authenticatedAtSeconds: 0 }),
+    authenticatedAs({
+      email: "user@example.com",
+      providers: ["google"],
+      authenticatedAtSeconds: 0,
+    }),
   );
   const response = await request(path);
   expect(response.status).toBe(400);
@@ -172,6 +206,36 @@ test("scheduled accounts retain explicit recovery access", async () => {
   expect(response.status).toBe(200);
   expect(account.restoreAccount).toHaveBeenCalledWith(challengeId, 10);
 });
+
+test.each([
+  ["active", ["google"], ["google"]],
+  ["deletion_scheduled", ["google"], ["google"]],
+  ["active", ["test-account"], ["test-account"]],
+  ["deletion_scheduled", ["test-account"], ["test-account"]],
+])(
+  "the challenge for a %s account linked to %j accepts %j",
+  async (state, providers, acceptedMethods) => {
+    mocks.authenticate.mockResolvedValue({
+      ...authenticatedAs({ email: "user@example.com", providers }),
+      snapshot: { state },
+    });
+    account.deletionChallenge.mockResolvedValue({
+      challengeId,
+      subject: challengeId,
+      issuedAtMs: 1,
+      expiresAtMs: 2,
+    });
+    const response = await request("/challenge", {});
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      challengeId,
+      subject: challengeId,
+      issuedAtMs: 1,
+      expiresAtMs: 2,
+      acceptedMethods,
+    });
+  },
+);
 
 test("lifecycle requests preserve the native origin exception and reject other origins", async () => {
   expect((await request("", { challengeId }, { Origin: "https://localhost" })).status).toBe(200);

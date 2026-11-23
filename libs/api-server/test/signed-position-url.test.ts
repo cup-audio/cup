@@ -145,7 +145,7 @@ async function createAccessToken() {
   return new SignJWT({
     role: "authenticated",
     is_anonymous: false,
-    app_metadata: { provider: "google" },
+    app_metadata: { provider: "google", providers: ["google"] },
   })
     .setProtectedHeader({ alg: "ES256", kid: "signed-position-url" })
     .setSubject(subject)

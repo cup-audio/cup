@@ -29,7 +29,7 @@ async function fixture(owner = accountId, state = "active") {
   const token = await new SignJWT({
     role: "authenticated",
     is_anonymous: false,
-    app_metadata: { provider: "google" },
+    app_metadata: { provider: "google", providers: ["google"] },
   })
     .setProtectedHeader({ alg: "ES256", kid: "private-access" })
     .setSubject(subject)

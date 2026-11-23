@@ -44,7 +44,7 @@ export function useAccountConfirmation(subject: string) {
         if (!isSignedInAs(subject)) {
           throw new UserFacingError({ title: "Use the same Google account." });
         }
-        await signInAgain();
+        await signInAgain(issued.acceptedMethods[0] ?? "google");
         return null;
       }
 
@@ -60,7 +60,14 @@ export function useAccountConfirmation(subject: string) {
       }
       const input = {
         challengeId: pending.challengeId,
-        ...(session.provider_token ? { providerToken: session.provider_token } : {}),
+        ...(session.provider_token
+          ? {
+              providerCredential: {
+                provider: "google" as const,
+                accessToken: session.provider_token,
+              },
+            }
+          : {}),
       };
       if (pending.action === "delete") {
         await requestApi({ subject }, (client) => client.scheduleDeletion(input));

@@ -1,6 +1,8 @@
 import { captureException } from "@sentry/core";
 import { createRemoteJWKSet, errors, jwtVerify } from "jose";
-import type { JWTVerifyGetKey } from "jose";
+import type { JWTPayload, JWTVerifyGetKey } from "jose";
+
+import type { SignInMethod } from "@cup/listener-api.routes";
 
 import type { ApiServerEnvironment } from "#src/api-server-environment.ts";
 import { ingressIdentity } from "#src/http/ingress-identity.ts";
@@ -48,17 +50,11 @@ export async function verifyAccountToken(
   ) {
     throw new errors.JWTClaimValidationFailed("Invalid account identity", payload);
   }
-  const metadata = payload["app_metadata"];
-  const provider =
-    !!metadata && typeof metadata === "object" && "provider" in metadata
-      ? metadata.provider
-      : undefined;
-  const isTestAccount =
-    testAccountEmail !== undefined && provider === "email" && payload["email"] === testAccountEmail;
-  if (provider !== "google" && !isTestAccount) {
+  const providers = admittedProviders(payload, testAccountEmail);
+  if (providers.length === 0) {
     throw new errors.JWTClaimValidationFailed("Unsupported sign-in provider", payload);
   }
-  const freshMethods = isTestAccount ? ["password"] : ["oauth", "id_token"];
+  const freshMethods = providers.includes("test-account") ? ["password"] : ["oauth", "id_token"];
   const amr = payload["amr"];
   const authenticatedAtSeconds = Array.isArray(amr)
     ? Math.max(
@@ -79,13 +75,36 @@ export async function verifyAccountToken(
       )
     : 0;
   return {
-    provider: isTestAccount ? ("test-account" as const) : ("google" as const),
+    providers,
     subject: payload.sub,
     issuedAt: payload.iat,
     expiresAt: payload.exp,
     authenticatedAtSeconds,
     email: typeof payload["email"] === "string" ? payload["email"] : undefined,
   };
+}
+
+function admittedProviders(
+  payload: JWTPayload,
+  testAccountEmail: string | undefined,
+): SignInMethod[] {
+  const metadata = payload["app_metadata"];
+  if (!metadata || typeof metadata !== "object") {
+    return [];
+  }
+  if (
+    testAccountEmail !== undefined &&
+    "provider" in metadata &&
+    metadata.provider === "email" &&
+    payload["email"] === testAccountEmail
+  ) {
+    return ["test-account"];
+  }
+  return "providers" in metadata &&
+    Array.isArray(metadata.providers) &&
+    metadata.providers.includes("google")
+    ? ["google"]
+    : [];
 }
 
 export async function authenticateAccountRequest(request: Request, env: ApiServerEnvironment) {
