@@ -18,6 +18,7 @@ export type AndroidLaunchArguments = LaunchArguments & {
 const APP_PACKAGE = "audio.cup.app";
 const MAIN_ACTIVITY = `${APP_PACKAGE}/.MainActivity`;
 const API_ORIGIN_EXTRA = "cupTestApiOrigin";
+const BACK_SETTLE_MS = 2_000;
 const REAL_GOOGLE_SIGN_IN_EXTRA = "cupTestRealGoogleSignIn";
 const SENTRY_DSN_EXTRA = "cupTestSentryDsn";
 const SIGNED_URL_LIFETIME_EXTRA = "cupTestSignedUrlLifetimeSeconds";
@@ -288,14 +289,17 @@ export class AndroidAppDevice implements AppDevice {
   }
 
   async pressBackUntilFocused(appPackage: string): Promise<void> {
+    let nextBackAtMs = 0;
     await waitFor(
       `${appPackage} in front after Back`,
       async () => {
         if ((await this.focusedPackage()) === appPackage) {
           return true;
         }
-        await this.pressBack();
-        await new Promise((resolve) => setTimeout(resolve, 2_000));
+        if (performance.now() >= nextBackAtMs) {
+          await this.pressBack();
+          nextBackAtMs = performance.now() + BACK_SETTLE_MS;
+        }
         return undefined;
       },
       30_000,

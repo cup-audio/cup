@@ -34,7 +34,7 @@ test("signs in with Apple through the native sheet's fake and opens the new audi
 
 test("closing Apple's sheet leaves the sign-in dialog open without an error", async () => {
   const device = asIosAppDevice(app.device);
-  await device.launch({ apiOrigin: app.apiOrigin, cancelAppleSignIn: true });
+  await device.launch({ apiOrigin: app.apiOrigin, shouldCancelAppleSignIn: true });
   const webView = await device.webView();
   await startSignInFromLandingPage(webView);
   const exchangesBefore = app.authProvider.exchanges();

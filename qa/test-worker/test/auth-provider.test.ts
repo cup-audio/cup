@@ -1,4 +1,6 @@
 import crypto from "node:crypto";
+import { once } from "node:events";
+import net from "node:net";
 import { setTimeout } from "node:timers/promises";
 import { Temporal } from "temporal-polyfill";
 import { afterAll, beforeAll, expect, test } from "vitest";
@@ -217,6 +219,27 @@ test("in hold mode, an authorization shows a page whose Continue link carries th
   } finally {
     await authProvider.close();
   }
+});
+
+test("closes while a browser still holds open connections to it", async () => {
+  const authProvider = await startAuthProvider();
+  authProvider.holdAuthorizations();
+  const { port } = new URL(authProvider.origin);
+  const idleSocket = net.connect(Number(port), "127.0.0.1");
+  await once(idleSocket, "connect");
+  const closedSocket = once(idleSocket, "close");
+  await authorize("audio.cup.app://auth/callback", hashForPkce("verifier"), {
+    provider: "apple",
+    origin: authProvider.origin,
+  });
+
+  const closed = await Promise.race([
+    authProvider.close().then(() => "closed"),
+    setTimeout(2_000, "still open"),
+  ]);
+
+  expect(closed).toBe("closed");
+  await closedSocket;
 });
 
 test("records the query parameters of every authorization request, in order", async () => {

@@ -600,7 +600,11 @@ function portOf(server: net.Server | undefined): number {
 }
 
 function close(server: net.Server): Promise<void> {
-  return new Promise((resolve, reject) =>
+  const closed = new Promise<void>((resolve, reject) =>
     server.close((error) => (error ? reject(error) : resolve())),
   );
+  if (server instanceof http.Server) {
+    server.closeAllConnections();
+  }
+  return closed;
 }

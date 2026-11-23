@@ -20,7 +20,7 @@ const SENTRY_DSN_KEY = "cupTestSentryDsn";
 const CANCEL_APPLE_SIGN_IN_KEY = "cupTestCancelAppleSignIn";
 
 export type IosLaunchArguments = LaunchArguments & {
-  readonly cancelAppleSignIn?: boolean;
+  readonly shouldCancelAppleSignIn?: boolean;
 };
 const DEVICE_LOG_PREDICATE = [
   'process == "App"',
@@ -100,7 +100,7 @@ export class IosAppDevice implements AppDevice {
         ...(launchArguments.testSentryDsn === undefined
           ? []
           : [`-${SENTRY_DSN_KEY}`, launchArguments.testSentryDsn]),
-        ...(launchArguments.cancelAppleSignIn === true
+        ...(launchArguments.shouldCancelAppleSignIn === true
           ? [`-${CANCEL_APPLE_SIGN_IN_KEY}`, "YES"]
           : []),
       ],

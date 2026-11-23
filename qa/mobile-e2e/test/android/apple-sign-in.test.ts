@@ -15,7 +15,6 @@ const app = useMobileApp();
 
 const APP_PACKAGE = "audio.cup.app";
 const AUTH_CALLBACK_URL = "audio.cup.app://auth/callback";
-const CANCELLATION_GRACE_PERIOD_MS = 3_000;
 
 test("an Apple sign-in that redirects at once signs in and starts the submitted request", async () => {
   const device = asAndroidAppDevice(app.device);
@@ -46,7 +45,6 @@ test("backing out of Apple's page ends the sign-in as a cancellation with the di
     .toBe(browserPackage);
   await device.waitForNativeText("Continue");
   await device.pressBackUntilFocused(APP_PACKAGE);
-  await new Promise((resolve) => setTimeout(resolve, CANCELLATION_GRACE_PERIOD_MS + 1_000));
 
   webView = await device.webView();
   expect(await pathname(webView)).toBe("/app/");
