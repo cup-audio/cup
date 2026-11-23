@@ -4,6 +4,7 @@ import { z } from "zod";
 import { CupError } from "@cup/errors";
 import type { AppleProviderCredential } from "@cup/listener-api.routes";
 
+import { readSupabaseUser } from "#src/adapters/supabase-user.ts";
 import type { ApiServerEnvironment } from "#src/api-server-environment.ts";
 
 const APPLE_AUDIENCE = "https://appleid.apple.com";
@@ -73,30 +74,12 @@ async function validateRefreshToken(
 }
 
 async function appleIdentitySubject(env: ApiServerEnvironment, subject: string) {
-  const response = await fetch(`${env.SUPABASE_URL}/auth/v1/admin/users/${subject}`, {
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    headers: {
-      apikey: env.SUPABASE_SECRET_KEY,
-      Authorization: `Bearer ${env.SUPABASE_SECRET_KEY}`,
-    },
-  });
-  if (!response.ok) {
-    await response.body?.cancel();
-    throw new CupError(`Supabase answered the Apple identity lookup with ${response.status}`);
-  }
-  const user = z
-    .object({
-      id: z.uuid(),
-      identities: z.array(
-        z.object({ provider: z.string(), identity_data: z.object({ sub: z.string() }) }),
-      ),
-    })
-    .parse(await response.json());
-  const apple = user.identities.find((identity) => identity.provider === "apple");
-  if (user.id !== subject || !apple) {
+  const user = await readSupabaseUser(env, subject);
+  const appleSubject = user.identities.find((identity) => identity.provider === "apple")?.subject;
+  if (appleSubject === undefined) {
     throw new CupError("The account has no Apple identity in Supabase");
   }
-  return apple.identity_data.sub;
+  return appleSubject;
 }
 
 async function signClientSecret(env: ApiServerEnvironment, clientId: string) {

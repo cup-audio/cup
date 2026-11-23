@@ -6,7 +6,13 @@ import type { ApiServerEnvironment } from "#src/api-server-environment.ts";
 
 const REQUEST_TIMEOUT_MS = 5_000;
 
-type SupabaseUser = { email: string | undefined; providers: string[] };
+export type SupabaseIdentity = { provider: string; subject: string | undefined };
+
+export type SupabaseUser = {
+  email: string | undefined;
+  identities: SupabaseIdentity[];
+  providers: string[];
+};
 
 export async function readSupabaseUser(
   env: ApiServerEnvironment,
@@ -27,14 +33,24 @@ export async function readSupabaseUser(
     .object({
       id: z.uuid(),
       email: z.string().optional(),
-      identities: z.array(z.object({ provider: z.string() })),
+      identities: z.array(
+        z.object({
+          provider: z.string(),
+          identity_data: z.object({ sub: z.string().optional() }).optional(),
+        }),
+      ),
     })
     .parse(await response.json());
   if (user.id !== subject) {
     throw new CupError("Supabase answered the user lookup with another user");
   }
+  const identities = user.identities.map((identity) => ({
+    provider: identity.provider,
+    subject: identity.identity_data?.sub,
+  }));
   return {
     email: user.email === undefined || user.email === "" ? undefined : user.email.toLowerCase(),
-    providers: user.identities.map(({ provider }) => provider),
+    identities,
+    providers: identities.map(({ provider }) => provider),
   };
 }

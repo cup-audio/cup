@@ -56,7 +56,7 @@ Recovery accepts every linked provider, and the confirmation shows one button pe
 
 Scheduling signs the requesting client out, which stops playback, and blocks subsequent private access checks. Lifecycle inspection and explicit recovery, after signing in again, remain available until the deadline; the scheduled-deletion notice links the web app's [account recovery page](web-app.md#routes-and-navigation), which signs the listener in for that. Recovery preserves history and allowance; once the deadline is reached, recovery is refused. The registry's [`accounts.test.ts`](../../libs/registry/test/accounts.test.ts) covers fresh authentication and recovery, and [`account-lifecycle-api.test.ts`](../../libs/api-server/test/account-lifecycle-api.test.ts) the API's origin checks and revocation outcomes.
 
-Sources: [client confirmation](../../apps/web-app/src/data-fetching/account-confirmation.ts), [client revocation of Apple sign-ins](../../apps/web-app/src/data-fetching/apple-sign-in-revocation.ts), [lifecycle API](../../libs/api-server/src/api-server.ts), and [atomic account transitions](../../libs/accounts/src/storage/account-lifecycle.ts).
+Sources: [client confirmation](../../apps/web-app/src/data-fetching/account-confirmation.ts), [client revocation of Apple sign-ins](../../apps/web-app/src/data-fetching/apple-sign-in-revocation.ts), [lifecycle API](../../libs/api-server/src/api-server.ts), [Apple confirmation and revocation of Apple sign-ins](../../libs/api-server/src/use-cases/apple-credential-revocation.ts), and [atomic account transitions](../../libs/accounts/src/storage/account-lifecycle.ts).
 
 ## Fencing and cleanup
 

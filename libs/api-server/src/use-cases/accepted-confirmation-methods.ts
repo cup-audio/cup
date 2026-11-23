@@ -1,6 +1,8 @@
 import type { AccountSnapshot } from "@cup/accounts";
 import type { SignInMethod } from "@cup/listener-api.routes";
 
+import { confirmationProvider } from "#src/use-cases/confirmation-provider.ts";
+
 export function acceptedConfirmationMethods(
   providers: readonly SignInMethod[],
   accountState: AccountSnapshot["state"],
@@ -8,8 +10,6 @@ export function acceptedConfirmationMethods(
   if (accountState !== "active") {
     return [...providers];
   }
-  if (providers.includes("apple")) {
-    return ["apple"];
-  }
-  return providers.includes("google") ? ["google"] : [...providers];
+  const provider = confirmationProvider(providers);
+  return provider === undefined ? [...providers] : [provider];
 }
