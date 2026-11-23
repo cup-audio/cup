@@ -4,7 +4,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-// LAME documents 1.25 * samples + 7200 bytes as sufficient encoder output space.
 #define PCM_SAMPLE_CAPACITY 4608
 #define MP3_BUFFER_CAPACITY ((PCM_SAMPLE_CAPACITY * 5) / 4 + 7200)
 #define ENCODER_ERROR_INVALID_ARGUMENT -1
@@ -16,7 +15,6 @@ typedef struct Encoder {
   struct Encoder *next;
 } Encoder;
 
-// JavaScript supplies raw numeric handles, so validate membership before dereferencing one.
 static Encoder *live_encoders;
 
 static void discard_lame_message(const char *format, va_list arguments) {
@@ -38,7 +36,6 @@ static Encoder *find_live_encoder(const Encoder *candidate) {
 }
 
 static int validate_encoded_byte_length(int encoded_byte_length) {
-  // Do not expose adjacent WASM memory if LAME ever violates its output-size contract.
   if (encoded_byte_length > MP3_BUFFER_CAPACITY) {
     return ENCODER_ERROR_INVALID_ARGUMENT;
   }

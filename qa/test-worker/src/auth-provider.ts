@@ -5,60 +5,30 @@ import type net from "node:net";
 import { Temporal } from "temporal-polyfill";
 
 const SUBJECT = "880ce5b5-6542-40fd-8f2d-380f3066e98a";
-/**
- * Supabase fills `name` from Google's ID token; the web app shows its initials ("rd") in the
- * avatar.
- */
 const READER_NAME = "Reader Doe";
 const OTHER_SUBJECT = "70fcf2d9-63c5-48be-b897-d3670f24ed43";
-/** The issuer of the Google ID tokens that the Android debug build's sign-in fake asks for. */
 const GOOGLE_ISSUER = "https://accounts.google.com";
 const GOOGLE_SUBJECT = "qa-google";
-/** Where the iOS app's sign-in sheet returns to Cup, as Supabase's redirect allow-list holds it. */
 const IOS_AUTH_CALLBACK_URL = "audio.cup.app://auth/callback";
-/** The Supabase Auth API version whose error shape the provider answers with when asked for it. */
 const SUPABASE_API_VERSION = "2024-01-01";
 const DEFAULT_ACCESS_TOKEN_LIFETIME_SECONDS = 300;
-/** Supabase's default `refresh_token_reuse_interval`, which `supabase/config.toml` keeps. */
 const DEFAULT_REFRESH_TOKEN_REUSE_INTERVAL_SECONDS = 10;
-/**
- * The local test account that the password grant signs in; a test Worker started with
- * `offersTestAccount` advertises it, as local development does.
- */
 export const TEST_ACCOUNT = { email: "test-account@example.test", password: "qa-test-account" };
 const TEST_ACCOUNT_SUBJECT = "c5a2b1e4-0f3d-4b8e-9a6c-2d7e1f4b9a30";
 const nowMilliseconds = () => Temporal.Now.instant().epochMilliseconds;
 const nowSeconds = () => Math.floor(nowMilliseconds() / 1000);
 
 type StartAuthProviderOptions = {
-  /**
-   * The host in the provider's origin, which is also in its token issuer. `localhost` makes it
-   * listen on both the IPv4 and the IPv6 loopback, wherever a client resolves `localhost` to.
-   */
   hostname?: "127.0.0.1" | "localhost";
-  /**
-   * Serves HTTPS with this key and certificate instead of HTTP. The web suite passes the Worker's
-   * certificate, because WebKit blocks an HTTPS page from calling HTTP.
-   */
   tls?: { key: Buffer; cert: Buffer };
 };
 
-/** A running fake auth provider, as tests of every suite read and configure it. */
 export type AuthProvider = Awaited<ReturnType<typeof startAuthProvider>>;
 
-/**
- * The sign-in a session belongs to; a refresh keeps it, as Supabase keeps a session's `amr`. A
- * password sign-in is the test account's, any other the Google account's.
- */
 type SignIn = { authenticatedAt: number; method: "oauth" | "id_token" | "password" };
 
-/** The session a refresh token's single use issued, and when, in epoch milliseconds. */
 type Rotation = { session: string; rotatedAt: number };
 
-/**
- * Local identity boundary: real PKCE, a Google ID token exchange with Supabase's nonce check, the
- * test account's password sign-in, signed access tokens and JWKS, with no Google traffic.
- */
 export async function startAuthProvider(options: StartAuthProviderOptions = {}) {
   const pair = crypto.generateKeyPairSync("ec", { namedCurve: "prime256v1" });
   const publicKey = {
@@ -68,13 +38,7 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
     use: "sig",
   };
   const codes = new Map<string, { challenge: string; authenticatedAt: number }>();
-  /**
-   * Every refresh token issued, kept after its single use with the session that use issued, so a
-   * reuse within the reuse interval gets that session again and a later reuse is told apart from a
-   * typo.
-   */
   const refreshTokens = new Map<string, SignIn & { rotation?: Rotation }>();
-  /** The query parameters of each authorization request, also of a rejected one. */
   const authorizationRequests: Array<Record<string, string>> = [];
   let origin = "";
   let exchanges = 0;
@@ -89,7 +53,6 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
     const message = `${header}.${payload}`;
     return `${message}.${crypto.sign("sha256", Buffer.from(message), { key: pair.privateKey, dsaEncoding: "ieee-p1363" }).toString("base64url")}`;
   };
-  /** Returns the claims of a token this provider signed, or undefined for any other token. */
   const verify = (token: string): Record<string, unknown> | undefined => {
     const [header, payload, signature] = token.split(".");
     if (
@@ -126,11 +89,6 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
       amr: [{ method, timestamp: authenticatedAt }],
     });
   };
-  /**
-   * The session that the PKCE, the ID token, the password and the refresh token exchange return,
-   * with a new single-use refresh token: the Google account's, or the test account's after a
-   * password sign-in.
-   */
   const sessionFor = ({ authenticatedAt, method }: SignIn) => {
     const refreshToken = crypto.randomUUID();
     refreshTokens.set(refreshToken, { authenticatedAt, method });
@@ -187,10 +145,6 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
     redirect.searchParams.set("code", code);
     response.writeHead(302, { Location: redirect.href }).end();
   };
-  /**
-   * Stands in for Google's sign-in sheet: returns a Google ID token for the account that carries
-   * the hashed nonce the app passed to the sign-in plugin.
-   */
   const issueGoogleIdToken = async (
     request: http.IncomingMessage,
     response: http.ServerResponse,
@@ -258,11 +212,6 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
     exchanges += 1;
     response.end(sessionFor({ authenticatedAt: code.authenticatedAt, method: "oauth" }));
   };
-  /**
-   * Exchanges a refresh token for a new session of the same sign-in, once. As Supabase does, a
-   * reuse within the reuse interval returns the session the first use issued, such as when a page
-   * reloads during a refresh and its storage still holds the old token; a later reuse is rejected.
-   */
   const exchangeRefreshToken = (
     body: unknown,
     request: http.IncomingMessage,
@@ -303,7 +252,6 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
     refreshes += 1;
     response.end(session);
   };
-  /** Signs in the test account, the only account with a password, as Supabase's email provider. */
   const exchangePassword = (
     body: unknown,
     request: http.IncomingMessage,
@@ -326,7 +274,6 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
     exchanges += 1;
     response.end(sessionFor({ authenticatedAt: nowSeconds(), method: "password" }));
   };
-  /** As Supabase does, accepts the ID token only when it carries the SHA-256 hash of the raw nonce. */
   const exchangeIdToken = (body: unknown, response: http.ServerResponse) => {
     if (
       !body ||
@@ -356,7 +303,6 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
       "Access-Control-Allow-Headers",
       "authorization, apikey, content-type, x-client-info, x-supabase-api-version",
     );
-    // supabase-js reads an error's code from the shape this header names, also in a browser.
     response.setHeader("Access-Control-Expose-Headers", "X-Supabase-Api-Version");
     response.setHeader("Content-Type", "application/json");
     const handle = async () => {
@@ -413,32 +359,15 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
   return {
     origin,
     otherToken: () => tokenFor(OTHER_SUBJECT),
-    /**
-     * The query parameters of every authorization request so far, in order, such as the `prompt`
-     * and `max_age` Cup asked Google for.
-     */
     authorizationRequests: () => authorizationRequests.map((query) => ({ ...query })),
-    /** How many sign-ins exchanged a PKCE code, an ID token or a password for a session. */
     exchanges: () => exchanges,
-    /**
-     * How many refresh tokens exchanged for a new session; a reuse within the reuse interval, which
-     * returns a session already issued, does not count.
-     */
     refreshes: () => refreshes,
-    /**
-     * Sets how long the access tokens of sessions issued from now on stay valid, 300 seconds by
-     * default; a test shortens it so a session refreshes within the test's time budget.
-     */
     setAccessTokenLifetime: (seconds: number) => {
       if (!Number.isInteger(seconds) || seconds <= 0) {
         throw new Error(`An access token lifetime must be a positive whole number: ${seconds}`);
       }
       accessTokenLifetimeSeconds = seconds;
     },
-    /**
-     * Sets how long after its first use a refresh token still returns the session that use issued,
-     * 10 seconds by default as in Supabase; a test shortens it to see a later reuse rejected.
-     */
     setRefreshTokenReuseInterval: (seconds: number) => {
       if (!Number.isFinite(seconds) || seconds < 0) {
         throw new Error(
@@ -454,10 +383,6 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
   };
 }
 
-/**
- * The redirects the provider sends a code to: a page of the web suite's app on `127.0.0.1`, or the
- * iOS app's callback URL, which its `ASWebAuthenticationSession` catches.
- */
 function isAllowedRedirect(redirect: URL): boolean {
   return (
     redirect.hostname === "127.0.0.1" ||
@@ -465,10 +390,6 @@ function isAllowedRedirect(redirect: URL): boolean {
   );
 }
 
-/**
- * Answers with the 400 error body Supabase Auth sends: the API version 2024-01-01 shape when the
- * client asks for it, as supabase-js does, and the legacy shape otherwise.
- */
 function rejectAsSupabase(
   request: http.IncomingMessage,
   response: http.ServerResponse,
@@ -491,10 +412,6 @@ async function readJson(request: http.IncomingMessage): Promise<unknown> {
   return JSON.parse(Buffer.concat(chunks).toString());
 }
 
-/**
- * Listens on one port at both `127.0.0.1` and `::1`, so `localhost` reaches the provider however a
- * client resolves it. Tries another port when the one assigned on IPv4 is taken on IPv6.
- */
 async function listenOnBothLoopbacks(createServer: () => net.Server): Promise<net.Server[]> {
   for (let attempt = 0; attempt < 10; attempt += 1) {
     const ipv4 = await listen(createServer, 0, "127.0.0.1");

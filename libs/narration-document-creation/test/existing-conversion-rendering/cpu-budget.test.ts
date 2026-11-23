@@ -3,17 +3,10 @@ import { expect, test } from "vitest";
 
 import { renderNarrationDocument } from "#src/index.ts";
 
-// The largest narration document preparation accepts: its content limit is 40,000 characters of
-// narration text in at most 200 synchronization units.
 const MAX_NARRATION_CHARACTERS = 40_000;
 const MAX_SYNCHRONIZATION_UNITS = 200;
 
-// The CPU time one render may take. The Worker's configured limit is far higher (`limits.cpu_ms`
-// in the Worker's Wrangler config), but the listener API renders on every request that carries the
-// narration document, so rendering must stay small next to the request's other work.
 const CPU_BUDGET_MILLISECONDS = 50;
-// An existing conversion's manifest references no narration source material, so rendering it never
-// loads one.
 const WITHOUT_NARRATION_SOURCE_MATERIAL = {
   sourceTitle: "Title",
   loadNarrationSourceMaterial: async () => {
@@ -22,8 +15,6 @@ const WITHOUT_NARRATION_SOURCE_MATERIAL = {
 };
 
 test("renders the largest allowed narration document within the CPU budget", async () => {
-  // 50 characters of narration text, so 199 paragraphs of four sentences and their headings come
-  // close to the limit.
   const sentence =
     'A sentence with <em>emphasis</em> and a <a href="/cited">cited source</a>, too. ';
   const sentenceText = "A sentence with emphasis and a cited source, too. ";
@@ -33,8 +24,6 @@ test("renders the largest allowed narration document within the CPU budget", asy
     { length: MAX_SYNCHRONIZATION_UNITS },
     (_, index) => `narration-unit-${String(index + 1).padStart(4, "0")}`,
   );
-  // The shape that narration document creation stored before the narration document was rendered
-  // on request: a heading merged into its paragraph sat with it in a section carrying the unit ID.
   const bodyHtml = unitIds
     .slice(1)
     .map((unitId, index) =>
@@ -62,7 +51,6 @@ test("renders the largest allowed narration document within the CPU budget", asy
   expect(narrationCharacters).toBeGreaterThan(MAX_NARRATION_CHARACTERS * 0.95);
   expect(narrationCharacters).toBeLessThanOrEqual(MAX_NARRATION_CHARACTERS);
 
-  // The fastest of several renders, so a busy test machine doesn't fail the budget.
   const cpuMilliseconds: number[] = [];
 
   for (let render = 0; render < 5; render += 1) {

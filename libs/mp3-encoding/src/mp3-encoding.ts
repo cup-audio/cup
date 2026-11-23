@@ -1,12 +1,10 @@
 import { CupError } from "@cup/errors";
 
 const PCM_SAMPLE_BYTE_LENGTH = 2;
-// Must match the capacity compiled into the narrow LAME bridge.
 const CHUNK_SAMPLE_COUNT = 4_608;
 const MAX_CHUNK_BYTE_LENGTH = (CHUNK_SAMPLE_COUNT * 5) / 4 + 7_200;
 const WASI_BAD_FILE_DESCRIPTOR = 8;
 
-/** Configures mono signed 16-bit little-endian PCM encoding. */
 export type EncodeOptions = {
   bitrateKilobitsPerSecond: number;
   sampleRate: number;
@@ -23,7 +21,6 @@ type EncoderExports = {
   encoder_get_pcm(encoder: number): number;
 };
 
-/** Encodes mono signed 16-bit little-endian PCM as a self-contained MP3. */
 export async function encodePcmAsMp3(pcm: Uint8Array, options: EncodeOptions): Promise<Uint8Array> {
   assertPositiveInteger(options.sampleRate, "PCM sample rate");
   assertPositiveInteger(options.bitrateKilobitsPerSecond, "MP3 bitrate");

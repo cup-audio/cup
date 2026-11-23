@@ -14,7 +14,6 @@ export type ControlledSourceMaterialPreparerOptions = {
   declaredLanguage?: DeclaredLanguage;
 };
 
-/** Creates a deterministic source preparer backed by controlled HTML and production cleanup. */
 export function createControlledSourceMaterialPreparer({
   url: controlledUrl,
   html,
@@ -29,12 +28,10 @@ export function createControlledSourceMaterialPreparer({
     }
 
     return prepareLoadedSourcePage({
-      // Without a browser to render it, the controlled HTML's first `<h1>` is its visible headline.
       bodyHtml: html.replace("<h1", `<h1 ${VISIBLE_HEADLINE_ATTRIBUTE}`),
       documentTitle: "Controlled source fixture",
       ...(coverImage === undefined ? {} : { coverImage }),
       ...(declaredLanguage === undefined ? {} : { declaredLanguage }),
-      // Nothing redirects a controlled source page.
       fetchedUrl: url,
       responseStatus: 200,
     });

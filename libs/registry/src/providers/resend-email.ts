@@ -4,23 +4,19 @@ import type { ProviderRequest } from "#src/providers/provider-request.ts";
 
 export type ResendEnvironment = {
   RESEND_API_KEY: string;
-  /** Resend API origin, such as `https://api.resend.com`. */
   RESEND_BASE_URL: string;
 };
 export type ResendEmail = {
-  /** Resend deduplicates sends with the same key inside its deduplication window. */
   idempotencyKey: string;
   to: string;
   subject: string;
   text: string;
 };
-/** `rejected` is final; `retry` covers other failures, timeouts, and lost responses. */
 export type ResendSendOutcome =
   | { kind: "sent" }
   | { kind: "rejected" }
   | { kind: "retry"; retryAfterMs: number };
 
-/** Sends one email from Cup's address; `nowMs` anchors an HTTP-date `Retry-After`. */
 export async function sendResendEmail(
   env: ResendEnvironment,
   email: ResendEmail,
@@ -36,7 +32,6 @@ export async function sendResendEmail(
         Authorization: `Bearer ${env.RESEND_API_KEY}`,
         "Content-Type": "application/json",
         "Idempotency-Key": email.idempotencyKey,
-        // Resend refuses requests without a User-Agent with 403.
         "User-Agent": "cup",
       },
       body: JSON.stringify({
@@ -64,9 +59,7 @@ export async function sendResendEmail(
   }
   try {
     await response.body?.cancel();
-  } catch {
-    /* The status already decided the outcome. */
-  }
+  } catch {}
   return outcome;
 }
 

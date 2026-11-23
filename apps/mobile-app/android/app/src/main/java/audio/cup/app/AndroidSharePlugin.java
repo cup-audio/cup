@@ -29,7 +29,6 @@ public class AndroidSharePlugin extends Plugin {
 
         JSObject share = new JSObject();
         share.put("text", text.toString().trim());
-        // Retain cold-start shares until the web app has registered its listener.
         notifyListeners("shareIntentReceived", share, true);
         intent.removeExtra(Intent.EXTRA_TEXT);
     }

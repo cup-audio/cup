@@ -16,7 +16,6 @@ export async function initializeIosIncomingUrls(
     handleShareLink(url, onShare);
   });
   const launch = await App.getLaunchUrl();
-  // A launch URL may also arrive as an event while the listener is registering.
   if (!receivedEvent && launch !== undefined) {
     handleShareLink(launch.url, onShare);
   }

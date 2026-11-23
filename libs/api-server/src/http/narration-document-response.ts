@@ -12,11 +12,6 @@ import { TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
 
 type ReadyAudiobook = Extract<Audiobook, { status: "ready" }>;
 
-/**
- * Renders the narration document a conversion's manifest stores into the listener response. A
- * render that fails, or disagrees with the stored units, still answers, with the fallback document,
- * and is reported to the operator.
- */
 export async function toRenderedNarrationDocumentResponse({
   conversionId,
   audiobook,

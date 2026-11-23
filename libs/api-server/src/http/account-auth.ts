@@ -8,10 +8,8 @@ import { authenticateAccount as authenticateVerifiedAccount } from "#src/use-cas
 
 const keySets = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
 
-/** The email and password account that local development offers instead of Google sign-in. */
 export type LocalTestAccount = { email: string; password: string };
 
-/** Never offered or accepted unless the Worker runs with `LOCAL_DEVELOPMENT=true`; see ADR 0012. */
 export function localTestAccount(env: ApiServerEnvironment): LocalTestAccount | undefined {
   if (
     env.LOCAL_DEVELOPMENT !== "true" ||
@@ -23,10 +21,6 @@ export function localTestAccount(env: ApiServerEnvironment): LocalTestAccount | 
   return { email: env.LOCAL_TEST_ACCOUNT_EMAIL, password: env.LOCAL_TEST_ACCOUNT_PASSWORD };
 }
 
-/**
- * Validate access locally; Cup lifecycle checks remain authoritative for account access. Only
- * Google identities are accepted, plus the local test account when `testAccountEmail` is given.
- */
 export async function verifyAccountToken(
   token: string,
   { supabaseUrl, testAccountEmail }: { supabaseUrl: string; testAccountEmail?: string | undefined },
@@ -64,7 +58,6 @@ export async function verifyAccountToken(
   if (provider !== "google" && !isTestAccount) {
     throw new errors.JWTClaimValidationFailed("Unsupported sign-in provider", payload);
   }
-  // Fresh authentication counts only the method of the identity's own provider.
   const freshMethods = isTestAccount ? ["password"] : ["oauth", "id_token"];
   const amr = payload["amr"];
   const authenticatedAtSeconds = Array.isArray(amr)
@@ -110,7 +103,6 @@ export async function authenticateAccountRequest(request: Request, env: ApiServe
     if (error instanceof errors.JOSEError && !(error instanceof errors.JWKSTimeout)) {
       return { result: "unauthorized" } as const;
     }
-    // Every caller answers this result with a 503.
     captureException(error);
     return { result: "unavailable" } as const;
   }

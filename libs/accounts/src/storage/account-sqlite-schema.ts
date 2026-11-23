@@ -5,10 +5,8 @@ import { conversionPhaseOrder } from "@cup/conversion-contracts";
 import type { AudiobookReference, ConversionPhase } from "@cup/conversion-contracts";
 import { defineAudioSegments } from "@cup/duration-ledger";
 
-// Re-exported so that the account migrations create the shared duration ledger tables.
 export { creditBalances, creditLedger, creditOperations } from "@cup/duration-ledger";
 
-/** Every conversion phase as an SQL list, so the CHECK below follows the enum. */
 const CONVERSION_PHASE_SQL_LIST = sql.raw(
   conversionPhaseOrder.map((phase) => `'${phase}'`).join(", "),
 );
@@ -23,7 +21,6 @@ export const accounts = sqliteTable(
     state: text({ enum: ["active", "deletion_scheduled", "deleting"] }).notNull(),
     executionEpoch: integer("execution_epoch").notNull(),
     recoveryDeadlineMs: integer("recovery_deadline_ms"),
-    // The duration ledger revision the registry last confirmed for its usage projection.
     registryConfirmedRevision: integer("registry_confirmed_revision").notNull().default(0),
   },
   (table) => [
@@ -42,33 +39,20 @@ export const accountConversions = sqliteTable(
     sourceUrl: text("source_url").notNull(),
     createdAtMs: integer("created_at_ms").notNull(),
     status: text({ enum: ["pending", "ready", "failed"] }).notNull(),
-    // The preparation phase the conversion last started; settling keeps it, as grants do.
     lastStartedPhase: text("last_started_phase").$type<ConversionPhase>().notNull(),
     completedAtMs: integer("completed_at_ms"),
     title: text(),
     audiobookReference: text("audiobook_reference_json", {
       mode: "json",
     }).$type<AudiobookReference>(),
-    // Set only for a ready conversion whose audiobook has a cover image; null otherwise.
     hasCoverImage: integer("has_cover_image", { mode: "boolean" }),
-    // The manifest's narration language, copied when the conversion became ready; null when the
-    // audiobook has none or was prepared before narration languages were recorded.
     narrationLanguage: text("narration_language"),
     failureCategory: text("failure_category"),
     explanation: text(),
-    // The conversion deletion marker: set when deletion was requested, it fences the conversion
-    // like a missing row and records that cleanup is still owed. It is not a conversion status.
     deletingSinceMs: integer("deleting_since_ms"),
-    // Set when the alarm takes a marked conversion's one attempt to terminate its workflows.
     workflowTerminationTriedAtMs: integer("workflow_termination_tried_at_ms"),
-    // When the conversion's current stage started, for the stuck-conversion check: preparation,
-    // accepted or retried, while pending; synthesis, whenever segments are reserved, once ready.
-    // The migration that added it set existing rows to their completion or creation time.
     stageStartedAtMs: integer("stage_started_at_ms"),
-    // Set when the stuck-conversion check reported the current stage; a stage start clears it.
     stuckReportedAtMs: integer("stuck_reported_at_ms"),
-    // Set when the stuck-conversion-deletion check reported the marked conversion; it never clears,
-    // because the row goes once the cleanup finishes.
     deletionStuckReportedAtMs: integer("deletion_stuck_reported_at_ms"),
   },
   (table) => [
@@ -138,7 +122,6 @@ export const deletionChallenges = sqliteTable(
   {
     challengeId: text("challenge_id").primaryKey(),
     executionEpoch: integer("execution_epoch").notNull(),
-    // Challenges are refused once deletion has started, so they never record `deleting`.
     state: text({ enum: ["active", "deletion_scheduled"] }).notNull(),
     issuedAtMs: integer("issued_at_ms").notNull(),
     expiresAtMs: integer("expires_at_ms").notNull(),
@@ -155,7 +138,6 @@ export const deletionAttempts = sqliteTable(
   {
     attemptId: text("attempt_id").primaryKey(),
     json: text("payload_json").notNull(),
-    // Account erasure deletes these rows, so the stored state never becomes `erased`.
     state: text({ enum: ["scheduled", "restored", "deleting"] }).notNull(),
     delivered: integer({ mode: "boolean" }).notNull().default(false),
   },

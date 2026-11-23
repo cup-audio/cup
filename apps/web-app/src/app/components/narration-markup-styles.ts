@@ -1,11 +1,5 @@
 import { css } from "@linaria/core";
 
-/**
- * The look of the markup a narration document keeps around its units, and of a segment's highlight
- * inside a table or preformatted text, as docs/architecture/web-app.md#reader describes it. It goes
- * on the element the narration document is rendered into, which sets the body text style and the
- * highlight bubble.
- */
 export const narrationMarkupClassName = css`
   a[href] {
     color: var(--color-ink);

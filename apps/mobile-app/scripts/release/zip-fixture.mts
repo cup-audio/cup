@@ -1,12 +1,7 @@
-/*
- * Builds zip archives in memory for the release scripts' tests, as Gradle writes bundles: stored or
- * deflated entries, no ZIP64.
- */
 import zlib from "node:zlib";
 
 export type ZipEntryFixture = { name: string; data: Buffer; isStored?: boolean };
 
-/** A zip archive of `entries`, deflated unless an entry is stored. */
 export function createZip(entries: readonly ZipEntryFixture[]): Buffer {
   const localParts: Buffer[] = [];
   const centralParts: Buffer[] = [];

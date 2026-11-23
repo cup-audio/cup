@@ -17,7 +17,6 @@ const NARRATION_LANGUAGE_SCENARIOS_SCHEMA = z
   .array(
     z
       .object({
-        // As source preparation captures it from the live page; absent when nothing is declared.
         declaredLanguage: z
           .object({ htmlLang: z.string().exactOptional(), ogLocale: z.string().exactOptional() })
           .strict()

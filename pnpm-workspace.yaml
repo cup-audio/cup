@@ -3,7 +3,6 @@ packages:
   - libs/*
   - qa/*
   - tooling/*
-  # Opt in to additional .patricktree-stack projects only when the consuming repo uses them.
   - .patricktree-stack/tooling/config-oxfmt
   - .patricktree-stack/tooling/config-oxlint
   - .patricktree-stack/tooling/config-stylelint
@@ -19,13 +18,9 @@ packages:
 
 allowBuilds:
   '@google/genai': true
-  # Its postinstall only checks that the sibling SDK versions match, which the sentry-client catalog pins.
   '@sentry/capacitor': false
-  # Its postinstall downloads the binary only when the platform package (an optional dependency) is missing.
   '@sentry/cli': false
-  # The mobile E2E suite installs its Appium drivers on its first run, never at install time.
   appium: false
-  # WebdriverIO pulls in desktop browser drivers (edgedriver, geckodriver) the mobile suite never uses.
   edgedriver: false
   esbuild: true
   geckodriver: false
@@ -40,14 +35,12 @@ catalog:
   "@playwright/test": 1.65.1
   "@typescript/native": "npm:typescript@^7.0.2"
   "@types/node": ^26.6.6
-  # vitest-evals requires Vitest 5; keep the runner and coverage provider aligned.
   "@vitest/coverage-v8": 5.1.0
   oxfmt: ^0.79.0
   oxlint: ^1.94.0
   oxlint-tsgolint: ^7.0.2007
   postcss: ^8.5.33
   postcss-styled-syntax: ^0.7.4
-  # stylelint-config-recess-order 7.10.0 and stylelint-config-standard 40 still peer on stylelint 17; move to 18 together with them.
   stylelint: ^17.16.0
   stylelint-config-recess-order: ^7.10.0
   stylelint-config-standard: ^40.0.0
@@ -55,7 +48,6 @@ catalog:
   typescript: "npm:@typescript/typescript6@^6.0.2"
   vite: ^8.3.8
   vitest: ^5.1.0
-  # wrangler >= 4.149 (newer workerd/miniflare) breaks the account E2E tests: a conversion resumed after signup is missing from the history; stay on 4.144 until that is investigated. Still reproduced on 4.163 (2026-11-17).
   wrangler: ~4.144.0
 
 catalogs:
@@ -63,7 +55,6 @@ catalogs:
     "@hono/zod-openapi": ^1.6.3
     hono: ^4.13.19
   web-app:
-    # keep in step with the wrangler hold in the default catalog (both bundle workerd/miniflare)
     "@cloudflare/vite-plugin": 1.62.2
     "@tanstack/router-plugin": ^1.169.0
     "@types/react": ^19.3.0
@@ -73,41 +64,29 @@ catalogs:
     react: ^19.3.1
     react-dom: ^19.3.1
     vite: ^8.3.8
-  # Sentry's server and client SDKs move on different majors; keep each family in its own catalog,
-  # `sentry-server` here and `sentry-client` for the web app and the shells, and never mix them in
-  # one package (qa/workspace-checks enforces it).
   sentry-server:
-    # @sentry/cloudflare depends on exactly its own @sentry/core version; move both together.
     "@sentry/cloudflare": 11.12.0
     "@sentry/core": 11.12.0
   sentry-client:
-    # @sentry/capacitor pins its own @sentry/browser and @sentry/core and peers on exactly one
-    # @sentry/react; move the family only together with a @sentry/capacitor release.
     "@sentry/capacitor": 4.6.0
     "@sentry/react": 10.76.2
-    # A build tool, in neither SDK family: it injects debug IDs and uploads source maps.
     "@sentry/cli": ^3.8.2
 
 packageExtensions:
   eslint-plugin-react-you-might-not-need-an-effect:
-    # "eslint-plugin-react-you-might-not-need-an-effect" defines eslint as peer dependency, but that is not required when used by oxlint --> make it optional
     peerDependenciesMeta:
       eslint:
         optional: true
 
-# handle peer dependencies in a strict way
 autoInstallPeers: false
 resolvePeersFromWorkspaceRoot: false
 strictPeerDependencies: true
 dedupePeerDependents: false
 
-# enforce specific Node.js and pnpm version (https://pnpm.io/npmrc#engine-strict)
 engineStrict: true
 
-# disable update notifier (https://pnpm.io/npmrc#update-notifier)
 updateNotifier: false
 
-# workspace-concurrency=0 will use amount of cores of the host to run tasks concurrently (https://pnpm.io/cli/recursive#--workspace-concurrency)
 workspaceConcurrency: 0
 
 minimumReleaseAgeExclude:

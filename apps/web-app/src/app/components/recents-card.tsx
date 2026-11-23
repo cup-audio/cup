@@ -14,18 +14,10 @@ import type { MapPropsToRequiredDataAttributeProps } from "#src/app/styling.util
 import { composeClassnames } from "#src/app/utils.js";
 
 type CardCustomProps = {
-  /** `muted`: the preparation phase or a failure line stands in for the title. */
   title: "ready" | "muted";
   cover: "shown" | "none";
 };
 
-/**
- * A track on Recents: a card linking to its detail view, with the source host below. Every state
- * with a narration document looks ready (title, then the cover when there is one); a pending
- * conversion shows its preparation phase and a failed one a short failure line instead of the
- * title. It preloads its track unless a dialog covers it: the listener cannot open it then, and
- * scheduling account deletion in the account dialog would refuse a preload still under way.
- */
 export function RecentsCard({
   item,
   isCoveredByDialog,
@@ -41,7 +33,6 @@ export function RecentsCard({
   };
 
   return (
-    // the list's masonry measures this item, which must not stretch to its grid area
     <li
       className={css`
         align-self: start;
@@ -94,7 +85,6 @@ export function RecentsCard({
               ? toPreparationPhaseLabel(item.preparationPhase)
               : "Couldn't prepare this track"}
         </span>
-        {/* the title names the card, so the cover is decorative */}
         {coverUrl !== undefined && (
           <DSCoverImage
             src={coverUrl}

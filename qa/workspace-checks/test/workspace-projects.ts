@@ -4,7 +4,6 @@ import { z } from "zod";
 
 export type WorkspaceProjectLocation = {
   name: string;
-  /** Path relative to the repository root, such as `libs/accounts`. */
   directory: string;
   absolutePath: string;
 };
@@ -13,7 +12,6 @@ const REPOSITORY_ROOT = path.join(import.meta.dirname, "../../..");
 
 const pnpmProjectListSchema = z.array(z.object({ name: z.string(), path: z.string() }));
 
-/** Lists the workspace projects pnpm sees, without the repository root and the shared stack. */
 export function listWorkspaceProjects(): WorkspaceProjectLocation[] {
   const pnpmOutput = childProcess.execFileSync(
     "pnpm",

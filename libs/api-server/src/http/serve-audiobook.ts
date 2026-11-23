@@ -42,11 +42,6 @@ export async function loadReadyAudiobookFromEnvironment(
   });
 }
 
-/**
- * Serves the narration track: the stored audio segments, unchanged and joined in sequence order.
- * The layout comes from the owner's settled durations alone, so the manifest is never loaded and
- * HEAD and conditional requests read nothing from R2. Request authorization happens before.
- */
 export async function serveNarrationTrack(
   env: ApiServerEnvironment,
   request: Request,
@@ -76,7 +71,6 @@ export async function serveNarrationTrack(
   if (matchesIfNoneMatch(request.headers.get("If-None-Match"), etag)) {
     return new Response(null, { status: 304, headers });
   }
-  // Hono answers HEAD with the first matching route, which is the GET route.
   if (request.method === "HEAD") {
     headers.set("Content-Length", totalByteLength.toString());
     return new Response(null, { status: 200, headers });
@@ -84,7 +78,6 @@ export async function serveNarrationTrack(
 
   const range = request.headers.get("Range");
   const ifRange = request.headers.get("If-Range");
-  // A stale `If-Range` asks for the whole current track instead of a range of another version.
   const isRangeRequest = range !== null && (ifRange === null || ifRange === etag);
   let served = { start: 0, end: totalByteLength - 1 };
   if (isRangeRequest) {
@@ -99,13 +92,11 @@ export async function serveNarrationTrack(
   const readPart = (part: TrackPart) =>
     readTrackPart(env, conversionId, reader.artifactPrefix, part);
   const firstPart = parts[0];
-  // A valid range lies within the track, and a narration track has at least one segment.
   if (firstPart === undefined) {
     throw new CupError(
       `Narration track byte range ${served.start}-${served.end} of ${totalByteLength} bytes selects no segment`,
     );
   }
-  // The first part is read before headers are sent, so a missing object yields an error status.
   const firstBody = await readPart(firstPart);
   if (firstBody === undefined) {
     return jsonError(traceId, "operational-error", "The narration track could not be read.", 500);
@@ -122,7 +113,6 @@ export async function serveNarrationTrack(
   );
 }
 
-/** Serves the stored cover image of a prepared audiobook; request authorization happens before. */
 export async function serveCoverImage(
   env: ApiServerEnvironment,
   request: Request,
@@ -136,7 +126,6 @@ export async function serveCoverImage(
   }
   const reader = resolveConversionReader(env, conversionId, owner);
   const audiobook = await loadReadyAudiobookFromEnvironment(env, conversionId, reader);
-  // The manifest decides: an object left by an earlier preparation attempt is not served.
   if (audiobook?.coverImage === undefined) {
     return coverImageNotFound(traceId);
   }
@@ -147,8 +136,6 @@ export async function serveCoverImage(
     return coverImageNotFound(traceId);
   }
 
-  // Its signed media URL changes once per UTC day, so the browser keeps a cover for that long
-  // (ADR 0013). Error responses keep the server-wide `private, no-store`.
   const headers = new Headers({
     "Cache-Control": COVER_IMAGE_CACHE_CONTROL,
     "Content-Type": audiobook.coverImage.contentType,
@@ -190,7 +177,6 @@ function parseRange(value: string, size: number): { start: number; end: number }
 }
 
 type TrackSegment = { sequence: number; trackOffset: number; byteLength: number };
-/** The bytes of one segment object that a request serves. */
 type TrackPart = { sequence: number; segmentByteLength: number; offset: number; length: number };
 
 function layOutNarrationTrack(durations: readonly number[]): {
@@ -231,10 +217,6 @@ function selectTrackParts(
     });
 }
 
-/**
- * Reads one part with a ranged R2 `get`. Returns `undefined`, after logging, when the object is
- * missing or its size differs from the length derived from its settled duration.
- */
 async function readTrackPart(
   env: ApiServerEnvironment,
   conversionId: string,
@@ -250,7 +232,6 @@ async function readTrackPart(
   }
 
   await object?.body.cancel();
-  // A fault the operator must look at, so an issue as well as the error log record with its sizes.
   const mismatch =
     "A stored audio segment is missing or its size differs from its settled duration.";
   captureException(new CupError(mismatch), {
@@ -267,10 +248,6 @@ async function readTrackPart(
   return undefined;
 }
 
-/**
- * Streams the first part, then reads each further part only once the client has consumed the
- * previous one, so a cancelled request stops reading from R2.
- */
 function createTrackStream(
   firstBody: ReadableStream<Uint8Array>,
   remainingParts: readonly TrackPart[],
@@ -309,16 +286,10 @@ function createTrackStream(
         current = undefined;
       },
     },
-    // Pull only when the client reads.
     { highWaterMark: 0 },
   );
 }
 
-/**
- * Workers send a generic stream chunked and ignore a `Content-Length` header set for it; a
- * `FixedLengthStream` body keeps the declared length. Node, which runs the unit tests, has no
- * `FixedLengthStream` and keeps the header as set.
- */
 function toFixedLengthBody(
   body: ReadableStream<Uint8Array>,
   byteLength: number,
@@ -329,7 +300,6 @@ function toFixedLengthBody(
   return body.pipeThrough(new FixedLengthStream(byteLength));
 }
 
-/** A strong ETag that changes with the conversion or any segment's settled duration. */
 async function createNarrationTrackEtag(
   conversionId: string,
   durations: readonly number[],
@@ -342,7 +312,6 @@ async function createNarrationTrackEtag(
   return `"${hex.join("")}"`;
 }
 
-/** `If-None-Match` uses the weak comparison and may list several tags or `*`. */
 function matchesIfNoneMatch(header: string | null, etag: string): boolean {
   if (header === null) {
     return false;

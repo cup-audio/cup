@@ -536,7 +536,6 @@ function isSourceElementIds(elementIds: readonly string[]): elementIds is Source
 
 class UnknownSelectionElementIdsError extends CupError {}
 
-// Reduce formatting noise for selection without changing the source used to reconstruct narration.
 function prepareSelectionPromptHtml(html: string): string {
   const fragment = parseFragment(html);
   prepareSelectionPromptChildren(fragment);

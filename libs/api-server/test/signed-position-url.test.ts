@@ -377,7 +377,6 @@ test("both paths answer the blocked response once the account's deletion is sche
 test("the position URL still needs the browser-mutation headers and an allowed origin", async () => {
   const { app, env, savedPositions } = fixture(accountOwner);
   const positionUrl = await signPositionUrl();
-  // The route's request validation answers 400 for the missing header before the handler runs.
   expect(
     (await putPosition(app, env, positionUrl, { "X-Create-Audiobook-From-URL-Request": "" }))
       .status,

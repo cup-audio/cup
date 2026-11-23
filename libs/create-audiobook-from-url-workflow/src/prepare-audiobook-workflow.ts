@@ -15,7 +15,6 @@ type ProductionWorkflowEnvironment = AudiobookWorkflowEnvironment & {
   SOURCE_PAGE_COOKIES_JSON?: string;
 };
 
-/** Prepares the narration document from a source URL with production providers. */
 export class PrepareAudiobookWorkflow extends WorkflowEntrypoint<
   ProductionWorkflowEnvironment,
   ConversionParams
@@ -37,8 +36,6 @@ export class PrepareAudiobookWorkflow extends WorkflowEntrypoint<
             await browser.close();
           }
         },
-        // A second browser session, opened after source preparation closed the first, so the cover
-        // image step is self-contained and safe to retry.
         loadCoverImage: async (declaration, sourceUrl) => {
           const browser = await launch(this.env.BROWSER);
 

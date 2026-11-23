@@ -256,7 +256,6 @@ export const CoverImages = {
   ],
 } satisfies Story;
 
-/** The second cover loads only once "Finish loading" is pressed. */
 let secondCoverGate = createGate();
 
 export const CoverImageSwap = {
@@ -297,7 +296,6 @@ function coverHandler(name: string, color: string) {
   return http.get(`${COVER_PATH}/${name}.svg`, () => coverResponse(color));
 }
 
-/** A flat-colored cover wider than 5:3, so the crop shows. */
 function coverResponse(color: string) {
   return new HttpResponse(
     `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200"><rect width="400" height="200" fill="${color}"/><circle cx="200" cy="100" r="60" fill="#fff"/></svg>`,
@@ -325,7 +323,6 @@ const swatch = css`
   justify-items: start;
 `;
 
-/** A promise that settles once `open` is called. */
 function createGate() {
   let resolvePromise: (() => void) | undefined;
   const promise = new Promise<void>((resolve) => {

@@ -2,7 +2,6 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { GoogleSignInOptions } from "#src/platform/account-auth.js";
 
-/** Prepares storage for the account session, which is kept under `storageKeys`. */
 export async function initializeAuthStorage(storageKeys: readonly string[]) {
   const storage = window.localStorage;
   return {
@@ -32,11 +31,6 @@ export async function signInWithGoogle(
   }
 }
 
-/**
- * Google's authorization parameters. Without `prompt`, Google skips its account chooser when it
- * can, so a normal sign-in takes one tap less; a fresh sign-in keeps the chooser and adds
- * `max_age=0`.
- */
 export function googleAuthorizationParams({
   fresh,
   chooseAccount,
@@ -50,13 +44,8 @@ export function googleAuthorizationParams({
   return {};
 }
 
-/**
- * Reports nothing: supabase-js refreshes the session only while the page is visible, as long as
- * nothing calls its `startAutoRefresh` or `stopAutoRefresh`, which remove that handling.
- */
 export function watchAppState(_listener: (isActive: boolean) => void): () => void {
   return () => {};
 }
 
-/** The browser keeps no sign-in of its own beyond the account session. */
 export async function clearNativeSignIn(): Promise<void> {}

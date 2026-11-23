@@ -1,7 +1,3 @@
-/**
- * What `cli.ts` checks and hands to `run.ts`. Playwright starts the run in a process of its own, so
- * the inputs travel through its environment.
- */
 export type FidelityCheckInputs = {
   story: string;
   designImagePath: string;
@@ -16,7 +12,6 @@ const ENVIRONMENT_KEYS = {
 
 const WHOLE_PIXELS = /^\d+$/;
 
-/** Accepts only digits, so neither `""`, `1e2` nor `0x10` passes as a number of pixels. */
 export function parseWholePixels(value: string): number {
   if (!WHOLE_PIXELS.test(value)) {
     throw new Error("Expected a whole number of pixels, such as 55.");

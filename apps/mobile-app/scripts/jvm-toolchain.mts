@@ -1,9 +1,4 @@
 /* oxlint-disable node/no-process-env -- The check reads the host's Java location. */
-/*
- * Checks the toolchain the JVM unit tests need, the Android SDK and Java 21, and prints every
- * problem with its fix. The review gate runs it as a prerequisite; `test-jvm.mts` runs it first.
- * `.mts` because this package is CommonJS for `capacitor.config.ts`.
- */
 import childProcess from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -12,7 +7,6 @@ import { DEFAULT_SDK_ROOT, resolveAndroidSdkRoot } from "#scripts/android-sdk.mt
 
 const ANDROID_STUDIO_JAVA_HOME = "/Applications/Android Studio.app/Contents/jbr/Contents/Home";
 
-/** Returns the Android SDK root Gradle gets as `ANDROID_HOME`, or exits with every problem. */
 export function requireJvmToolchain(): string {
   const sdkRoot = resolveAndroidSdkRoot();
   const problems: string[] = [];
@@ -36,11 +30,9 @@ export function requireJvmToolchain(): string {
   return sdkRoot;
 }
 
-/** Gradle runs with `JAVA_HOME`'s Java, or with the one on `PATH`. */
 function findJava21Problem(): string | undefined {
   const javaHome = process.env["JAVA_HOME"];
   const java = javaHome === undefined ? "java" : path.join(javaHome, "bin", "java");
-  // `java -version` writes to stderr.
   const result = childProcess.spawnSync(java, ["-version"], { encoding: "utf8" });
   if (result.status !== 0) {
     return javaHome === undefined

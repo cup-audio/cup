@@ -4,27 +4,19 @@ import os from "node:os";
 import path from "node:path";
 import url from "node:url";
 
-/** Runs Sentry CLI with these arguments to completion and resolves with its exit code. */
 export type RunSentryCli = (args: string[]) => Promise<number>;
 
-/** A release build of one shell, made after `pnpm --filter @cup/mobile-app build`. */
 export type ShellSymbolsTarget =
   | {
       platform: "ios";
-      /** The Xcode archive (`.xcarchive`) whose app goes to App Store Connect. */
       archive: string;
-      /** The web build's source maps, `apps/web-app/dist/source-maps`. */
       webSourceMapDir: string;
     }
   | {
       platform: "android";
-      /** The web bundle `cap sync` packed into the Android project, which the release build ships. */
       packedWebDir: string;
-      /** The web build's source maps, `apps/web-app/dist/source-maps`. */
       webSourceMapDir: string;
-      /** R8's mapping file of the release build. */
       mappingFile: string;
-      /** The ProGuard UUID the build embedded in its `sentry-debug-meta.properties` asset. */
       proguardUuid: string;
     };
 
@@ -32,12 +24,6 @@ const SENTRY_CLI = url.fileURLToPath(import.meta.resolve("@sentry/cli/bin/sentry
 const SENTRY_PROJECT = "cup-app";
 const DEBUG_ID_COMMENT = /\n\/\/# debugId=([0-9a-f-]{36})\s*$/;
 
-/**
- * Uploads what Sentry needs to symbolicate a shell release: the iOS archive's dSYMs or the Android
- * build's R8 mapping file, and the source maps of the web bundle packed into the build. Any failure
- * throws before the operator uploads the build to the store; debug IDs and ProGuard UUIDs, not
- * releases, match the files to events, so no release is named.
- */
 export async function uploadShellSymbols(
   target: ShellSymbolsTarget,
   runSentryCli: RunSentryCli,
@@ -50,11 +36,9 @@ export async function uploadShellSymbols(
   if (target.platform === "ios") {
     const dsymDir = path.join(target.archive, "dSYMs");
     await assertHasDsym(dsymDir);
-    // `--wait` waits until Sentry has processed the files, so a processing error fails the step too.
     steps.push(["debug-files", "upload", "--project", SENTRY_PROJECT, "--wait", dsymDir]);
   } else {
     await assertMappingMatchesBuild(target.mappingFile, target.proguardUuid, runSentryCli);
-    // Sentry CLI uploads the file under the UUID it derives from the content, which the check matched.
     steps.push([
       "proguard",
       "upload",
@@ -84,11 +68,6 @@ export async function uploadShellSymbols(
   }
 }
 
-/**
- * Runs the workspace's Sentry CLI. By default it inherits the operator's environment, so the CLI
- * finds the upload token in `~/.sentryclirc` and the committed `.sentryclirc` above the working
- * directory.
- */
 export async function spawnSentryCli(
   args: string[],
   {
@@ -104,10 +83,6 @@ export async function spawnSentryCli(
   });
 }
 
-/**
- * Xcode archives the app at `Products/Applications/<name>.app`; Capacitor packs the web bundle in
- * its `public` folder.
- */
 async function findPackedWebDir(archive: string) {
   const applicationsDir = path.join(archive, "Products/Applications");
   const apps = (await fs.readdir(applicationsDir)).filter((entry) => entry.endsWith(".app"));
@@ -119,11 +94,6 @@ async function findPackedWebDir(archive: string) {
   return path.join(applicationsDir, apps[0]!, "public");
 }
 
-/**
- * Sentry deobfuscates an Android event only with the mapping file whose UUID the app carries, so
- * check that this mapping file is the one the build embedded. Sentry CLI computes the UUID offline:
- * `--no-upload` writes it into a properties file without contacting Sentry.
- */
 async function assertMappingMatchesBuild(
   mappingFile: string,
   proguardUuid: string,
@@ -162,11 +132,6 @@ async function assertHasDsym(dsymDir: string) {
   }
 }
 
-/**
- * The source maps are those of the last web build in this checkout, which need not be the bundle
- * that `cap sync` packed into the release. Sentry CLI would upload them anyway, so check that every
- * map's debug ID is in the packed bundle. Capacitor's own scripts carry no debug ID.
- */
 async function assertSourceMapsMatchPackedBundle(packedWebDir: string, webSourceMapDir: string) {
   const sourceMapDebugIds = new Set<string>();
   for (const file of await listFiles(webSourceMapDir, ".map")) {

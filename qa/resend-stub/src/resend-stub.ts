@@ -1,94 +1,52 @@
-/*
- * A `node:http` stand-in for Resend's `POST /emails`, one instance per test on an OS-assigned port.
- * By default it models Resend's documented request checks and idempotency with a ledger keyed by
- * `Idempotency-Key`; a test can script, hang or hold the next requests' answers instead. The live
- * contract test (`pnpm test:resend-live`) checks the model against the real API.
- *
- * The modeled behavior follows Resend's docs as read on 2026-10-20:
- * - API introduction (https://resend.com/docs/api-reference/introduction): requests without a
- *   `User-Agent` header are refused with 403.
- * - Idempotency keys (https://resend.com/docs/dashboard/emails/idempotency-keys): keys are 1 to 256
- *   characters and kept for 24 hours; a replay with the same body returns the original response
- *   without sending again, a replay with a modified body answers `409 invalid_idempotent_request`,
- *   and a replay while the first request is in progress answers `409 concurrent_idempotent_requests`.
- * - Errors (https://resend.com/docs/api-reference/errors): the `{ statusCode, name, message }` shape.
- *
- * Where the docs are silent the stub picks one reading and says so: the 24 hours count from the
- * first request, an expired key sends again, "modified" compares parsed JSON, and a refused request
- * leaves no trace on its key.
- */
-
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import http from "node:http";
 import util from "node:util";
 import { Temporal } from "temporal-polyfill";
 
-/** How long Resend keeps an idempotency key. */
 export const IDEMPOTENCY_KEY_LIFETIME_MS = 24 * 60 * 60 * 1_000;
 
-/** One request the stub received, valid or not. */
 export type ResendStubRequest = {
   method: string;
   pathname: string;
   authorization: string | undefined;
   userAgent: string | undefined;
   idempotencyKey: string | undefined;
-  /** The parsed JSON body; the raw text when it is not JSON, `undefined` without one. */
   body: unknown;
 };
 
-/** An email the stub sent: one per idempotency key within the key's lifetime, as Resend sends. */
 export type SentEmail = {
   id: string;
   idempotencyKey: string | undefined;
-  /** The request body that sent it. */
   email: unknown;
 };
 
 export type ScriptedResponse = {
   status: number;
-  /** Sent as JSON. */
   body?: unknown;
-  /** Sent verbatim instead of `body`, such as a malformed or HTML error page. */
   rawBody?: string;
   headers?: Record<string, string>;
 };
 
-/** A request the stub holds open until the test releases it. */
 export type HeldRequest = {
-  /** Resolves once the held request has arrived; a ledger hold has put its key in flight by then. */
   received: Promise<void>;
   release(): void;
 };
 
 export type ResendStub = {
-  /** The stub's origin on 127.0.0.1, for `RESEND_BASE_URL`. */
   url: string;
-  /** Every request, in arrival order. */
   requests: readonly ResendStubRequest[];
-  /** The ledger's sent emails, in the order they were sent. */
   emails: readonly SentEmail[];
-  /** Answers the next valid request with this response instead of the ledger; it sends nothing. */
   respondNext(response: ScriptedResponse): void;
-  /** Never answers the next valid request, as an unresponsive Resend would; it sends nothing. */
   hangNext(): void;
-  /**
-   * Holds the next valid request open until the test releases it. Without `response` the request
-   * runs through the ledger: its key is in flight while held and the email is sent on release, even
-   * when the client has given up by then (a send whose response is lost). With `response` it is
-   * answered that way on release and sends nothing.
-   */
   holdNext(response?: ScriptedResponse): HeldRequest;
   close(): Promise<void>;
 };
 
 export type ResendStubOptions = {
-  /** The clock for idempotency key expiry, in epoch milliseconds; defaults to the system clock. */
   now?: () => number;
 };
 
-/** A response in Resend's error shape. */
 export function resendError(status: number, name: string, message: string): ScriptedResponse {
   return { status, body: { statusCode: status, name, message } };
 }
@@ -108,7 +66,6 @@ type LedgerEntry = { email: unknown; firstRequestMs: number } & (
   | { state: "SENT"; id: string }
 );
 
-/** Starts a stub on 127.0.0.1 on a port the OS assigns; the caller closes it. */
 export async function startResendStub(options: ResendStubOptions = {}): Promise<ResendStub> {
   const now = options.now ?? (() => Temporal.Now.instant().epochMilliseconds);
   const requests: ResendStubRequest[] = [];
@@ -158,7 +115,6 @@ export async function startResendStub(options: ResendStubOptions = {}): Promise<
     respond(response, await send(idempotencyKey, body, override));
   }
 
-  /** Runs a valid request through the ledger, held until released when `hold` is given. */
   async function send(
     idempotencyKey: string | undefined,
     body: unknown,
@@ -168,7 +124,6 @@ export async function startResendStub(options: ResendStubOptions = {}): Promise<
     if (entry !== undefined && now() < entry.firstRequestMs + IDEMPOTENCY_KEY_LIFETIME_MS) {
       hold?.markReceived();
       await hold?.released;
-      // The first request may have finished while this replay was held.
       return answerReplay(ledger.get(idempotencyKey ?? "") ?? entry, body);
     }
 
@@ -213,7 +168,6 @@ export async function startResendStub(options: ResendStubOptions = {}): Promise<
       return { received: received.promise, release: released.resolve };
     },
     close: async () => {
-      // Hung and held requests would otherwise keep `close()` waiting forever.
       server.closeAllConnections();
       await new Promise<void>((resolve, reject) =>
         server.close((error) => (error === undefined ? resolve() : reject(error))),
@@ -222,10 +176,6 @@ export async function startResendStub(options: ResendStubOptions = {}): Promise<
   };
 }
 
-/**
- * Starts a stub and closes it when the test finishes. Pass `onTestFinished` from the test's own
- * context, so that concurrent tests each close their own stub.
- */
 export async function useResendStub(
   { onTestFinished }: { onTestFinished: (listener: () => Promise<void>) => void },
   options: ResendStubOptions = {},
@@ -235,7 +185,6 @@ export async function useResendStub(
   return stub;
 }
 
-/** Resend's refusal of a request it never runs, or `undefined` for a valid send request. */
 function refuse(
   request: http.IncomingMessage,
   requestUrl: URL,
@@ -263,7 +212,6 @@ function refuse(
   return undefined;
 }
 
-/** Resend's answer to a key it still keeps. */
 function answerReplay(entry: LedgerEntry, body: unknown): ScriptedResponse {
   if (entry.state === "IN_FLIGHT") {
     return resendError(
@@ -283,7 +231,6 @@ function answerReplay(entry: LedgerEntry, body: unknown): ScriptedResponse {
 }
 
 function respond(response: http.ServerResponse, scripted: ScriptedResponse) {
-  // A client that gave up, such as one whose timeout fired during a hold, gets no answer.
   if (response.destroyed) {
     return;
   }

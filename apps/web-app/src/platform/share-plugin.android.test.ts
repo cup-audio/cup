@@ -36,7 +36,6 @@ test("submits a cold-start share and repeat shares through the form", async ({ p
 
   const input = component.getByRole("textbox", { name: "URL", exact: true });
   await expect(input).toHaveValue("https://example.com/first?from=share");
-  // A share that arrives while this start is pending waits for it to settle.
   await expect.poll(() => starts).toEqual(["https://example.com/first?from=share"]);
   await expect(component.getByRole("button", { name: "Listen" })).toBeEnabled();
 

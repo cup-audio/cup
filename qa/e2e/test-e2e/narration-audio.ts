@@ -1,9 +1,5 @@
 import type { Page } from "@playwright/test";
 
-/**
- * Keeps the player host's audio element reachable from the test, because the host never attaches it
- * to the document. The host creates it before any other audio element.
- */
 export async function captureNarrationAudio(page: Page): Promise<void> {
   await page.addInitScript(() => {
     const NativeAudio = window.Audio;

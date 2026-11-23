@@ -19,7 +19,6 @@ const ADDED_SOURCE_URL = "https://example.test/added";
 const COVER_PATH = "/__story/covers";
 const SECOND_PAGE_CURSOR = "second-page";
 
-/** Titles of different lengths, so the cards differ in height. */
 const TITLES = [
   "Trump sieht sich als legitimer Träger von acht Nobelpreisen und wütet gegen Norwegen",
   "Our minds aren’t equipped to handle AI",
@@ -38,19 +37,12 @@ const HOSTS = ["derstandard.at", "www.theverge.com", "nytimes.com"];
 const COVER_COLORS = ["#5b7f95", "#c4733d", "#7a8f4e", "#8a5a83"];
 
 export const EmptyRecents = accountStory({ path: "/recent" });
-/** The history never answers, so Recents keeps loading its tracks. */
 export const LoadingTracks = accountStory({
   path: "/recent",
   handlers: [http.get("/api/account/conversions", () => delay("infinite"))],
 });
-/** The session carries no name, so the avatar shows its glyph. */
 export const RecentsWithoutName = accountStory({ path: "/recent", userMetadata: {} });
-/** A signed-in listener opening the home page lands on Recents. */
 export const SignedInHome = accountStory({ path: "/" });
-/**
- * The app starts on the home page while auth restores the stored session. The auth configuration is
- * held as `"auth-config"` from the start, so a test sees what the page shows meanwhile.
- */
 export const SignedInColdStartHome = {
   ...accountStory({
     path: "/",
@@ -59,15 +51,10 @@ export const SignedInColdStartHome = {
   }),
   beforeMount: async () => holdStoryResponses("auth-config"),
 } satisfies Story;
-/** A signed-out listener follows a link to Recents or one of its dialogs. */
 export const SignedOutRecents = accountStory({ path: "/recent", isSignedOut: true });
 export const SignedOutAddDialog = accountStory({ path: "/recent/add", isSignedOut: true });
 export const SignedOutAccountDialog = accountStory({ path: "/recent/account", isSignedOut: true });
 
-/**
- * Two pages of ready cards, most of them with a cover; the second page loads on scrolling. A card
- * opens a track that is still being prepared.
- */
 export const Recents = accountStory({
   path: "/recent",
   handlers: [
@@ -96,14 +83,12 @@ export const RecentsWithOneReadyItem = accountStory({
   recents: { items: createReadyItems(0, 1), nextCursor: null },
 });
 
-/** The account dialog over a ready card. */
 export const OneReadyItemBehindAccountDialog = accountStory({
   path: "/recent/account",
   handlers: [coverHandler()],
   recents: { items: createReadyItems(0, 1), nextCursor: null },
 });
 
-/** A pending card for each preparation phase label, next to ready and failed cards. */
 export const RecentsWithPendingAndFailed = accountStory({
   path: "/recent",
   handlers: [coverHandler()],
@@ -128,10 +113,6 @@ export const RecentsWithPendingAndFailed = accountStory({
 const LOADED_CONVERSION_ID = "5f0c8a52-2d3e-4b8f-9a61-0c7e4d2b9f13";
 const LOADED_TITLE = "Sure, let’s smoosh SpaceX and xAI together";
 
-/**
- * The listener loaded an audiobook on its detail view, paused at its start, and went back to
- * Recents, where one track is pending, as drawn.
- */
 export const RecentsWithMiniPlayer = createMiniPlayerStory({ hasCover: true });
 export const RecentsWithMiniPlayerWithoutCover = createMiniPlayerStory({ hasCover: false });
 
@@ -179,17 +160,10 @@ function createMiniPlayerStory({ hasCover }: { hasCover: boolean }): Story {
   });
 }
 
-/**
- * Waits until the player sheet's scrubber is enabled, once the audiobook can play, and loads the
- * audiobook paused at its start the way a listener can without playing it: seeking. A seek to the
- * start the unloaded sheet already shows changes nothing, so it seeks to the end first.
- */
 async function goBackToRecentsOnceLoaded({
   canvasElement,
 }: Parameters<NonNullable<Story["play"]>>[0]) {
   const canvas = within(canvasElement);
-  // The loading view's disabled sheet is replaced once the audiobook arrives, and the sheet swaps
-  // its controls once the audiobook is loaded, so each wait queries the scrubber again.
   const waitForScrubber = (isReady: (scrubber: HTMLInputElement) => boolean, timeout = 1_000) =>
     waitFor(
       () => {
@@ -210,11 +184,9 @@ async function goBackToRecentsOnceLoaded({
   await waitForScrubber((scrubber) => Number(scrubber.value) === 0);
   await user.click(canvas.getByRole("link", { name: "Back" }));
   await canvas.findByRole("region", { name: "Player" }, { timeout: 10_000 });
-  // Back runs the cover transition; a tap during it would reach the document instead of Recents.
   await document.activeViewTransition?.finished;
 }
 
-/** A stable conversion ID per generated history item. */
 function toStoryConversionId(index: number): string {
   return `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`;
 }
@@ -222,7 +194,6 @@ function toStoryConversionId(index: number): string {
 function createReadyItems(firstIndex: number, count: number): Record<string, unknown>[] {
   return Array.from({ length: count }, (_, offset) => {
     const index = firstIndex + offset;
-    // every fourth card has no cover
     const hasCoverImage = index % 4 !== 3;
     return historyItem(index, {
       status: "ready",
@@ -253,7 +224,6 @@ function historyItem(index: number, fields: Record<string, unknown>): Record<str
   };
 }
 
-/** Flat-colored covers wider than 5:3, named by their hex color. */
 function coverHandler() {
   return http.get(`${COVER_PATH}/:color`, ({ params }) => {
     const color = `#${String(params["color"]).replace(/\.svg$/, "")}`;
@@ -267,11 +237,6 @@ function coverHandler() {
 const REVISITED_READY_INDEX = 0;
 const REVISITED_PENDING_INDEX = 1;
 
-/**
- * A signed-in listener moves between Recents, its dialogs and two tracks, one ready and one still
- * being prepared. Tests hold or fail each refetch by name (see `src/ui-gallery/held-responses.ts`):
- * `"account-history"`, `"account"` and `` `audiobook:${conversionId}` ``.
- */
 export const RevisitingScreens = accountStory({
   path: "/recent",
   recents: {
@@ -283,8 +248,6 @@ export const RevisitingScreens = accountStory({
   },
   handlers: [
     coverHandler(),
-    // Unless failed, each of these handlers answers nothing, so the story's default answers once it
-    // is released.
     http.get("/api/account/conversions", () => answerControlledResponse("account-history")),
     http.get("/api/account", () => answerControlledResponse("account")),
     http.get(`/api/audiobooks/${toStoryConversionId(REVISITED_READY_INDEX)}`, async () => {
@@ -301,7 +264,6 @@ export const RevisitingScreens = accountStory({
         playbackPosition: null,
         title,
         originalUrl: `https://${HOSTS[REVISITED_READY_INDEX]}/articles/${REVISITED_READY_INDEX}`,
-        // the card's cover, which moves into this one's place
         coverImage: { url: toStoryCoverUrl(REVISITED_READY_INDEX) },
         narrationDocument: {
           html: `<article><h1 data-synchronization-unit="unit-1">${title}</h1><p data-synchronization-unit="unit-2">Two.</p></article>`,
@@ -333,10 +295,6 @@ export const RevisitingScreens = accountStory({
   ],
 });
 
-/**
- * `RevisitingScreens` with the ready track's audiobook held from the start, so a test sees both its
- * preload and its first visit wait until it releases `` `audiobook:${conversionId}` ``.
- */
 export const FirstVisitToHeldTrack = {
   ...RevisitingScreens,
   beforeMount: async () =>
@@ -345,7 +303,6 @@ export const FirstVisitToHeldTrack = {
 
 export const AddDialog = accountStory({ path: "/recent/add" });
 
-/** The start request never answers, so the submit button keeps its loading state. */
 export const AddDialogPending = accountStory({
   path: "/recent/add",
   handlers: [http.post("/api/account/conversions", () => delay("infinite"))],
@@ -362,9 +319,7 @@ export const AddDialogError = accountStory({
   play: submitSourceUrl,
 });
 
-/** Recents lists the started conversion once the history query is fetched again. */
 export const AddDialogStarts = createAddDialogStartsStory("/recent");
-/** A signed-in listener opening the home page, where a start succeeds as in `AddDialogStarts`. */
 export const SignedInHomeStarts = createAddDialogStartsStory("/");
 
 function createAddDialogStartsStory(path: string): Story {
@@ -397,7 +352,6 @@ function createAddedItem() {
   };
 }
 
-/** The start request answers only once the page calls `window.answerAddDialogStart()`. */
 export const AddDialogStartsLater = (() => {
   let isStarted = false;
   return accountStory({
@@ -421,8 +375,6 @@ export const AddDialogStartsLater = (() => {
 })();
 
 async function submitSourceUrl({ canvasElement }: Parameters<NonNullable<Story["play"]>>[0]) {
-  // The router renders nothing until the route chunks have loaded, which under a full parallel test
-  // run can take longer than the lookup's default second.
   const dialog = within(
     await within(canvasElement.ownerDocument.body).findByRole("dialog", {}, { timeout: 10_000 }),
   );
@@ -439,7 +391,6 @@ async function submitSourceUrl({ canvasElement }: Parameters<NonNullable<Story["
   await user.click(submit);
 }
 
-/** Holds the response while a test holds it, then answers the failure a test asked for, if any. */
 async function answerControlledResponse(name: string) {
   await waitWhileHeld(name);
   return readFailedStoryResponse(name);

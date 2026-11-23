@@ -3,13 +3,6 @@ import { HttpResponse } from "msw";
 
 import type { ErrorResponse } from "@cup/listener-api.routes";
 
-/**
- * Lets a test hold or fail a story's mocked responses, for example a refetch, to check what the
- * screen shows from the cache meanwhile or after the refetch failed. A story handler awaits
- * `waitWhileHeld` with a name and answers `readFailedStoryResponse` when it returns one; a test
- * calls `window.holdResponses`, `window.releaseResponses` and `window.failResponses` with that name
- * (through `src/test-utils/held-responses.ts`), which a story that imports this module provides.
- */
 type FailureStatus = 403 | 404 | 500;
 
 const ERROR_OF_STATUS = {
@@ -39,7 +32,6 @@ function releaseStoryResponses(name: string): void {
   holds.delete(name);
 }
 
-/** Every later response of that name fails with the status, for the rest of the page's lifetime. */
 function failStoryResponses(name: string, status: FailureStatus): void {
   failures.set(name, status);
 }
@@ -54,7 +46,6 @@ export async function waitWhileHeld(name: string): Promise<void> {
   await holds.get(name)?.promise;
 }
 
-/** The error response a test asked responses of that name to fail with, if any. */
 export function readFailedStoryResponse(name: string): HttpResponse<ErrorResponse> | undefined {
   const status = failures.get(name);
   if (status === undefined) {

@@ -1,10 +1,3 @@
-/*
- * Runs the Worker options through Sentry's own Cloudflare SDK against the Sentry stub, so the
- * linked-errors and extra-error-data integrations build the event that `beforeSend` scrubs. No
- * request path of the Worker wraps a foreign error today, so the Worker integration tests cannot
- * provoke this case.
- */
-
 import * as Sentry from "@sentry/cloudflare";
 import { expect, test } from "vitest";
 
@@ -13,7 +6,6 @@ import { useSentryStub } from "@cup/sentry-stub";
 
 import { createWorkerSentryOptions } from "#src/worker-sentry-options.ts";
 
-/** Drizzle's query error: it embeds the SQL parameters and does not set `name`. */
 class DrizzleQueryError extends Error {
   readonly params: unknown[];
   constructor(query: string, params: unknown[], cause: unknown) {

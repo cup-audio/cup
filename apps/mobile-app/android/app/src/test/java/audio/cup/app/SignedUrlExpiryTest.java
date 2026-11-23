@@ -8,7 +8,6 @@ import org.junit.Test;
 
 public class SignedUrlExpiryTest {
     private static final long HOUR_MILLISECONDS = 60 * 60 * 1_000;
-    /** When the page fetched the audiobook response that carried the URLs, by the page's clock. */
     private static final long ISSUED_AT = 1_800_000_000_000L;
 
     @Test
@@ -41,7 +40,6 @@ public class SignedUrlExpiryTest {
 
     @Test
     public void theServerRejectingTheSignedUrlMeansItExpired() {
-        // The media route answers an expired or invalid token with 401; a 403 refuses the URL too.
         assertTrue(SignedUrlExpiry.isUrlRejection(401));
         assertTrue(SignedUrlExpiry.isUrlRejection(403));
     }

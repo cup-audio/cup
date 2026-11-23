@@ -3,8 +3,6 @@ import { expect, test } from "vitest";
 import { renderNarrationDocument } from "#src/index.ts";
 
 const ORIGINAL_URL = "https://publisher.example/articles/story";
-// An existing conversion's manifest references no narration source material, so rendering it never
-// loads one.
 const WITHOUT_NARRATION_SOURCE_MATERIAL = {
   sourceTitle: "Title",
   loadNarrationSourceMaterial: async () => {

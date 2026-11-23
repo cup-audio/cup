@@ -33,7 +33,6 @@ export type GrantParams = z.infer<typeof grantParamsSchema>;
 export const conversionParamsSchema = z.object({ conversionId: uuidV4Schema }).strict();
 export type ConversionParams = z.infer<typeof conversionParamsSchema>;
 
-/** Names the account whose inspection shows the deleted conversion's cleanup. */
 export const deleteConversionResponseSchema = z
   .object({ conversionId: uuidV4Schema, accountId: z.uuid() })
   .strict();
@@ -130,10 +129,6 @@ export const migrationReportSchema = z
   })
   .strict();
 
-/**
- * Every `code` of an operator API error response, including the codes of the server-wide middleware
- * that also guards operator routes, such as `method-not-allowed`.
- */
 export const ERROR_CODE = {
   ACCOUNT_NOT_ACTIVE: "account-not-active",
   ACCOUNT_NOT_FOUND: "account-not-found",
@@ -155,7 +150,6 @@ export const ERROR_CODE = {
 } as const;
 export type ErrorCode = (typeof ERROR_CODE)[keyof typeof ERROR_CODE];
 
-/** Sentry's trace ID of the request, which finds the request's trace in Sentry's search. */
 const traceIdSchema = z
   .string()
   .regex(/^[0-9a-f]{32}$/, "Must be a 32-character lowercase hex trace ID");
@@ -180,8 +174,6 @@ export const setGrantAllowanceRequestSchema = z
 export const accountParamsSchema = z.object({ accountId: z.uuid() }).strict();
 export type AccountParams = z.infer<typeof accountParamsSchema>;
 
-// The account owns these shapes and its Durable Object returns them, so the operator contract
-// composes the account schemas instead of keeping copies that can drift from the account.
 export const inspectAccountResponseSchema = z
   .object({
     account: accountSnapshotSchema,
@@ -203,7 +195,6 @@ export const inspectAccountLedgerQuerySchema = z
       .min(1)
       .max(MAX_LEDGER_PAGE_SIZE)
       .default(DEFAULT_LEDGER_PAGE_SIZE),
-    // At most 15 digits, so every valid cursor is a safe integer.
     cursor: z
       .string()
       .regex(/^[1-9]\d{0,14}$/, "The ledger cursor is invalid.")
@@ -261,7 +252,6 @@ export const listAccountsResponseSchema = z
           subject: z.uuid(),
           createdAt: z.iso.datetime(),
           phase: z.enum(accountPhases),
-          // Absent until the Registry has received the account's first usage projection.
           usage: z
             .object({
               allowanceMilliseconds: z.number().int().nonnegative(),

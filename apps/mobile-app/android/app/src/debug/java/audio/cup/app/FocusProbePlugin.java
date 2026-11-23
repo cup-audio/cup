@@ -15,19 +15,6 @@ import androidx.core.content.ContextCompat;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
-/**
- * Debug builds only. Takes audio focus from Cup's player on an adb command, the way a call, a
- * navigation prompt or another media app would, so the mobile E2E suite can check how ExoPlayer
- * reacts without real apps:
- *
- * <pre>
- * adb shell am broadcast -p audio.cup.app -a audio.cup.app.FOCUS_PROBE --es focus transient
- * </pre>
- *
- * <p>{@code focus} is {@code transient} (as a call), {@code duck} (as a navigation prompt),
- * {@code full} (as another media app) or {@code abandon}, which gives the focus back. The receiver
- * is registered only while the app runs with the test API origin.
- */
 @RequiresApi(Build.VERSION_CODES.O)
 @CapacitorPlugin(name = "CupFocusProbe")
 public class FocusProbePlugin extends Plugin {
@@ -56,7 +43,6 @@ public class FocusProbePlugin extends Plugin {
 
     @Override
     public void load() {
-        // adb broadcasts come from the shell, so the receiver must be exported.
         ContextCompat.registerReceiver(getContext(), receiver, new IntentFilter(ACTION), ContextCompat.RECEIVER_EXPORTED);
     }
 

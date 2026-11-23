@@ -11,8 +11,6 @@ public class MainActivity extends BridgeActivity {
     @OptIn(markerClass = UnstableApi.class)
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        // Before the bridge loads the page, whose JS starts the native Sentry SDK, so the SDK never
-        // writes or reads an installation ID file.
         InMemoryInstallation.use();
         CrashReportingPlugin.deleteSentryFilesIfDisabled(this);
         registerPlugin(AndroidSharePlugin.class);

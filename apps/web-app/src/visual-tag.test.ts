@@ -16,8 +16,6 @@ test(
   async ({ page }) => {
     await page.setContent("<p>A test with the visual tag</p>");
 
-    // Playwright rejects a negative `maxDiffPixels` before it takes or compares a screenshot, so
-    // the assertion fails this way only if the options reach it, with or without a name.
     await expect(expect(page).toHaveScreenshot({ maxDiffPixels: -1 })).rejects.toThrow(
       "`maxDiffPixels` option value must be non-negative integer",
     );

@@ -12,7 +12,6 @@ const SUBJECT = "880ce5b5-6542-40fd-8f2d-380f3066e98a";
 const ACCOUNT_ID = "70fcf2d9-63c5-48be-b897-d3670f24ed43";
 const CHALLENGE_ID = "a3fcb5d8-9162-4c1a-b804-3be130c5e92a";
 
-/** Exercise the real session adapter against local deterministic identity and API responses. */
 export function accountStory({
   path,
   state = "active",
@@ -30,22 +29,14 @@ export function accountStory({
   recents?: { items: Record<string, unknown>[]; nextCursor: string | null };
   confirmation?: "delete" | "restore";
   setupFailure?: boolean | "once";
-  /** The session user's metadata, which carries the name the avatar shows. */
   userMetadata?: Record<string, unknown>;
-  /** Starts without a stored session, as a listener following a link does. */
   isSignedOut?: boolean;
-  /** Mounts the app while auth restores the stored session, as a cold start does. */
   isColdStart?: boolean;
   handlers?: RequestHandler[];
   play?: Story["play"];
 }): Story {
   let setupFailed = false;
   function AccountStory(): React.ReactNode {
-    /*
-     * Each mount gets its own router that starts at the story's path. Navigating a router that an
-     * earlier story mounted would let that story's still mounted tree react to the navigation, and
-     * once that tree unmounts, the navigation waits for a render that only follows it.
-     */
     const [router] = React.useState(() =>
       createAppRouter(createMemoryHistory({ initialEntries: [`/app${path}`] })),
     );
@@ -53,20 +44,15 @@ export function accountStory({
     const [error, setError] = React.useState<string>();
     React.useEffect(() => {
       Object.assign(window, {
-        // Lets tests go back as the system Back gesture does, which no element of the page sees.
         goBackInAccountStory: () => router.history.back(),
-        // Lets tests open a screen that no element of the current one links to, as a typed URL does.
         openPathInAccountStory: (pathToOpen: string) => router.history.push(`/app${pathToOpen}`),
-        // Lets tests tell a replaced history entry from a pushed one.
         readAccountStoryHistoryLength: () => router.history.length,
       });
       const initialize = async () => {
-        // A signed-out story stores no session, so neither its user nor a confirmation applies.
         if (!isSignedOut) {
           storeAccountStorySession(userMetadata, confirmation);
         }
         if (isColdStart) {
-          // Loads every route's code first, so the screen renders as soon as its route lets it.
           for (const route of Object.values(router.routesById)) {
             await router.loadRouteChunk(route);
           }

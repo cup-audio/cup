@@ -9,7 +9,6 @@ type SignInDialogProps = Pick<
   "open" | "onOpenChange" | "finalFocus" | "description" | "errorMessage"
 > & {
   signInMethods: readonly SignInMethod[];
-  /** The method of the sign-in in progress, if any. */
   pendingMethod: SignInMethod | undefined;
   onSignIn: (method: SignInMethod) => void;
 };
@@ -54,7 +53,6 @@ export function SignInDialog({
   );
 }
 
-/** One button per sign-in method, all disabled while a sign-in is in progress. */
 export function SignInButtons({
   signInMethods,
   pendingMethod,

@@ -6,11 +6,6 @@ import { expect, test, VISUAL_TAG } from "#src/test-utils/component-test.ts";
 import { holdResponses, releaseResponses } from "#src/test-utils/held-responses.ts";
 import { recordReactUseWarnings } from "#src/test-utils/react-use-warnings.ts";
 
-/**
- * Keeps the player host's audio element reachable, which is never attached to the document. The
- * first one created is the host's: development mode runs state initializers twice and keeps the
- * first result.
- */
 async function captureNarrationAudio(page: Page) {
   await page.addInitScript(() => {
     const NativeAudio = window.Audio;
@@ -35,7 +30,6 @@ async function readNarrationAudio(page: Page) {
   });
 }
 
-/** Goes back in history as the system Back gesture does, which no element of the page sees. */
 async function goBackAsTheSystemDoes(page: Page) {
   await page.evaluate(() => {
     const goBack: unknown = Reflect.get(window, "goBackInAccountStory");
@@ -46,10 +40,6 @@ async function goBackAsTheSystemDoes(page: Page) {
   });
 }
 
-/**
- * The texts of the first three blocks of the narration document, inside an `<hgroup>` or not. A
- * segment's Play from here button is no block.
- */
 async function readOpeningTexts(article: Locator) {
   return article.evaluate((element) =>
     [...element.querySelectorAll(":scope > *, :scope > hgroup > *")]
@@ -59,7 +49,6 @@ async function readOpeningTexts(article: Locator) {
   );
 }
 
-/** The `narrationDocument` query of each audiobook request the story answered, in order. */
 async function readAudiobookRequestQueries(page: Page): Promise<unknown[]> {
   const queries: unknown = await page.evaluate(() =>
     Reflect.get(window, "audiobookRequestQueries"),
@@ -70,7 +59,6 @@ async function readAudiobookRequestQueries(page: Page): Promise<unknown[]> {
   return queries;
 }
 
-/** Waits until the element plays within a unit of five seconds that starts at `startSeconds`. */
 async function expectPlayingFrom(page: Page, startSeconds: number) {
   await expect
     .poll(async () => {
@@ -125,7 +113,6 @@ test(
     );
     await page.mouse.up();
     expect(await page.evaluate(() => window.getSelection()?.toString().length)).toBeGreaterThan(0);
-    // Ending a text selection is not a request to play.
     await expect(component.getByRole("button", { name: "Play", exact: true })).toBeVisible();
     await expect(selectedSegment).not.toHaveAttribute("aria-current");
     expect((await readNarrationAudio(page)).paused).toBe(true);
@@ -158,7 +145,6 @@ test("tapping a link plays nothing and offers to open it in a popover", async ({
   await expect(popover).toHaveAttribute("target", "_blank");
   await expect(popover).toHaveAttribute("rel", "noopener noreferrer");
   await expect(link).toHaveCSS("background-color", "rgba(18, 18, 18, 0.08)");
-  // The popover sits below the link.
   const linkBounds = await link.boundingBox();
   const popoverBounds = await popover.boundingBox();
   expect(popoverBounds!.y).toBeGreaterThan(linkBounds!.y + linkBounds!.height);
@@ -190,7 +176,6 @@ test("tapping beside the link popover or scrolling closes it without playback", 
   await link.scrollIntoViewIfNeeded();
   await link.click();
   await expect(popover).toBeVisible();
-  // A tap on the segment's own text lands on the backdrop.
   const segmentBounds = await segment.boundingBox();
   await page.mouse.click(segmentBounds!.x + 4, segmentBounds!.y + 8);
   await expect(popover).toHaveCount(0);
@@ -217,7 +202,6 @@ test("from the keyboard, a link opens the popover focused, and Play from here pl
     .getByRole("link", { name: "roughly 25 percent", exact: true });
   const popover = page.getByRole("link", { name: /^Open link/ });
 
-  // Focus alone would scroll the link into view, and that scroll would close the popover.
   await link.scrollIntoViewIfNeeded();
   await link.focus();
   await page.keyboard.press("Enter");
@@ -226,7 +210,6 @@ test("from the keyboard, a link opens the popover focused, and Play from here pl
   await expect(popover).toHaveCount(0);
   await expect(link).toBeFocused();
 
-  // One button per segment, before its text: the third plays the third segment.
   const playFromHere = component.getByRole("button", { name: "Play from here", exact: true });
   await expect(playFromHere).toHaveCount(
     await component
@@ -280,7 +263,6 @@ test("a heading before a list highlights and plays together with the list's firs
   await expect(heading).toHaveAttribute("aria-current", "true");
   await expect(firstItem).toHaveAttribute("aria-current", "true");
   await expectPlayingFrom(page, 5);
-  // Each segment is announced and reached with Tab once, not once per element.
   await expect(component.getByRole("button", { name: "Play from here", exact: true })).toHaveCount(
     3,
   );
@@ -319,7 +301,6 @@ test("units inside a restored table, description list and preformatted text high
 
   const preformattedText = component.locator("pre");
 
-  // The line break shows, which only the rendered text knows.
   expect(await preformattedText.evaluate((element: HTMLElement) => element.innerText)).toBe(
     "A short poem\nin two lines",
   );
@@ -363,7 +344,6 @@ test("a table row, and a heading with the table's first row, highlight and play 
   );
   await expectPlayingFrom(page, 20);
 
-  // A row's Play from here button sits in its first cell, since a row holds only cells.
   for (const row of [headerRow, europeRow, asiaRow]) {
     expect(
       await row.evaluate((element) =>
@@ -401,12 +381,7 @@ test(
   },
 );
 
-/**
- * Makes the screen as tall as the page, so the whole narration document shows with the shell's top
- * bar above it and the player sheet below it, none of them over another.
- */
 async function showWholePage(page: Page) {
-  // The page reaches its height once the narration document is in.
   await expect(page.getByRole("article")).toBeVisible();
   const viewport = page.viewportSize();
   expect(viewport).not.toBeNull();
@@ -414,10 +389,6 @@ async function showWholePage(page: Page) {
   await page.setViewportSize({ width: viewport!.width, height: pageHeight });
 }
 
-/**
- * The area of the screen that holds every given element, with room for a highlight bubble, which
- * reaches 12 px past its element.
- */
 async function readUnionBounds(page: Page, locators: Locator[]) {
   const viewport = page.viewportSize();
   expect(viewport).not.toBeNull();
@@ -492,7 +463,6 @@ test(
     const headerRow = component.getByRole("row").filter({ hasText: "Conversions" });
     const cell = component.getByRole("cell", { name: "Kept for long-form articles" });
 
-    // The heading's unit is the ninth, which starts at 40 s; the cell's is the sixteenth.
     await position.fill("41000");
     await expect(heading).toHaveAttribute("aria-current", "true");
     await expect(headerRow).toHaveAttribute("aria-current", "true");
@@ -583,7 +553,6 @@ test(
       .filter({ hasText: "A second document about listening" })
       .getByRole("link")
       .click();
-    // Opening another audiobook does not interrupt the one playing; its sheet shows its own start.
     await expect(
       playerSheet.getByRole("slider", { name: "Position in A second document about listening" }),
     ).toHaveValue("0");
@@ -620,7 +589,6 @@ test(
 
     await playerSheet.getByRole("button", { name: "Forward 15 seconds", exact: true }).click();
     await expect(playerSheet.getByText("-0:00", { exact: true })).toBeVisible();
-    // The timeline ends a millisecond short of the track, so the element never reaches its end.
     await expect.poll(async () => (await readNarrationAudio(page)).currentTime).toBe(14.999);
     expect((await readNarrationAudio(page)).paused).toBe(true);
   },
@@ -643,7 +611,6 @@ test(
       .filter({ hasText: "A second document about listening" })
       .getByRole("link")
       .click();
-    // The listener stopped 12 s in, in the second unit; showing it loads nothing.
     await expect(playerSheet.getByText("0:12", { exact: true })).toBeVisible();
     await expect(playerSheet.getByText("-0:18", { exact: true })).toBeVisible();
     await expect(component.locator('[data-synchronization-unit="unit-2"]')).toHaveAttribute(
@@ -736,7 +703,6 @@ test("Back after a deep link opens Recents as a new entry above the track", asyn
   await component.getByRole("link", { name: "Back", exact: true }).click();
   await expect(component.getByRole("heading", { name: "Recent", exact: true })).toBeVisible();
 
-  // Back pushed Recents, so the system Back returns to the track below it.
   await goBackAsTheSystemDoes(page);
   await expect(title).toBeVisible();
 });
@@ -788,7 +754,6 @@ test(
     await expect(topBar.getByText(title)).toBeVisible();
     await expect(topBar.getByText("gatesnotes.com", { exact: true })).toBeVisible();
 
-    // Paused at the segment's start, so nothing moves for the screenshot.
     await component.getByRole("button", { name: "Pause", exact: true }).click();
     await page.evaluate(() => {
       if ("narrationAudio" in window && window.narrationAudio instanceof HTMLAudioElement) {
@@ -822,10 +787,8 @@ test("the top bar's menu opens the original page", { tag: VISUAL_TAG }, async ({
     "https://www.gatesnotes.com/a-turbulent-ai-era-and-critical-choices-to-make",
   );
   await expect(openOriginal).toHaveAttribute("target", "_blank");
-  // Offered once the account history lists the track.
   await expect(page.getByRole("menuitem", { name: "Delete track" })).toBeVisible();
   await expectDestructiveDeleteLast(page);
-  // Every segment has audio, so there is nothing to retry.
   await expect(page.getByRole("menuitem", { name: "Retry", exact: true })).toHaveCount(0);
   await expect(page).toHaveScreenshot("menu-open.png");
 });
@@ -884,7 +847,6 @@ test("the top bar's menu offers no Retry when the audiobook cannot generate", as
   await expect(page.getByRole("menuitem", { name: "Retry", exact: true })).toHaveCount(0);
 });
 
-// "the top bar's menu opens the original page" checks the menu of a ready track.
 for (const [status, story] of [
   ["pending", "AccountPendingConversion"],
   ["failed", "AccountFailedConversion"],
@@ -900,13 +862,11 @@ for (const [status, story] of [
   });
 }
 
-/** The open menu ends with Delete track, in the error color. */
 async function expectDestructiveDeleteLast(page: Page) {
   const items = page.getByRole("menuitem");
   await expect(items.last()).toHaveText("Delete track");
   const [deleteColor, errorColor] = await items.last().evaluate((item) => [
     getComputedStyle(item).color,
-    // Resolves the error token to the same color notation as the item's computed color.
     (() => {
       const probe = document.createElement("span");
       probe.style.color = "var(--color-error)";
@@ -989,11 +949,9 @@ test("deleting a track unloads the player first, then lands on Recents without i
 }) => {
   await captureNarrationAudio(page);
   const component = await mount("routes/_shell.audiobooks.$conversionId/DeleteTrack");
-  // The account story mounts the shell, and with it the player's audio element, once signed in.
   await expect(
     component.getByRole("heading", { name: "A deterministic document about careful testing" }),
   ).toBeVisible();
-  // Opening the track loads nothing into the player; Play does.
   expect((await readNarrationAudio(page)).src).toBe("");
   await component.getByRole("button", { name: "Play", exact: true }).click();
   await expect.poll(async () => (await readNarrationAudio(page)).src).toContain("audiobook=story");
@@ -1007,13 +965,11 @@ test("deleting a track unloads the player first, then lands on Recents without i
 
   await expect(component.getByRole("heading", { name: "Recent", exact: true })).toBeVisible();
   await expect(component.getByRole("status").filter({ hasText: "Track deleted." })).toHaveCount(1);
-  // Recents is empty once the deleted track is gone from it.
   await expect(component.getByRole("link", { name: "Add your first track" })).toBeVisible();
-  expect(await page.evaluate((): unknown => Reflect.get(window, "deletionRequest"))).toEqual(
-    // The session-mutation guard of the API refuses a request without a JSON content type.
-    { contentType: "application/json", narrationAudioSrc: "" },
-  );
-  // Deleting replaced the detail entry, so Back cannot return to it.
+  expect(await page.evaluate((): unknown => Reflect.get(window, "deletionRequest"))).toEqual({
+    contentType: "application/json",
+    narrationAudioSrc: "",
+  });
   await page.evaluate(() => {
     const goBack: unknown = Reflect.get(window, "goBackInAccountStory");
     if (typeof goBack !== "function") {
@@ -1077,7 +1033,6 @@ test("a failed deletion keeps the dialog open with an inline error, the player u
 }) => {
   await captureNarrationAudio(page);
   const component = await mount("routes/_shell.audiobooks.$conversionId/DeleteTrackFailsOnce");
-  // The account story mounts the shell, and with it the player's audio element, once signed in.
   await expect(
     component.getByRole("heading", { name: "A deterministic document about careful testing" }),
   ).toBeVisible();
@@ -1090,7 +1045,6 @@ test("a failed deletion keeps the dialog open with an inline error, the player u
 
   await expect(dialog.getByRole("alert")).toHaveText("The track could not be deleted.");
   await expect(dialog.getByRole("button", { name: "Cancel", exact: true })).toBeEnabled();
-  // The failure is shown in the dialog only: no toast opens.
   await expect(page.getByRole("alertdialog", { includeHidden: true })).toHaveCount(1);
   expect((await readNarrationAudio(page)).src).toBe("");
 
@@ -1133,7 +1087,6 @@ test("deleting a track opened from Recents returns to Recents where it was, with
 
   await expect(component.getByRole("status").filter({ hasText: "Track deleted." })).toHaveCount(1);
   await expect(deletableCard).toHaveCount(0);
-  // The track listed just above the deleted one is still in view.
   await expect(
     component.getByRole("link", { name: "Another track 30", exact: true }),
   ).toBeInViewport();
@@ -1183,11 +1136,9 @@ test("an audiobook opened again loads at the position saved meanwhile, while its
 
   await component.getByText("Keep the important boundaries real.", { exact: true }).click();
   await expectPlayingFrom(page, 5);
-  // Playing another audiobook saves the listening position in this one.
   await openFromRecents("A second document about listening");
   await playerSheet.getByRole("button", { name: "Play", exact: true }).click();
   await expect.poll(async () => (await readNarrationAudio(page)).src).toContain("audiobook=second");
-  // Longer than Query keeps an unobserved suspense query at the least, one second.
   await page.clock.fastForward(5_000);
 
   await holdResponses(page, "audiobook:693af4c4-9fa8-430d-9dc5-c00e88fb38a7");
@@ -1216,7 +1167,6 @@ test("a track found gone when its audio is requested again is unloaded and repor
   await expect(playerSheet.getByRole("alert")).toHaveText("This track is no longer available.");
   await expect(playerSheet.getByRole("button", { name: "Play", exact: true })).toBeDisabled();
   expect((await readNarrationAudio(page)).src).toBe("");
-  // The player reports it in place: no toast opens.
   await expect(page.getByRole("alertdialog", { includeHidden: true })).toHaveCount(0);
 });
 
@@ -1274,7 +1224,6 @@ test(
     await expect(component.getByRole("button", { name: "Retry", exact: true })).toBeEnabled();
     await expect(page).toHaveScreenshot("audiobook-with-failed-segment.png");
 
-    // A refused retry leaves the audiobook unchanged, so the reader has to say why.
     await component.getByRole("button", { name: "Retry", exact: true }).click();
     await expect(
       component.getByText(
@@ -1323,7 +1272,6 @@ test("renders audiobook-not-found", { tag: VISUAL_TAG }, async ({ mount, page })
     component.getByRole("heading", { name: "The track could not be loaded." }),
   ).toBeVisible();
   await expect(component.getByText("Track not found.")).toBeVisible();
-  // Trying again cannot find an audiobook that does not exist.
   await expect(component.getByRole("button", { name: "Try again" })).toHaveCount(0);
   await expect(page).toHaveTitle("Audiobook · Cup");
   await expect(page).toHaveScreenshot("audiobook-not-found.png");
@@ -1337,7 +1285,6 @@ test("renders audiobook-load-error", { tag: VISUAL_TAG }, async ({ mount, page }
   await expect(page).toHaveTitle("Audiobook · Cup");
   await expect(page).toHaveScreenshot("audiobook-load-error.png");
 
-  // The story answers the next request with a conversion still being prepared.
   await component.getByRole("button", { name: "Try again" }).click();
   await expect(component.getByLabel("Preparing track")).toHaveAttribute("aria-busy", "true");
 });
@@ -1368,13 +1315,11 @@ test(
     const component = await mount("routes/_shell.audiobooks.$conversionId/PendingConversion");
     const skeleton = component.getByLabel("Preparing track");
     await expect(skeleton).toHaveAttribute("aria-busy", "true");
-    // A conversion still being prepared is content, not a loading state.
     await expect(skeleton).not.toHaveAttribute("data-loading-state");
     await expect(
       component.getByRole("contentinfo", { name: "Player" }).getByRole("status"),
     ).toHaveText("Preparing");
     await expect(component.getByRole("button", { name: "Play", exact: true })).toBeDisabled();
-    // The loading state looks the same apart from the menu, which only the loaded page has.
     await expect(component.getByRole("button", { name: "More", exact: true })).toBeVisible();
     await expect(skeleton).toBeVisible();
     await expectNoHorizontalOverflow(page);
@@ -1382,7 +1327,6 @@ test(
   },
 );
 
-/** The page fits the viewport without horizontal overflow, which Safari once showed for skeletons. */
 async function expectNoHorizontalOverflow(page: Page) {
   const { scrollWidth, clientWidth } = await page.evaluate(() => ({
     scrollWidth: document.documentElement.scrollWidth,
@@ -1432,7 +1376,6 @@ test(
     const component = await mount("routes/_shell.audiobooks.$conversionId/RetryRefused");
     await component.getByRole("button", { name: "Retry", exact: true }).click();
 
-    // Base UI announces urgent toasts through an alert and hides the toast itself until focused.
     await expect(page.getByRole("alert")).toHaveText(
       "The retry could not start.This trial no longer permits new speech generation.",
     );
@@ -1485,7 +1428,6 @@ test("failed polling keeps the track and shows one toast until polling recovers"
   await expect(toasts).toHaveCount(1);
   await expect(toasts).toContainText("The track could not be updated.");
 
-  // Three failed polls replace one toast, which closes once polling succeeds again.
   const toastCounts: number[] = [];
   await expect
     .poll(async () => {
@@ -1506,9 +1448,7 @@ test("polls after the first one that brings the narration document omit it, and 
     "routes/_shell.audiobooks.$conversionId/SynthesisPolledWithoutNarrationDocument",
   );
 
-  // The page loads pending and polls until the track is ready.
   await expect(component.getByRole("button", { name: "Play", exact: true })).toBeEnabled();
-  // A page load holds no document, and neither does a pending audiobook.
   const queries = await readAudiobookRequestQueries(page);
   expect(queries.slice(0, 2)).toStrictEqual([null, null]);
   expect(queries.length).toBeGreaterThanOrEqual(4);
@@ -1539,12 +1479,10 @@ test("a track URL renewed without the narration document plays, highlights and s
 
   await playerSheet.getByRole("button", { name: "Play", exact: true }).click();
 
-  // The element reports playing the failed URL until the renewed one replaces it.
   await expect
     .poll(async () => (await readNarrationAudio(page)).src)
     .not.toContain("missing-narration-track");
   await expectPlayingFrom(page, 0);
-  // Only the page load requests the document; a refetch on mount and the renewal omit it.
   const queries = await readAudiobookRequestQueries(page);
   expect(queries[0]).toBeNull();
   expect(queries.length).toBeGreaterThanOrEqual(2);

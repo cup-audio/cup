@@ -10,21 +10,12 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import java.io.File;
 
-/**
- * The "Send crash reports" switch, on by default. The web app reads it before it starts Sentry and
- * starts the native SDK only while it is on, so turning it off takes full effect on the next start.
- * Turning it off also deletes the native SDK's files, such as crash reports waiting to be sent.
- */
 @CapacitorPlugin(name = "CrashReporting")
 public class CrashReportingPlugin extends Plugin {
     private static final String TAG = "CupCrashReporting";
     private static final String PREFERENCES = "audio.cup.app.crash_reporting";
     private static final String ENABLED_KEY = "enabled";
 
-    /**
-     * Deletes the files a native SDK left while the switch is off. The SDK of the process in which
-     * the listener turned the switch off keeps running, and can write again, until the app stops.
-     */
     static void deleteSentryFilesIfDisabled(Context context) {
         if (!isEnabled(context)) {
             deleteSentryFiles(context);
@@ -45,7 +36,6 @@ public class CrashReportingPlugin extends Plugin {
             call.reject("The enabled option must be a boolean.", "INVALID_ARGUMENT");
             return;
         }
-        // Written synchronously, so a crash right after the switch changed cannot lose it.
         boolean isStored = preferences(getContext()).edit().putBoolean(ENABLED_KEY, enabled).commit();
         if (!isStored) {
             call.reject("The crash reports setting could not be stored.", "STORAGE_FAILED");
@@ -65,11 +55,6 @@ public class CrashReportingPlugin extends Plugin {
         return context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE);
     }
 
-    /**
-     * The native SDK keeps everything in its cache folder `cache/sentry/`: options, the outbox and
-     * crash reports waiting to be sent. With the NDK off and the installation ID in memory, it
-     * writes nowhere else.
-     */
     private static void deleteSentryFiles(Context context) {
         File sentryCache = new File(context.getCacheDir(), "sentry");
         if (!deleteRecursively(sentryCache)) {

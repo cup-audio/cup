@@ -1,0 +1,24 @@
+---
+status: accepted
+---
+
+# Run the mobile app's scripts as `.mts` and empty the web build before packing
+
+`@cup/mobile-app` is a CommonJS package, because `capacitor.config.ts` is loaded as CommonJS, yet its command scripts are ES modules run by Node directly. Its scripts also feed native builds from the web app's Turbo-cached build, run Gradle for the Android app's JVM unit tests, and find the Android SDK and Java on the operator's Mac. The decisions came with the native Android media player's JVM tests in [cup-audio/cup#401](https://github.com/cup-audio/cup/pull/401), `android:run` in [cup-audio/cup#269](https://github.com/cup-audio/cup/pull/269), the Android release scripts in [cup-audio/cup#449](https://github.com/cup-audio/cup/pull/449) (Linear CUP-80), and the emptied web build in [cup-audio/cup#459](https://github.com/cup-audio/cup/pull/459). These decisions were recorded from code comments on 2026-11-23.
+
+## Decision
+
+- **Scripts are `.mts` files.** The package is CommonJS for `capacitor.config.ts`, so its scripts in [`scripts/`](../../apps/mobile-app/scripts/) use the `.mts` extension to run as ES modules: `android-release.mts`, `android-run.mts`, `android-sdk.mts`, `android-upload-key-create.mts`, `jvm-toolchain.mts`, `script-process.mts` and `test-jvm.mts` among them. `script-process.mts` holds what the command scripts share: the package root, ending the script with a message, and running host tools. Because the code lives in `scripts/`, not in the `src/` the shared Vitest configuration covers, the [Vitest config](../../apps/mobile-app/vitest.config.mts) points coverage at `scripts/`.
+- **Empty the web build before packing it.** [`web-build-output.mts`](../../apps/mobile-app/scripts/web-build-output.mts) empties the web app's served build, which `cap sync` packs into both native projects, and its source maps, which `symbols:upload` sends to Sentry. Turbo restores a cached build by writing its files over what a folder already holds and removes none, so without emptying these first a release would pack, and upload the source maps of, every earlier build's files, as the Worker's deploy script also guards against. The declaration output and its build info stay, so TypeScript's incremental build keeps working.
+- **One Android SDK location for scripts and the mobile E2E suite.** [`android-sdk.mts`](../../apps/mobile-app/scripts/android-sdk.mts), exported as `@cup/mobile-app/android-sdk`, resolves `ANDROID_HOME`, then `ANDROID_SDK_ROOT`, then Android Studio's default on macOS.
+- **The JVM unit tests run through Gradle with a checked toolchain.** [`test-jvm.mts`](../../apps/mobile-app/scripts/test-jvm.mts) runs `testDebugUnitTest` for the plugin's plain Java logic (`android/app/src/test`). It first runs [`jvm-toolchain.mts`](../../apps/mobile-app/scripts/jvm-toolchain.mts), which the review gate also runs as a prerequisite and which prints every problem with its fix: the Android SDK, and Java 21, since Gradle runs with `JAVA_HOME`'s Java or the one on `PATH` (`java -version` writes to stderr). Gradle reads the SDK from `ANDROID_HOME`, so `test-jvm.mts`, `android-run.mts` and `android-release.mts` set it and need no `local.properties`.
+- **`android:run` waits out a startup crash.** [`android-run.mts`](../../apps/mobile-app/scripts/android-run.mts) checks that the app's process still runs a few seconds after launching it, because a crash at startup ends the process after `am start` already reported success.
+- **`cap update`, not `cap sync`, before the JVM tests.** `cap update android` writes the Gradle projects of Capacitor's plugins, which the app's build includes, without copying the web bundle as `cap sync` would. It writes the plugin list into the assets folder, which only that copy would otherwise create, so `test-jvm.mts` creates the folder first. `cap update` still requires the web bundle to exist, so the package's `turbo:test` depends on `^turbo:build`, which builds the web app ([`turbo.jsonc`](../../apps/mobile-app/turbo.jsonc)).
+- **Turbo hashes what Gradle reads.** `android/local.properties` is a `turbo:test` input although Git ignores it, and so it is no default input, because Gradle reads `sdk.dir` from it; `ANDROID_HOME`, `ANDROID_SDK_ROOT` and `JAVA_HOME` pass through, since Gradle finds the Android SDK and Java 21 through them.
+- **The assets ignore pattern is Capacitor's.** The [app's Gradle build](../../apps/mobile-app/android/app/build.gradle) keeps the `ignoreAssetsPattern` Capacitor's template sets, modified from aapt's default (`AaptAssets.cpp`) to accommodate modern web apps.
+
+## Consequences
+
+- Every new script in the package must be `.mts` to run as an ES module.
+- Any other command that packs or uploads the web build must empty it first, for the same Turbo restore behaviour.
+- The JVM unit tests make the web app's build a prerequisite of the package's tests.

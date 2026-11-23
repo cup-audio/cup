@@ -55,7 +55,6 @@ test("closing the account dialog opened from Recents returns to Recents", async 
 
   await expect(dialog).toHaveCount(0);
   await expect(component.getByRole("heading", { name: "Recent", exact: true })).toBeVisible();
-  // Opening again proves closing went back to the entry below, not forward to a new one.
   await component.getByRole("link", { name: "Account", exact: true }).click();
   await expect(dialog).toBeVisible();
 });

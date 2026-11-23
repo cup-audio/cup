@@ -31,9 +31,7 @@ export type PendingConversion = {
   lastStartedPhase: ConversionPhase;
   title?: string;
   workflowStartedAtMs?: number;
-  /** When the current stage started: preparation while pending, synthesis once ready. */
   stageStartedAtMs: number;
-  /** When the stuck-conversion check reported the current stage; a stage start removes it. */
   stuckReportedAtMs?: number;
 };
 export type ReadyConversion = Omit<PendingConversion, "status"> & {
@@ -41,9 +39,7 @@ export type ReadyConversion = Omit<PendingConversion, "status"> & {
   completedAtMs: number;
   title: string;
   audiobookReference: AudiobookReference;
-  /** Recorded only when the audiobook has one, so a replayed outcome without it still matches. */
   hasCoverImage?: true;
-  /** The manifest's narration language (BCP 47); absent when the audiobook has none. */
   narrationLanguage?: string;
   measurements?: ConversionMeasurements;
   providerUsage?: Record<string, unknown>;
@@ -91,9 +87,7 @@ export type GrantRecord = {
   registrySnapshotRevision: number;
   registryConfirmedSnapshotRevision: number;
   conversions: GrantConversion[];
-  /** Read from the duration ledger; ledger operations change it, not saving the record. */
   segmentUsage: SegmentUsage[];
-  /** Read from the duration ledger; ledger operations change it, not saving the record. */
   duration: DurationTotals;
 };
 

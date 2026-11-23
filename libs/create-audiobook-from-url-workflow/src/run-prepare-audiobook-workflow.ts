@@ -71,7 +71,6 @@ const PROCESSING_STEP_CONFIG = {
   timeout: "10 minutes",
 } as const satisfies WorkflowStepConfig;
 
-// One retry covers a browser launch or connection that failed transiently; a refusal does not throw.
 const COVER_IMAGE_STEP_CONFIG = {
   retries: {
     limit: 1,
@@ -105,7 +104,6 @@ export type PrepareAudiobookWorkflowServices = {
   ) => Promise<NarrationLanguageDetectionResult>;
 };
 
-/** Runs a conversion through durable steps using explicitly supplied provider services. */
 export async function runPrepareAudiobookWorkflow({
   env,
   event,
@@ -117,7 +115,6 @@ export async function runPrepareAudiobookWorkflow({
   step: WorkflowStep;
   services: PrepareAudiobookWorkflowServices;
 }) {
-  // The failure capture reports a failed step's own error, so Cup's errors keep their messages.
   const step = keepStepErrors(workflowStep);
   const params = conversionParamsSchema.parse(event.payload);
   const { sourceUrl } = params;
@@ -135,7 +132,6 @@ export async function runPrepareAudiobookWorkflow({
   const { artifactPrefix, artifactBucket: bucket } = execution;
   let failureCategory: ConversionFailureCategory = "source-preparation";
 
-  // Assigned once source preparation has finished; it never rejects.
   let coverImagePromise: Promise<CoverImage | undefined> | undefined;
 
   const result = await (async () => {
@@ -152,7 +148,6 @@ export async function runPrepareAudiobookWorkflow({
         },
       );
 
-      // Kept before narration content selection runs, so failed preparations keep it too.
       await step.do(
         phaseStepName(
           ConversionPhase.SOURCE_MATERIAL_PREPARATION,
@@ -168,8 +163,6 @@ export async function runPrepareAudiobookWorkflow({
           }),
       );
 
-      // Started beside content selection and awaited only before the manifest is stored, so a
-      // slow image host does not delay selection.
       coverImagePromise = storeDeclaredCoverImage({
         artifactPrefix,
         bucket,
@@ -205,8 +198,6 @@ export async function runPrepareAudiobookWorkflow({
 
       const segmentationVersion = CURRENT_SEGMENTATION_VERSION;
       const synchronizationUnits = await step.do(
-        // Named apart from the step that returned the whole narration document, so a run that
-        // recorded that step before the deploy runs this one instead of reusing its result.
         phaseStepName(
           ConversionPhase.NARRATION_DOCUMENT_CREATION,
           "segment narration source material",
@@ -214,8 +205,6 @@ export async function runPrepareAudiobookWorkflow({
         PROCESSING_STEP_CONFIG,
         async () => {
           await execution.phaseStarted(ConversionPhase.NARRATION_DOCUMENT_CREATION);
-          // Only the units are kept: the listener API renders the narration document on request
-          // from the stored narration source material.
           return segmentNarrationDocument({
             segmentationVersion,
             sourceTitle: sourceMaterial.title,
@@ -257,8 +246,6 @@ export async function runPrepareAudiobookWorkflow({
         PROCESSING_STEP_CONFIG,
         async () => {
           await execution.phaseStarted(ConversionPhase.AUDIOBOOK_STORAGE);
-          // Written before the manifest that references it, so a stored manifest never references
-          // a missing object.
           const narrationSourceMaterial = await storeNarrationSourceMaterial({
             artifactPrefix,
             bucket,
@@ -307,18 +294,12 @@ export async function runPrepareAudiobookWorkflow({
         },
       };
     } catch (error) {
-      // Let a cover image step that is still running finish first, so it cannot write into the
-      // conversion's prefix after the owner has started cleaning up the failed conversion.
       await coverImagePromise;
 
       const failedOutcome = await step.do(
         phaseStepName(ConversionPhase.FINALIZATION, "create failed conversion outcome"),
         PROCESSING_STEP_CONFIG,
         async () => {
-          // A content limit is an expected outcome, which the `content-limit` warning records, inside
-          // this step, which never retries: a replay of the run reuses the step's result instead of
-          // logging again. Any other failure is captured once its outcome is recorded, under the
-          // event ID chosen here, so that the outcome can carry it as its diagnostic reference.
           if (error instanceof ContentLimitError) {
             logEvent(
               "content-limit",
@@ -351,9 +332,6 @@ export async function runPrepareAudiobookWorkflow({
         TERMINAL_STATE_STEP_CONFIG,
         async () => {
           await execution.recordFailed(failedOutcome);
-          // Last in the step, so only a run whose owner recorded the failure reports it, and a
-          // replay of the run reuses the recorded step instead of capturing again. A run that
-          // cannot record its failure stops, and the owner's alarm captures the stopped Workflow.
           if (failedOutcome.diagnosticReference !== undefined) {
             captureException(originalStepError(error), {
               event_id: failedOutcome.diagnosticReference,
@@ -390,8 +368,6 @@ export async function runPrepareAudiobookWorkflow({
     },
   );
 
-  // The ready outcome already reserved every segment or none. Insufficient duration is a valid
-  // result that leaves nothing to dispatch; the owner's alarm dispatches if this step fails.
   await step.do(
     phaseStepName(ConversionPhase.FINALIZATION, "start speech synthesis"),
     TERMINAL_STATE_STEP_CONFIG,
@@ -403,10 +379,6 @@ export async function runPrepareAudiobookWorkflow({
   return result.audiobookReference;
 }
 
-/**
- * Keeps the declared cover image when it can be loaded. Every failure leaves the audiobook without
- * one instead of failing the conversion, so this never rejects.
- */
 async function storeDeclaredCoverImage({
   artifactPrefix,
   bucket,
@@ -431,7 +403,6 @@ async function storeDeclaredCoverImage({
   let missingCause: MissingCoverImageCause;
   try {
     const outcome = await step.do(
-      // Runs beside content selection; it keeps an image the source material declares.
       phaseStepName(ConversionPhase.SOURCE_MATERIAL_PREPARATION, "store cover image"),
       COVER_IMAGE_STEP_CONFIG,
       async () => {
@@ -440,7 +411,6 @@ async function storeDeclaredCoverImage({
           return loaded;
         }
 
-        // The bytes are stored inside the step because a step result cannot carry them.
         const coverImage = await storeCoverImage({
           artifactPrefix,
           bucket,
@@ -470,20 +440,10 @@ async function storeDeclaredCoverImage({
       "log missing cover image",
       () => logMissingCoverImage(conversionId, missingCause),
     );
-  } catch {
-    // A log step the engine could not run must not fail the conversion: this never rejects.
-  }
+  } catch {}
   return undefined;
 }
 
-/**
- * Decides the narration language in one retryable step. Detection never rejects: when the step's
- * retries are exhausted, or the answer is unusable, it falls back to the declared language or to
- * none, and the fallback is logged. A narration language the speech model cannot speak stays the
- * narration language and is logged on its own, also when it came from a fallback; a speech provider
- * that ignores the narration language, such as ElevenLabs, logs nothing. Both warnings are logged
- * in one step, so a replay of the run does not log them again.
- */
 async function detectNarrationLanguage({
   conversionId,
   detect,
@@ -553,11 +513,6 @@ async function detectNarrationLanguage({
   return result;
 }
 
-/**
- * Runs `log` in a step of its own, which never retries. Code between steps runs again whenever the
- * engine replays the run, so a log record written there repeats; a replay reuses this step's
- * recorded result instead, so the record is written once.
- */
 function logOnce(
   step: WorkflowStep,
   phase: ConversionPhase,
@@ -569,7 +524,6 @@ function logOnce(
   });
 }
 
-/** Either the loader's refusal reason or the error that ended the cover image step. */
 type MissingCoverImageCause =
   | { reason: string; error?: never }
   | { reason?: never; error: unknown };

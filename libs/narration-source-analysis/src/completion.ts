@@ -1,8 +1,3 @@
-/*
- * The model call behind narration source analysis: one forced tool call per request. Narration
- * content selection and narration language detection share it.
- */
-
 export type CompletionTool = {
   name: string;
   description: string;

@@ -9,10 +9,6 @@ type SignInRecord = {
   error?: string;
 };
 
-/**
- * Runs the iOS adapter's Google sign-in against a fake Supabase client, with the native
- * `WebAuthentication` plugin answering `callbackUrl`, and records what each side received.
- */
 async function signIn(
   page: Page,
   callbackUrl: string,
@@ -38,7 +34,6 @@ async function signIn(
       },
     });
   }, callbackUrl);
-  // The gallery page serves the app's modules; nothing needs to be mounted.
   await page.goto("");
   return page.evaluate(async (requestedOptions) => {
     const modulePath = "/src/platform/account-auth.ios.ts";

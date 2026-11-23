@@ -509,10 +509,6 @@ test("the stuck-conversion-deletion check leaves existing marked conversions unr
   }
 });
 
-/**
- * Finds a migration by its journal tag without its number prefix, so renumbering it after a rebase
- * keeps the test valid; also returns the keys of all migrations that run before it.
- */
 function findMigration(name: string) {
   const keys = Object.keys(accountMigrations.migrations);
   const index = accountMigrations.journal.entries.findIndex((entry) =>
@@ -524,7 +520,6 @@ function findMigration(name: string) {
   return { key: keys[index]!, earlierKeys: keys.slice(0, index) };
 }
 
-/** Runs migrations in one transaction with enforced foreign keys, like the Durable Object migrator. */
 function applyMigrations(database: sqlite.DatabaseSync, keys: string[]) {
   const migrations: Record<string, string> = accountMigrations.migrations;
   database.exec("BEGIN");
@@ -536,10 +531,6 @@ function applyMigrations(database: sqlite.DatabaseSync, keys: string[]) {
   database.exec("COMMIT");
 }
 
-/**
- * Compares schema objects independently of identifier quoting, whitespace, and column order;
- * columns added by `ALTER TABLE` are appended, while a fresh baseline lists them in schema order.
- */
 function readSchema(database: sqlite.DatabaseSync) {
   return database
     .prepare(
@@ -556,7 +547,6 @@ function readSchema(database: sqlite.DatabaseSync) {
     });
 }
 
-/** Splits a `CREATE TABLE` statement into its sorted top-level column and constraint clauses. */
 function splitTableDefinition(sql: string) {
   const bodyStart = sql.indexOf("(");
   const clauses: string[] = [];

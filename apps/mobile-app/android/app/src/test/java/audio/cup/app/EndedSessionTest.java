@@ -36,7 +36,6 @@ public class EndedSessionTest {
         EndedSession ended = endAt(saves, services, 22_000);
         ended.saveIfUnsaved(services.now);
         services.answer(NOT_CONNECTED);
-        // An ended session retries nothing on its own; only the page's close or next load saves.
         assertNull(services.retryTimer);
 
         ended.saveIfUnsaved(services.now);
@@ -86,7 +85,6 @@ public class EndedSessionTest {
         assertEquals(List.of(POSITION_URL + " unit-1+1000"), services.sent);
     }
 
-    /** Saves whose last save failed for a lost connection. */
     private static PositionSaves failingSaves(FakeSaveServices services) {
         PositionSaves saves = new PositionSaves(POSITIONS, POSITION_URL, services);
         saves.save(1_000);
@@ -94,7 +92,6 @@ public class EndedSessionTest {
         return saves;
     }
 
-    /** Ends the session at `positionMilliseconds`, with URLs the page received just now. */
     private static EndedSession endAt(PositionSaves saves, FakeSaveServices services, long positionMilliseconds) {
         return new EndedSession(
             "conversion",

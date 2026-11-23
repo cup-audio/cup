@@ -20,11 +20,9 @@ export const accountQuery = (subject: string) =>
     queryKey: QUERY_KEYS.accountSnapshot(subject),
     queryFn: () => requestApi({ subject }, (client) => client.getAccount()),
     retry: false,
-    // The account settings replace themselves with the setup error, which explains rate limiting.
     meta: { errorDisplay: "inline" },
   });
 
-/** Invalidates every query of the account's data: its snapshot and its history. */
 export function invalidateAccountQueries(subject: string) {
   return queryClient.invalidateQueries({ queryKey: QUERY_KEYS.account(subject) });
 }
@@ -35,13 +33,11 @@ export function invalidateAccountSnapshot(subject: string) {
 
 export function useSignInMutation() {
   return useMutation({
-    // The sign-in dialog keeps its failure next to the button that tries again.
     meta: { errorDisplay: "inline" },
     mutationFn: async (method: SignInMethod) => {
       try {
         await signIn(method);
       } catch (error) {
-        // Backing out is the person's choice, so the dialog stays open without an error.
         if (!(error instanceof SignInCancelledError)) {
           throw error;
         }
@@ -54,7 +50,6 @@ export function useStartAccountConversionMutation(
   onSuccess: (conversionId: string) => Promise<void>,
 ) {
   return useMutation({
-    // The start form shows refusals and the rate-limit countdown next to the submitted URL.
     meta: { errorDisplay: "inline" },
     onError: (failure, request) => {
       if (!isSignedInAs(request.subject)) {

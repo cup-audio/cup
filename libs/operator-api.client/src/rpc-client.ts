@@ -11,7 +11,6 @@ import type {
 
 import { createHonoClient, type HonoClient } from "#src/hono-client.ts";
 
-/** Focused typed client for the operator RPC actions. */
 export class OperatorApiClient {
   #honoClient: HonoClient;
   #accessToken: string;

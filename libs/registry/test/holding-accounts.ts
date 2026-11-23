@@ -1,20 +1,9 @@
-/*
- * A holding ACCOUNTS double. It wraps the real namespace and holds the next call of a chosen account
- * method until the test releases it. While the deletion coordinator awaits an account RPC, its
- * Durable Object's input gate is open, so another call, such as a restore delivery, can land on the
- * coordinator in between; the hold makes that interleaving happen the same way every time.
- * Production code knows nothing about it: the test passes the wrapped namespace as `ACCOUNTS`.
- */
-
 import type { DeletionAccounts } from "#src/account-deletion/deletion-coordinator.ts";
 
 export type AccountMethod = "fenceDeletion" | "eraseAccount";
 
-/** A held call, waiting for the test. */
 export type Hold = {
-  /** Resolves once the matching call has arrived and is being held. */
   reached: Promise<void>;
-  /** Lets the held call run on the real account. */
   release(): void;
 };
 
@@ -22,7 +11,6 @@ type PendingHold = { method: AccountMethod; arrive(): Promise<void> };
 
 export type HoldingAccounts = {
   accounts: DeletionAccounts;
-  /** Holds the next call of `method`; every other call passes straight through. */
   holdNext(method: AccountMethod): Hold;
 };
 

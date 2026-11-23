@@ -144,8 +144,6 @@ export async function synthesizeGeminiAudio({
       },
       query: {
         model: speechConfig.model,
-        // Gemini 3.8 reads input verbatim; retain the classifier workaround only for legacy 3.1.
-        // https://ai.google.dev/gemini-api/docs/models/gemini-3.8-flash-lite-tts#migration-guide
         input: isLegacyGemini
           ? `Synthesize speech by reading the following transcript verbatim.\nSpeak only the transcript, without adding commentary.\n\nTRANSCRIPT:\n${narrationText}`
           : [
@@ -158,9 +156,6 @@ export async function synthesizeGeminiAudio({
                     ...(spokenLanguage === undefined
                       ? {}
                       : {
-                          // An unspoken style is what makes a names-only segment, such as a
-                          // byline, sound like the narration language; the language parameter
-                          // alone does not (cup-audio/cup#193).
                           annotations: [{ type: "speech_metadata", style: spokenLanguage.style }],
                         }),
                   },
@@ -227,10 +222,6 @@ export async function synthesizeGeminiAudio({
   return parseAudioResponse(await readResponseBody(response));
 }
 
-/**
- * Returns the language a request speaks in: the narration language, when the speech policy sends
- * one and the model can speak it. Policies 3 and 4 keep the requests they were prepared with.
- */
 function selectSpokenLanguage(
   speechConfig: SpeechConfig,
   narrationLanguage: string | undefined,
@@ -247,7 +238,6 @@ function selectSpokenLanguage(
     return undefined;
   }
 
-  // The style names the language without its region: "German" for de-AT.
   const englishName = new Intl.DisplayNames(["en"], { type: "language" }).of(
     toLanguageSubtag(narrationLanguage),
   );
@@ -318,7 +308,6 @@ async function readAudioStream(stream: ReadableStream<Uint8Array>): Promise<Uint
   return audio;
 }
 
-/** Converts Google AI Studio server-sent events into decoded PCM audio chunks. */
 function createAudioStreamFromEvents(body: ReadableStream<Uint8Array>): ReadableStream<Uint8Array> {
   const reader = body.getReader();
   const decoder = new TextDecoder();

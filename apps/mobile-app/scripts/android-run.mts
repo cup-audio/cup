@@ -1,8 +1,4 @@
 /* oxlint-disable node/no-process-env -- The script passes the environment on to Gradle and reads the adb device selection. */
-/*
- * Builds the debug app, installs it on the one connected Android device or emulator, and launches
- * it. `.mts` because this package is CommonJS for `capacitor.config.ts`.
- */
 import childProcess from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -27,7 +23,6 @@ if (!fs.existsSync(adb)) {
 const serial = selectDevice();
 console.log(`Deploying to ${serial}.`);
 
-// Gradle reads the SDK from ANDROID_HOME, so no `local.properties` is needed.
 const environment: NodeJS.ProcessEnv = {
   ...process.env,
   ANDROID_HOME: sdkRoot,
@@ -58,7 +53,6 @@ if (!launchOutput.includes("Status: ok")) {
   fail(`Launching ${MAIN_ACTIVITY} failed:\n${launchOutput}`);
 }
 
-// A crash at startup ends the process after `am start` already reported success.
 await timers.setTimeout(SECONDS_TO_SURVIVE_LAUNCH * 1000);
 const pid = childProcess.spawnSync(adb, ["-s", serial, "shell", "pidof", APP_ID], {
   encoding: "utf8",
@@ -72,7 +66,6 @@ console.log(
   `${APP_ID} is running on ${serial}. Check that its UI renders, for example with \`adb -s ${serial} exec-out screencap -p > screen.png\`.`,
 );
 
-/** Returns the serial of the device to deploy to: `ANDROID_SERIAL` or the only one connected. */
 function selectDevice(): string {
   const connected = runCaptured(adb, ["devices"])
     .split("\n")

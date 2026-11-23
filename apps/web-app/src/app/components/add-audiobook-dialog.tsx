@@ -9,18 +9,10 @@ import { textStyles } from "#src/app/design-system/text-styles.js";
 import { useAccountConversionSubmission } from "#src/app/use-cases/account-conversions.js";
 import { composeClassnames } from "#src/app/utils.js";
 
-/**
- * Starts an account conversion from a source URL, in the Add a Track sheet. Sign-in, the rate-limit
- * countdown and errors stay inside the sheet; it closes once the start succeeded, so the new item
- * appears on Recents behind it. Every close slides the sheet away first; `onClose` follows once it
- * has gone.
- */
 export function AddAudiobookDialog({ onClose }: { onClose: () => void }): React.ReactNode {
   const [open, setOpen] = React.useState(true);
   const submission = useAccountConversionSubmission({
-    // The dialog's start never resumes on home or in a later dialog.
     requestStorage: "memory",
-    // The start mutation has already invalidated the history query that Recents lists.
     onStarted: async () => setOpen(false),
   });
   return (
@@ -46,11 +38,9 @@ export function AddAudiobookDialog({ onClose }: { onClose: () => void }): React.
       >
         <SourceUrlForm
           initialSourceUrl={submission.initialSourceUrl}
-          // A closing sheet leaves a shared URL for the next form.
           shouldReceiveSharedUrl={open}
           isPending={submission.isPending}
           retryIn={submission.retryIn}
-          // Sign-in explains itself in place of the failure.
           error={submission.isSignInOpen ? undefined : submission.error}
           errorFallbackMessage="The track could not be added."
           onSubmit={submission.submit}

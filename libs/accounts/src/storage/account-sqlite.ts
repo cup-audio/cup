@@ -51,14 +51,11 @@ import { rateEvents } from "#src/storage/rate-limit-schema.ts";
 import { migrateAccount } from "#src/storage/sqlite-migrations.ts";
 import { requireRow } from "#src/storage/sqlite-row.ts";
 
-/** How far a conversion's current stage has come: what the stuck-conversion check reads of it. */
 type ConversionStageProgress = {
   conversionId: string;
   status: "pending" | "ready" | "failed";
   lastStartedPhase: ConversionPhase;
-  /** Whether a segment of the conversion still holds a duration reservation. */
   hasReservedSegment: boolean;
-  /** When the current stage started: preparation while pending, synthesis once ready. */
   stageStartedAtMs: number;
 };
 
@@ -176,7 +173,6 @@ export class AccountSqlite {
     return confirmed !== undefined && confirmed.revision < this.duration.revision();
   }
 
-  /** Confirmations can arrive out of order, so the confirmed revision only moves forward. */
   confirmRegistryUsage(revision: number): void {
     z.number().int().nonnegative().safe().parse(revision);
     this.database
@@ -258,7 +254,6 @@ export class AccountSqlite {
     });
   }
 
-  /** A reservation of any missing segment starts synthesis again. */
   reserveMissingAudioSegments(
     conversionId: string,
     narrationTextCharactersBySegment: readonly number[],
@@ -311,7 +306,6 @@ export class AccountSqlite {
       .run();
   }
 
-  /** A settled conversion keeps the phase it last started; callers check the execution first. */
   recordPhaseStarted(conversionId: string, phase: ConversionPhase) {
     const parsed = conversionPhaseSchema.parse(phase);
     this.database
@@ -326,7 +320,6 @@ export class AccountSqlite {
       .run();
   }
 
-  /** Returns whether the segment had a reservation to release. */
   releaseAudioSegment(conversionId: string, sequence: number, nowMs: number): boolean {
     return this.duration.releaseReservations(conversionId, nowMs, sequence) > 0;
   }
@@ -380,10 +373,6 @@ export class AccountSqlite {
     return this.duration.segments(conversionId);
   }
 
-  /**
-   * Sets the conversion deletion marker and releases the conversion's open reservations in one
-   * transaction, so no hold outlives the marker; settled segments stay charged.
-   */
   markConversionDeletion(
     conversionId: string,
     nowMs: number,
@@ -412,7 +401,6 @@ export class AccountSqlite {
     });
   }
 
-  /** The marked conversions whose one attempt to terminate their workflows is still to come. */
   conversionsOwingWorkflowTermination(): string[] {
     return this.database
       .select({ conversionId: accountConversions.conversionId })
@@ -427,11 +415,6 @@ export class AccountSqlite {
       .map((row) => row.conversionId);
   }
 
-  /**
-   * Takes the conversion's one attempt to terminate its workflows and returns the segment sequences
-   * whose workflows may still run. It is recorded ahead of the attempt, so an alarm that dies
-   * partway through a long conversion's workflows does not start over on every pass.
-   */
   claimWorkflowTermination(conversionId: string, nowMs: number): number[] {
     z.number().int().nonnegative().safe().parse(nowMs);
     this.database
@@ -442,11 +425,6 @@ export class AccountSqlite {
     return this.duration.segments(conversionId).map((segment) => segment.sequence);
   }
 
-  /**
-   * The last cleanup step deletes a marked conversion's rows in one transaction, the marked row
-   * last because the other rows reference it. Ledger history stays: segments only reference their
-   * credit operations. An unmarked conversion is never touched.
-   */
   deleteMarkedConversionRows(conversionId: string): void {
     this.database.transaction(() => {
       if (!this.isMarkedForDeletion(conversionId)) {
@@ -523,8 +501,6 @@ export class AccountSqlite {
         .run();
       this.duration.releaseReservations(conversionId, nowMs);
       let isInsufficientDuration = false;
-      // Reserving with the ready outcome leaves no moment in which a prepared conversion has
-      // undecided reservations: afterwards a segment without one means the document did not fit.
       if (parsed.status === "ready" && narrationTextCharactersBySegment !== undefined) {
         const reservation = this.duration.reserveMissing(
           conversionId,
@@ -562,11 +538,6 @@ export class AccountSqlite {
     };
   }
 
-  /**
-   * Pages the duration ledger in append order. The cursor is the decimal position of the page's
-   * last event; a malformed cursor fails rather than restarting from the first event. An account
-   * that was never initialized, or was erased with its ledger, fails like `snapshot`.
-   */
   ledger(page: { limit: number; cursor?: string }): AccountLedgerPage {
     this.snapshot();
     let afterPosition: number | undefined;
@@ -641,7 +612,6 @@ export class AccountSqlite {
       .all();
     const items = rows.slice(0, 50).map((row) => {
       const conversion = requireRow(this.getConversion(row.conversionId));
-      // Stored `ready` means prepared; history reports whether the audiobook can be played.
       return conversion.status === "ready"
         ? {
             ...conversion,
@@ -656,10 +626,6 @@ export class AccountSqlite {
     };
   }
 
-  /**
-   * Every conversion carrying the deletion marker, oldest marker first. Each still owes cleanup,
-   * and the alarm stays armed while any is listed.
-   */
   conversionDeletions(): AccountConversionDeletion[] {
     return this.database
       .select({
@@ -673,7 +639,6 @@ export class AccountSqlite {
       .map((row) => accountConversionDeletionSchema.parse(row));
   }
 
-  /** The marked conversions the stuck-conversion-deletion check has not reported. */
   unreportedConversionDeletions(): AccountConversionDeletion[] {
     return this.database
       .select({
@@ -692,7 +657,6 @@ export class AccountSqlite {
       .map((row) => accountConversionDeletionSchema.parse(row));
   }
 
-  /** Records that the stuck-conversion-deletion check reported the marked conversion. */
   markDeletionStuckReported(conversionId: string, nowMs: number): void {
     this.database
       .update(accountConversions)
@@ -701,7 +665,6 @@ export class AccountSqlite {
       .run();
   }
 
-  /** A conversion marked for deletion reads as missing, which also fences its execution. */
   getConversion(conversionId: string):
     | (AccountConversion & {
         outcome: AccountConversionOutcome | null;
@@ -733,10 +696,6 @@ export class AccountSqlite {
     };
   }
 
-  /**
-   * The conversions whose current stage the stuck-conversion check has not reported, without those
-   * marked for deletion.
-   */
   conversionsWithUnreportedStage(): ConversionStageProgress[] {
     const reservedConversionIds = new Set(
       this.duration.reservedSegments().map((segment) => segment.conversionId),
@@ -763,15 +722,10 @@ export class AccountSqlite {
         status: row.status,
         lastStartedPhase: row.lastStartedPhase,
         hasReservedSegment: reservedConversionIds.has(row.conversionId),
-        /*
-         * Code from before migration 0011 writes no stage start, so a row it wrote during a
-         * rollback has none. Such a row reads the way the migration backfilled the rows it found.
-         */
         stageStartedAtMs: row.stageStartedAtMs ?? row.completedAtMs ?? row.createdAtMs,
       }));
   }
 
-  /** Records that the stuck-conversion check reported the conversion's current stage. */
   markStuckReported(conversionId: string, nowMs: number): void {
     this.database
       .update(accountConversions)
@@ -788,7 +742,6 @@ export class AccountSqlite {
       .run();
   }
 
-  /** Starts the conversion's stage again, so the stuck-conversion check may report it once more. */
   private startStage(conversionId: string, nowMs: number): void {
     this.database
       .update(accountConversions)
@@ -801,7 +754,6 @@ export class AccountSqlite {
     return (this.readDeletionMarker(conversionId)?.deletingSinceMs ?? null) !== null;
   }
 
-  /** The conversion's deletion marker, or `undefined` when the account has no such conversion. */
   private readDeletionMarker(conversionId: string) {
     return this.database
       .select({ deletingSinceMs: accountConversions.deletingSinceMs })
@@ -875,7 +827,6 @@ function toOutcome(row: ConversionRow): AccountConversionOutcome | null {
   if (row.status === "pending") {
     return null;
   }
-  // Parsing restores the exact outcome shape, so settlement replays compare equal fingerprints.
   return accountOutcomeSchema.parse(
     row.status === "ready"
       ? {

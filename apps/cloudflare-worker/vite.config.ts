@@ -9,10 +9,6 @@ import { createWebAppViteConfig, WEB_APP_DIRECTORY } from "@cup/web-app/vite";
 
 const WORKER_DIRECTORY = import.meta.dirname;
 
-/**
- * A stale `.env.local` can point at a local Supabase stack that is no longer running; the server
- * would start, and sign-in would fail only later in the browser. Fail at startup instead.
- */
 function requireReachableLocalSupabase(mode: string): Plugin {
   return {
     name: "cup:require-reachable-local-supabase",
@@ -54,25 +50,17 @@ export default defineConfig(({ command, mode }) => {
     build: { outDir: path.join(WORKER_DIRECTORY, "dist") },
     plugins: [
       cloudflare({ configPath: path.join(WORKER_DIRECTORY, "wrangler.jsonc") }),
-      /*
-       * Build-time instrumentation only (Hono and `openai` spans). `src/index.ts` wraps the entry
-       * points itself, so that the integration tests, which bundle without Vite, run the same
-       * wrapping. The plugin uploads no source maps.
-       */
       sentryCloudflareVitePlugin({ autoInstrumentation: false }),
     ],
   });
 
   if (command === "build") {
     const webBundleDirectory = path.join(WEB_APP_DIRECTORY, "dist/web");
-    // The web package builds first through Turbo; never deploy without its SPA assets.
     fs.accessSync(path.join(webBundleDirectory, "index.html"));
 
     return mergeConfig(workerConfig, {
       root: WORKER_DIRECTORY,
       publicDir: webBundleDirectory,
-      // `prepare-source-maps` in `turbo:build` injects debug IDs and moves the maps out of the
-      // deployed bundle; the deploy uploads them to Sentry (scripts/deploy.ts).
       build: { sourcemap: "hidden" },
     });
   } else if (command === "serve") {

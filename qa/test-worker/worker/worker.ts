@@ -25,7 +25,6 @@ const CONTROLLED_COVER_IMAGE = {
   url: "https://source.example.test/cover.png",
   alternativeText: "A deterministic cover image",
 };
-// A one-pixel PNG standing in for the publisher's image, which no browser fetches here.
 const CONTROLLED_COVER_IMAGE_BYTES = Uint8Array.from(
   atob(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAX+XDSwAAAABJRU5ErkJggg==",
@@ -35,7 +34,6 @@ const CONTROLLED_COVER_IMAGE_BYTES = Uint8Array.from(
 
 export { RegistryDurableObject, AccountDurableObject, ConversionGrantDurableObject };
 
-/** Runs preparation with deterministic local provider adapters. */
 export class PrepareAudiobookQaWorkflow extends WorkflowEntrypoint<Env, ConversionParams> {
   override run(event: WorkflowEvent<ConversionParams>, step: WorkflowStep) {
     assertNoPaidAiBindings(this.env);
@@ -67,7 +65,6 @@ export class PrepareAudiobookQaWorkflow extends WorkflowEntrypoint<Env, Conversi
   }
 }
 
-/** Runs segment synthesis with a tracked local speech provider. */
 export class SynthesizeAudioSegmentQaWorkflow extends WorkflowEntrypoint<
   Env,
   SegmentWorkflowParams
@@ -89,11 +86,9 @@ const apiServer = createApiServer({
 });
 
 const NARRATION_TRACK_PATH = /^\/api\/files\/audiobooks\/[^/]+\/narration-track\.mp3$/u;
-/** How often a throttled narration track sends its next chunk. */
 const THROTTLE_INTERVAL_MILLISECONDS = 100;
 
 type QaEnvironment = Env & {
-  /** Set by the harness's `trackBytesPerSecond` option; unset, the track goes out at full speed. */
   QA_TRACK_BYTES_PER_SECOND?: string;
 };
 
@@ -124,11 +119,6 @@ function parseTrackBytesPerSecond(value: string | undefined): number | undefined
   return bytesPerSecond;
 }
 
-/**
- * Sends the body at `bytesPerSecond`, keeping status and headers. A client then buffers only part
- * of the track and keeps loading while it plays, so a lost connection fails a request, as it does
- * over a mobile network; at loopback speed the client holds the whole track within a second.
- */
 function throttle(response: Response, bytesPerSecond: number): Response {
   const contentLength = response.headers.get("Content-Length");
   if (response.body === null || contentLength === null) {
@@ -164,16 +154,10 @@ function throttle(response: Response, bytesPerSecond: number): Response {
       return reader.cancel(reason);
     },
   });
-  // The client must still know the track's length, as it does from the API server.
   const body = throttled.pipeThrough(new FixedLengthStream(Number(contentLength)));
   return new Response(body, response);
 }
 
-/**
- * Writes one line per request to Wrangler's output, which the harness reads back as the request
- * log. The prefix must match `REQUEST_LOG_PREFIX` in `src/test-worker.ts`. A POST or PUT also logs
- * its body, read from a clone so the API still reads the original.
- */
 async function logRequest(request: Request): Promise<void> {
   const url = new URL(request.url);
   console.log(

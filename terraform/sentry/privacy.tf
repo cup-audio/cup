@@ -1,8 +1,3 @@
-# The provider cannot set the organisation's privacy settings or a project's Advanced Data Scrubbing
-# rules, so these resources send them to Sentry's API whenever the committed JSON changes. Each PUT
-# replaces every rule of its scope, so rules added in the UI are lost on the next change here. The
-# check blocks compare the live values in every plan, which catches such UI edits.
-
 locals {
   organization_api_url = "${local.sentry_api_base_url}0/organizations/${data.sentry_organization.cup.slug}/"
   cup_worker_api_url   = "${local.sentry_api_base_url}0/projects/${data.sentry_organization.cup.slug}/${sentry_project.cup["worker"].slug}/"
@@ -12,7 +7,6 @@ locals {
 
   organization_privacy_settings = jsonencode({
     scrubIPAddresses = true
-    # "Show Generative AI Features" off, so no member can send issue data to Sentry's AI features.
     hideAiFeatures = true
     relayPiiConfig = jsonencode(local.organization_relay_pii_config)
   })
@@ -20,7 +14,6 @@ locals {
     relayPiiConfig = jsonencode(local.cup_worker_relay_pii_config)
   })
 
-  # Reads SENTRY_AUTH_TOKEN from the environment Terraform runs in, so the token stays out of state.
   put_privacy_settings_command = <<-EOT
     printf '%s' "$${PRIVACY_SETTINGS}" | curl --silent --show-error --fail \
       --request PUT \
@@ -61,8 +54,6 @@ resource "terraform_data" "cup_worker_privacy_settings" {
   }
 }
 
-# The token passed in request_headers is written to state; this is accepted, as state already holds
-# the Sentry keys and is access-controlled.
 check "organization_privacy_settings" {
   data "http" "organization" {
     url = local.organization_api_url

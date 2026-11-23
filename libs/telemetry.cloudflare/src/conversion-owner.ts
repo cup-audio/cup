@@ -1,10 +1,6 @@
 import type { ConversionOwner } from "@cup/conversion-contracts";
 import { TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
 
-/**
- * The keys that name a conversion's owner: `cup.owner.kind` and the opaque owner ID. A trial
- * conversion's owner is its conversion grant, so its kind is `grant`.
- */
 export function conversionOwnerKeys(owner: ConversionOwner): Record<string, string> {
   return owner.kind === "account"
     ? {

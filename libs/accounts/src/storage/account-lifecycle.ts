@@ -22,7 +22,6 @@ export type DeletionAttempt = {
   state: "scheduled" | "restored" | "deleting" | "erased";
 };
 
-/** Stored attempts never reach `erased`: account erasure deletes their rows. */
 type StoredDeletionAttemptState = (typeof deletionAttempts.$inferSelect)["state"];
 
 export class AccountLifecycleConflictError extends CupError {
@@ -32,7 +31,6 @@ export class AccountLifecycleConflictError extends CupError {
   }
 }
 
-/** Local transitions are atomic; registry delivery is a persisted, replayable outbox. */
 export class AccountLifecycle {
   private readonly database: DrizzleSqliteDODatabase;
   private readonly snapshot: () => AccountSnapshot;

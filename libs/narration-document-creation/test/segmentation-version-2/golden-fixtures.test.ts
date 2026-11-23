@@ -14,9 +14,6 @@ const SEGMENTATION_FIXTURE_SCHEMA = z
   })
   .strict();
 
-// The expected units were written from the spec's version 2 rules; the fixtures of the rules that
-// version 2 keeps from version 1 are copies of version 1's. They are frozen: a change that alters
-// them must become a new segmentation version.
 const FIXTURES_DIRECTORY = path.join(import.meta.dirname, "golden-fixtures");
 
 const FIXTURE_FILE_NAMES = fs

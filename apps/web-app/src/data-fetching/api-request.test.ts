@@ -43,7 +43,6 @@ async function signIn(page: Page) {
   );
 }
 
-/** Records the Authorization header of each audiobook request and answers it with an error. */
 async function recordAudiobookAuthorization(page: Page) {
   const authorization: Array<string | null> = [];
   await page.route(`**/api/audiobooks/${CONVERSION_ID}`, async (route) => {

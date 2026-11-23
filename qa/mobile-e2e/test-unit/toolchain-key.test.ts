@@ -38,9 +38,6 @@ test("writes the same Android key on every run while the toolchain stays the sam
     ...process.env,
     ANDROID_HOME: sdkRoot,
     JAVA_HOME: javaHome,
-    // Keeps the CLI's iOS probes off the host's Xcode, which this test does not check:
-    // `xcrun simctl` starts CoreSimulatorService when it is not running, which took the test past
-    // its timeout on a loaded Mac.
     DEVELOPER_DIR: path.join(directory, "missing"),
   };
 
@@ -64,7 +61,6 @@ test("writes the same Android key on every run while the toolchain stays the sam
 test("writes the reasons, the same on every run, when a platform's toolchain cannot be read", async () => {
   const directory = await makeTemporaryDirectory();
   const missing = path.join(directory, "missing");
-  // No Android SDK, no Java and no Xcode, as on a Mac before Android Studio and Xcode are installed.
   const env = {
     ...process.env,
     ANDROID_HOME: missing,
@@ -139,7 +135,6 @@ async function runCli(
   };
 }
 
-/** The compile SDK of the mobile app, so the fake SDK holds the platform the key reads. */
 async function readCompileSdkVersion(): Promise<string> {
   const text = await fs.readFile(VARIABLES_GRADLE, "utf8");
   const compileSdkVersion = /compileSdkVersion\s*=\s*(?<version>\d+)/.exec(text)?.groups?.[
@@ -161,7 +156,6 @@ async function writeSourceProperties(
   await fs.writeFile(path.join(packageDirectory, "source.properties"), `${properties}\n`);
 }
 
-/** A `bin/java` that prints the property lines `java -XshowSettings:properties -version` prints. */
 async function writeFakeJava(
   directory: string,
   runtimeVersion: string,

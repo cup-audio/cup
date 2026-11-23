@@ -62,8 +62,6 @@ test.for([
 });
 
 test("aborts before building when Sentry CLI has no auth token", async ({ onTestFinished }) => {
-  // An empty home directory has no `~/.sentryclirc`; the URL is a local discard port, so even a
-  // misconfigured run cannot reach Sentry.
   const home = await fs.mkdtemp(path.join(os.tmpdir(), "deploy-home-"));
   onTestFinished(() => fs.rm(home, { recursive: true, force: true }));
   const sentryCliEnvironment = {

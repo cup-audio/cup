@@ -10,7 +10,6 @@ export type FakeSpeechSynthesisAiOptions = {
   durationMilliseconds?: number;
 };
 
-/** Creates a deterministic speech adapter without an external AI binding. */
 export function createFakeSpeechSynthesisAi(
   options: FakeSpeechSynthesisAiOptions = {},
 ): SpeechSynthesisAi {

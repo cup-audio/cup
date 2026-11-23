@@ -44,10 +44,6 @@ const routeStartConversionHeadersSchema = startConversionHeadersSchema.omit({
   "content-type": true,
 });
 
-/**
- * Sentry's uptime monitor checks this route. It answers while the Worker runs and calls no binding,
- * so its checks cost nothing beyond the Worker itself.
- */
 const healthRoute = createRoute({
   method: "get",
   path: "/api/health",
@@ -435,7 +431,6 @@ export type ListenerApiHandlers<Bindings extends object> = {
   headCoverImage: ListenerApiRouteHandler<typeof coverImageHeadRoute, Bindings>;
 };
 
-/** Creates the typed HTTP interface used by the web application. */
 export function createListenerApi<Bindings extends object>(
   handlers: ListenerApiHandlers<Bindings>,
 ) {
@@ -465,7 +460,6 @@ const unavailable = (): never => {
   throw new Error("Contract application cannot handle requests.");
 };
 
-/** Creates a handler-less application used only by local OpenAPI generation. */
 export function createListenerContractApp() {
   return createListenerApi({
     deletionChallenge: unavailable,
@@ -494,10 +488,6 @@ type OpenApiDocument = ReturnType<
   ReturnType<typeof createListenerContractApp>["getOpenAPIDocument"]
 >;
 
-/**
- * Generates the listener API's OpenAPI document. The listener client build exports it, and the
- * snapshot test compares it with the committed copy.
- */
 export function createListenerOpenApiDocument(): OpenApiDocument {
   return createListenerContractApp().getOpenAPIDocument({
     openapi: "3.0.0",

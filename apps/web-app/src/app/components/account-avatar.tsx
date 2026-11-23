@@ -11,14 +11,8 @@ import { textStyles } from "#src/app/design-system/text-styles.js";
 import { interTypefaceScope } from "#src/app/global-styles.js";
 import { composeClassnames } from "#src/app/utils.js";
 
-/** The drawn ring's stroke, so the fallback glyph's lines match it. */
 const RING_STROKE_WIDTH = 4;
 
-/**
- * Link to the account dialog showing the account holder's initials in the drawn ring, or a person
- * glyph when the session carries no usable name. Cup stores no name: Supabase fills `name` (and the
- * deprecated `full_name`) from the identity provider.
- */
 export function AccountAvatar({
   userMetadata,
 }: {
@@ -31,7 +25,6 @@ export function AccountAvatar({
       {...interTypefaceScope}
       to="/recent/account"
       state={{ isOpenedFromRecents: true }}
-      // the initials are decoration; the link says where it goes
       aria-label="Account"
       className={composeClassnames(
         pressableOverlay,

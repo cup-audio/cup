@@ -1,18 +1,13 @@
 import { CupError } from "@cup/errors";
 
 const PCM_SAMPLE_BYTE_LENGTH = 2;
-// Must match the capacity compiled into the narrow Sonic bridge.
 const CHUNK_SAMPLE_COUNT = 4_608;
-// Sonic silently clamps values outside these ranges (SONIC_MIN_* and SONIC_MAX_* in sonic.h).
 const SONIC_SAMPLE_RATE_RANGE = { min: 1_000, max: 500_000 };
 const SONIC_SPEED_RANGE = { min: 0.05, max: 20 };
-// Sonic's lowest detected pitch (SONIC_MIN_PITCH in sonic.h); it holds back two periods of it.
 const SONIC_MIN_PITCH_HERTZ = 65;
 
-/** Configures the time-stretch of mono signed 16-bit little-endian PCM. */
 export type StretchOptions = {
   sampleRate: number;
-  /** Output duration is the input duration divided by this factor. */
   speedFactor: number;
 };
 
@@ -27,7 +22,6 @@ type StretcherExports = {
   stretcher_write(stretcher: number, sampleCount: number): number;
 };
 
-/** Time-stretches mono signed 16-bit little-endian PCM, keeping its pitch. */
 export async function stretchPcm(pcm: Uint8Array, options: StretchOptions): Promise<Uint8Array> {
   if (!Number.isInteger(options.sampleRate) || options.sampleRate <= 0) {
     throw new CupError(`PCM sample rate must be a positive integer: ${options.sampleRate}`);
@@ -118,10 +112,6 @@ function stretch(
     throw new CupError("Sonic time stretcher did not provide a PCM buffer");
   }
 
-  // Sonic's flush squeezes the pitch periods it still holds back and fades them into silence,
-  // cutting up to about 13 ms off a segment's end. Silence past the end turns those periods into
-  // ordinary input; the output is trimmed back to the segment's stretched length below. The
-  // padding covers two of Sonic's longest pitch periods of output, so it scales with a speed-up.
   const paddingSampleCount = Math.ceil(
     ((2 * options.sampleRate) / SONIC_MIN_PITCH_HERTZ) * Math.max(1, options.speedFactor),
   );
@@ -149,8 +139,6 @@ function stretch(
     stretchedByteLength += readStretchedChunks(stretchedChunks, wasm, stretcher, bufferPointer);
   }
 
-  // Sonic holds back the last pitch periods until it is flushed; without this the padding is lost
-  // and, with it, the segment's end.
   assertSuccessStatus(wasm.stretcher_flush(stretcher), "flushing");
   stretchedByteLength += readStretchedChunks(stretchedChunks, wasm, stretcher, bufferPointer);
 
@@ -199,7 +187,6 @@ function readStretchedChunks(
       return byteLength;
     }
 
-    // Do not expose adjacent WASM memory if the bridge ever violates its buffer capacity.
     if (sampleCount < 0 || sampleCount > CHUNK_SAMPLE_COUNT) {
       throw new CupError(`Sonic time stretcher reading failed with status ${sampleCount}`);
     }

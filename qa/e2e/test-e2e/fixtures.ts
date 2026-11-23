@@ -25,7 +25,6 @@ import {
 
 export type WorkerEnvironment = {
   origin: string;
-  /** This test's fake auth provider: its recorded authorization requests and token lifetime. */
   authProvider: AuthProvider;
   persistenceDirectory: string;
   createGrant(): Promise<CreatedGrant>;
@@ -35,12 +34,10 @@ export type WorkerEnvironment = {
 type Fixtures = {
   expectConsoleError: ((message: string | RegExp) => void) & { messages: Array<string | RegExp> };
   qaScenario: TestWorkerScenario;
-  /** Whether the Worker offers the fake auth provider's test account, as local development does. */
   offersTestAccount: boolean;
   workerEnvironment: WorkerEnvironment;
 };
 
-// Fails every test whose page requests Sentry or the telemetry tunnel.
 export const test = base.extend(telemetryRequestGuard).extend<Fixtures>({
   expectConsoleError: async ({ browserName: _browserName }, use) => {
     const expectedConsoleErrors: Array<string | RegExp> = [];
@@ -81,12 +78,6 @@ export const test = base.extend(telemetryRequestGuard).extend<Fixtures>({
       unexpectedRequests.push(url.href);
       await route.abort("blockedbyclient");
     });
-    // WebKit rejects the outgoing document's pending loads when a navigation replaces it: it raises
-    // each cancelled fetch as failing "due to access control checks", and the queries' error
-    // boundaries and Vite's preload helper log errors nobody can see. Chromium drops that document's
-    // pending loads silently. Errors between a main-frame document request and the commit of the next
-    // document come from the outgoing document, because the next one has run no script yet. They are
-    // attached to the report but not counted. Chromium keeps the full check.
     const outgoingDocumentErrors: string[] = [];
     let isReplacingDocument = false;
     const recordError = (errors: string[], text: string): void => {
@@ -124,7 +115,6 @@ export const test = base.extend(telemetryRequestGuard).extend<Fixtures>({
     await attachText(testInfo, "browser-console-errors", consoleErrors);
     await attachText(testInfo, "browser-page-errors", pageErrors);
     baseExpect(unexpectedRequests, "The browser made an unapproved external request").toEqual([]);
-    // A test may expect an error when its route answers a request, before the browser logs it.
     await baseExpect(() => {
       baseExpect(
         consoleErrors,
@@ -144,10 +134,6 @@ export const test = base.extend(telemetryRequestGuard).extend<Fixtures>({
   },
 });
 
-/**
- * Playwright's `expect`, whose `toHaveScreenshot` fails in a test without {@link VISUAL_TAG}, so a
- * screenshot cannot silently lose the two browser projects that run only visual tests.
- */
 export const expect = baseExpect.extend({
   async toHaveScreenshot(
     receiver: Locator | Page,
@@ -175,11 +161,6 @@ type ScreenshotName = string | ReadonlyArray<string>;
 
 type ScreenshotOptions = PageAssertionsToHaveScreenshotOptions;
 
-/**
- * Playwright's two `toHaveScreenshot` overloads, for a page or a locator. `expect` of a `Locator |
- * Page` is a union of page and locator assertions, whose overloaded methods TypeScript cannot call;
- * both are assignable to this type, whose options are the page's, a superset of the locator's.
- */
 type ScreenshotAssertions = {
   toHaveScreenshot(name: ScreenshotName, options?: ScreenshotOptions): Promise<void>;
   toHaveScreenshot(options?: ScreenshotOptions): Promise<void>;

@@ -24,7 +24,6 @@ export function useAccountConfirmation(subject: string) {
   const [challenge, setChallenge] = React.useState(readPendingAccountChallenge);
   const change = useMutation({
     mutationKey: ACCOUNT_CONFIRMATION_MUTATION_KEY,
-    // The confirmation flow shows its failure next to the step the user is taking.
     meta: { errorDisplay: "inline" },
     mutationFn: async (
       command: { type: "begin"; action: "delete" | "restore" } | { type: "confirm" },
@@ -41,7 +40,6 @@ export function useAccountConfirmation(subject: string) {
         const next = { ...issued, action: command.action };
         storeAccountChallenge(next);
         setChallenge(next);
-        // Supabase AMR timestamps have whole-second precision; authenticate strictly after issuance.
         await new Promise<void>((resolve) => window.setTimeout(resolve, 1_100));
         if (!isSignedInAs(subject)) {
           throw new UserFacingError({ title: "Use the same Google account." });
@@ -56,8 +54,6 @@ export function useAccountConfirmation(subject: string) {
           title: "Use the same Google account that requested confirmation.",
         });
       }
-      // The Google provider token lives only on the session; requestApi below re-resolves its own
-      // token and guard, so this check exists to name the account mismatch and narrow `session`.
       const session = await getFreshAccountSession();
       if (session?.user.id !== subject) {
         throw new UserFacingError({ title: "Use the same Google account." });
@@ -78,16 +74,12 @@ export function useAccountConfirmation(subject: string) {
         clearAccountChallenge();
         setChallenge(null);
       }
-      // A scheduled deletion blocks the account, so only its snapshot is requested again before the
-      // sign-out below clears the cache. A restore also lets Recents behind the account dialog list
-      // the history it failed to list for the blocked account.
       await (pending.action === "delete"
         ? invalidateAccountSnapshot(subject)
         : invalidateAccountQueries(subject));
       if (!isSignedInAs(subject)) {
         return null;
       }
-      // signOut owns playback/media cleanup; the auth lifecycle clears account queries.
       if (pending.action === "delete") {
         await signOut();
         return null;
@@ -115,10 +107,6 @@ export function useAccountConfirmation(subject: string) {
   };
 }
 
-/**
- * Whether a deletion or recovery step is running. Leaving the account dialog then would lose the
- * return from Google, which comes back to the dialog's URL.
- */
 export function useIsAccountConfirmationPending(): boolean {
   return useIsMutating({ mutationKey: ACCOUNT_CONFIRMATION_MUTATION_KEY }) > 0;
 }

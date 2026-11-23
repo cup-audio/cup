@@ -17,7 +17,6 @@ export const completeWithGemini: Completion = async (request, options = {}) => {
     maxRetries: options.maxRetries ?? 0,
     ...(options.fetch ? { fetch: options.fetch } : {}),
     defaultHeaders: {
-      // The gateway supplies the stored Google credential; do not forward the Cloudflare token to Google.
       Authorization: null,
       "cf-aig-authorization": `Bearer ${apiKey}`,
       "cf-aig-collect-log": "true",
@@ -65,7 +64,6 @@ function parseGeminiResponse(response: OpenAI.Chat.Completions.ChatCompletion): 
   const cached = usage.prompt_tokens_details?.cached_tokens ?? 0;
   const input = usage.prompt_tokens - cached;
   const reasoning = usage.completion_tokens_details?.reasoning_tokens;
-  // OpenAI-compatible completion tokens already include reasoning tokens.
   const output = usage.completion_tokens;
   return {
     provider: "google-ai-studio",

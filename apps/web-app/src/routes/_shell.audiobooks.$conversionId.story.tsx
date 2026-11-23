@@ -38,7 +38,6 @@ export const ReadyAudiobook = {
 } satisfies Story;
 
 const GATES_NOTES_CONVERSION_ID = "7b1736db-31f7-46ba-b6b5-d965770b355b";
-// The local fixture is renderNarrationDocument's HTML, as the listener API serves it, for what createNarrationDocument made of the Gates Notes E2E article's source title, source subtitle and body.
 const gatesNotesRouter = createAppRouter(
   createMemoryHistory({ initialEntries: [`/app/audiobooks/${GATES_NOTES_CONVERSION_ID}`] }),
 );
@@ -70,22 +69,16 @@ export const GatesNotesArticle = {
 const SECOND_CONVERSION_ID = "c4be3f43-4a43-4d6b-9a3f-6f0d2f6e2d51";
 const COVER_URL = `${window.location.origin}/__story/covers/detail.svg`;
 
-/** A signed-in listener opens a long audiobook with a cover. */
 export const AccountAudiobook = createGatesNotesAccountStory({
   items: [createRecentsItem(GATES_NOTES_CONVERSION_ID, gatesNotesAudiobook.title)],
   nextCursor: null,
 });
 
-/**
- * A signed-in listener opens a trial audiobook they can also open, such as one converted before
- * signing in. Their account history does not list it.
- */
 export const AccountOpensTrialAudiobook = createGatesNotesAccountStory({
   items: [createRecentsItem(SECOND_CONVERSION_ID, "A second document about listening")],
   nextCursor: null,
 });
 
-/** The audiobook is older than the first page of the account history lists. */
 export const AccountAudiobookOnLaterHistoryPage = accountStory({
   path: `/audiobooks/${CONVERSION_ID}`,
   handlers: [
@@ -148,7 +141,6 @@ function createGatesNotesAccountStory(recents: {
   });
 }
 
-/** The first response never arrives. */
 export const LoadingAudiobook = {
   component: () => <GlobalProviders router={router} />,
   handlers: [
@@ -176,7 +168,6 @@ export const AudiobookNotFound = {
   ],
 } satisfies Story;
 
-/** The first response fails; trying again finds the conversion still being prepared. */
 export const AudiobookLoadError = {
   component: () => <GlobalProviders router={router} />,
   handlers: [
@@ -205,16 +196,11 @@ export const AudiobookLoadError = {
   ],
 } satisfies Story;
 
-/** A signed-in listener moves between an audiobook, Recents, and a second audiobook. */
 export const ListeningAcrossPages = createListeningAcrossPagesStory({
   secondUnitDurationMilliseconds: SEGMENT_DURATION_MILLISECONDS,
   secondPlaybackPosition: null,
 });
 
-/**
- * Like `ListeningAcrossPages`, but the listener stopped 12 s into the second audiobook, whose units
- * last 10 s each.
- */
 export const ResumingAcrossPages = createListeningAcrossPagesStory({
   secondUnitDurationMilliseconds: 10_000,
   secondPlaybackPosition: { synchronizationUnitId: "unit-2", offsetMilliseconds: 2_000 },
@@ -314,7 +300,6 @@ function createPreparedStory(audiobook: Audiobook) {
     component: () => <GlobalProviders router={router} />,
     handlers: [
       http.get(`/api/audiobooks/${CONVERSION_ID}`, () => HttpResponse.json(audiobook)),
-      // The allowance was spent elsewhere, so a retry of the missing audio is refused.
       http.post(`/api/audiobooks/${CONVERSION_ID}/retry`, () =>
         HttpResponse.json({
           result: "insufficient-duration",
@@ -326,7 +311,6 @@ function createPreparedStory(audiobook: Audiobook) {
   } satisfies Story;
 }
 
-/** The audiobook offers no retry, such as once a trial no longer permits speech generation. */
 export const AudiobookWithoutRetry = createPreparedStory({
   ...createAudiobook(),
   canGenerate: false,
@@ -354,7 +338,6 @@ export const InsufficientDuration = createPreparedStory({
   ],
 });
 
-/** Duration was freed after generation was refused, so the audio waits for a Retry. */
 export const AudiobookNotYetGenerated = createPreparedStory({
   ...PREPARED_AUDIOBOOK,
   status: "insufficient-duration",
@@ -387,7 +370,6 @@ export const AudiobookWithFailedSegment = createPreparedStory({
   ],
 });
 
-// A segment with two elements: a heading before a list, and the list's first item.
 const HEADING_BEFORE_A_LIST_AUDIOBOOK = {
   ...PREPARED_AUDIOBOOK,
   narrationDocument: {
@@ -415,9 +397,6 @@ export const HeadingBeforeAListWithFailedSegment = createPreparedStory({
   ],
 });
 
-// The structure the narration document keeps, in its smallest form: a heading before a table, whose
-// caption, header cells and cells are units, a description list and preformatted text in a scroll
-// card.
 const RESTORED_STRUCTURE_UNITS = [
   { id: "unit-1", narrationText: "A deterministic document about careful testing" },
   { id: "unit-2", narrationText: "Latency\n\nLatency by region" },
@@ -443,8 +422,6 @@ export const RestoredStructure = createPreparedStory({
   ),
 });
 
-// Segmentation version 2's units: a heading before a table with its header row, each table row and
-// a description list group.
 const ROW_UNITS = [
   { id: "unit-1", narrationText: "A deterministic document about careful testing" },
   { id: "unit-2", narrationText: "Latency\n\nRegion, Latency" },
@@ -464,11 +441,6 @@ export const RowUnits = createPreparedStory({
   narrationTrack: createStoryNarrationTrack(ROW_UNITS.map(() => SEGMENT_DURATION_MILLISECONDS)),
 });
 
-/**
- * A narration document that uses every element the reader keeps. `u="…"` stands for the unit
- * attribute. The first table has a unit per row, with the heading before it in the first row's
- * unit; the second has a unit per cell, as an existing conversion's tables do.
- */
 const KEPT_MARKUP_HTML_SOURCE = `<article>
 <hgroup><h1 u="kept-1">Keeping the pipeline honest</h1><p u="kept-2">Notes from a year of running speech synthesis at scale</p></hgroup>
 <p u="kept-3">Most of our failures were <em>boring</em>. A cron job ran twice; a cache held on to a <strong>stale manifest</strong>; a vendor quietly changed its <i>de facto</i> rate limit, which we only noticed in <b>bold red</b> on a dashboard. The <a href="https://www.example.org/postmortems">postmortem archive</a> has the details.</p>
@@ -498,7 +470,6 @@ const KEPT_MARKUP_UNITS = [
   ...new Set(Array.from(KEPT_MARKUP_HTML_SOURCE.matchAll(/ u="([^"]+)"/g), ([, unitId]) => unitId)),
 ].map((unitId) => ({ id: unitId ?? "", narrationText: unitId ?? "" }));
 
-/** Every kept element and both kinds of table units, with ready audio. */
 export const KeptMarkup = createPreparedStory({
   ...PREPARED_AUDIOBOOK,
   title: "Keeping the pipeline honest",
@@ -533,14 +504,12 @@ function createPendingStory(preparationPhase?: PreparationPhase) {
   } satisfies Story;
 }
 
-/** A conversion whose phase is not reported, or not known to this client. */
 export const PendingConversion = createPendingStory();
 export const PendingStarting = createPendingStory("starting");
 export const PendingReadingPage = createPendingStory("reading-page");
 export const PendingSelectingContent = createPendingStory("selecting-content");
 export const PendingPreparingText = createPendingStory("preparing-text");
 
-/** The first poll finds the conversion prepared, which brings in its title. */
 export const PendingConversionGetsPrepared = {
   component: () => <GlobalProviders router={router} />,
   handlers: [
@@ -568,11 +537,6 @@ export const PendingConversionGetsPrepared = {
   ],
 } satisfies Story;
 
-/**
- * Polls a conversion from pending through synthesis to ready, and answers as the Worker does: a
- * request that omits the narration document gets the audiobook without it. Each request's
- * `narrationDocument` query is recorded in `window.audiobookRequestQueries`.
- */
 export const SynthesisPolledWithoutNarrationDocument = {
   component: () => <GlobalProviders router={router} />,
   handlers: (() => {
@@ -657,13 +621,11 @@ const FAILED_AUDIOBOOK = {
   explanation: "Preparation failed. Retry to load this track.",
 } satisfies Audiobook;
 
-/** The account history of the stories below, which lists their conversion. */
 const ACCOUNT_HISTORY = {
   items: [createRecentsItem(CONVERSION_ID, PREPARED_AUDIOBOOK.title)],
   nextCursor: null,
 };
 
-/** A signed-in listener opens a conversion that is still preparing. */
 export const AccountPendingConversion = accountStory({
   path: `/audiobooks/${CONVERSION_ID}`,
   recents: ACCOUNT_HISTORY,
@@ -672,7 +634,6 @@ export const AccountPendingConversion = accountStory({
   ],
 });
 
-/** A signed-in listener opens a conversion whose preparation failed. */
 export const AccountFailedConversion = accountStory({
   path: `/audiobooks/${CONVERSION_ID}`,
   recents: ACCOUNT_HISTORY,
@@ -681,7 +642,6 @@ export const AccountFailedConversion = accountStory({
   ],
 });
 
-/** How the stories below answer the listener's request to delete the track. */
 type DeletionOutcome =
   | "deleted"
   | "deleted-recents-refresh-never-answers"
@@ -689,17 +649,9 @@ type DeletionOutcome =
   | "fails-once"
   | "never-answers";
 
-/** Tracks Recents lists above the deletable one when the story starts on Recents. */
 const TRACKS_ABOVE_DELETABLE_COUNT = 30;
-/** Tracks Recents lists below the deletable one when the story starts on Recents. */
 const TRACKS_BELOW_DELETABLE_COUNT = 4;
 
-/**
- * A signed-in listener deletes a ready track that Recents lists. Once the track is deleted, the
- * audiobook and Recents no longer have it. Opened from Recents, Recents lists enough other tracks
- * to scroll, the deletable one far down; otherwise the story starts on the detail view, as a deep
- * link does, and Recents lists only that track.
- */
 function createDeletionStory(
   outcome: DeletionOutcome,
   audiobook: Audiobook = createAudiobook(),
@@ -739,7 +691,6 @@ function createDeletionStory(
       }),
       http.delete(`/api/account/conversions/${CONVERSION_ID}`, async ({ request }) => {
         deletionRequestCount += 1;
-        // Tests that capture the player's audio element read what it held when the request was sent.
         Object.assign(window, {
           deletionRequest: {
             contentType: request.headers.get("Content-Type"),
@@ -779,27 +730,19 @@ function createDeletionStory(
 }
 
 export const DeleteTrack = createDeletionStory("deleted");
-/** The listener scrolls Recents down to the track and opens it there. */
 export const DeleteTrackOpenedFromRecents = createDeletionStory(
   "deleted",
   createAudiobook(),
   "recents",
 );
-/** Recents can show only its cached list after the deletion, which was loaded with the track. */
 export const DeleteTrackRecentsRefreshNeverAnswers = createDeletionStory(
   "deleted-recents-refresh-never-answers",
 );
-/** The track was already deleted, for example on another device. */
 export const DeleteTrackAlreadyDeleted = createDeletionStory("not-found");
 export const DeleteTrackFailsOnce = createDeletionStory("fails-once");
 export const DeleteTrackNeverAnswers = createDeletionStory("never-answers");
-/** A pending track is deleted while the page polls it. */
 export const DeletePendingTrack = createDeletionStory("deleted", PENDING_AUDIOBOOK);
 
-/**
- * The narration track cannot be read once Play loads it, and requesting the audiobook again finds
- * it gone, as after its deletion on another device.
- */
 export const TrackGoneOnRenewal = accountStory({
   path: `/audiobooks/${CONVERSION_ID}`,
   handlers: (() => {
@@ -832,11 +775,6 @@ export const TrackGoneOnRenewal = accountStory({
   })(),
 });
 
-/**
- * The first narration track URL fails to load, so Play renews it; the renewal omits the narration
- * document the page holds and gets a working URL. The renewal's `narrationDocument` query is
- * recorded in `window.audiobookRequestQueries` and each saved position in `window.savedPositions`.
- */
 export const TrackRenewedWithoutNarrationDocument = accountStory({
   path: `/audiobooks/${CONVERSION_ID}`,
   handlers: (() => {
@@ -928,10 +866,6 @@ export const RetryRefused = {
   ],
 } satisfies Story;
 
-/**
- * Polling an audiobook whose audio is generated fails three times, then recovers. The count spans
- * the page's lifetime, so the failures play out only once per page load.
- */
 export const PollingInterrupted = {
   component: () => <GlobalProviders router={router} />,
   handlers: (() => {
@@ -965,12 +899,6 @@ export const PollingInterrupted = {
   })(),
 } satisfies Story;
 
-/**
- * Polling an audiobook whose audio is generated finds it gone or no longer accessible, as after its
- * deletion on another device or a revoked trial. The poll's answer is held from the start, so a
- * test sees the track until it releases `audiobook-poll`, however slowly the first response
- * renders.
- */
 function createAccessLostWhilePollingStory(failure: "not-found" | "access-denied") {
   let requestCount = 0;
   return {

@@ -1,11 +1,8 @@
 import { CupError } from "@cup/errors";
 
-/** MIME type of synthesized narration segments. */
 export const AUDIOBOOK_CONTENT_TYPE = "audio/mpeg";
-/** MIME type of the canonical audiobook manifest. */
 export const AUDIOBOOK_MANIFEST_CONTENT_TYPE = "application/json";
 
-/** Audio format required from every synthesized narration segment. */
 export const AUDIO_FORMAT = {
   bitrateKilobitsPerSecond: 128,
   channelCount: 1,
@@ -16,14 +13,6 @@ export const AUDIO_FORMAT = {
 const FRAME_DURATION_MILLISECONDS = 24;
 const FRAME_BYTE_LENGTH = 384;
 
-/**
- * Derives a segment's byte length from its settled duration (`actual_milliseconds` × 16).
- *
- * The derivation holds because `analyzeMp3` accepts only unpadded MPEG-2 Layer III frames in
- * `AUDIO_FORMAT`, each exactly 384 bytes and 24 ms long. Any future change to the segment encoding
- * must start recording segment byte lengths, because derivation then no longer holds for older
- * tracks.
- */
 export function getSegmentByteLength(durationMilliseconds: number): number {
   const frameCount = durationMilliseconds / FRAME_DURATION_MILLISECONDS;
 
@@ -36,11 +25,8 @@ export function getSegmentByteLength(durationMilliseconds: number): number {
   return frameCount * FRAME_BYTE_LENGTH;
 }
 
-/** Frame boundaries and playback duration derived from a complete MP3 byte sequence. */
 export type Mp3Analysis = {
-  /** Byte offset of the first MPEG audio frame, after any leading ID3v2 tag. */
   audioStart: number;
-  /** Exclusive byte offset after the final MPEG audio frame, before any trailing ID3v1 tag. */
   audioEnd: number;
   durationMilliseconds: number;
 };
@@ -53,10 +39,6 @@ const MPEG_1_LAYER_3_BITRATES = [
 ] as const;
 const MPEG_1_SAMPLE_RATES = [44_100, 48_000, 32_000] as const;
 
-/**
- * Accepts optional ID3v2 and ID3v1 tags, but requires all intervening bytes to be complete
- * configured Layer III frames.
- */
 export function analyzeMp3(audio: Uint8Array): Mp3Analysis {
   if (audio.byteLength === 0) {
     throw new CupError("MP3 audio must contain at least one MPEG audio frame");
@@ -145,7 +127,6 @@ function assertFrameMatchesAudioFormat({
   bitrateKilobitsPerSecond: number;
   padding: number;
 }): void {
-  // Only MPEG-2 encodes 24 kHz, so this check also rejects every other MPEG version
   if (sampleRate !== AUDIO_FORMAT.sampleRate) {
     throw new CupError(`MP3 audio has unexpected sample rate at byte ${offset}: ${sampleRate} Hz`);
   }
@@ -160,7 +141,6 @@ function assertFrameMatchesAudioFormat({
     );
   }
 
-  // `getSegmentByteLength` relies on every frame having the same length
   if (padding === 1) {
     throw new CupError(`MP3 audio contains a padded frame at byte ${offset}`);
   }

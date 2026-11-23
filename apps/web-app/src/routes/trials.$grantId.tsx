@@ -93,7 +93,6 @@ function TrialConversionPage(): React.JSX.Element {
   );
 }
 
-/** Opening a trial link words its refusals in terms of the link rather than the grant. */
 function describeTrialLinkRefusal(error: RpcError): ErrorCopy {
   if (
     error.code === ERROR_CODE.GRANT_SESSION_REQUIRED ||

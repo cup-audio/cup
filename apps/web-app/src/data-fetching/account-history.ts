@@ -25,11 +25,6 @@ export function createAccountHistoryQuery(subject: string) {
   });
 }
 
-/**
- * Whether the signed-in account's history lists the conversion, which tells the account's own
- * conversion from a trial one the listener can also open. It loads further history pages until it
- * finds the conversion or runs out of pages, and is `false` until then. It never polls itself.
- */
 export function useIsAccountConversion(subject: string, conversionId: string): boolean {
   const { data, hasNextPage, isFetchingNextPage, fetchNextPage } = useInfiniteQuery({
     ...createAccountHistoryQuery(subject),
@@ -51,11 +46,6 @@ export function useIsAccountConversion(subject: string, conversionId: string): b
   return isListed;
 }
 
-/**
- * Removes a deleted conversion from the cached history pages, so Recents never lists it while its
- * history is requested again. Cancels history requests in flight first, because one sent before the
- * deletion would put the conversion back. The caller invalidates the history afterwards.
- */
 export async function removeFromCachedAccountHistory(subject: string, conversionId: string) {
   const queryKey = QUERY_KEYS.accountHistory(subject);
   await queryClient.cancelQueries({ queryKey });

@@ -14,10 +14,8 @@ import {
   defineAudioSegments,
 } from "@cup/duration-ledger";
 
-// Re-exported so that the grant migrations create the shared duration ledger tables.
 export { creditBalances, creditLedger, creditOperations };
 
-/** Every conversion phase as an SQL list, so the CHECK below follows the enum. */
 const CONVERSION_PHASE_SQL_LIST = sql.raw(
   conversionPhaseOrder.map((phase) => `'${phase}'`).join(", "),
 );
@@ -77,10 +75,7 @@ export const conversions = sqliteTable(
     audiobookReference: text("audiobook_reference_json", {
       mode: "json",
     }).$type<AudiobookReference>(),
-    // Set only for a ready conversion whose audiobook has a cover image; null otherwise.
     hasCoverImage: integer("has_cover_image", { mode: "boolean" }),
-    // The manifest's narration language, copied when the conversion became ready; null when the
-    // audiobook has none or was prepared before narration languages were recorded.
     narrationLanguage: text("narration_language"),
     measurements: text("measurements_json", { mode: "json" }).$type<ConversionMeasurements>(),
     providerUsage: text("provider_usage_json", { mode: "json" }).$type<Record<string, unknown>>(),
@@ -88,11 +83,7 @@ export const conversions = sqliteTable(
     explanation: text(),
     diagnosticReference: text("diagnostic_reference"),
     cleanupState: text("cleanup_state", { enum: CLEANUP_STATES }),
-    // When the conversion's current stage started, for the stuck-conversion check: preparation,
-    // accepted or retried, while pending; synthesis, whenever segments are reserved, once ready.
-    // The migration that added it set existing rows to their completion or creation time.
     stageStartedAtMs: integer("stage_started_at_ms"),
-    // Set when the stuck-conversion check reported the current stage; a stage start clears it.
     stuckReportedAtMs: integer("stuck_reported_at_ms"),
   },
   (table) => [

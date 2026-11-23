@@ -4,17 +4,10 @@ import { createFakeSpeechSynthesisAi } from "@cup/audiobook-production/fake";
 const SPEECH_CALLS_PREFIX = "qa/speech-calls/";
 const SPEECH_RELEASE_KEY = "qa/speech-released";
 
-/**
- * Records local provider requests and optionally holds responses to exercise concurrent
- * reservations.
- */
 export function createTrackedSpeechProvider(bucket: R2Bucket, scenario: string): SpeechSynthesisAi {
   const provider = createFakeSpeechSynthesisAi(
     scenario === "tts-failure"
-      ? // A 400 the provider does not mark as retryable is permanent, so the segment Workflow fails
-        // at once instead of waiting out its retry backoff; the Workflow's library tests cover
-        // retried 503s with the production retry count.
-        { failureStatus: 400 }
+      ? { failureStatus: 400 }
       : scenario === "speech-gated"
         ? { durationMilliseconds: 8_000 }
         : scenario === "long-speech"
@@ -84,7 +77,6 @@ function narrationTextFromRequest(query: unknown): string {
   throw new Error("Narration request text missing");
 }
 
-/** These controls are served only by the isolated QA Worker. */
 export async function handleSpeechControl(
   request: Request,
   bucket: R2Bucket,

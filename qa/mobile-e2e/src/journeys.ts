@@ -1,19 +1,9 @@
-/**
- * Listener journeys inside the WebView that several specs share. Each takes the session switched
- * into the WebView, as `AppDevice.webView()` returns it; one that passes through the platform's own
- * screens, such as signing in, takes the device too.
- */
 import type { AppDevice } from "#src/app-device.ts";
 
-/** The source URL the test Worker's fake source preparation accepts. */
 export const SOURCE_URL = "https://source.example.test/fixture";
 
 const SIGN_IN_TIMEOUT_MS = 60_000;
 
-/**
- * From the signed-out landing page, starts a conversion of `SOURCE_URL` and signs in with "Continue
- * with Google", which the test's fake auth provider answers. Ends on the new audiobook's page.
- */
 export async function signInFromLandingPage(
   device: AppDevice,
   webView: WebdriverIO.Browser,
@@ -27,11 +17,6 @@ export async function signInFromLandingPage(
   });
 }
 
-/**
- * From the signed-out landing page, opens the sign-in dialog with the "Sign in" link under the
- * start form and signs in with "Continue with Google", which the test's fake auth provider answers.
- * Ends on Recents, where home sends a signed-in listener.
- */
 export async function signInFromHomeLink(
   device: AppDevice,
   webView: WebdriverIO.Browser,
@@ -49,7 +34,6 @@ export async function signInFromHomeLink(
   });
 }
 
-/** Fills the landing page's start form with `SOURCE_URL` and submits it, which asks to sign in. */
 export async function startSignInFromLandingPage(webView: WebdriverIO.Browser): Promise<void> {
   const url = webView.$('input[type="url"]');
   await url.waitForDisplayed({ timeout: 30_000 });
@@ -58,7 +42,6 @@ export async function startSignInFromLandingPage(webView: WebdriverIO.Browser): 
   await webView.$("button=Continue with Google").waitForEnabled({ timeout: 30_000 });
 }
 
-/** Waits until Recents lists `count` tracks. */
 export async function waitForRecents(webView: WebdriverIO.Browser, count: number): Promise<void> {
   await webView.waitUntil(
     async () =>
@@ -68,7 +51,6 @@ export async function waitForRecents(webView: WebdriverIO.Browser, count: number
   );
 }
 
-/** Waits for the signed-out landing page: its start form. */
 export async function waitForLandingPage(webView: WebdriverIO.Browser): Promise<void> {
   await webView.$("button=Listen").waitForDisplayed({ timeout: 30_000 });
   await webView.waitUntil(async () => (await pathname(webView)) === "/app/", {
@@ -77,15 +59,11 @@ export async function waitForLandingPage(webView: WebdriverIO.Browser): Promise<
   });
 }
 
-/** The one link in the narration document of `SOURCE_URL`, which the test Worker's page carries. */
 export const NARRATION_LINK_URL = "https://source.example.test/deterministic-fakes";
 
-/** On an audiobook's page, taps the narration document's link, then "Open link" in its popover. */
 export async function openNarrationLink(webView: WebdriverIO.Browser): Promise<void> {
   const link = webView.$(`article a[href="${NARRATION_LINK_URL}"]`);
   await link.waitForExist({ timeout: 60_000 });
-  // Any scroll closes the popover, so the link is scrolled to before the tap, and the scroll event
-  // has fired by the second animation frame.
   await link.scrollIntoView({ block: "center" });
   await webView.execute(
     () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
@@ -96,7 +74,6 @@ export async function openNarrationLink(webView: WebdriverIO.Browser): Promise<v
   await popover.click();
 }
 
-/** On an audiobook's page, opens the top bar's menu and taps "Open original page". */
 export async function openOriginalPage(webView: WebdriverIO.Browser): Promise<void> {
   await webView.$('button[aria-label="More"]').click();
   const openOriginal = webView.$("a=Open original page");

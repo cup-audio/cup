@@ -4,12 +4,7 @@ import React from "react";
 
 import { crashReportsQuery, useSetCrashReportsMutation } from "#src/data-fetching/crash-reports.js";
 
-/**
- * The shells' "Send crash reports" switch, which covers native crash capture only: the shell's JS
- * errors still reach Sentry. Render it in a shell only; the browser has no native crash capture.
- */
 export function CrashReportsSetting(): React.ReactNode {
-  // The switch reads the device's setting in an instant; until then, the section is left out.
   return (
     <React.Suspense fallback={null}>
       <CrashReportsSwitch />

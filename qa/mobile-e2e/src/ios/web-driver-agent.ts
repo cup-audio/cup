@@ -6,7 +6,6 @@ import { APPIUM_HOME } from "#src/appium.ts";
 import { run } from "#src/host.ts";
 import type { IosHost } from "#src/ios/preflight.ts";
 
-/** WebDriverAgent as the installed XCUITest driver bundles it. */
 const WEB_DRIVER_AGENT_ROOT = path.join(
   APPIUM_HOME,
   "node_modules",
@@ -14,14 +13,8 @@ const WEB_DRIVER_AGENT_ROOT = path.join(
   "node_modules",
   "appium-webdriveragent",
 );
-/** Shared by every checkout on this Mac, like the Android emulator's snapshot. */
 const CACHE_ROOT = path.join(os.homedir(), "Library", "Caches", "cup-mobile-e2e", "wda");
 
-/**
- * Returns the derived data folder of a WebDriverAgent build for the simulator, building it first
- * when this WebDriverAgent version has not been built with this Xcode on this Mac. Sessions start
- * the build with `xcodebuild test-without-building`, so later runs never rebuild it.
- */
 export async function ensureWebDriverAgent(host: IosHost): Promise<string> {
   const packageJson: unknown = JSON.parse(
     await fs.readFile(path.join(WEB_DRIVER_AGENT_ROOT, "package.json"), "utf8"),
@@ -38,7 +31,6 @@ export async function ensureWebDriverAgent(host: IosHost): Promise<string> {
   process.stderr.write(
     `Building WebDriverAgent ${version} once for this Mac and Xcode into ${derivedData}; this takes a few minutes.\n`,
   );
-  // Concurrent first runs each build into their own folder; the first rename wins.
   await fs.mkdir(CACHE_ROOT, { recursive: true });
   const building = await fs.mkdtemp(`${derivedData}.building-`);
   try {

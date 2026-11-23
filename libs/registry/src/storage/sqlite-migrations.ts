@@ -60,8 +60,6 @@ function migrateWithLegacyReset<T extends Record<string, unknown>>(
     throw new CupError("Both legacy and Drizzle migration histories exist; refusing to reset");
   }
 
-  // Drizzle executes the reset, baseline, preserved rows, and journal write in one transaction.
-  // Removing the legacy journal makes the destructive transition run exactly once.
   return migrate(database, {
     ...migrations,
     migrations: {

@@ -16,7 +16,6 @@ export function LandingPage(): React.ReactNode {
   return <GlobalProviders router={router} />;
 }
 
-/** The iOS app serves the web app from `capacitor://localhost`, a scheme without a URL origin. */
 const iosAppRouter = createAppRouter(createMemoryHistory({ initialEntries: ["/app/"] }), {
   pageOrigin: "capacitor://localhost",
 });
@@ -26,9 +25,6 @@ export function LandingPageInIosApp(): React.ReactNode {
 }
 
 export const SignIn = {
-  // The landing page's route component is split into its own chunk. Loading the route before
-  // mounting keeps the page from rendering empty while that chunk downloads, which can take longer
-  // than the URL field lookup below waits.
   beforeMount: async () => {
     await router.load();
   },
@@ -51,7 +47,6 @@ export const SignIn = {
   },
 } satisfies Story;
 
-/** Local development without a Google client: the configuration offers only the test account. */
 export const SignInWithTestAccount = {
   ...SignIn,
   handlers: [
@@ -65,7 +60,6 @@ export const SignInWithTestAccount = {
   ],
 } satisfies Story;
 
-/** A signed-out listener opens the sign-in dialog from the line under the form. */
 export const SignInFromLink = {
   beforeMount: SignIn.beforeMount,
   component: LandingPage,
@@ -81,10 +75,6 @@ export const SignInFromLinkWithTestAccount = {
   handlers: SignInWithTestAccount.handlers,
 } satisfies Story;
 
-/**
- * Account auth fails to initialize, so home shows signed out, and a sign-in that initializes it
- * again fails too. Holding `"auth-config"` keeps that retry loading.
- */
 export const HomeWhileAuthUnavailable = {
   beforeMount: SignIn.beforeMount,
   component: LandingPage,
@@ -99,10 +89,6 @@ export const HomeWhileAuthUnavailable = {
   ],
 } satisfies Story;
 
-/**
- * A start submitted from the home page resumed after sign-in and is still pending, so a signed-in
- * listener stays on home instead of being redirected to Recents.
- */
 export const SignedInHomeWithPendingStart = {
   ...accountStory({
     path: "/",

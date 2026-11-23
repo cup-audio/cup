@@ -14,16 +14,10 @@ import java.util.concurrent.Executors;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-/**
- * Sends listening-position saves to the signed position URL off the main thread, and answers on
- * `handler`'s thread. The position URL carries its own authorization, so a save needs no session of
- * the listener's and works while the page is suspended.
- */
 final class PositionUrlWriter {
     private static final String TAG = "CupPositionSaves";
     private static final int TIMEOUT_MILLISECONDS = 15_000;
 
-    /** One thread, so the saves leave in the order {@link PositionSaves} sends them. */
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Handler handler;
 
@@ -52,7 +46,6 @@ final class PositionUrlWriter {
             connection.setReadTimeout(TIMEOUT_MILLISECONDS);
             connection.setDoOutput(true);
             connection.setFixedLengthStreamingMode(body.length);
-            // The position route's browser-mutation check; the request sends no Origin.
             connection.setRequestProperty("Content-Type", "application/json");
             connection.setRequestProperty("X-Create-Audiobook-From-URL-Request", "1");
             try (OutputStream output = connection.getOutputStream()) {
@@ -74,7 +67,6 @@ final class PositionUrlWriter {
         }
     }
 
-    /** The message of the API's error envelope, `{ "error": { "message": … } }`, if it has one. */
     private static String readErrorMessage(HttpURLConnection connection, int status) {
         if (status < 400) {
             return null;

@@ -8,7 +8,6 @@ import { createListenerOpenApiDocument } from "#src/hono-app.ts";
 const HTTP_METHODS = ["get", "head", "post", "put", "patch", "delete"] as const;
 const MUTATION_METHODS: ReadonlySet<string> = new Set(["post", "put", "patch", "delete"]);
 
-/** The parts of an OpenAPI document the structural tests read. */
 const openApiDocumentSchema = z.object({
   paths: z.record(
     z.string(),
@@ -30,7 +29,6 @@ const openApiDocumentSchema = z.object({
   ),
 });
 
-/** Every operation of the document, named like `POST /api/grants/{grantId}/sessions`. */
 function listOperations() {
   const document = openApiDocumentSchema.parse(createListenerOpenApiDocument());
   return Object.entries(document.paths).flatMap(([path, pathItem]) =>
@@ -45,7 +43,6 @@ function listOperations() {
 
 describe("listener OpenAPI document", () => {
   test("matches the committed snapshot", async () => {
-    // Update the snapshot with `pnpm --filter '@cup/listener-api.routes' test -u`.
     await expect(
       `${JSON.stringify(createListenerOpenApiDocument(), undefined, 2)}\n`,
     ).toMatchFileSnapshot("./__snapshots__/openapi.json");
@@ -86,8 +83,6 @@ describe("listener OpenAPI document", () => {
   });
 
   test("every operation with request schemas declares the 400 response that the validation hook returns", () => {
-    // `defaultHook` answers a request that fails its route's schemas with `400 invalid-input`.
-    // Routes registered with their own hook answer validation failures differently; none yet.
     const operationsWithCustomHooks = new Set<string>();
     const operationsWithout400 = listOperations().flatMap(({ name, operation }) =>
       (operation.requestBody !== undefined || operation.parameters !== undefined) &&

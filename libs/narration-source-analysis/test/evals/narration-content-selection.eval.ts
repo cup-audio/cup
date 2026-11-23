@@ -36,7 +36,6 @@ const CANDIDATES: readonly NarrationContentSelectionCandidate[] = [
   },
 ];
 
-// Separate from the selection candidates, so detection experiments vary independently of selection.
 const DETECTION_CANDIDATES: readonly NarrationLanguageDetectionCandidate[] = [
   {
     ...PRODUCTION_DETECTION_CONFIG,
@@ -88,8 +87,6 @@ for (const candidate of CANDIDATES) {
 
           await vitest.expect(result).toSatisfyJudge(EXACT_SYNCHRONIZATION_UNITS_JUDGE, {
             expectedSynchronizationUnits: evalCase.expectedSynchronizationUnits,
-            // Scores never gate: the file snapshot below gates the production candidate, so
-            // `eval:update` can rewrite a golden that differs instead of failing before it.
             threshold: null,
           });
 
@@ -109,7 +106,6 @@ const EXACT_NARRATION_LANGUAGE_JUDGE = createJudge<
   NarrationLanguageDetectionEvalOutput,
   { expectedLanguage: string }
 >("exact-narration-language", ({ output, expectedLanguage }) => {
-  // A fallback answers with the declared language, which can match without the detector deciding.
   const isExactMatch = output.fallbackReason === undefined && output.language === expectedLanguage;
 
   return {
@@ -163,10 +159,6 @@ function describeDeclaredLanguage({ declaredLanguage }: NarrationLanguageScenari
   return declarations.length === 0 ? "nothing declared" : `declared ${declarations.join(", ")}`;
 }
 
-/**
- * Rebuilds the narration source material from the committed selection golden, leaving out the
- * source title and source subtitle units, so a selection regression cannot fail detection.
- */
 function toSourceMaterialHtml(evalCase: EvalCase): string {
   const leadingUnitCount = evalCase.sourceSubtitle === undefined ? 1 : 2;
 

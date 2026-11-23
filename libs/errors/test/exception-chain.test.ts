@@ -3,7 +3,6 @@ import { expect, test } from "vitest";
 import { CupError } from "#src/cup-error.ts";
 import { describeExceptionChain, isCupError } from "#src/exception-chain.ts";
 
-/** Drizzle's query error: it embeds the SQL parameters and does not set `name`. */
 class DrizzleQueryError extends Error {
   constructor(query: string, params: unknown[], cause: unknown) {
     super(`Failed query: ${query}\nparams: ${params.join(",")}`, { cause });
@@ -72,7 +71,6 @@ test("drops the message of a plain `Error`, which a dependency can throw with an
 });
 
 test("counts an error rebuilt from a Cup error by a Durable Object RPC call as Cup's own", () => {
-  // The runtime rebuilds a thrown error as a plain `Error` that keeps its own properties.
   const thrown = new CupError("Account execution is fenced");
   const rebuilt = Object.assign(
     new Error(thrown.message),

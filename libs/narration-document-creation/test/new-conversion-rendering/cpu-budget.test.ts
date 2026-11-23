@@ -7,19 +7,12 @@ import {
   type SegmentationVersion,
 } from "#src/index.ts";
 
-// The largest narration document preparation accepts: its content limit is 40,000 characters of
-// narration text in at most 200 synchronization units.
 const MAX_NARRATION_CHARACTERS = 40_000;
 const MAX_SYNCHRONIZATION_UNITS = 200;
 
-// The CPU time one render may take, stricter than the Worker's configured limit (`limits.cpu_ms` in
-// the Worker's Wrangler config) on purpose: the listener API renders on every request that carries
-// the narration document, so rendering must stay small next to the request's other work, not just
-// finish before the Worker is stopped.
 const CPU_BUDGET_MILLISECONDS = 50;
 
 const SOURCE_TITLE = "The largest narration document";
-// 50 characters of narration text, with kept inline markup and a link.
 const SENTENCE = 'A sentence with <em>emphasis</em> and a <a href="/cited">cited source</a>, too. ';
 const SENTENCE_TEXT_LENGTH = 50;
 
@@ -41,7 +34,6 @@ test.for([1, 2] as const)(
       MAX_NARRATION_CHARACTERS,
     );
 
-    // The fastest of several renders, so a busy test machine doesn't fail the budget.
     const cpuMilliseconds: number[] = [];
 
     for (let render = 0; render < 5; render += 1) {
@@ -64,11 +56,6 @@ test.for([1, 2] as const)(
   },
 );
 
-/**
- * A table, a description list and a long `pre`, each after a heading, followed by as many
- * paragraphs as fill the content limit's units and close to its characters under the given
- * segmentation version, which divides tables and description lists into units differently.
- */
 function createLargestSourceMaterialHtml(segmentationVersion: SegmentationVersion): string {
   const tableRows = Array.from(
     { length: 12 },
@@ -97,7 +84,6 @@ function createLargestSourceMaterialHtml(segmentationVersion: SegmentationVersio
   const paragraphCharacters =
     (MAX_NARRATION_CHARACTERS - countNarrationCharacters(structuredUnits)) / paragraphCount;
   const sentenceCount = Math.floor(paragraphCharacters / SENTENCE_TEXT_LENGTH);
-  // One long word fills the rest, so the paragraphs come within a character each of the limit.
   const fillingWord = "w".repeat(
     Math.floor(paragraphCharacters) - sentenceCount * SENTENCE_TEXT_LENGTH,
   );

@@ -25,36 +25,27 @@ test("keeps the pitch of a pure tone", async () => {
 
   const stretched = await stretchPcm(pcm, STRETCH_OPTIONS);
 
-  // A 220 Hz tone crosses zero 440 times per second; a resampling speed-up would give 462.
   expect(countZeroCrossingsPerSecond(stretched)).toBeCloseTo(440, -1);
 });
 
 test("keeps audio shorter than Sonic's pitch analysis window", async () => {
-  // Sonic holds back input until it has two of its longest pitch periods (738 samples at
-  // 24 kHz), so 20 ms of audio comes out only once the stream is padded and flushed.
   const pcm = createTonePcm(SAMPLE_RATE / 50, 1_500);
 
   const stretched = await stretchPcm(pcm, STRETCH_OPTIONS);
 
-  // 20 ms at ×1.05 is 457 samples.
   expect(stretched.byteLength / 2).toBe(457);
   expect(countHighPitchedSamples(stretched)).toBeGreaterThanOrEqual(457 * 0.85);
 });
 
 test("keeps a short distinctive tail at the end of a segment", async () => {
-  // Sonic's flush squeezes the pitch periods it holds back and fades them into silence, which
-  // cost about half of this tail before the stretcher padded the segment with silence.
   const body = createTonePcm(SAMPLE_RATE * 2, 220);
   const tail = createTonePcm(SAMPLE_RATE / 50, 1_500);
 
   const stretchedBody = await stretchPcm(body, STRETCH_OPTIONS);
   const stretched = await stretchPcm(concatenatePcm(body, tail), STRETCH_OPTIONS);
 
-  // The 20 ms tail at ×1.05 is 457 samples; Sonic removes whole pitch periods, so the tail's
-  // content may fall 15% short.
   expect(stretched.byteLength / 2 - stretchedBody.byteLength / 2).toBe(457);
   expect(countHighPitchedSamples(stretched)).toBeGreaterThanOrEqual(457 * 0.85);
-  // The tail ends the output rather than the body or silence.
   expect(
     countHighPitchedSamples(stretched.subarray(-(SAMPLE_RATE / 100) * 2)),
   ).toBeGreaterThanOrEqual((SAMPLE_RATE / 100) * 0.5);
@@ -129,8 +120,6 @@ function concatenatePcm(...parts: Uint8Array[]): Uint8Array {
   return pcm;
 }
 
-// Counts the samples in 1 ms blocks that cross zero at least twice at a tone's amplitude: a 1,500 Hz
-// tone does, a 220 Hz tone, which crosses zero every 2.3 ms, does not.
 function countHighPitchedSamples(pcm: Uint8Array): number {
   const view = new DataView(pcm.buffer, pcm.byteOffset, pcm.byteLength);
   const sampleCount = pcm.byteLength / 2;

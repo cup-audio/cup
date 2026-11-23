@@ -4,11 +4,6 @@ import { renderNarrationDocument, segmentNarrationDocument } from "#src/index.ts
 
 const FETCHED_URL = "https://publisher.example/articles/story";
 
-/**
- * Renders narration source material as a new conversion whose stored units are the ones
- * segmentation version 1 derives from it, and returns the narration document's body after the
- * source title.
- */
 async function renderBody(sourceMaterialHtml: string): Promise<string> {
   const sourceTitle = "Story title";
   const { synchronizationUnits } = segmentNarrationDocument({
@@ -100,7 +95,6 @@ test("shows preformatted text split into several units as one pre per unit in on
   const unitBoundary = '</b></pre><pre data-synchronization-unit="narration-unit-0003"><b>';
 
   expect(body.split(unitBoundary)).toHaveLength(2);
-  // The units split the text between two words of one line.
   expect(body.replace(unitBoundary, " ")).toBe(
     `<div data-scroll-card=""><pre data-synchronization-unit="narration-unit-0002"><b>${lines.join("<br>")}</b></pre></div>`,
   );

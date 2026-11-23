@@ -1,31 +1,19 @@
-/** A `package.json` `exports` field; a conditional target always has a `default` condition here. */
 type ExportsField =
   | string
   | Record<string, string | { [condition: string]: string; default: string }>;
 
 export type WorkspaceProject = {
   name: string;
-  /** Path relative to the repository root, such as `libs/accounts`. */
   directory: string;
   exports: ExportsField | undefined;
-  /** `cup.subpathExportExceptions` of the project's `package.json`: subpath to reason. */
   subpathExportExceptions: Record<string, string>;
-  /** Reads a file by its path relative to the project directory. */
   readFile: (relativePath: string) => Promise<string>;
 };
 
-/** Only these directories hold production code; `tooling/` and `qa/` packages hold none. */
 const PRODUCTION_DIRECTORIES = ["apps/", "libs/"];
 const ROOT_INDEX = "./src/index.ts";
-/** `export { … } from "…"` or `export * from "…"` of a file inside the package. */
 const LOCAL_RE_EXPORT = /^export\s[^;]*?\sfrom\s+["'](?:#src\/|\.{1,2}\/)/m;
 
-/**
- * Checks the package export rule of the system overview: production code is exported through `.`,
- * which is `src/index.ts` when it re-exports other files. In `apps/` and `libs/`, a subpath export
- * pointing into `src/` is production code unless it is a `*.fake.ts` test double; such a subpath
- * passes only when `cup.subpathExportExceptions` lists it with a reason.
- */
 export async function findPackageExportProblems(projects: WorkspaceProject[]): Promise<string[]> {
   const problems: string[] = [];
 
@@ -76,7 +64,6 @@ function isProductionTarget(target: string): boolean {
   return target.startsWith("./src/") && !target.endsWith(".fake.ts");
 }
 
-/** Maps each subpath to the file it loads at runtime: the target string or its `default` condition. */
 function readExportTargets(project: WorkspaceProject): Map<string, string> {
   const targets = new Map<string, string>();
   if (project.exports === undefined) {

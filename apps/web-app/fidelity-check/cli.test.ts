@@ -11,7 +11,6 @@ import {
   type FidelityCheckInputs,
 } from "#fidelity-check/inputs.ts";
 
-/** The PNG signature and the start of its IHDR chunk, which carries a 402×898 size. */
 const PNG_HEADER = Buffer.from("89504e470d0a1a0a0000000d494844520000019200000382", "hex");
 const STORY = "routes/index/LandingPage";
 
@@ -59,7 +58,6 @@ await test("launches the check with the image resolved against the working direc
       playwrightArgs: [],
     },
   ]);
-  // The launch's exit code, so a mismatch fails the command.
   assert.equal(exitCode, 1);
 });
 
@@ -160,7 +158,6 @@ await test("starts relative paths where pnpm was typed, but only for this script
   const pnpmScript = { INIT_CWD: "/typed/here", npm_lifecycle_event: "fidelity-check" };
 
   assert.equal(findWorkingDirectory(pnpmScript, "/package"), "/typed/here");
-  // An INIT_CWD left over from another pnpm script says nothing about this command.
   assert.equal(
     findWorkingDirectory({ INIT_CWD: "/elsewhere", npm_lifecycle_event: "dev" }, "/here"),
     "/here",

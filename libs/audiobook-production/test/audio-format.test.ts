@@ -28,7 +28,6 @@ test("rejects non-frame bytes between MPEG audio frames", () => {
 
 test("rejects a frame at a bitrate other than the configured one", () => {
   const frame = createMpeg2Layer3Frame();
-  // bitrate index 0b1011 is 112 kbps in MPEG-2 Layer III, so the frame is 336 bytes
   const lowerBitrateFrame = new Uint8Array(336);
 
   lowerBitrateFrame.set([0xff, 0xf3, 0xb4, 0xc0]);
@@ -40,7 +39,6 @@ test("rejects a frame at a bitrate other than the configured one", () => {
 
 test("rejects a padded frame", () => {
   const frame = createMpeg2Layer3Frame();
-  // padding bit set, so the frame is 385 bytes
   const paddedFrame = new Uint8Array(385);
 
   paddedFrame.set([0xff, 0xf3, 0xc6, 0xc0]);

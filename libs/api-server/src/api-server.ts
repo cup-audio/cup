@@ -305,7 +305,6 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
       );
     }
   },
-  /** Acts only on the caller's own account, so another account's or a trial conversion is not found. */
   async deleteAccountConversion(context) {
     const validation = validateSessionMutationRequest(context.req.raw, context.get("traceId"));
     if (validation.result === "invalid") {
@@ -579,7 +578,6 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
     if (!audiobook) {
       return jsonError(context.get("traceId"), "audiobook-not-found", "Track not found.", 404);
     }
-    // The ownership middleware admitted this request for the owner alone.
     const signMediaUrl = createMediaUrlSigner(context, owner);
     const segmentUsage = await reader.listAudioSegments();
     const narrationTrackDurations = findNarrationTrackDurations(segmentUsage);
@@ -640,7 +638,6 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
                   : undefined,
               ),
             }),
-        // A reader polling with the document it already holds skips reading and rendering it.
         ...(narrationDocument === "omit"
           ? {}
           : {
@@ -686,8 +683,6 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
       return context.json({ result: "started" } satisfies RetryConversionResponse, 200);
     }
 
-    // A prepared conversion retries synthesis: failed segments, or the whole document when it
-    // previously did not fit. A refusal for insufficient duration is an outcome, not an error.
     const result = await dispatch.startSynthesis(
       countNarrationTextCharactersBySegment(audiobook.narrationDocument),
     );
@@ -776,7 +771,6 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
   },
 };
 
-// Durable Object RPC rejections carry only the thrown message, so ledger rejections are matched by it.
 const ACCOUNT_ADJUSTMENT_CONFLICTS = [
   {
     thrownMessage: "Account is not active",
@@ -877,7 +871,6 @@ const operatorApiHandlers: OperatorApiHandlers<ApiServerEnvironment> = {
         return jsonError(context.get("traceId"), conflict.code, conflict.message, 409);
       }
       captureException(error);
-      // Retrying with the same request ID replays a recorded adjustment, so failures stay safe to retry.
       return jsonError(
         context.get("traceId"),
         "operational-error",
@@ -889,7 +882,6 @@ const operatorApiHandlers: OperatorApiHandlers<ApiServerEnvironment> = {
   async listAccountDeletions(context) {
     const registry = context.env.REGISTRY;
     const accountRegistry = registry.get(registry.idFromName("registry"));
-    // Typed rather than parsed, like the account inspection below.
     return context.json(
       {
         attempts: await accountRegistry.inspectDeletions(),
@@ -901,9 +893,6 @@ const operatorApiHandlers: OperatorApiHandlers<ApiServerEnvironment> = {
   async inspectAccount(context) {
     const { accountId } = context.req.valid("param");
     const account = context.env.ACCOUNTS.get(context.env.ACCOUNTS.idFromName(accountId));
-    // Checked against the contract at compile time, not parsed, so an unexpected shape reaches the
-    // operator instead of failing as a server error; the route tests parse responses strictly.
-    // `satisfies` rejects missing or mismatched properties, but not extra ones in nested values.
     return context.json(
       {
         account: await account.inspect(),
@@ -915,7 +904,6 @@ const operatorApiHandlers: OperatorApiHandlers<ApiServerEnvironment> = {
       200,
     );
   },
-  /** Pages the account's duration ledger, which keeps the entries of deleted conversions. */
   async inspectAccountLedger(context) {
     const searchParameters = new URL(context.req.url).searchParams;
     if (["limit", "cursor"].some((name) => searchParameters.getAll(name).length > 1)) {
@@ -937,7 +925,6 @@ const operatorApiHandlers: OperatorApiHandlers<ApiServerEnvironment> = {
       200,
     );
   },
-  /** Deletes an account's conversion; a trial conversion is refused. */
   async deleteConversion(context) {
     const { conversionId } = context.req.valid("param");
     const owner = await getRegistryStub(context.env).findConversionOwner(conversionId);
@@ -1199,11 +1186,8 @@ export type ApiServerHonoEnvironment = {
   Variables: { traceId: string };
 };
 
-/** Creates the HTTP server for the web application and operator interfaces. */
 export function createApiServer(dependencies: ApiServerDependencies = productionDependencies) {
   const app = new Hono<ApiServerHonoEnvironment>();
-  // First, so that every error body carries the trace ID, also one of an error that a later
-  // middleware throws and `onError` answers.
   app.use("*", async (context, next) => {
     context.set("traceId", readTraceId());
     await next();
@@ -1237,7 +1221,6 @@ export function createApiServer(dependencies: ApiServerDependencies = production
         defaultSrc: ["'self'"],
         connectSrc: ["'self'", new URL(context.env.SUPABASE_URL).origin],
         imgSrc: ["'self'"],
-        // The web player's narration track: a signed media URL on this origin's file routes.
         mediaSrc: [`${new URL(context.req.url).origin}/api/files/`],
         styleSrc: ["'self'", "'unsafe-inline'"],
         scriptSrc: ["'self'", NONCE],
@@ -1245,9 +1228,6 @@ export function createApiServer(dependencies: ApiServerDependencies = production
         baseUri: ["'none'"],
         formAction: ["'self'"],
       },
-      // The Android and iOS apps embed media from their own origins (`https://localhost` on Android,
-      // `capacitor://localhost` on iOS) with plain `<img>` and `<audio>` elements. A signed media URL authorizes the request by itself, so its
-      // routes allow a cross-origin embed; credentialed CORS still admits only the app's origins.
       crossOriginResourcePolicy: isSignedMediaPath(context.req.path) ? "cross-origin" : true,
       referrerPolicy: "no-referrer",
       xFrameOptions: "DENY",
@@ -1311,8 +1291,6 @@ export function createApiServer(dependencies: ApiServerDependencies = production
     const origin = context.req.header("Origin");
     allowApplicationOrigin(context, origin);
     if (isPositionPath(context.req.path)) {
-      // The position route authorizes either of its two credentials, the bearer token or a signed
-      // position URL, and checks ownership itself (`authorizePositionSave`).
       await next();
       context.header("Cross-Origin-Resource-Policy", "same-origin");
       return;
@@ -1364,8 +1342,6 @@ export function createApiServer(dependencies: ApiServerDependencies = production
     context.header("Cross-Origin-Resource-Policy", "same-origin");
   });
 
-  // Media routes accept only a signed media URL. Registering the exact media routes, as listed in
-  // `allowedMethodsForApiPath`, lets other paths under `/api/files/` answer 404 instead of 401.
   for (const path of [
     "/api/files/audiobooks/:conversionId/narration-track.mp3",
     "/api/files/audiobooks/:conversionId/cover-image",
@@ -1418,8 +1394,6 @@ export function createApiServer(dependencies: ApiServerDependencies = production
     }
     await next();
     if (context.req.method !== "GET" && context.req.method !== "HEAD") {
-      // No operator email: no log record carries an email address. Like every Sentry log record, it
-      // carries the trace ID of the request, the one error bodies carry.
       logEvent("operator-mutation", "The operator changed something through the Operator API.", {
         attributes: {
           "http.request.method": context.req.method,
@@ -1431,20 +1405,15 @@ export function createApiServer(dependencies: ApiServerDependencies = production
     return context.res;
   });
 
-  // The telemetry tunnel: the client SDK posts its envelopes here, on Cup's own domain, past ad
-  // blockers. It is not part of the Listener API, and its path avoids "sentry" so filter lists miss it.
-  // Same-origin in the browser; the shells post from their own origins without credentials.
   app.use(
     TELEMETRY_TUNNEL_PATH,
     cors({
       origin: ["capacitor://localhost", "https://localhost"],
       allowMethods: ["POST"],
-      // The client SDK reads its rate limits from these.
       exposeHeaders: ["Retry-After", "X-Sentry-Rate-Limits"],
     }),
   );
   app.post(TELEMETRY_TUNNEL_PATH, (context) => {
-    // `cf` is typed as incoming or outgoing request properties, which leaves `country` unknown.
     const country = context.req.raw.cf?.country;
     return handleTelemetryTunnelRequest(context.req.raw, {
       tunnelDsns: context.env.SENTRY_TUNNEL_DSNS,
@@ -1469,11 +1438,9 @@ export function createApiServer(dependencies: ApiServerDependencies = production
       return context.redirect(`/app/${url.search}`, 308);
     }
     if (/^\/trials\/[^/]+\/?$/.test(url.pathname)) {
-      // Leave Location without a fragment so browsers inherit the original trial credential.
       return context.redirect(`/app${url.pathname}${url.search}`, 308);
     }
 
-    // The shell is internal; other existing assets also include Vite's development modules.
     if (url.pathname === "/index.html") {
       return context.text("Not Found", 404);
     }
@@ -1490,8 +1457,6 @@ export function createApiServer(dependencies: ApiServerDependencies = production
       response = await context.env.ASSETS.fetch(new Request(url, context.req.raw));
     }
     if (!response.headers.get("Content-Type")?.startsWith("text/html")) {
-      // An asset response's headers are immutable; the secure headers middleware and the
-      // Cache-Control middleware set headers on the response this handler returns.
       return new Response(response.body, response);
     }
 
@@ -1503,14 +1468,11 @@ export function createApiServer(dependencies: ApiServerDependencies = production
   });
 
   app.onError((error, context) => {
-    // Hono's own 4xx, such as the validator's answer to a malformed JSON body, is the client's
-    // fault: it keeps its status and opens no issue.
     if (error instanceof HTTPException && error.status < 500) {
       return error.status === 400
         ? jsonError(context.get("traceId"), "invalid-input", "The request could not be read.", 400)
         : error.getResponse();
     }
-    // Hono hands the error here instead of rethrowing it, so Sentry's handler wrapper never sees it.
     captureException(error);
     return jsonError(
       context.get("traceId"),
@@ -1528,23 +1490,16 @@ export function createApiServer(dependencies: ApiServerDependencies = production
     .route("/", createOperatorApi(operatorApiHandlers));
 }
 
-/**
- * The Sentry trace ID of the request, which error bodies carry so that a reported reference finds
- * the request's trace. Sentry's request wrapper makes the request's span active; without one, as in
- * tests that call the app directly, the scope's propagation context still holds a trace ID.
- */
 function readTraceId(): string {
   return (
     getActiveSpan()?.spanContext().traceId ?? getCurrentScope().getPropagationContext().traceId
   );
 }
 
-/** Whether the path is one of the media routes that a signed media URL authorizes. */
 function isSignedMediaPath(path: string): boolean {
   return /^\/api\/files\/audiobooks\/[^/]+\/(?:narration-track\.mp3|cover-image)$/.test(path);
 }
 
-/** Whether the path is the listening-position route, which a signed position URL authorizes. */
 function isPositionPath(path: string): boolean {
   return /^\/api\/audiobooks\/[^/]+\/position$/.test(path);
 }
@@ -1553,12 +1508,6 @@ type PositionSaveAuthorization =
   | { result: "authorized"; account: ReturnType<ApiServerEnvironment["ACCOUNTS"]["get"]> }
   | { result: "denied"; response: Response };
 
-/**
- * Authorizes a listening-position save by exactly one credential: the listener's bearer token or a
- * signed position URL's `token`. Either way, the save goes to an active account, which must own the
- * audiobook; with the bearer token, a trial audiobook that the request's grant session covers
- * counts too. Sign-out does not revoke a position URL; it stays valid until it expires.
- */
 async function authorizePositionSave(
   env: ApiServerEnvironment,
   request: Request,
@@ -1605,8 +1554,6 @@ async function authorizePositionSave(
     return { result: "denied", response: accountAuthError("blocked", requestId) };
   }
   if (owner?.kind === "trial") {
-    // A signed-in listener saves a trial audiobook's position to their account when the request's
-    // grant session covers the audiobook. A position URL never authorizes such a save.
     const denied = await requireActiveTrialAudiobookSession(
       env,
       owner.grantId,
@@ -1627,15 +1574,10 @@ async function authorizePositionSave(
   return { result: "authorized", account: auth.account };
 }
 
-/** The web app's origins: the production origin and the one its Capacitor shells load it from. */
 function isApplicationOrigin(origin: string | undefined): origin is string {
   return origin === "https://localhost" || origin === APPLICATION_ORIGIN;
 }
 
-/**
- * Lets the web app read the response with credentials when the request comes from one of its
- * origins.
- */
 function allowApplicationOrigin(context: Context, origin: string | undefined): void {
   if (!isApplicationOrigin(origin)) {
     return;
@@ -1672,7 +1614,6 @@ async function authenticateGrant(
       ? { result: "valid" as const, token, snapshot: result.snapshot }
       : { result: "invalid" as const };
   } catch (error) {
-    // Every caller answers this result with a 500.
     captureException(error);
     return { result: "operational-error" as const };
   }
@@ -1734,9 +1675,7 @@ function validateSessionMutationRequest(
   if (
     (request.headers.has("Origin") &&
       request.headers.get("Origin") !== new URL(request.url).origin) ||
-    // Reject browser requests from another site; native HTTP requests can omit Fetch Metadata.
     request.headers.get("Sec-Fetch-Site") === "cross-site" ||
-    // Require a custom header that cross-origin browser requests cannot send without a CORS preflight.
     request.headers.get("X-Create-Audiobook-From-URL-Request") !== "1"
   ) {
     return {

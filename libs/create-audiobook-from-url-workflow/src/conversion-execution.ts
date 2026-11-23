@@ -15,27 +15,21 @@ export type ConversionExecution = {
   artifactBucket: R2Bucket;
   getReadyAudiobookReference(): Promise<AudiobookReference | undefined>;
   phaseStarted(phase: ConversionPhase): Promise<void>;
-  /** Records the prepared document and reserves all of its segments, or none, in one step. */
   recordReady(
     outcome: Parameters<ConversionGrantDurableObject["recordReady"]>[1],
     narrationTextCharactersBySegment: readonly number[],
   ): Promise<void>;
   recordFailed(outcome: Parameters<ConversionGrantDurableObject["recordFailed"]>[1]): Promise<void>;
-  /** Dispatches every reserved segment; reserves first when a retry finds segments unreserved. */
   startSynthesis(narrationTextCharactersBySegment: readonly number[]): Promise<void>;
-  /** Reservations are taken for the whole document by the owner; a segment only checks its own. */
   getAudioSegmentState(sequence: number): Promise<SegmentUsage["state"] | undefined>;
-  /** `attempts` counts the run's synthesis attempts, for the owner's outcome event. */
   completeAudioSegment(
     sequence: number,
     durationMilliseconds: number,
     attempts: number,
   ): Promise<void>;
-  /** `attempts` is absent when the run cannot tell, such as after a replay. */
   releaseAudioSegment(sequence: number, attempts: number | undefined): Promise<void>;
 };
 
-/** Captures ownership and epoch; execution checks remain in the owner RPCs and artifact writer. */
 export function resolveConversionExecution(
   env: AudiobookWorkflowEnvironment,
   {

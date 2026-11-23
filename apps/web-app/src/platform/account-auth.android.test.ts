@@ -3,14 +3,8 @@ import type { Page } from "@playwright/test";
 import type { signInWithGoogle } from "#src/platform/account-auth.android.ts";
 import { expect, test } from "#src/test-utils/component-test.ts";
 
-/** A rejection of the Google sign-in plugin, as the Android bridge reports it. */
 type PluginFailure = { code: string | undefined; message: string };
 
-/**
- * Runs the Android adapter against a fake Google sign-in plugin whose `signIn` fails with
- * `failure`, and reports whether the call resolved, its error message, and whether the ID token
- * reached Supabase.
- */
 async function signInFailingWith(
   { page, mount }: { page: Page; mount: (story: string) => Promise<unknown> },
   failure: PluginFailure,
@@ -51,7 +45,6 @@ async function signInFailingWith(
     let exchanged = false;
     const client: Parameters<typeof signInWithGoogle>[0] = {
       auth: {
-        // No case gets an ID token, so none may reach the exchange.
         signInWithIdToken: async () => {
           exchanged = true;
           throw new Error("The ID token reached Supabase.");
@@ -75,12 +68,7 @@ async function signInFailingWith(
   });
 }
 
-for (const message of [
-  // Google Play services’ detail when the person leaves its add-account screen.
-  "[16] Cancelled by user.",
-  // The plugin’s own message when Google gives no detail.
-  "The user canceled the sign-in flow.",
-]) {
+for (const message of ["[16] Cancelled by user.", "The user canceled the sign-in flow."]) {
   test(`a sign-in the person cancelled rejects as a cancellation: ${message}`, async ({
     mount,
     page,
@@ -96,7 +84,6 @@ for (const message of [
 }
 
 for (const failure of [
-  // Google Play services reports a missing Android OAuth client as a cancellation.
   { code: "SIGN_IN_CANCELED", message: "[16] Account reauth failed." },
   { code: "NO_CREDENTIAL_AVAILABLE", message: "No credential is available." },
   { code: undefined, message: "TYPE_UNKNOWN: [8] Unknown error" },

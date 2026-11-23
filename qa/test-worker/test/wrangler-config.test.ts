@@ -4,7 +4,6 @@ import { experimental_readRawConfig } from "wrangler";
 
 const CONFIG_PATH = nodeUrl.fileURLToPath(new URL("../wrangler.jsonc", import.meta.url));
 
-/** The test Worker's `vars`; Wrangler types its raw config as `any`. */
 function readVars(): Record<string, unknown> {
   const { rawConfig }: { rawConfig: { vars?: Record<string, unknown> } } =
     experimental_readRawConfig({ config: CONFIG_PATH });

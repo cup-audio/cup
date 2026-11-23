@@ -17,10 +17,6 @@ import { STOP_PLAYBACK_EVENT_NAME } from "#src/playback-events.js";
 
 const PlayerHostContext = React.createContext<PlayerHost | null>(null);
 
-/**
- * Provides the app's single player to every page below it and feeds it the account; unmounting it
- * stops playback.
- */
 export function PlayerHostProvider({ children }: { children: React.ReactNode }) {
   const [host] = React.useState(
     () =>
@@ -62,7 +58,6 @@ export function PlayerHostProvider({ children }: { children: React.ReactNode }) 
   React.useEffect(
     function reportAccountChanges() {
       host.accountChanged();
-      // Deferred, because the auth store can publish while a page renders.
       return subscribeAuthState(() => queueMicrotask(host.accountChanged));
     },
     [host],
@@ -77,17 +72,14 @@ export function usePlayerHost(): PlayerHost {
   return host;
 }
 
-/** Re-renders when another audiobook is loaded or shown, or the shown one changes. */
 export function usePlayerHostSnapshot(): PlayerHostSnapshot {
   const host = usePlayerHost();
   return React.useSyncExternalStore(host.subscribe, host.getSnapshot);
 }
 
-/** Reports that the listener is on this conversion's page, whether or not its audiobook is prepared. */
 export function useShownConversion(conversionId: string): void {
   const host = usePlayerHost();
 
-  // Layout effects report the page before the first paint, so its controls never flash.
   React.useLayoutEffect(
     function showWhileOnThePage() {
       host.showConversion(conversionId);
@@ -98,20 +90,12 @@ export function useShownConversion(conversionId: string): void {
 }
 
 type ShownAudiobookPlayback = {
-  /** This page's audiobook, while it is the loaded one. */
   loaded: LoadedAudiobook | null;
   canPlay: boolean;
-  /** Where loading this page's audiobook resumes, shown while it is not loaded. */
   resumePositionMilliseconds: number;
-  /** Must be called from a user gesture. */
   playFromUnit: (unitIndex: number) => void;
 };
 
-/**
- * Reports the prepared audiobook a page shows, below `useShownConversion`, and describes its
- * playback. Segment taps load the audiobook first when another one is loaded. `receivedAt` is when
- * the audiobook's response arrived, the query's `dataUpdatedAt`, which dates its track URL.
- */
 export function useShownAudiobook(
   conversionId: string,
   audiobook: PreparedAudiobook,
@@ -136,11 +120,6 @@ export function useShownAudiobook(
   };
 }
 
-/**
- * Reads one value of a player's state and re-renders only when that value changes, not on every
- * position update. Snapshots are compared with `Object.is`, so `select` must return a primitive or
- * an otherwise stable value.
- */
 export function usePlayerState<Selected>(
   player: Player,
   select: (snapshot: PlayerSnapshot) => Selected,

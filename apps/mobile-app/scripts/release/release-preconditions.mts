@@ -1,31 +1,15 @@
-/*
- * What must hold before `android:release` starts Gradle: a clean, pushed commit and the upload key in
- * place. Git and the upload key's storage sit behind small interfaces so tests can fake them.
- */
-
 export type ReleaseGit = {
-  /**
-   * Whether tracked files differ from `HEAD`, staged or not. Ignored and untracked files don't
-   * count.
-   */
   hasTrackedChanges(): boolean;
-  /** The remote-tracking branches, such as `origin/main`, that contain `HEAD`. */
   remoteBranchesContainingHead(): readonly string[];
 };
 
 export type UploadKeyStore = {
   keystorePath: string;
-  /**
-   * Names the Keychain item in a message, such as `the Keychain generic-password item with service
-   * "…"`.
-   */
   keychainItemDescription: string;
   hasKeystore(): boolean;
-  /** Throws when the lookup itself fails, such as on a locked Keychain. */
   hasKeychainItem(): boolean;
 };
 
-/** Returns a message for every failed precondition; empty when the release may start. */
 export function findFailedReleasePreconditions({
   git,
   uploadKey,

@@ -1,9 +1,5 @@
 import type { Page } from "@playwright/test";
 
-/**
- * Records the source URLs the page submits as conversion starts, on an account or a trial, in
- * order. The returned array fills as the requests go out.
- */
 export function recordConversionStarts(page: Page): string[] {
   const starts: string[] = [];
   page.on("request", (request) => {

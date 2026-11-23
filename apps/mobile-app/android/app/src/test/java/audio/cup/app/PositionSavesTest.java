@@ -8,12 +8,10 @@ import static org.junit.Assert.assertTrue;
 import java.util.List;
 import org.junit.Test;
 
-/** Mirrors the web player's save rules in `playback-session.test.ts`. */
 public class PositionSavesTest {
     private static final String POSITION_URL = "https://cup.example/api/audiobooks/conversion/position?token=first";
     private static final String RENEWED_POSITION_URL = "https://cup.example/api/audiobooks/conversion/position?token=renewed";
 
-    // Units of 20, 10, 3 and 2 seconds on the narration track.
     private static final ListeningPositions POSITIONS = new ListeningPositions(
         new String[] { "unit-1", "unit-2", "unit-3", "unit-4" },
         new long[] { 0, 20_000, 30_000, 33_000 }
@@ -29,7 +27,6 @@ public class PositionSavesTest {
 
         saves.save(1_000);
         saves.save(21_000);
-        // The second save waits until the first one was written.
         assertEquals(1, services.pending.size());
         services.answerAll(SAVED);
 
@@ -84,7 +81,6 @@ public class PositionSavesTest {
 
         assertEquals(2, services.sent.size());
         assertNull(services.retryTimer);
-        // Without a failed save, a reconnect sends nothing.
         saves.reconnected();
         assertEquals(2, services.sent.size());
     }
@@ -112,7 +108,6 @@ public class PositionSavesTest {
 
         saves.save(1_000);
         saves.save(21_000);
-        // The older save fails while the newer one waits; the newer one's outcome counts.
         services.answer(NOT_CONNECTED);
         assertNull(services.retryTimer);
         services.answer(NOT_CONNECTED);
@@ -129,7 +124,6 @@ public class PositionSavesTest {
 
         saves.save(1_000);
         services.answer(NOT_CONNECTED);
-        // The page stays quiet about a first failure, as the web player does.
         assertEquals(PositionSaves.Status.FAILING, saves.getStatus());
         assertTrue(saves.isFailing());
 
@@ -185,7 +179,6 @@ public class PositionSavesTest {
         services.answer(NOT_CONNECTED);
         saves.reconnected();
         services.answer(NOT_CONNECTED);
-        // Within the retry delay of the first failure, but saves still fail.
         saves.save(2_000);
         services.answer(NOT_CONNECTED);
 
@@ -282,7 +275,6 @@ public class PositionSavesTest {
 
         saves.save(1_000);
         services.answer(NOT_CONNECTED);
-        // The final save of a closing session.
         saves.save(21_000);
         saves.close();
         services.answer(NOT_CONNECTED);

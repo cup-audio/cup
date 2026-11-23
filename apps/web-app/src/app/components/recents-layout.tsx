@@ -18,13 +18,11 @@ import {
 } from "#src/app/view-transition-names.js";
 import { useAccountSession } from "#src/auth/hooks.js";
 
-/** Recents' header, tab bar and mini player, around the tracks or what shows in their place. */
 export function RecentsLayout({ children }: { children: React.ReactNode }): React.JSX.Element {
   const session = useAccountSession();
 
   return (
     <>
-      {/* the header scrolls away with the tracks, unlike other shell pages' sticky headers */}
       <div
         className={css`
           grid-area: shell-main;
@@ -39,7 +37,6 @@ export function RecentsLayout({ children }: { children: React.ReactNode }): Reac
           className={composeClassnames(
             pageWidth,
             css`
-              /* put above shell <main> */
               z-index: 1;
               display: flex;
               grid-area: shell-header;
@@ -75,7 +72,6 @@ export function RecentsLayout({ children }: { children: React.ReactNode }): Reac
               grid-area: shell-main;
               padding-block: 24px;
 
-              /* the tab bar's fade reaches this far over the end of <main> */
               padding-block-end: ${fadeFooterClearance(TAB_BAR_HEIGHTS)};
             `,
           )}
@@ -83,7 +79,6 @@ export function RecentsLayout({ children }: { children: React.ReactNode }): Reac
           {children}
         </main>
       </div>
-      {/* the mini player stacks on the tab bar, so it needs no offset from the tab bar's height */}
       <div className={stickyBottomBar}>
         <div
           className={composeClassnames(
@@ -103,7 +98,6 @@ export function RecentsLayout({ children }: { children: React.ReactNode }): Reac
   );
 }
 
-/** The header and the list share the page's width and the drawn 12 px inline padding. */
 const pageWidth = css`
   width: 100%;
   max-width: var(--app-max-width);

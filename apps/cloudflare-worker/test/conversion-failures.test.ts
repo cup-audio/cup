@@ -9,7 +9,6 @@ import { useWorker, type TestWorker } from "#test/use-worker.ts";
 const SOURCE_URL = "https://example.com/conversion-failure";
 const DAY_MS = 24 * 60 * 60 * 1_000;
 
-/** Records a trial conversion in a new grant, as the Listener API does before it dispatches. */
 async function createTrialConversion(worker: TestWorker) {
   const env = await worker.getEnv();
   const grantId = crypto.randomUUID();
@@ -23,14 +22,9 @@ async function createTrialConversion(worker: TestWorker) {
   return { env, grant, grantId, conversionId: started.conversion.conversionId };
 }
 
-/**
- * Prepares a trial conversion without the preparation Workflow: stores its manifest and records it
- * ready, which reserves its one segment. Returns the stored manifest's key and body.
- */
 async function createPreparedTrialConversion(worker: TestWorker) {
   const conversion = await createTrialConversion(worker);
   const { env, grant, conversionId } = conversion;
-  // An existing conversion's narration document, whose HTML the manifest stores.
   const narrationDocument = {
     html: '<article><h1 id="narration-unit-0001">A conversion with one segment</h1></article>',
     synchronizationUnits: [
@@ -66,7 +60,6 @@ function segmentWorkflowParams(conversionId: string, grantId: string) {
   };
 }
 
-/** Waits for a Workflow step's span. The run's final flush sends it after the run's events. */
 async function waitForStepSpan(
   sentry: SentryStub,
   stepName: string,
@@ -96,7 +89,6 @@ test("a failed preparation sends one event, whose ID is the conversion's diagnos
   });
   const { env, grant, grantId, conversionId } = await createTrialConversion(worker);
 
-  // The test config binds no `BROWSER`, so source preparation fails on every attempt.
   await env.PREPARE_AUDIOBOOK_WORKFLOW.create({
     id: conversionId,
     params: { sourceUrl: SOURCE_URL, grantId },
@@ -136,7 +128,6 @@ test("a preparation's steps are spans named after their conversion phases, and i
   });
   const { env, grantId, conversionId } = await createTrialConversion(worker);
 
-  // The test config binds no `BROWSER`, so source preparation fails on every attempt.
   await env.PREPARE_AUDIOBOOK_WORKFLOW.create({
     id: conversionId,
     params: { sourceUrl: SOURCE_URL, grantId },
@@ -186,7 +177,6 @@ test("a finally failed segment sends one event tagged segment", async ({
   });
   const { env, grant, grantId, conversionId } = await createPreparedTrialConversion(worker);
 
-  // The test config binds no `AI`, so synthesis fails on every attempt.
   await env.SYNTHESIZE_AUDIO_SEGMENT_WORKFLOW.create(segmentWorkflowParams(conversionId, grantId));
 
   await expect
@@ -222,7 +212,6 @@ test("a segment whose prepared narration cannot be loaded is released and sends 
   const { env, grant, grantId, conversionId, manifestKey } =
     await createPreparedTrialConversion(worker);
 
-  // Loading the narration fails on every attempt while its manifest is missing.
   await env.AUDIO_BUCKET.delete(manifestKey);
   await env.SYNTHESIZE_AUDIO_SEGMENT_WORKFLOW.create(segmentWorkflowParams(conversionId, grantId));
 
@@ -241,8 +230,6 @@ test("a segment whose prepared narration cannot be loaded is released and sends 
       "cup.audio_segment.sequence": "0",
     },
   });
-  // The Workflow step rebuilds the `CupError` its callback threw without the brand; the run
-  // captures the error the step threw, so the message stays.
   expect(events[0]?.exception?.values).toEqual([
     expect.objectContaining({
       type: "Error",
@@ -265,7 +252,6 @@ test("a finally failed segment's owner logs its release with the run's attempts"
   });
   const { env, grantId, conversionId } = await createPreparedTrialConversion(worker);
 
-  // The test config binds no `AI`, so synthesis fails on its first attempt and both retries.
   await env.SYNTHESIZE_AUDIO_SEGMENT_WORKFLOW.create(segmentWorkflowParams(conversionId, grantId));
 
   const findLog = (eventName: string) =>
@@ -304,9 +290,6 @@ test("a preparation whose owner refuses its failed outcome is not captured by th
   const env = await worker.getEnv();
   const conversionId = crypto.randomUUID();
 
-  // The grant was never initialized, so it refuses each phase the preparation records, the
-  // finalization of its failure included. The run stops without a recorded outcome, which is for
-  // the owner's alarm to capture as a stopped Workflow; capturing here too would open two issues.
   await env.PREPARE_AUDIOBOOK_WORKFLOW.create({
     id: conversionId,
     params: { sourceUrl: SOURCE_URL, grantId: crypto.randomUUID() },
@@ -329,8 +312,6 @@ test("a foreign error that failed a preparation step keeps its type and loses it
   });
   const { env, grantId, conversionId } = await createTrialConversion(worker);
 
-  // The test config binds no `BROWSER`, so launching the browser for source preparation throws a
-  // `TypeError`, which is not Cup's own.
   await env.PREPARE_AUDIOBOOK_WORKFLOW.create({
     id: conversionId,
     params: { sourceUrl: SOURCE_URL, grantId },
@@ -356,14 +337,12 @@ test("a retried Workflow step that then succeeds sends no error event", async ({
   const workflows = await worker.introspectWorkflow("SYNTHESIZE_AUDIO_SEGMENT_WORKFLOW");
   onTestFinished(() => workflows.dispose());
   await workflows.modifyAll(async (modifier) => {
-    // The test config binds no `AI`; the segment's synthesis is not under test.
     await modifier.mockStepResult(
       { name: "audio-segment-production: synthesize and settle audio segment" },
       { result: "settled", segment: { durationMilliseconds: 1_000 } },
     );
   });
 
-  // Loading the narration fails while its manifest is missing, and succeeds once it is back.
   await env.AUDIO_BUCKET.delete(manifestKey);
   await env.SYNTHESIZE_AUDIO_SEGMENT_WORKFLOW.create(segmentWorkflowParams(conversionId, grantId));
   await waitForStepSpan(sentry, "audio-segment-production: load prepared narration", {

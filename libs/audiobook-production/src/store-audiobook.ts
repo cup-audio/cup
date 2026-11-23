@@ -16,27 +16,18 @@ import { narrationSourceMaterialReferenceSchema } from "#src/store-source-materi
 
 const synchronizationUnitsSchema = z.array(SYNCHRONIZATION_UNIT_SCHEMA).min(1).readonly();
 
-/**
- * What the manifest stores to render the narration document, in one of two shapes; the shape
- * decides how it is rendered.
- */
 export const storedNarrationDocumentSchema = z.union([
-  // Existing conversions stored the HTML narration document creation produced at preparation.
   z
     .object({
       html: z.string().min(1),
       synchronizationUnits: synchronizationUnitsSchema,
     })
     .strict(),
-  // New conversions store the narration source material beside the manifest and segment it again
-  // with the recorded segmentation version whenever the narration document is rendered.
   z
     .object({
       segmentationVersion: z.literal([1, 2]),
       narrationSourceMaterial: narrationSourceMaterialReferenceSchema,
-      /** The URL the source page was finally loaded from, after redirects. */
       fetchedUrl: z.url().optional(),
-      // Stored because recovering it from the units would make the render-time check check itself.
       sourceSubtitle: z.string().min(1).optional(),
       synchronizationUnits: synchronizationUnitsSchema,
     })
@@ -44,20 +35,15 @@ export const storedNarrationDocumentSchema = z.union([
 ]);
 export type StoredNarrationDocument = z.infer<typeof storedNarrationDocumentSchema>;
 
-/** Prepared narration; individual audio segments are published independently. */
 export type Audiobook = {
   title: string;
   originalUrl: string;
   narrationDocument: StoredNarrationDocument;
   speechConfig: SpeechConfig;
-  /** The canonical BCP 47 narration language, absent when the conversion has none. */
   narrationLanguage?: string | undefined;
-  /** Present only when a cover image is stored beside the manifest. */
   coverImage?: CoverImage | undefined;
 };
 
-/** Identifies a stored canonical audiobook manifest. */
-/** The text length of each synchronization unit, which is what its audio segment is estimated from. */
 export function countNarrationTextCharactersBySegment(narrationDocument: {
   synchronizationUnits: readonly { narrationText: string }[];
 }): number[] {
@@ -71,7 +57,6 @@ export type AudiobookReference = {
   etag: string;
 };
 
-/** Minimal object-storage operations required for canonical audiobook manifests. */
 export type ManifestStorage = {
   get(key: string): Promise<{
     key: string;
@@ -87,7 +72,6 @@ export type ManifestStorage = {
   ): Promise<{ key: string; size: number; etag: string } | null>;
 };
 
-/** Supplies the artifacts and source metadata used to create an audiobook manifest. */
 export type StoreOptions = {
   artifactPrefix?: string;
   bucket: ManifestStorage;
@@ -100,7 +84,6 @@ export type StoreOptions = {
   coverImage?: CoverImage;
 };
 
-/** Supplies the storage dependency and expected identity of a manifest to load. */
 export type LoadOptions = {
   bucket: ManifestStorage;
   audiobookReference: AudiobookReference;
@@ -117,7 +100,6 @@ export const audiobookSchema = z.object({
       voice: z.string().min(1),
       policyVersion: z.string().min(1),
     })
-    // Manifests from before speechConfig was recorded keep the requests they were prepared with.
     .default(LEGACY_GEMINI_V4_SPEECH_CONFIG),
   narrationLanguage: z
     .string()
@@ -126,7 +108,6 @@ export const audiobookSchema = z.object({
   coverImage: coverImageSchema.optional(),
 });
 
-/** Stores the canonical audiobook manifest. */
 export async function storeAudiobook({
   artifactPrefix,
   bucket,
@@ -164,7 +145,6 @@ export async function storeAudiobook({
   };
 }
 
-/** Loads and validates a stored audiobook against its manifest reference. */
 export async function loadAudiobook({
   bucket,
   audiobookReference,

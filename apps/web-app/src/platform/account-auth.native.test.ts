@@ -4,7 +4,6 @@ import { expect, test } from "#src/test-utils/component-test.ts";
 
 type Shell = "android" | "ios";
 
-/** An item in the fake native store, with the Keychain accessibility it was written with. */
 type StoredItem = { data: string; access: unknown };
 
 type StorageRecord = {
@@ -15,11 +14,6 @@ type StorageRecord = {
 const SESSION_KEY = "cup-account-session";
 const PREFIXED_SESSION_KEY = `capacitor-storage_${SESSION_KEY}`;
 
-/**
- * Initializes the shell's session storage against a fake native Secure Storage plugin holding
- * `existingItems`, reads the session item, writes `written` under it, and reports what was read and
- * what the native store holds afterwards.
- */
 async function readThenWriteSession(
   page: Page,
   shell: Shell,
@@ -58,7 +52,6 @@ async function readThenWriteSession(
               return {};
             }
             if (method === "internalGetItem") {
-              // Like the Keychain query, a read matches an item whatever its accessibility.
               return { data: store[options.prefixedKey]?.data ?? null };
             }
             throw new Error(`Unexpected native call ${plugin}.${method}`);
@@ -68,7 +61,6 @@ async function readThenWriteSession(
     },
     { platform: shell, items: existingItems },
   );
-  // The gallery page serves the app's modules; nothing needs to be mounted.
   await page.goto("");
   return page.evaluate(
     async ({ platform, key, value }) => {
@@ -88,14 +80,12 @@ test("the iOS shell writes the session readable after the device's first unlock"
 }) => {
   const record = await readThenWriteSession(page, "ios", {}, "the-session");
 
-  // 2 is the plugin's `KeychainAccess.afterFirstUnlock`.
   expect(record.items).toEqual({ [PREFIXED_SESSION_KEY]: { data: "the-session", access: 2 } });
 });
 
 test("the iOS shell reads a session stored before the update and rewrites it after first unlock", async ({
   page,
 }) => {
-  // 0 is the plugin's default, `KeychainAccess.whenUnlocked`, which earlier versions wrote.
   const record = await readThenWriteSession(
     page,
     "ios",
@@ -112,7 +102,6 @@ test("the iOS shell reads a session stored before the update and rewrites it aft
 test("the Android shell writes the session with the plugin's default access", async ({ page }) => {
   const record = await readThenWriteSession(page, "android", {}, "the-session");
 
-  // Android ignores the access option; the plugin sends its default, `KeychainAccess.whenUnlocked`.
   expect(record.items).toEqual({ [PREFIXED_SESSION_KEY]: { data: "the-session", access: 0 } });
 });
 
@@ -158,7 +147,6 @@ test("reports the app's state at the start, then each foreground and background 
       },
     });
   });
-  // The gallery page serves the app's modules; nothing needs to be mounted.
   await page.goto("");
 
   const reported = await page.evaluate(async () => {

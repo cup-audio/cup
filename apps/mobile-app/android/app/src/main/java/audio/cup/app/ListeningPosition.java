@@ -1,6 +1,5 @@
 package audio.cup.app;
 
-/** A synchronization unit and the offset within its audio, as the position route stores it. */
 final class ListeningPosition {
     final String synchronizationUnitId;
     final long offsetMilliseconds;

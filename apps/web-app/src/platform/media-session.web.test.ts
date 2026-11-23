@@ -81,10 +81,8 @@ test("the browser's media session shows the audiobook, sends its actions, and cl
       actions: ["play", "pause", "stop", "seekto", "seekbackward", "seekforward"],
     },
     playing: "playing",
-    // Waiting for data shows as paused, so the system does not move the position on meanwhile.
     waiting: "paused",
     paused: "paused",
-    // Clearing sets no state, which removes it.
     positionStates: [{ duration: 15, position: 5.5, playbackRate: 1.5 }, undefined],
     actions: [
       "play",

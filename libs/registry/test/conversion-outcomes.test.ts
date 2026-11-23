@@ -1,9 +1,3 @@
-/*
- * The conversion outcome `info` events both owners send when they record an outcome, and the
- * issues their alarms open for a Workflow that stopped, against a Sentry stub (`@cup/sentry-stub`).
- * Both owners run Sentry-wrapped, as in the Worker.
- */
-
 import nodeUrl from "node:url";
 import { Temporal } from "temporal-polyfill";
 import { afterAll, beforeAll, expect, test } from "vitest";
@@ -30,7 +24,6 @@ type TestEnvironment = {
 
 const MINUTE_MS = 60_000;
 const NARRATION_TEXT_CHARACTERS_BY_SEGMENT = [100, 100];
-/** Each test waits for several end-of-invocation flushes from the Durable Object to the stub. */
 const TEST_TIMEOUT_MS = 30_000;
 
 let stub: SentryStub;
@@ -106,7 +99,6 @@ test(
       },
     });
 
-    // The release settled the last reserved segment; the settlement before it left one reserved.
     await waitForLogs("conversion-synthesis-settled", conversionId, 1);
     const synthesisSettled = logs("conversion-synthesis-settled", conversionId);
     expect(synthesisSettled).toHaveLength(1);
@@ -160,7 +152,6 @@ test(
     await grant.recordReady(
       conversionId,
       { ...readyGrantOutcome(conversionId), completedAtMs: createdAtMs + MINUTE_MS },
-      // Far more narration than a new grant's duration allowance covers.
       [10_000_000],
     );
 
@@ -367,7 +358,6 @@ test(
   async () => {
     const { account } = await createAccount();
 
-    // The test object refuses to create preparation Workflows until a test accepts them.
     const conversionId = await startAccountConversion(
       account,
       Temporal.Now.instant().epochMilliseconds,
@@ -389,7 +379,6 @@ test(
     const nowMs = Temporal.Now.instant().epochMilliseconds;
     const conversionId = await startGrantConversion(grant, nowMs);
 
-    // The test object's Workflow instances report no status.
     await grant.reconcileAtForTest(nowMs);
 
     await waitForLogs("conversion-dispatch-failed", conversionId, 1);
@@ -439,7 +428,6 @@ test(
     await account.acceptPreparationForTest();
     const finishedConversionId = await startPreparedAccountConversion(account, accountId);
     const unreachableConversionId = await startPreparedAccountConversion(account, accountId);
-    // As on the platform, terminating each of these finished instances throws.
     await account.reportWorkflowStatusForTest(finishedConversionId, "complete");
     await account.reportWorkflowStatusForTest(`segment-${finishedConversionId}-0`, "errored");
     await account.reportWorkflowStatusForTest(`segment-${finishedConversionId}-1`, "terminated");
@@ -447,8 +435,6 @@ test(
 
     await account.reconcileForTest();
 
-    // The unreachable conversion's instances report no status, so their failed terminations warn.
-    // Its pass runs after the first one, so once its warnings arrive, the first pass's have too.
     await account.failTerminationsForTest();
     await account.deleteConversion(unreachableConversionId);
     await account.reconcileForTest();
@@ -503,7 +489,6 @@ async function createAccount() {
   const account = bindings.SENTRY_ACCOUNTS.get(bindings.SENTRY_ACCOUNTS.idFromName(accountId));
   const nowMs = Temporal.Now.instant().epochMilliseconds;
   await account.initialize({ accountId, subject: crypto.randomUUID(), createdAtMs: nowMs });
-  // Enough duration for the tests' two-segment narration documents.
   await account.adjustAllowance(crypto.randomUUID(), 3_600_000, "conversion-outcome-test", nowMs);
   return { account, accountId };
 }

@@ -20,7 +20,6 @@ export async function readAudiobook(page: Page, conversionId: string, token?: st
   return audiobookSchema.parse(await response.json());
 }
 
-/** Waits for a prepared conversion, whatever the state of its audio. */
 export async function waitForPreparedAudiobook(
   page: Page,
   conversionId: string,
@@ -45,10 +44,6 @@ export async function waitForPreparedAudiobook(
   return prepared;
 }
 
-/**
- * Synthesis starts by itself after preparation; waits until every segment has audio. Returns each
- * segment's settled duration, as the narration track's start offsets lay them out.
- */
 export async function waitForGeneratedAudio(page: Page, conversionId: string, token?: string) {
   await expect
     .poll(async () => (await readAudiobook(page, conversionId, token)).status, { timeout: 90_000 })

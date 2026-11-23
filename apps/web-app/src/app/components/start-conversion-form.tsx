@@ -32,7 +32,6 @@ export function StartConversionForm(props: StartConversionFormProps): React.Reac
   return check.assertIsUnreachable(props);
 }
 
-/** What the sign-in dialog says, by what opened it. */
 const SIGN_IN_DESCRIPTIONS: Record<SignInEntry, React.ReactNode> = {
   "home-link": <>Sign in to get back to your tracks.</>,
   submission: (
@@ -45,19 +44,16 @@ const SIGN_IN_DESCRIPTIONS: Record<SignInEntry, React.ReactNode> = {
 function AccountConversionForm(): React.ReactNode {
   const navigate = useNavigate();
   const submission = useAccountConversionSubmission({
-    // A start survives the OAuth redirect and resumes when home mounts again.
     requestStorage: "session",
     onStarted: async (conversionId) => {
       await navigate({ to: "/audiobooks/$conversionId", params: { conversionId } });
     },
-    // As the home route's redirect does, so Back does not return to the signed-out home page.
     onSignedInFromLink: async () => {
       await navigate({ to: signedInHomeTarget(), replace: true });
     },
   });
   const submitButtonRef = React.useRef<HTMLButtonElement>(null);
   const signInLinkRef = React.useRef<HTMLAnchorElement>(null);
-  /** Closing the sign-in returns focus to what opened it. */
   const signInOpeners: Record<SignInEntry, React.RefObject<HTMLElement | null>> = {
     "home-link": signInLinkRef,
     submission: submitButtonRef,
@@ -68,7 +64,6 @@ function AccountConversionForm(): React.ReactNode {
       <ConversionForm
         refs={{ submitButton: submitButtonRef }}
         initialSourceUrl={submission.initialSourceUrl}
-        // Until auth settles, a signed-in listener may still be redirected to the Add dialog, which takes a shared URL instead.
         shouldReceiveSharedUrl={!submission.isAuthLoading}
         isPending={submission.isPending}
         retryIn={submission.retryIn}
@@ -96,7 +91,6 @@ function AccountConversionForm(): React.ReactNode {
   );
 }
 
-/** The signed-out listener's way to sign in without submitting a source URL. */
 function SignInLine({
   ref,
   onSignIn,
@@ -118,7 +112,6 @@ function SignInLine({
       Already listening with Cup?{" "}
       <a
         ref={ref}
-        // Opens the sign-in dialog in place; the home page has no sign-in route.
         href="#sign-in"
         onClick={(event) => {
           event.preventDefault();

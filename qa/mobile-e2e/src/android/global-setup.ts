@@ -7,14 +7,9 @@ import { startAppium, type AppiumServer } from "#src/appium.ts";
 import { clearFailureArtifacts } from "#src/failure-artifacts.ts";
 import { run } from "#src/host.ts";
 
-/**
- * Starts what the Android project's specs share: the run's own emulator, an Appium server and the
- * freshly built debug app installed on the emulator. Specs start their own test Worker.
- */
 export default async function setup(project: TestProject): Promise<() => Promise<void>> {
   const host = await checkAndroidHost();
   await clearFailureArtifacts("android");
-  // A run killed before its teardown, such as with its whole process tree, leaves its emulator running.
   await stopOrphanedEmulators();
 
   const started: { emulator?: Emulator; appium?: AppiumServer } = {};
@@ -23,7 +18,6 @@ export default async function setup(project: TestProject): Promise<() => Promise
   };
 
   try {
-    // Settle all three before acting, so a failure in one still stops the others in teardown.
     const [apk, emulator, appium] = await Promise.allSettled([
       buildAndroidDebugApp(host),
       bootEmulator(host).then((bootedEmulator) => (started.emulator = bootedEmulator)),

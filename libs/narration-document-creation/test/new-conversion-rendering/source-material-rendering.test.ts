@@ -6,10 +6,6 @@ import {
   SYNCHRONIZATION_UNIT_SCHEMA,
 } from "#src/index.ts";
 
-/**
- * Segments narration source material with segmentation version 1 and renders it as a new conversion
- * whose stored units are the derived ones, as preparation and the listener API do.
- */
 async function renderSourceMaterial(options: {
   sourceTitle: string;
   sourceSubtitle?: string;

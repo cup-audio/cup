@@ -6,16 +6,10 @@ import { pressableOverlay } from "#src/app/design-system/interaction-states.js";
 import { composeClassnames } from "#src/app/utils.js";
 
 type DSIconButtonProps = Omit<React.ComponentProps<"button">, "aria-label" | "children"> & {
-  /** Accessible name; the icon itself is decorative. */
   label: string;
-  /** One of the drawn icons in `icons.tsx`, shown at its drawn size. */
   icon: React.ReactNode;
 };
 
-/**
- * Icon-only button of the redesigned screens: no border or padding, a hit area of at least 44 px,
- * and the icon at 24 % ink while disabled.
- */
 export function DSIconButton({
   label,
   icon,
@@ -33,7 +27,6 @@ export function DSIconButton({
   );
 }
 
-/** Also for links that look like an icon button, such as the detail view's back chevron. */
 export const iconButtonStyles = composeClassnames(
   pressableOverlay,
   css`

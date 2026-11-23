@@ -1,31 +1,21 @@
 import { run } from "#src/host.ts";
 
-/** What the iOS run needs from the host, checked before any simulator starts. */
 export type IosHost = {
-  /** Xcode's build version, such as `27B52`; a new Xcode needs a new WebDriverAgent build. */
   readonly xcodeBuildVersion: string;
   readonly runtime: {
     readonly identifier: string;
-    /** Such as `26.3.1`. */
     readonly version: string;
   };
-  /** The iPhone device type each run's simulator is created from. */
   readonly deviceTypeIdentifier: string;
 };
 
 const PREFERRED_DEVICE_TYPE = "iPhone 17";
 const RESTART_CORE_SIMULATOR = "killall -9 com.apple.CoreSimulator.CoreSimulatorService";
 
-/**
- * Checks that the host has every tool an iOS run needs, before any simulator starts, and fails with
- * the fix rather than skipping the platform.
- */
 export async function checkIosHost(): Promise<IosHost> {
   const xcode = await readXcodeVersion();
   const macosVersion = (await run("sw_vers", ["-productVersion"])).stdout.trim();
   const macosMajor = majorOf(macosVersion);
-  // Since version 26, Xcode and macOS share major versions, and an older Xcode's XCTest runners
-  // hang on a newer macOS: WebDriverAgent never answers and the session times out after minutes.
   if (macosMajor >= 26 && majorOf(xcode.version) < macosMajor) {
     fail(
       `Xcode ${xcode.version} does not support macOS ${macosVersion}: every XCTest runner hangs on it, WebDriverAgent included. Update Xcode to ${String(macosMajor)} or later, then restart CoreSimulatorService with \`${RESTART_CORE_SIMULATOR}\`.`,
@@ -66,23 +56,14 @@ export async function readXcodeVersion(): Promise<{ version: string; buildVersio
 type SimulatorRuntime = {
   identifier: string;
   version: string;
-  /** Such as `24B8117`; differs from the simulator SDK's build version. */
   buildVersion: string;
   supportedDeviceTypes: { identifier: string; name: string; productFamily: string }[];
 };
 
-/**
- * Returns the iOS simulator runtime of the same version as Xcode's simulator SDK, rather than the
- * newest one installed. Device-specific runtimes of that version are skipped. An older runtime on a
- * newer macOS is not enough: on macOS 27.2, WebKit's content process crashed under the iOS 26.3.1
- * runtime in about one launch in seven.
- */
 export async function findIosRuntime(): Promise<SimulatorRuntime> {
   const sdkVersion = (
     await run("xcrun", ["--sdk", "iphonesimulator", "--show-sdk-version"])
   ).stdout.trim();
-  // The plain identifier, such as `com.apple.CoreSimulator.SimRuntime.iOS-27-2`; device-specific
-  // runtimes of the same version carry a suffix.
   const identifier = `com.apple.CoreSimulator.SimRuntime.iOS-${sdkVersion.replaceAll(".", "-")}`;
   let result;
   try {
@@ -90,8 +71,6 @@ export async function findIosRuntime(): Promise<SimulatorRuntime> {
   } catch (error) {
     failWithSimulatorServiceHint(String(error));
   }
-  // After an Xcode update, the running CoreSimulatorService is older than simctl, which then warns
-  // about the version mismatch and lists no runtimes.
   if (/CoreSimulator/i.test(result.stderr)) {
     failWithSimulatorServiceHint(result.stderr);
   }
@@ -106,7 +85,6 @@ export async function findIosRuntime(): Promise<SimulatorRuntime> {
   return runtime;
 }
 
-/** Returns the available iOS runtimes of `simctl list runtimes --json`. */
 function parseIosRuntimes(json: string): SimulatorRuntime[] {
   const listing: unknown = JSON.parse(json);
   const runtimes =

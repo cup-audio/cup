@@ -326,7 +326,6 @@ test("a URL handed out at 23:59 UTC is accepted until 48 hours after the start o
     });
 
     for (const [instant, status] of [
-      // 47 hours after the start of the UTC day it was handed out on.
       ["2026-10-28T23:00:00.000Z", 200],
       ["2026-10-28T23:59:59.999Z", 200],
       ["2026-10-29T00:00:00.000Z", 401],

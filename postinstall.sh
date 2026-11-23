@@ -3,7 +3,6 @@ set -e
 
 cd "$(dirname "$0")"
 
-# a linked worktree starts without the ignored environment files and the optional Android upload keystore; create them from the main checkout
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     git_dir="$(git rev-parse --path-format=absolute --git-dir)"
     git_common_dir="$(git rev-parse --path-format=absolute --git-common-dir)"
@@ -19,22 +18,17 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     fi
 fi
 
-# a checkout from before the narration-source-analysis rename keeps .env.evals at the old library path; setup moves it
 if [ -f libs/narration-content-selection/.env.evals ] && [ ! -f libs/narration-source-analysis/.env.evals ]; then
     node tooling/env-setup/src/cli.ts setup --from apps/cloudflare-worker/.env.local
 fi
 
 pnpm run env:check
 
-# Worker types are not committed; generate them so typechecking, lint, and tests work before a build
 pnpm run cf-typegen
 
 if [ "${CI}" = "true" ]; then
-    # in CI/CD (i.e. GitHub Actions runners and Docker builds), we are finished
     exit 0
 else
-    # on developer machines, run some commands
 
-    # install husky git hooks
     husky
 fi

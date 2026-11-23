@@ -23,10 +23,6 @@ const SEGMENTATION_FIXTURE_INPUT_SCHEMA = z.object({
   sourceMaterialHtml: z.string(),
 });
 
-/**
- * Segments narration source material with segmentation version 2 and renders it as a new conversion
- * whose stored units are the derived ones, as preparation and the listener API do.
- */
 async function renderWithVersion2(options: {
   sourceTitle: string;
   sourceSubtitle?: string;
@@ -50,7 +46,6 @@ async function renderWithVersion2(options: {
   return { html, synchronizationUnits };
 }
 
-/** Returns the narration document's body after the source title. */
 async function renderBody(sourceMaterialHtml: string): Promise<string> {
   const sourceTitle = "Story title";
   const { html } = await renderWithVersion2({ sourceTitle, sourceMaterialHtml });
@@ -61,12 +56,6 @@ async function renderBody(sourceMaterialHtml: string): Promise<string> {
   return html.slice(opening.length, -"</article>".length);
 }
 
-/**
- * The text a listener sees for each unit, in unit order: the text of every element that carries the
- * unit's attribute, joined like narration text joins blocks, with a table row's non-empty cells
- * joined by ", " and a `br` read as a line break. A line's indentation in preformatted text is
- * shown but not narrated, so it is left out.
- */
 function readShownUnitTexts(html: string): Map<string, string> {
   const elementTexts = new Map<string, string[]>();
 

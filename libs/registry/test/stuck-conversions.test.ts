@@ -1,11 +1,3 @@
-/*
- * The stuck-conversion check on both owners' alarms and the account's stuck-conversion-deletion
- * check, against a Sentry stub (`@cup/sentry-stub`).
- * Both owners run Sentry-wrapped, as in the Worker, and each alarm pass runs at a chosen `nowMs`.
- * A pass that sends nothing is followed by one that reports a second conversion of the same owner,
- * so waiting for that event shows that the quiet pass has flushed too.
- */
-
 import nodeUrl from "node:url";
 import { Temporal } from "temporal-polyfill";
 import { afterAll, beforeAll, expect, test } from "vitest";
@@ -28,7 +20,6 @@ type TestEnvironment = {
 const T0_MS = 2_000_000_000_000;
 const MINUTE_MS = 60_000;
 const NARRATION_TEXT_CHARACTERS_BY_SEGMENT = [100, 100];
-/** Each test waits for several end-of-invocation flushes from the Durable Object to the stub. */
 const TEST_TIMEOUT_MS = 30_000;
 
 let stub: SentryStub;
@@ -311,8 +302,6 @@ test(
   "a conversion deletion still marked 1 hour after it was marked is reported once",
   async () => {
     const { account, accountId } = await createAccount();
-    // Marked one and five minutes apart, so that each pass after the first report also reports a
-    // different deletion before any repeat: Sentry's Dedupe drops only an immediate repeat.
     const first = await startStalledDeletion(account, accountId, T0_MS);
     const second = await startStalledDeletion(account, accountId, T0_MS + MINUTE_MS);
     const third = await startStalledDeletion(account, accountId, T0_MS + 5 * MINUTE_MS);
@@ -413,7 +402,6 @@ async function createAccount() {
   const accountId = crypto.randomUUID();
   const account = bindings.SENTRY_ACCOUNTS.get(bindings.SENTRY_ACCOUNTS.idFromName(accountId));
   await account.initialize({ accountId, subject: crypto.randomUUID(), createdAtMs: T0_MS });
-  // Enough duration for the tests' two-segment narration documents.
   await account.adjustAllowance(crypto.randomUUID(), 3_600_000, "stuck-conversion-test", T0_MS);
   return { account, accountId };
 }
@@ -433,7 +421,6 @@ async function startAccountConversion(
   return conversionId;
 }
 
-/** Settling ready with the segment lengths reserves the whole document, which starts synthesis. */
 async function settleAccountConversionReady(
   account: Awaited<ReturnType<typeof createAccount>>["account"],
   accountId: string,
@@ -458,10 +445,6 @@ async function settleAccountConversionReady(
   );
 }
 
-/**
- * Marks a conversion for deletion at `markedAtMs` behind a writer whose put never lands, so every
- * cleanup pass waits on the undrained writer and the conversion stays marked.
- */
 async function startStalledDeletion(
   account: Awaited<ReturnType<typeof createAccount>>["account"],
   accountId: string,
@@ -503,7 +486,6 @@ async function startGrantConversion(
   return started.conversion.conversionId;
 }
 
-/** Recording ready with the segment lengths reserves the whole document, which starts synthesis. */
 async function recordGrantConversionReady(
   grant: Awaited<ReturnType<typeof createGrant>>["grant"],
   conversionId: string,

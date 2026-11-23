@@ -13,13 +13,11 @@ import {
 import { UserFacingError } from "#src/errors.ts";
 import { expect, test } from "#src/test-utils/component-test.ts";
 
-/** The session ignores a ready segment's own audio; only the narration track plays. */
 const ready = (sequence: number) => ({
   sequence,
   status: "ready" as const,
 });
 
-// Units of 20, 10, 3 and 2 seconds on the narration track.
 const AUDIOBOOK: PlayableAudiobook = {
   status: "ready",
   canGenerate: true,
@@ -54,7 +52,6 @@ function createSession({
 } = {}) {
   const saved: Array<{ position: PlaybackPosition; subject: string | null }> = [];
   const state = { now: 0 };
-  /** The armed retry timer and reconnect listener; tests fire them in place of the browser. */
   const retry: {
     timer: (() => void) | null;
     delay: number | null;
@@ -92,14 +89,12 @@ function createSession({
   return { session, saved, state, retry };
 }
 
-/** Lets settled saves run. */
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 const NOT_CONNECTED = new TypeError(
   'Unable to resolve host "cup.audio": No address associated with hostname',
 );
 
-/** A save service that fails while `isConnected` is false, as a lost connection does. */
 function createFlakyConnection() {
   const connection = { isConnected: false };
   const saved: string[] = [];

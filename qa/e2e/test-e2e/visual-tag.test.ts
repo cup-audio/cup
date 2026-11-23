@@ -4,7 +4,6 @@ import { expect, test } from "#test-e2e/fixtures.ts";
 test("a screenshot assertion in a test without the visual tag fails, naming the tag", async ({
   browser,
 }) => {
-  // A page of its own, so that the test starts no test Worker for the fixture's page.
   const page = await browser.newPage();
   await page.setContent("<p>A test without the visual tag</p>");
 
@@ -18,12 +17,9 @@ test(
   "a screenshot assertion in a test with the visual tag passes its options to Playwright",
   { tag: VISUAL_TAG },
   async ({ browser }) => {
-    // A page of its own, so that the test starts no test Worker for the fixture's page.
     const page = await browser.newPage();
     await page.setContent("<p>A test with the visual tag</p>");
 
-    // Playwright rejects a negative `maxDiffPixels` before it takes or compares a screenshot, so
-    // the assertion fails this way only if the options reach it, with or without a name.
     await expect(expect(page).toHaveScreenshot({ maxDiffPixels: -1 })).rejects.toThrow(
       "`maxDiffPixels` option value must be non-negative integer",
     );

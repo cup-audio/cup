@@ -85,23 +85,14 @@ export function createSegmentWorkflowId(conversionId: string, sequence: number) 
   return `segment-${conversionId}-${sequence}`;
 }
 
-/**
- * Checks the synthesis attempt count that a segment Workflow passes to its owner with the segment's
- * outcome: absent after a replay of the run, otherwise a positive safe integer.
- */
 export function assertSynthesisAttempts(attempts: number | undefined): void {
   if (attempts !== undefined && (!Number.isSafeInteger(attempts) || attempts < 1)) {
     throw new CupError("Synthesis attempts must be a positive safe integer");
   }
 }
 
-// Bounds how many creation requests one dispatch has in flight. This does not enforce the
-// Workflows limit on instance creations per second: creations are not paced, and owners do not
-// coordinate. A creation refused for that limit fails the dispatch, which the caller retries and
-// the owner alarm completes.
 const SEGMENT_DISPATCH_CONCURRENCY = 25;
 
-/** Starts or restarts synthesis for every given segment of one conversion. */
 export async function dispatchSegmentWorkflows(
   workflow: SynthesisWorkflowDispatcher,
   conversion: Omit<SegmentWorkflowParams, "sequence">,
@@ -114,15 +105,6 @@ export async function dispatchSegmentWorkflows(
   );
 }
 
-/**
- * Checks a reserved segment's synthesis from the owner's alarm.
- *
- * A reservation means synthesis is owed. A missing instance is created, because dispatch never
- * reached it. An errored instance is restarted, because it either predates this reservation (a
- * retry's dispatch failed before reaching it) or stopped without releasing; a run that fails again
- * releases the reservation itself. When the owner can no longer execute work, or the instance was
- * terminated, the segment is reported so the owner releases the reservation.
- */
 export async function reconcileSegmentWorkflow(
   workflow: SynthesisWorkflowDispatcher,
   params: SegmentWorkflowParams,
@@ -137,10 +119,7 @@ export async function reconcileSegmentWorkflow(
   } catch {
     try {
       await workflow.create({ id, params });
-    } catch {
-      // An ambiguous platform result must not release work that might still be running; the
-      // next alarm checks again.
-    }
+    } catch {}
     return "in-progress";
   }
 
@@ -150,14 +129,11 @@ export async function reconcileSegmentWorkflow(
   if (status === "errored") {
     try {
       await instance.restart();
-    } catch {
-      // The next alarm tries again; the reservation stays until synthesis reports an outcome.
-    }
+    } catch {}
   }
   return "in-progress";
 }
 
-/** Called under the owner's concurrency gate so explicit retries cannot restart each other. */
 async function dispatchSegmentWorkflow(
   workflow: SynthesisWorkflowDispatcher,
   params: SegmentWorkflowParams,
@@ -166,7 +142,6 @@ async function dispatchSegmentWorkflow(
   try {
     await workflow.create({ id, params });
   } catch {
-    // Creation can succeed before its response is lost. Resolve through the stable identity.
     const instance = await workflow.get(id);
     const result = await instance.status();
     if (result.status === "errored" || result.status === "terminated") {

@@ -2,15 +2,10 @@ import type { Page } from "@playwright/test";
 
 import { expect, test } from "#src/test-utils/component-test.ts";
 
-/**
- * Runs the web adapter's Google sign-in against a fake Supabase client and returns the OAuth
- * options it passed, whose query parameters Supabase forwards to Google.
- */
 async function signIn(
   page: Page,
   options: { fresh: boolean; chooseAccount: boolean },
 ): Promise<unknown> {
-  // The gallery page serves the app's modules; nothing needs to be mounted.
   await page.goto("");
   return page.evaluate(async (signInOptions) => {
     const modulePath = "/src/platform/account-auth.web.ts";

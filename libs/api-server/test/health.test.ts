@@ -13,7 +13,6 @@ vi.mock("cloudflare:workers", () => ({
   },
 }));
 
-/** The settings every response's headers need; the health route may read nothing else. */
 const SETTINGS: Partial<ApiServerEnvironment> = { SUPABASE_URL: "https://access-test.supabase.co" };
 
 test("the health endpoint answers 200 without touching a binding", async () => {

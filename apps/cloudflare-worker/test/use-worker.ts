@@ -9,23 +9,13 @@ import type * as testWorkerModule from "#test/worker.ts";
 export type TestWorker = WorkerHandle<ApiServerEnvironment, typeof testWorkerModule>;
 
 type UseWorkerOptions = Pick<TestContext, "onTestFinished"> & {
-  /** Test-only vars that override wrangler.test.jsonc, for example `LOCAL_DEVELOPMENT`. */
   vars?: Record<string, string>;
-  /** Test-only secrets that override the dummy values of `TEST_SECRETS`. */
   secrets?: Record<string, string>;
-  /**
-   * Where Sentry sends, such as a Sentry stub's `dsn("cup-worker")`. Without it, Sentry runs as in
-   * production and sends to the discard port that wrangler.test.jsonc sets.
-   */
   sentryDsn?: string;
 };
 
 const PACKAGE_DIRECTORY = nodeUrl.fileURLToPath(new URL("..", import.meta.url));
 
-/**
- * Dummy values for every secret of `secrets.required` in wrangler.jsonc. None of them is valid for
- * a real provider, and wrangler.test.jsonc points the providers' URLs at an unreachable address.
- */
 export const TEST_SECRETS = {
   CLOUDFLARE_API_KEY: "test-cloudflare-api-key",
   SOURCE_PAGE_COOKIES_JSON: "[]",
@@ -36,14 +26,6 @@ export const TEST_SECRETS = {
   MEDIA_URL_SIGNING_KEY: "test-media-url-signing-key",
 } as const;
 
-/**
- * Starts a fresh instance of the whole production Worker (test/worker.ts) in Wrangler's local test
- * runtime, with empty Durable Object, R2 and Workflow storage, and closes it when the test
- * finishes.
- *
- * Pass `onTestFinished` from the test's own context: Vitest tracks hooks per test only through the
- * context, which keeps concurrent tests in one file apart.
- */
 export async function useWorker({
   onTestFinished,
   vars = {},

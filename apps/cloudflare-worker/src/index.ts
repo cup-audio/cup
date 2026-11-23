@@ -1,9 +1,3 @@
-/*
- * Every entry point is wrapped with Sentry here rather than by the Sentry Vite plugin's
- * auto-instrumentation: the integration tests run this module in Wrangler's test harness, which
- * bundles without Vite, and must exercise the same wrapping as production (vite.config.ts).
- */
-
 import * as Sentry from "@sentry/cloudflare";
 
 import { AccountDurableObject as UninstrumentedAccountDurableObject } from "@cup/accounts";

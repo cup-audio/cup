@@ -8,29 +8,12 @@ import { createListenerApiClient } from "#src/api-client.js";
 import { getFreshAccountSession, getResourceAccountSession } from "#src/auth/account-session.js";
 import { UserFacingError } from "#src/errors.js";
 
-/**
- * Every unsuccessful API response rejects with `RpcError`, see {@link requestApi}; compare its
- * `code` with `ERROR_CODE`.
- */
 export { ERROR_CODE, RpcError } from "@cup/listener-api.client";
 
 type ApiResponse = Awaited<Parameters<typeof parseOkResponse>[0]>;
 type ApiResult<Response extends ApiResponse> = ReturnType<typeof parseOkResponse<Response>>;
 type AccountAuth = { subject: string };
 
-/**
- * Sends one API request with a freshly resolved account token and returns its parsed payload. Grant
- * sessions travel as cookies independently of the account authorization chosen here:
- *
- * - `"none"`: no account token.
- * - `"optional"`: the signed-in account's token if there is one, e.g. for an article that a
- *   conversion grant or an account may own.
- * - `{ subject }`: the account the request was issued for must still be signed in; otherwise the
- *   request is rejected before dispatch.
- *
- * Unsuccessful responses reject with `RpcError`; a missing or changed required account rejects with
- * a plain `Error` before the request is sent.
- */
 export function requestApi<Response extends ApiResponse>(
   auth: "none",
   send: (client: ListenerApiClient) => Promise<Response>,

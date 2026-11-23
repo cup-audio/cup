@@ -47,8 +47,6 @@ import {
 } from "#src/data-fetching/reader.js";
 import { describeError } from "#src/errors.js";
 
-// The audiobook request waits for any session itself (`requestApi("optional")`), so the detail view
-// needs no `beforeLoad`.
 export const Route = createFileRoute("/_shell/audiobooks/$conversionId")({
   component: AudiobookRoute,
   loader: async ({ context, params }) => {
@@ -71,7 +69,6 @@ function AudiobookRoute() {
   const { conversionId } = Route.useParams();
   const session = useAccountSession();
 
-  // Another audiobook starts with a fresh retry outcome and its title in view.
   return session ? (
     <AccountAudiobookPage
       key={conversionId}
@@ -83,7 +80,6 @@ function AudiobookRoute() {
   );
 }
 
-/** Trial conversions cannot be deleted, even by a signed-in listener who can open one. */
 function AccountAudiobookPage({
   subject,
   conversionId,
@@ -96,21 +92,14 @@ function AccountAudiobookPage({
   return <AudiobookPage conversionId={conversionId} isDeletable={isDeletable} />;
 }
 
-/**
- * Every detail view has the player sheet, disabled until the shown audiobook can play. The page
- * counts as shown while it loads, fails, or is still preparing, and is titled "Audiobook" until the
- * audiobook has a title.
- */
 function DetailLayout({
   audiobookTitle,
   topBar,
   statusLine = "",
   children,
 }: {
-  /** Absent while the audiobook loads, after it failed to load, and while it has no title yet. */
   audiobookTitle?: string | undefined;
   topBar: React.ReactNode;
-  /** The status line above the scrubber: the preparation phase or the synthesis progress. */
   statusLine?: string;
   children: React.ReactNode;
 }): React.JSX.Element {
@@ -129,16 +118,10 @@ function DetailLayout({
   );
 }
 
-/** The top bar before the audiobook has loaded: Back only. */
 function PlainTopBar() {
   return <DetailTopBar back={useDetailBack()} compactTitle={undefined} menu={undefined} />;
 }
 
-/**
- * Only accounts have Recents; trial listeners return to the start. Opened from Recents, Back goes
- * back in history, so Recents returns at its scroll position; otherwise, such as after a deep link,
- * there is no Recents entry below to return to, and Back opens Recents at the top.
- */
 function useDetailBack(): DetailBack {
   const isAccount = useAccountSession() !== null;
   const isOpenedFromRecents = useIsOpenedFromRecents();
@@ -170,14 +153,10 @@ function AudiobookPage({
   const deletion = useTrackDeletion(conversionId);
   const audiobookQuery = createAudiobookQuery(conversionId);
   const { data: audiobook, dataUpdatedAt: audiobookReceivedAt } = useSuspenseQuery(
-    // A poll during or after the deletion would find the track gone and report a failure.
     deletion.isPollingStopped ? { ...audiobookQuery, refetchInterval: false } : audiobookQuery,
   );
-  // The top bar's "…" menu and the page's Retry buttons share one mutation, so a refused retry is
-  // reported in the notices wherever it was started.
   const retry = useRetryConversion(conversionId);
   const [isTitleScrolledAway, setIsTitleScrolledAway] = React.useState(false);
-  // A pending conversion gets its title once preparation ends, which the poll above brings in.
   const audiobookTitle = "title" in audiobook ? audiobook.title : undefined;
 
   const topBar = (
@@ -201,7 +180,6 @@ function AudiobookPage({
           deletion: isDeletable ? { start: deletion.openDialog } : undefined,
         }}
       />
-      {/* Rendered into a portal, so its place here only ties it to the page's state. */}
       <DeleteTrackDialog deletion={deletion} />
     </>
   );
@@ -275,7 +253,6 @@ function AudiobookPage({
 
 type TrackDeletion = ReturnType<typeof useTrackDeletion>;
 
-/** The delete dialog's state and the deletion it confirms, for the signed-in listener's track. */
 function useTrackDeletion(conversionId: string) {
   const session = useAccountSession();
   const host = usePlayerHost();
@@ -286,10 +263,7 @@ function useTrackDeletion(conversionId: string) {
     subject: session?.user.id,
     conversionId,
     onDeleted: async () => {
-      // Either way Back cannot return to the deleted track: going back leaves it as the Forward
-      // entry, which leads to the not-found error screen, and replacing drops it.
       await returnToRecents();
-      // Once the dialog is gone, which hides the rest of the page from screen readers while open.
       announce("Track deleted.");
     },
   });
@@ -301,7 +275,6 @@ function useTrackDeletion(conversionId: string) {
     isPollingStopped: mutation.isPending || mutation.isSuccess,
     openDialog: () => setIsDialogOpen(true),
     closeDialog: () => {
-      // Escape cannot abandon a deletion that runs.
       if (mutation.isPending) {
         return;
       }
@@ -309,14 +282,12 @@ function useTrackDeletion(conversionId: string) {
       mutation.reset();
     },
     confirm: () => {
-      // Before the request, so no part of the app plays the track while it is deleted.
       host.release(conversionId);
       mutation.mutate();
     },
   };
 }
 
-/** Confirms the deletion of the track; Cancel has the focus, as the safe choice. */
 function DeleteTrackDialog({ deletion }: { deletion: TrackDeletion }): React.JSX.Element {
   const cancelButtonRef = React.useRef<HTMLButtonElement>(null);
   const error = deletion.error
@@ -354,10 +325,6 @@ function DeleteTrackDialog({ deletion }: { deletion: TrackDeletion }): React.JSX
   );
 }
 
-/**
- * Shows the narration document. Its audio plays in the shell's player, which the player sheet
- * controls; once the audiobook has a narration track, a segment tap plays from that segment.
- */
 function PreparedReader({
   conversionId,
   audiobook,
@@ -367,7 +334,6 @@ function PreparedReader({
 }: {
   conversionId: string;
   audiobook: PreparedAudiobook;
-  /** When the audiobook's response arrived, which can lie long before this page showed it. */
   audiobookReceivedAt: number;
   retry: RetryMutation;
   onTitleScrolledAwayChange: (isScrolledAway: boolean) => void;
@@ -375,7 +341,6 @@ function PreparedReader({
   const playback = useShownAudiobook(conversionId, audiobook, audiobookReceivedAt);
   const { loaded, canPlay, resumePositionMilliseconds } = playback;
   const units = audiobook.narrationDocument.synchronizationUnits;
-  // Before the audiobook is loaded, the segment Play resumes from.
   const resumeUnitId =
     canPlay && isPlayableAudiobook(audiobook)
       ? units[findUnitIndexAt(audiobook.narrationTrack, resumePositionMilliseconds)]?.id
@@ -430,7 +395,6 @@ function PreparedReader({
   );
 }
 
-/** Explains why audio is missing, and offers to retry its synthesis. */
 function ReaderNotices({
   audiobook,
   retry,
@@ -450,7 +414,6 @@ function ReaderNotices({
     </DSButton>
   );
 
-  // A retry refused for lack of duration changes nothing in the audiobook, so it is reported here.
   const retryOutcomeNotice =
     retry.data?.result === "insufficient-duration" && audiobook.status === "ready" ? (
       <ReaderNotice>
@@ -469,7 +432,6 @@ function ReaderNotices({
       {audiobook.status === "insufficient-duration" ? (
         <ReaderNotice>
           {audiobook.availableMilliseconds >= audiobook.requiredMilliseconds ? (
-            // Duration was freed since generation was refused; nothing starts until Retry.
             <p>Audio has not been generated for this track yet.</p>
           ) : (
             <p>
@@ -482,7 +444,6 @@ function ReaderNotices({
         </ReaderNotice>
       ) : null}
 
-      {/* No narration track exists until every segment has audio, so playback waits for Retry. */}
       {hasFailedSegments ? (
         <ReaderNotice>
           <p>
@@ -497,7 +458,6 @@ function ReaderNotices({
   );
 }
 
-/** Marks the segment being played; rendered only while this page's audiobook is loaded. */
 function PlayingSegmentHighlight({
   loaded,
   units,
@@ -516,7 +476,6 @@ function PlayingSegmentHighlight({
   );
 }
 
-/** Marks a segment of the narration document as the current one. */
 function SegmentHighlight({
   unitId,
   narrationDocumentRef,
@@ -569,7 +528,6 @@ function NarrationDocument({
       check.assert(narrationDocumentElement);
 
       const title = findTitle(narrationDocumentElement, units);
-      // A source subtitle shares an <hgroup> with the title, and the host goes below both.
       const titleParent = title.parentElement;
       const titleGroup = titleParent?.tagName === "HGROUP" ? titleParent : title;
       const host = document.createElement("p");
@@ -580,7 +538,6 @@ function NarrationDocument({
 
       return () => host.remove();
     },
-    // A changed document is rendered anew, which drops the host.
     [sourceHost, units, narrationDocumentElementRef],
   );
 
@@ -590,7 +547,6 @@ function NarrationDocument({
       check.assert(narrationDocumentElement);
 
       const title = findTitle(narrationDocumentElement, units);
-      // The source subtitle is drawn in the subheading text style.
       const subheadings = narrationDocumentElement.querySelectorAll(
         "h2, h3, h4, h5, h6, hgroup > h1 + p",
       );
@@ -606,7 +562,6 @@ function NarrationDocument({
         }
       };
     },
-    // A changed document is rendered anew, which drops the classes.
     [units, narrationDocumentElementRef],
   );
 
@@ -620,10 +575,6 @@ function NarrationDocument({
       check.assert(narrationDocumentElement);
 
       const title = findTitle(narrationDocumentElement, units);
-      // The document scrolls, so the root is the screen without the sticky header on top of it:
-      // only a title under or above the header is scrolled away. A large cover on a short screen
-      // can start it below the visible part, so the root reaches far below the screen and the title
-      // counts as intersecting there.
       const headerHeight =
         document.querySelector<HTMLElement>("[data-shell-header]")?.offsetHeight ?? 0;
       const observer = new IntersectionObserver(
@@ -681,11 +632,9 @@ function NarrationDocument({
       return attachNarrationDocumentInteraction({
         narrationDocumentElement,
         unitIds: units.map((unit) => unit.id),
-        // Units are selectable only with a narration track, which has audio for every unit.
         selectUnit: isSelectable ? (unitIndex) => selectUnit(unitIndex) : undefined,
       });
     },
-    // A changed document is rendered anew, which drops the buttons.
     [units, isSelectable, narrationDocumentElementRef],
   );
 
@@ -699,12 +648,9 @@ function NarrationDocument({
           color: var(--color-ink-60);
 
           & > article > * {
-            /* one blank line between blocks, as drawn */
             margin-block-end: var(--line-height-paragraph);
           }
 
-          /* the title and the host inserted below it open the page as drawn */
-          /* the title and headings take the h2 and h4 text styles from applyHeadingTextStyles */
           & > article > h1,
           & > article > hgroup,
           & > article > hgroup > h1 {
@@ -712,12 +658,10 @@ function NarrationDocument({
             color: var(--color-ink);
           }
 
-          /* the source subtitle sits closer to the title than the host does, as drawn */
           & > article > hgroup > h1 {
             margin-block-end: var(--spacing-base);
           }
 
-          /* the source subtitle, which only ever follows the title inside the <hgroup> */
           & > article > hgroup > h1 + p {
             color: var(--color-ink-60);
           }
@@ -730,10 +674,6 @@ function NarrationDocument({
             color: var(--color-ink);
             background-color: var(--color-ink-8);
 
-            /*
-              The highlight extends 12 px past the text on every side without moving it; the spread
-              grows the 12 px radius to the drawn 24 px.
-            */
             border-radius: var(--spacing-gutter);
             box-shadow: 0 0 0 var(--spacing-gutter) var(--color-ink-8);
           }
@@ -749,10 +689,8 @@ function NarrationDocument({
   );
 }
 
-/** Far more than any screen, so a title below the visible part of the page never counts as gone. */
 const TITLE_OBSERVER_BOTTOM_MARGIN_PIXELS = 100_000;
 
-/** Every narration document opens with its title as its first unit, which is narrated too. */
 function findTitle(
   narrationDocumentElement: HTMLElement,
   units: PreparedAudiobook["narrationDocument"]["synchronizationUnits"],
@@ -762,7 +700,6 @@ function findTitle(
   return title;
 }
 
-/** Every element of the narration document that belongs to a segment, in document order. */
 function findSegmentElements(narrationDocumentElement: HTMLElement, unitId: string): Element[] {
   return [
     ...narrationDocumentElement.querySelectorAll(
@@ -771,7 +708,6 @@ function findSegmentElements(narrationDocumentElement: HTMLElement, unitId: stri
   ];
 }
 
-/** Notices that explain missing audio, in the reader's flow above the text. */
 function ReaderNotice({ children }: { children: React.ReactNode }) {
   return (
     <div
@@ -785,7 +721,6 @@ function ReaderNotice({ children }: { children: React.ReactNode }) {
           padding: var(--spacing-gutter) calc(2 * var(--spacing-gutter));
           margin-block-end: calc(2 * var(--spacing-gutter));
 
-          /* the h5 size and line height at the regular weight; notices are undrawn */
           font-weight: 400;
 
           background-color: var(--color-surface);
@@ -803,10 +738,6 @@ function ReaderNotice({ children }: { children: React.ReactNode }) {
   );
 }
 
-/**
- * Retry starts nothing while the conversion runs, and has nothing to restart once every segment has
- * audio.
- */
 function offersRetry(audiobook: Audiobook): boolean {
   if (!audiobook.canGenerate) {
     return false;

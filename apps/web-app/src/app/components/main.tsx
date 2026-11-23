@@ -8,7 +8,6 @@ import {
 
 type MainProps = React.ComponentProps<"main">;
 
-/** The page's content; the document scrolls it (see the shell layout in `routes/_shell.tsx`). */
 export function Main({ children, ...delegated }: MainProps): React.JSX.Element {
   return <main {...delegated}>{children}</main>;
 }
@@ -16,7 +15,6 @@ export function Main({ children, ...delegated }: MainProps): React.JSX.Element {
 type ShellContentProps = {
   headerContent?: React.ReactNode;
   mainContent: React.ReactNode;
-  /** Room below the content, for a footer that fades over the page's end. */
   mainPaddingBlockEnd?: string | undefined;
 };
 
@@ -73,7 +71,6 @@ export function ShellContent({
               width: 100%;
               height: var(--app-padding-block);
 
-              /* let clicks reach the content fading underneath */
               pointer-events: none;
               background-image: linear-gradient(to bottom, var(--color-bg), transparent);
             `}

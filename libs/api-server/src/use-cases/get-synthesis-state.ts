@@ -15,12 +15,6 @@ export type GetSynthesisStateDependencies = {
   getFailureExplanation(sequence: number): Promise<string | undefined>;
 };
 
-/**
- * Derives a prepared conversion's status from its owner's reservations and settlements.
- *
- * Reservations are taken for the whole narration document or not at all, so a segment without any
- * reservation means the document did not fit the available duration.
- */
 export async function getSynthesisState(
   {
     narrationTextCharactersBySegment,

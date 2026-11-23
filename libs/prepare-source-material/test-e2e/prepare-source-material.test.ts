@@ -15,23 +15,16 @@ import {
   loadPublicSourcePage,
 } from "#src/prepare-source-material.ts";
 
-// Fails every test whose page requests Sentry or the telemetry tunnel.
 const test = base.extend(telemetryRequestGuard);
 
 type SourcePageFixture = {
   coverImage: { url: string; alternativeText?: string };
-  // The declared language of the kept load, as the page declares it; undefined when it declares none.
   declaredLanguage: DeclaredLanguage | undefined;
   snapshotFilename: string;
   stabilizeSourceMaterial: (html: string) => string;
-  // The source subtitle that preparation detects and removes from the source material, if any.
   subtitle?: string;
-  // The visible headline; the cut removes it and everything before it.
   title: string;
-  // Text the page sets above its visible headline, which the cut removes.
   textBeforeHeadline: readonly string[];
-  // Requests the recording does not answer: unavailable at capture time, with query values that
-  // change on every load, or made only on randomly sampled loads. The page loads without them.
   unrecordedRequests?: readonly RegExp[];
   url: string;
 };
@@ -71,7 +64,6 @@ const SOURCE_PAGES: readonly SourcePageFixture[] = [
     coverImage: {
       url: "https://images.gatesnotes.com/12514eb8-7b51-008e-41a9-512542cf683b/f93f0cc8-be6d-4e33-870b-ab6d546576f1/AI-Article-08.19.2026-Share-Image-1200x630.jpg",
     },
-    // Only the rendered head declares a language.
     declaredLanguage: { ogLocale: "en_US" },
     snapshotFilename: "gates-notes.html",
     subtitle: "We need a plan to ensure that the good outweighs the bad.",
@@ -95,7 +87,6 @@ const SOURCE_PAGES: readonly SourcePageFixture[] = [
     stabilizeSourceMaterial: (html: string) => html,
     title: "BYD will mit neuer Luxus-Limousine Rolls-Royce und Maybach Konkurrenz machen",
     textBeforeHeadline: ["Obere Oberklasse"],
-    // The browser save holds only the scripts the page references, not the chunks they import.
     unrecordedRequests: [
       /^https:\/\/b\.staticfiles\.at\/lib\/k13m\/assets\/(?:index|preload-helper|Component|config)-[\w-]+\.js$/u,
       /^https:\/\/b\.staticfiles\.at\/lib\/dst-readinglist\/assets\/dst-readinglist-[\w-]+\.js$/u,
@@ -133,7 +124,6 @@ const SOURCE_PAGES: readonly SourcePageFixture[] = [
     unrecordedRequests: [
       /^https:\/\/www\.washingtonpost\.com\/subscribe\/user\/auth-status\?/u,
       /^https:\/\/www\.washingtonpost\.com\/red-static\/services\/dat\/\?/u,
-      // Datadog session replay samples one load in five at random and only then loads its recorder.
       /^https:\/\/www\.washingtonpost\.com\/_next\/static\/chunks\/datadogRecorder\.[\da-f]+\.js$/u,
     ],
     url: "https://www.washingtonpost.com/politics/2026/10/28/these-seven-races-will-determine-which-party-controls-senate/",
@@ -174,7 +164,6 @@ for (const {
         "a_turbulent_ai_era_and_critical_choices_to_make_a",
       );
       expect(staticPage.documentTitle).toBe("");
-      // The shell declares no metadata; the cover image exists only in the rendered head.
       expect(staticPage.coverImage).toBeUndefined();
       expect(staticPage.declaredLanguage).toBeUndefined();
     }
@@ -251,8 +240,6 @@ for (const javaScriptEnabled of [false, true]) {
   test(`leaves screen-reader-only content out of the source material (JavaScript enabled: ${javaScriptEnabled})`, async ({
     browser: playwrightBrowser,
   }) => {
-    // The link hint copies openai.com's markup, recorded on 2026-11-22: a Tailwind `sr-only` span
-    // after a word joiner.
     const sourcePageHtml = `<!doctype html>
       <html>
         <head>
@@ -290,7 +277,6 @@ for (const javaScriptEnabled of [false, true]) {
   });
 }
 
-// A one-pixel PNG, served in place of the publisher's image.
 const COVER_IMAGE_BYTES = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAX+XDSwAAAABJRU5ErkJggg==",
   "base64",
@@ -313,7 +299,6 @@ test("loads a cover image as a browser navigation carrying the source page as re
             handler({
               request: () => route.request(),
               abort: (errorCode) => route.abort(errorCode),
-              // The loader approved the request; answer it locally instead of reaching the internet.
               continue: async () => {
                 const headers = route.request().headers();
                 requests.push({
@@ -323,7 +308,6 @@ test("loads a cover image as a browser navigation carrying the source page as re
                 });
                 await route.fulfill({
                   body: COVER_IMAGE_BYTES,
-                  // Deliberately wrong: the type must come from the bytes.
                   contentType: "image/jpeg",
                 });
               },
@@ -351,7 +335,6 @@ test("loads a cover image as a browser navigation carrying the source page as re
   });
 });
 
-/** Answers every source-page request with the given HTML. */
 function createSingleSourcePageBrowser(
   playwrightBrowser: Browser,
   sourcePageHtml: string,
@@ -382,8 +365,6 @@ function createSingleSourcePageBrowser(
   };
 }
 
-// Retain public page URLs so production URL checks and relative resource resolution still run.
-// Only the test transport redirects requests to the local recording server.
 function createFixtureBrowser(
   playwrightBrowser: Browser,
   request: APIRequestContext,
@@ -430,7 +411,6 @@ function createFixtureBrowser(
               continue: async () => {
                 const sourceRequest = route.request();
                 const url = sourceRequest.url();
-                // Images, fonts, media, and third-party tracking do not supply narration content.
                 if (
                   !recordedHosts.has(new URL(url).hostname) ||
                   !recordedResourceTypes.has(sourceRequest.resourceType())
@@ -538,7 +518,6 @@ function escapeHtml(text: string): string {
 }
 
 test("a test whose page requests Sentry fails", async ({ browser: playwrightBrowser }) => {
-  // The telemetry request guard fails this test in its teardown; the test proves that it does.
   test.fail();
   const page = await playwrightBrowser.newPage();
   await page.route("https://publisher.example/**", (route) =>
@@ -547,7 +526,6 @@ test("a test whose page requests Sentry fails", async ({ browser: playwrightBrow
       body: '<img src="https://o1.ingest.de.sentry.io/api/1/envelope/">',
     }),
   );
-  // Answered locally: nothing reaches Sentry.
   await page.route("https://o1.ingest.de.sentry.io/**", (route) => route.abort());
   await page.goto("https://publisher.example/story");
   await page.close();

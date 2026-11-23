@@ -1,4 +1,3 @@
-/** Never accept caller-supplied forwarding headers as an ingress identity. */
 export async function ingressIdentity(request: Request, localDevelopment = false) {
   const value =
     (request.cf ? request.headers.get("CF-Connecting-IP") : null) ??

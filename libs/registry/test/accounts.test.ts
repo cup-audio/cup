@@ -34,7 +34,6 @@ const harness = createTestHarness({
 });
 const worker = harness.getWorker();
 let bindings: AccountEnvironment;
-// Wrangler masks rejected RPC error messages; rejection checks are paired with persisted-state assertions.
 const nowMs = 2_000_000_000_000;
 
 const missingIdentities = new Set<string>();
@@ -87,7 +86,6 @@ async function createAccount() {
   return { account, accountId, subject };
 }
 
-/** Settling this outcome with the segment lengths reserves the whole document, as preparation does. */
 function readyOutcome(accountId: string, conversionId: string) {
   return {
     status: "ready",
@@ -245,7 +243,6 @@ test("account usage projections apply newer revisions and ignore stale ones", as
 });
 
 test("an allowance adjustment pushes the account's usage to the registry", async () => {
-  // Account objects push to the singleton registry name used in production.
   const registry = bindings.REGISTRY.get(bindings.REGISTRY.idFromName("registry"));
   const { accountId } = await registry.provisionVerifiedIdentity(crypto.randomUUID(), nowMs);
   const account = bindings.ACCOUNTS.get(bindings.ACCOUNTS.idFromName(accountId));
@@ -605,7 +602,6 @@ async function expectWorkerRpcRejection(operation: Promise<unknown>): Promise<vo
   try {
     await operation;
   } catch {
-    // Wrangler hides the original rejection behind its RPC transport; state assertions verify the effect.
     return;
   }
   throw new Error("Expected the Durable Object operation to reject");
@@ -709,7 +705,6 @@ test("account history pages ties deterministically without crossing owners", asy
     nowMs,
   );
   const storage = await worker.getDurableObjectStorage("ACCOUNTS", { name: accountId });
-  // Copying the accepted conversion in one statement avoids 52 sequential RPCs, which exceed the test timeout under load.
   await storage.exec(
     `INSERT INTO account_conversions (conversion_id, idempotency_key, source_url, created_at_ms, status, last_started_phase)
      SELECT copy.value, copy.value, source_url, created_at_ms, status, last_started_phase
@@ -818,7 +813,6 @@ test("deletion needs fresh authentication and recovery preserves the original le
     }),
   ).resolves.toEqual({ result: "conflict" });
   expect((await account.inspect()).state).toBe("active");
-  // The test account is initialized directly; registry delivery intentionally rejects it.
   await expect(
     account.scheduleDeletion({
       challengeId: first.challengeId,
@@ -887,8 +881,6 @@ test("due deletion and email work cannot be starved by 100 future or terminal re
       }),
     );
   }
-  // Several rows per statement: 204 single-row inserts, each a round trip to the harness,
-  // outlasted the test timeout under a full parallel test run.
   await insertRows(storage, "deletion_jobs", 2, jobs);
   await insertRows(storage, "deletion_notifications", 3, notifications);
   const receipts = await testObject.reconcileForTest();
@@ -1188,7 +1180,6 @@ test("failed generation retains completed duration charges and releases only unf
   const id = started.conversion.conversionId;
   await account.settleConversion(id, readyOutcome(accountId, id), nowMs, 1, [100, 100]);
   await account.completeAudioSegment(id, 0, 5_000.1, 1);
-  // The second segment fails after retries and releases only its own reservation.
   await account.releaseAudioSegment(id, 1, 1);
   await account.releaseAudioSegment(id, 1, 1);
   expect((await account.inspect()).balance).toEqual({
@@ -1292,7 +1283,6 @@ test("a balance constraint failure rolls back the entire allowance adjustment", 
     account.adjustAllowance(requestId, Number.MAX_SAFE_INTEGER, "overflow", nowMs),
   );
   expect(await account.inspectAccounting()).toEqual(before);
-  // Reusing the request proves the failed transaction left no operation or ledger entry behind.
   await account.adjustAllowance(requestId, 100, "valid retry", nowMs);
   expect(await account.inspectAccounting()).toMatchObject({
     reconstructed: { available: 1_800_100, reserved: 0 },
@@ -1495,14 +1485,12 @@ test("a stalled cleanup does not try termination again, even after the object re
 
   await account.reconcileForTest();
   expect(await account.terminationsForTest()).toHaveLength(3);
-  // The failed owner removal left the conversion marked, so the next pass cleans it up again.
   expect((await readConversionRows(storage, conversionId)).account_conversions).toHaveLength(1);
 
   await expectWorkerRpcRejection(account.restartForTest());
   const restarted = bindings.ACCOUNTS.get(bindings.ACCOUNTS.idFromName(accountId));
   await restarted.reconcileForTest();
 
-  // The restart emptied the record of attempts, so any attempt listed here is a second one.
   expect(await restarted.terminationsForTest()).toEqual([]);
   expect(await readConversionRows(storage, conversionId)).toEqual(NO_CONVERSION_ROWS);
 });
@@ -1526,7 +1514,6 @@ test("the dispatch alarm binds no owner and creates no workflow for a deleted co
   const { account, accountId } = await createAccount();
   const conversionId = crypto.randomUUID();
   const storage = await worker.getDurableObjectStorage("ACCOUNTS", { name: accountId });
-  // A conversion whose dispatch never ran, so the alarm would otherwise bind and create it.
   await storage.exec(
     `INSERT INTO account_conversions (conversion_id, idempotency_key, source_url, created_at_ms, status, last_started_phase)
      VALUES (?, ?, 'https://example.com/undispatched', ?, 'pending', 'conversion-start')`,
@@ -1631,10 +1618,6 @@ test("a deletion-scheduled account accepts a conversion deletion and a deleting 
   expect(await account.getConversion(deletingConversionId)).toBeDefined();
 });
 
-/**
- * Provisions an account through the registry, so the alarm's usage publication can succeed, and
- * starts a conversion whose preparation dispatch binds its owner, then reserves two segments.
- */
 async function startPreparedConversion() {
   const registry = bindings.REGISTRY.get(bindings.REGISTRY.idFromName("registry"));
   const subject = crypto.randomUUID();
@@ -1696,7 +1679,6 @@ test("a deleted conversion's cleanup drains its writers and removes its objects,
     synchronizationUnitId: "unit-1",
     offsetMilliseconds: 10,
   });
-  // A writer whose put landed but whose acknowledgement was lost; cleanup drains it first.
   const writerId = crypto.randomUUID();
   const executionPrefix = prefix + "executions/1/";
   const segmentKey = executionPrefix + "segment-0.mp3";
@@ -1711,7 +1693,6 @@ test("a deleted conversion's cleanup drains its writers and removes its objects,
   const ledgerEntries = (await account.inspectAccounting()).entries;
 
   expect(await account.deleteConversion(conversionId)).toEqual({ result: "marked" });
-  // The deletion arms the alarm to fire at once.
   await expect.poll(() => account.firedAlarmsForTest()).toBeGreaterThan(0);
 
   await account.reconcileForTest();
@@ -1720,7 +1701,6 @@ test("a deleted conversion's cleanup drains its writers and removes its objects,
   expect((await bindings.AUDIO_BUCKET.list({ prefix })).objects).toEqual([]);
   expect(await registry.findConversionOwner(conversionId)).toBeUndefined();
   expect(await readConversionRows(storage, conversionId)).toEqual(NO_CONVERSION_ROWS);
-  // The ledger keeps its history: only the release of the open hold was appended.
   expect((await account.inspectAccounting()).entries).toBe(ledgerEntries + 1);
   expect(await account.alarmForTest()).toBeNull();
 });
@@ -1733,7 +1713,6 @@ test("the cleanup sweep pages past 1,000 objects and keeps a sibling conversion'
       keys.slice(start, start + 100).map((key) => bindings.AUDIO_BUCKET.put(key, "audio")),
     );
   }
-  // Another conversion of the same account.
   const siblingKey = `accounts/${accountId}/conversions/${crypto.randomUUID()}/audiobook.mp3`;
   await bindings.AUDIO_BUCKET.put(siblingKey, "sibling");
 
@@ -1863,7 +1842,6 @@ test("a conversion marked while no alarm was armed is cleaned up once the accoun
   const { account, accountId, conversionId, storage, prefix, registry } =
     await startPreparedConversion();
   await bindings.AUDIO_BUCKET.put(prefix + "audiobook.mp3", "audio");
-  // Marked the way a deletion did before the alarm cleaned up, which armed nothing.
   await storage.exec(
     "UPDATE account_conversions SET deleting_since_ms = ? WHERE conversion_id = ?",
     nowMs,
@@ -1907,10 +1885,6 @@ test("conversion deletions list each marked conversion with its marker time", as
   ]);
 });
 
-/**
- * Inserts rows of `columns` values each, 30 rows per statement, which stays below the variable
- * limit of a Durable Object's SQLite.
- */
 async function insertRows(
   storage: { exec(query: string, ...bindings: string[]): Promise<unknown> },
   table: string,

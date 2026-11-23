@@ -12,7 +12,6 @@ import {
 } from "#src/test-utils/view-transition-recorder.ts";
 
 const ADDED_SOURCE_URL = "https://example.test/added";
-/** Cards on the first page of the `Recents` story. */
 const FIRST_PAGE_SIZE = 24;
 
 for (const state of [
@@ -49,7 +48,6 @@ test("a ready card links to its detail view and shows its title, cover and host"
     "href",
     "/app/audiobooks/00000000-0000-4000-8000-000000000000",
   );
-  // the cover is decorative: the title names the card
   await expect(link.locator("img")).toHaveAttribute("alt", "");
   await expect(card.getByText("derstandard.at", { exact: true })).toBeVisible();
   await expect(link.getByText("derstandard.at")).toHaveCount(0);
@@ -67,7 +65,6 @@ test("a card preloads its track only once no dialog covers it", async ({ mount, 
   const dialog = page.getByRole("dialog", { name: "Account settings" });
   await expect(dialog.getByText("Delete account…")).toBeVisible();
   await expectCoversLoaded(page);
-  // The longest a preload takes to start, as nothing on the page tells that none will.
   await page.waitForTimeout(500);
   expect(preloads).toEqual([]);
 
@@ -87,12 +84,10 @@ test("pending and failed cards show a muted line in the title slot and no cover"
   await expect(links.nth(0)).toHaveAccessibleName("Selecting narration content");
   await expect(links.nth(1)).toHaveAccessibleName("Preparing");
   await expect(links.nth(3)).toHaveAccessibleName("Couldn't prepare this track");
-  // a conversion with a narration document looks ready
   await expect(links.nth(4)).toHaveAccessibleName("Generating audio still looks ready");
   for (const index of [0, 1, 3]) {
     await expect(links.nth(index).locator("img")).toHaveCount(0);
   }
-  // the source host shows only below the card, here "www." dropped
   await expect(cardsOf(component).nth(1).getByText("theverge.com", { exact: true })).toBeVisible();
 });
 
@@ -107,11 +102,9 @@ test(
     const boxes = await readCardBoxes(component);
     const columnLefts = [...new Set(boxes.map((box) => box.left))].sort((a, b) => a - b);
     expect(columnLefts.length).toBeGreaterThanOrEqual(2);
-    // the first row fills the columns left to right
     for (const [column, left] of columnLefts.entries()) {
       expect(boxes[column]).toMatchObject({ left, top: 0 });
     }
-    // every later card goes into the column that ends highest, leftmost on a tie, so no card starts above its predecessor
     const columnBottoms = columnLefts.map(() => 0);
     for (const [index, box] of boxes.entries()) {
       const shortestColumn = columnBottoms.indexOf(Math.min(...columnBottoms));
@@ -138,7 +131,6 @@ test(
     await expect(component.getByRole("button", { name: "Load more" })).toHaveCount(0);
     const firstPageBoxes = await readCardBoxes(component);
 
-    // the first page is longer than the sentinel's margin, so the next page waits for scrolling
     expect(nextPageRequests).toBe(0);
     await component.getByRole("main").evaluate((main) => main.scrollIntoView({ block: "end" }));
 
@@ -155,7 +147,6 @@ test(
     const component = await mount("routes/_shell.recent/Recents");
     await expect(cardsOf(component)).toHaveCount(FIRST_PAGE_SIZE);
     await expectCoversLoaded(page);
-    // a card far enough down that Recents opening at the top would not show it
     const card = cardsOf(component).nth(FIRST_PAGE_SIZE - 4);
     await card.scrollIntoViewIfNeeded();
     const scrollPosition = await page.evaluate(() => window.scrollY);
@@ -199,7 +190,6 @@ test("the mini player names the loaded audiobook and its host", async ({ mount }
   await expect(player.getByRole("link")).toHaveAccessibleName(
     "Sure, let’s smoosh SpaceX and xAI together theverge.com",
   );
-  // the cover is decorative: the link names the audiobook
   await expect(player.locator("img")).toHaveAttribute("alt", "");
   await expect(player.getByRole("progressbar")).toHaveCount(0);
 });
@@ -231,7 +221,6 @@ test(
     const cover = player.locator("img");
     await expectCoversLoaded(page);
 
-    // the gap between the link and the −15 s button
     const linkBox = await player.getByRole("link").boundingBox();
     expect(linkBox).not.toBeNull();
     await page.mouse.click(linkBox!.x + linkBox!.width + 4, linkBox!.y + linkBox!.height / 2);
@@ -244,7 +233,6 @@ test(
     await expect(
       component.getByRole("heading", { name: "Sure, let’s smoosh SpaceX and xAI together" }),
     ).toBeVisible();
-    // the detail view shows the player sheet, not the mini player
     await expect(component.getByRole("contentinfo", { name: "Player" })).toBeVisible();
     await expect(component.getByRole("region", { name: "Player" })).toHaveCount(0);
   },
@@ -255,7 +243,6 @@ test("the mini player stays behind the account dialog", async ({ mount, page }) 
 
   await component.getByRole("link", { name: "Account" }).click();
   await expect(page.getByRole("dialog", { name: "Account settings" })).toBeVisible();
-  // The open dialog hides the page behind it from the accessibility tree.
   await expect(
     page.getByRole("region", { name: "Player", includeHidden: true }).getByRole("link", {
       name: /^Sure, let’s smoosh SpaceX and xAI together/,
@@ -274,7 +261,6 @@ test("a signed-in cold start on home never shows the start form before Recents",
   mount,
   page,
 }) => {
-  // Records every text field the page inserts, however briefly; Recents itself has none.
   await page.addInitScript(() => {
     const insertedFields: string[] = [];
     Object.assign(window, { insertedFields });
@@ -293,7 +279,6 @@ test("a signed-in cold start on home never shows the start form before Recents",
   );
   const component = await mount("routes/_shell.recent/SignedInColdStartHome");
   await authConfigRequest;
-  // Gives the page a few frames to render what it shows while auth is held.
   await page.evaluate(async () => {
     for (let frame = 0; frame < 3; frame++) {
       await new Promise(requestAnimationFrame);
@@ -332,9 +317,6 @@ test("a URL shared while signed in opens the Add dialog and starts its conversio
 }) => {
   const starts = recordConversionStarts(page);
   const component = await mount("routes/_shell.recent/EmptyRecents");
-  // The native share plugins hand the URL to share intake, and a cold start then opens the app's
-  // home. The gallery's own mount keeps this page, and with it the pending URL; the mount fixture
-  // would load a new one.
   await page.evaluate(async (url) => {
     const modulePath = "/src/platform/share-intake.ts";
     const { receiveSharedUrl } = await import(modulePath);
@@ -382,7 +364,6 @@ test("renders the idle Add dialog over Recents", { tag: VISUAL_TAG }, async ({ m
   await expect(
     page.getByRole("heading", { name: "Recent", exact: true, includeHidden: true }),
   ).toBeAttached();
-  // The field stays unfocused, so opening the sheet does not raise the on-screen keyboard.
   await expect(dialog).toBeFocused();
   await expect(dialog.getByRole("textbox", { name: "URL" })).toHaveAttribute(
     "placeholder",
@@ -406,7 +387,6 @@ test(
       throw new Error("The Add dialog has no box, or the page no viewport size");
     }
     expect(box.y + box.height).toBe(viewport.height);
-    // The 800 px app column, less the 12 px gutter on each side.
     const inset = Math.max(0, (viewport.width - 800) / 2) + 12;
     expect(box.x).toBe(inset);
     expect(box.x + box.width).toBe(viewport.width - inset);
@@ -433,7 +413,6 @@ test(
     const dialog = page.getByRole("dialog", { name: "Add a track" });
     await expect(dialog.getByRole("alert")).toHaveText("This page cannot be converted.");
     await expect(dialog.getByRole("button", { name: "Add" })).toBeEnabled();
-    // The submit button regains focus once re-enabled, with or without a focus ring; the field keeps it stable.
     await dialog.getByRole("textbox", { name: "URL" }).focus();
     await expect(page).toHaveScreenshot("add-dialog-error.png");
   },
@@ -452,7 +431,6 @@ test("a refused start in the Add dialog leaves nothing for home or a reopened di
   const component = await mount("routes/_shell.recent/AddDialogError");
   const dialog = page.getByRole("dialog", { name: "Add a track" });
   await expect(dialog.getByRole("alert")).toHaveText("This page cannot be converted.");
-  // The stored request belongs to the home page's start, which resumes it after sign-in.
   expect(await page.evaluate(() => window.sessionStorage.getItem("cup_pending_conversion"))).toBe(
     null,
   );
@@ -500,7 +478,6 @@ for (const close of [
 
       await expect(page.getByRole("dialog", { name: "Add a track" })).toHaveCount(0);
       await expect(component.getByRole("heading", { name: "Recent", exact: true })).toBeVisible();
-      // Opening again proves closing went back to the entry below, not forward to a new one.
       await component.getByRole("link", { name: "Add", exact: true }).click();
       await expect(page.getByRole("dialog", { name: "Add a track" })).toBeVisible();
     },
@@ -518,7 +495,6 @@ test(
     const tops = sampleAddDialogTops(page, "until-rest-after-moving");
     await dragAddDialogGrabber(page, restingTop, 60);
 
-    // It followed the pointer down, then came back up.
     expect(Math.max(...(await tops))).toBeGreaterThan(restingTop + 30);
     await expect(dialog).toBeVisible();
     await expect.poll(() => readAddDialogTop(page)).toBe(restingTop);
@@ -540,10 +516,8 @@ test(
     await page.mouse.move(x, restingTop + 8);
     await page.mouse.down();
     await page.mouse.move(x, restingTop + 108, { steps: 10 });
-    // The dialog follows the pointer once the pull passes Base UI's small start threshold.
     await expect.poll(() => readAddDialogTop(page)).toBeGreaterThan(restingTop + 50);
 
-    // The backdrop has faded by as much as the pull has moved the dialog down.
     await expect(page).toHaveScreenshot("add-dialog-mid-pull.png");
     await page.mouse.up();
   },
@@ -604,7 +578,6 @@ test(
     expect(await sampleAddDialogTops(page, "until-rest")).toEqual([restingTop]);
 
     await page.keyboard.press("Escape");
-    // It may stay for a frame before it leaves, but it never moves across frames.
     expect((await sampleAddDialogTops(page, "until-rest")).length).toBeLessThanOrEqual(1);
     await expect(dialog).toHaveCount(0);
   },
@@ -633,7 +606,6 @@ test("a start that succeeds after Back closed the Add dialog leaves the listener
   const accountDialog = page.getByRole("dialog", { name: "Account settings" });
   await expect(accountDialog.getByText("Delete account…")).toBeVisible();
 
-  // A successful start refreshes the account, then reports that the dialog's start succeeded.
   const accountRefresh = page.waitForResponse(
     (response) => new URL(response.url()).pathname === "/api/account",
   );
@@ -648,7 +620,6 @@ test("a start that succeeds after Back closed the Add dialog leaves the listener
   await page.evaluate(
     () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
   );
-  // The Add dialog is no longer shown, so its late success neither goes back nor closes this one.
   await expect(accountDialog.getByText("Delete account…")).toBeVisible();
 });
 
@@ -682,10 +653,6 @@ test(
   },
 );
 
-/**
- * Keeps the player host's audio element reachable, which is never attached to the document (see
- * _shell.audiobooks.$conversionId.test.ts).
- */
 async function captureNarrationAudio(page: Page) {
   await page.addInitScript(() => {
     const NativeAudio = window.Audio;
@@ -735,16 +702,10 @@ const REVISITED_READY_TITLE =
 const REVISITED_READY_ID = "00000000-0000-4000-8000-000000000000";
 const REVISITED_PENDING_ID = "00000000-0000-4000-8000-000000000001";
 
-/** The loading states recorded after the first `skippedCount`, those of the visit under test. */
 async function readLoadingStatesSince(page: Page, skippedCount: number) {
   return (await readLoadingStateRecord(page)).slice(skippedCount);
 }
 
-/**
- * Stays away from a screen longer than Query keeps an unobserved query at the least (one second for
- * a suspense query), so a cache that does not keep it for the page lifetime has dropped it. Needs
- * `page.clock.install()` before the mount.
- */
 async function stayAway(page: Page) {
   await page.clock.fastForward(5_000);
 }
@@ -776,8 +737,6 @@ test("returning to Recents from a screen that does not show the history shows it
   await page.clock.install();
   const component = await mount("routes/_shell.recent/RevisitingScreens");
   await expect(cardsOf(component)).toHaveCount(2);
-  // Unlike the detail view, which observes the history to offer deletion, account recovery leaves
-  // it unobserved, so only the cache lifetime keeps it while the listener is away.
   await openPathInAccountStory(page, "/account-recovery");
   await expect(component.getByText("This account is not scheduled for deletion.")).toBeVisible();
   await stayAway(page);
@@ -1005,7 +964,6 @@ test("a first visit to a track holds Recents behind the progress bar, then shows
   );
   await releaseResponses(page, `audiobook:${REVISITED_READY_ID}`);
   await audiobookResponse;
-  // A paused clock also holds Query's notifications, so the response shows only as time passes.
   await page.clock.runFor(299);
   await expect(trackSkeleton).toBeVisible();
 
@@ -1045,8 +1003,6 @@ test(
   "a preloaded track shows no progress bar while the browser captures its cover transition",
   { tag: VISUAL_TAG },
   async ({ mount, page }) => {
-    // WebKit in the E2E suite's Docker browser takes longer than the bar's delay to capture the old
-    // screen; delaying the transition's update stands in for that, in any browser.
     await page.addInitScript(() => {
       const startViewTransition = document.startViewTransition.bind(document);
       document.startViewTransition = (options) => {
@@ -1210,7 +1166,6 @@ test(
     await page.evaluate(() => document.activeViewTransition?.finished);
 
     await scrollCoverTo(page, "above-viewport");
-    // Not a tap on the card, as that would scroll it into view: the way a browser Forward opens it.
     await openPathInAccountStory(page, `/audiobooks/${REVISITED_READY_ID}`);
     await expect(component.getByRole("heading", { name: REVISITED_READY_TITLE })).toBeVisible();
 
@@ -1255,7 +1210,6 @@ test(
     expect(await readViewTransitionRecord(page)).toHaveLength(3);
     await page.evaluate(() => document.activeViewTransition?.finished);
 
-    // the detail view's cover is in view, and so is the card it would land on
     await component.getByRole("link", { name: "Back", exact: true }).click();
 
     await expect(cardsOf(component)).toHaveCount(2);
@@ -1286,13 +1240,10 @@ test(
   },
 );
 
-/** Waits until the Add dialog has slid in and stopped moving, and returns its top edge. */
 async function waitForAddDialogAtRest(page: Page): Promise<number> {
   const dialog = page.getByRole("dialog", { name: "Add a track" });
   await expect(dialog).toBeVisible();
   await dialog.evaluate(async (element) => {
-    // A cancelled animation, such as one a restarted transition replaces, rejects `finished` with an
-    // AbortError, so wait until no animation is still running instead of for the first set.
     const runningAnimations = () =>
       element
         .getAnimations()
@@ -1305,14 +1256,6 @@ async function waitForAddDialogAtRest(page: Page): Promise<number> {
   return readAddDialogTop(page);
 }
 
-/**
- * Reads the Add dialog's top edge on every frame, for at most 5 s:
- *
- * - `until-rest`: while it moves, until it rests or leaves the document; a dialog that does not move
- *   yields only its first top, one already gone none.
- * - `until-rest-after-moving`: as `until-rest`, but first waits for it to start moving.
- * - `until-gone`: until it leaves the document, also while it rests before.
- */
 function sampleAddDialogTops(
   page: Page,
   stop: "until-rest" | "until-rest-after-moving" | "until-gone",
@@ -1336,7 +1279,6 @@ function sampleAddDialogTops(
           const top = dialog.getBoundingClientRect().top;
           hasMoved ||= tops.length > 0 && top !== tops.at(-1);
           tops.push(top);
-          // A finished slide-in stays listed, holding the sheet in place with its fill.
           const isResting =
             dialog.getAnimations().every((animation) => animation.playState === "finished") &&
             !dialog.hasAttribute("data-swiping");
@@ -1355,7 +1297,6 @@ function sampleAddDialogTops(
   );
 }
 
-/** Expects the dialog's top edge to have moved down through several frames, off its resting place. */
 function expectSlidAway(tops: number[], restingTop: number) {
   expect(new Set(tops).size).toBeGreaterThan(2);
   expect(isOrdered(tops, "ascending"), `top edges ${JSON.stringify(tops)}`).toBe(true);
@@ -1380,10 +1321,6 @@ async function readAddDialogTop(page: Page): Promise<number> {
   return box.y;
 }
 
-/**
- * Drags the Add dialog down by its grabber, which sits centered on its top edge, and holds still
- * before letting go, so the pull ends slowly rather than as a flick.
- */
 async function dragAddDialogGrabber(page: Page, dialogTop: number, distance: number) {
   const viewport = page.viewportSize();
   if (!viewport) {
@@ -1398,7 +1335,6 @@ async function dragAddDialogGrabber(page: Page, dialogTop: number, distance: num
   await page.mouse.up();
 }
 
-/** Scrolls the shown screen's track cover, on a page made tall enough for any story's content. */
 async function scrollCoverTo(page: Page, place: "above-viewport" | "partly-in-viewport") {
   await page.evaluate((coverPlace) => {
     document.body.style.minHeight = "500vh";
@@ -1429,7 +1365,6 @@ function cardsOf(component: Locator): Locator {
   return component.getByRole("list", { name: "Tracks" }).getByRole("listitem");
 }
 
-/** Each card's position and height in the list, independent of the scroll position. */
 function readCardBoxes(component: Locator) {
   return cardsOf(component).evaluateAll((cards) =>
     cards.map((card) => {
@@ -1447,7 +1382,6 @@ function readCardBoxes(component: Locator) {
   );
 }
 
-/** Covers keep their placeholder until loaded; screenshots and layout checks wait for them. */
 async function expectCoversLoaded(page: Page) {
   await expect
     .poll(() =>
@@ -1490,7 +1424,6 @@ test("the page title names the account dialog while it is open", async ({ mount,
   await expect(page).toHaveTitle("Recent · Cup");
 });
 
-/** Plays and pauses the shown track, so Recents shows it in the mini player. */
 async function loadIntoPlayer(component: Locator): Promise<void> {
   const playerSheet = component.getByRole("contentinfo", { name: "Player" });
   await playerSheet.getByRole("button", { name: "Play", exact: true }).click();

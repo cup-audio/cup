@@ -5,21 +5,14 @@ import { z } from "zod";
 export type WranglerConfig = z.infer<typeof wranglerConfigSchema>;
 export type DurableObjectMigration = NonNullable<WranglerConfig["migrations"]>[number];
 
-/** The production config, which `pnpm dev` and `wrangler deploy` use. */
 export const PRODUCTION_CONFIG_PATH = nodeUrl.fileURLToPath(
   new URL("../wrangler.jsonc", import.meta.url),
 );
 
-/** The integration tests' config (`useWorker()`). */
 export const TEST_CONFIG_PATH = nodeUrl.fileURLToPath(
   new URL("wrangler.test.jsonc", import.meta.url),
 );
 
-/**
- * The parts of a Wrangler config that the tests read. Wrangler's declarations import the config
- * types from a package it bundles, so `experimental_readRawConfig()` returns `any`; this schema
- * gives the tests checked types instead. Unlisted keys pass through untouched.
- */
 const wranglerConfigSchema = z.looseObject({
   routes: z
     .array(z.strictObject({ pattern: z.string(), custom_domain: z.boolean().optional() }))

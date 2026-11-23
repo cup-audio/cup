@@ -1,18 +1,7 @@
 import React from "react";
 
-/*
- * The icons drawn for the Recents and detail-view designs, exported from Figma as SVG (see
- * docs/research/recents-design-tokens/icons),
- * for the conversion screens (https://www.figma.com/design/Mud3jhH7Lliuv0jIbCS63R/cup?node-id=403-11619)
- * and for the Add a Track sheet (https://www.figma.com/design/Mud3jhH7Lliuv0jIbCS63R/cup?node-id=485-12270).
- * They paint in `currentColor` and are decorative: the control or text
- * beside one carries the accessible name. The export's full-size clip paths are left out
- * because they clip nothing.
- */
-
 type IconProps = React.SVGProps<SVGSVGElement>;
 
-/** Ring around the avatar initials. */
 export function AvatarRingIcon(props: IconProps): React.JSX.Element {
   return (
     <svg width="54" height="49" viewBox="0 0 54 49" fill="none" aria-hidden="true" {...props}>
@@ -27,7 +16,6 @@ export function AvatarRingIcon(props: IconProps): React.JSX.Element {
   );
 }
 
-/** Recent tab (filled house). */
 export function TabRecentIcon(props: IconProps): React.JSX.Element {
   return (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
@@ -39,7 +27,6 @@ export function TabRecentIcon(props: IconProps): React.JSX.Element {
   );
 }
 
-/** Add tab (outlined plus). */
 export function TabAddIcon(props: IconProps): React.JSX.Element {
   return (
     <svg width="24" height="23" viewBox="0 0 24 23" fill="none" aria-hidden="true" {...props}>
@@ -51,7 +38,6 @@ export function TabAddIcon(props: IconProps): React.JSX.Element {
   );
 }
 
-/** Back in the detail view's top bar. */
 export function BackChevronIcon(props: IconProps): React.JSX.Element {
   return (
     <svg width="19" height="25" viewBox="0 0 19 25" fill="none" aria-hidden="true" {...props}>
@@ -66,7 +52,6 @@ export function BackChevronIcon(props: IconProps): React.JSX.Element {
   );
 }
 
-/** "…" menu button; the drawing includes the button's padding. */
 export function MoreIcon(props: IconProps): React.JSX.Element {
   return (
     <svg width="51" height="28" viewBox="0 0 51 28" fill="none" aria-hidden="true" {...props}>
@@ -86,7 +71,6 @@ export function MoreIcon(props: IconProps): React.JSX.Element {
   );
 }
 
-/** Mini player pause. */
 export function PauseMiniIcon(props: IconProps): React.JSX.Element {
   return (
     <svg width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden="true" {...props}>
@@ -102,7 +86,6 @@ export function PauseMiniIcon(props: IconProps): React.JSX.Element {
   );
 }
 
-/** −15 s in the player sheet and the mini player, which draw it alike. */
 export function SkipBack15Icon(props: IconProps): React.JSX.Element {
   return (
     <svg width="36" height="36" viewBox="0 0 36 36" fill="none" aria-hidden="true" {...props}>
@@ -118,7 +101,6 @@ export function SkipBack15Icon(props: IconProps): React.JSX.Element {
   );
 }
 
-/** Player sheet +15 s. */
 export function SkipForward15Icon(props: IconProps): React.JSX.Element {
   return (
     <svg width="36" height="36" viewBox="0 0 36 36" fill="none" aria-hidden="true" {...props}>
@@ -134,7 +116,6 @@ export function SkipForward15Icon(props: IconProps): React.JSX.Element {
   );
 }
 
-/** Player sheet pause. */
 export function PauseIcon(props: IconProps): React.JSX.Element {
   return (
     <svg width="48" height="48" viewBox="0 0 48 48" fill="none" aria-hidden="true" {...props}>
@@ -150,10 +131,6 @@ export function PauseIcon(props: IconProps): React.JSX.Element {
   );
 }
 
-/**
- * Play, drawn only disabled (`play-disabled.svg`); here at full ink, and a disabled control dims
- * it.
- */
 export function PlayIcon(props: IconProps): React.JSX.Element {
   return (
     <svg width="48" height="48" viewBox="0 0 48 48" fill="none" aria-hidden="true" {...props}>
@@ -165,7 +142,6 @@ export function PlayIcon(props: IconProps): React.JSX.Element {
   );
 }
 
-/** Cup logo on the conversion screens. */
 export function CupLogoIcon(props: IconProps): React.JSX.Element {
   return (
     <svg
@@ -184,7 +160,6 @@ export function CupLogoIcon(props: IconProps): React.JSX.Element {
   );
 }
 
-/** Arrow in the conversion screens' Listen button, drawn rotated by a hair. */
 export function ArrowRightIcon(props: IconProps): React.JSX.Element {
   return (
     <svg
@@ -204,7 +179,6 @@ export function ArrowRightIcon(props: IconProps): React.JSX.Element {
   );
 }
 
-/** Close in a sheet's title row. */
 export function CloseIcon(props: IconProps): React.JSX.Element {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true" {...props}>

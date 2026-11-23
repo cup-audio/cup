@@ -44,8 +44,6 @@ export default defineConfig({
       },
     },
     {
-      /* The request module itself, and the session machine's own plumbing (auth configuration),
-       * which runs below account sessions and so cannot go through `requestApi`. */
       files: ["src/data-fetching/api-request.ts", "src/auth/account-session.ts"],
       rules: {
         "no-restricted-imports": restrictImports(),

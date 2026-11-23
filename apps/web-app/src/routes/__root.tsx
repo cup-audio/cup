@@ -10,7 +10,6 @@ type RouterContext = {
   queryClient: QueryClient;
 };
 
-/** Root route that supplies shared loader context and the application shell. */
 export const Route = createRootRouteWithContext<RouterContext>()({
   component: RootLayout,
   beforeLoad: ({ preload }) => {
@@ -18,8 +17,6 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       return;
     }
 
-    // Start restoring auth without delaying page rendering; routes that need a session await it.
-    // Initialization publishes failures to auth state, so they need not fail navigation here.
     void ensureAuthInitialized().catch(() => undefined);
   },
 });

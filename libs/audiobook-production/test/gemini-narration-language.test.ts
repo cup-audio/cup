@@ -21,7 +21,6 @@ const TODAYS_INPUT = [
   { type: "user_input", content: [{ type: "text", text: NARRATION_TEXT }] },
 ] as const;
 const TODAYS_GENERATION_CONFIG = { speech_config: [{ voice: "Charon" }] } as const;
-// Policy 6 sends exactly the request policy 5 sends; only the stored audio's pace differs.
 
 test.each([
   {
@@ -80,7 +79,6 @@ test.each([
   async ({ speechConfig, narrationLanguage }) => {
     const request = await captureRequest(speechConfig, narrationLanguage);
 
-    // toEqual, not toMatchObject, so a stray language or style fails the test.
     expect(request.query.input).toEqual(TODAYS_INPUT);
     expect(request.query.generation_config).toEqual(TODAYS_GENERATION_CONFIG);
   },
@@ -91,7 +89,6 @@ test.each([LEGACY_GEMINI_V5_SPEECH_CONFIG, GEMINI_SPEECH_CONFIG])(
   async (speechConfig) => {
     const request = await captureRequest(speechConfig, undefined);
 
-    // toEqual, not toMatchObject, so a stray language or style fails the test.
     expect(request.query.input).toEqual(TODAYS_INPUT);
     expect(request.query.generation_config).toEqual(TODAYS_GENERATION_CONFIG);
   },
@@ -108,7 +105,6 @@ test("a policy v4 request ignores the narration language", async () => {
   const request = await captureRequest(LEGACY_GEMINI_V4_SPEECH_CONFIG, "de-AT");
 
   expect(request.query).toMatchObject({ model: "gemini-3.8-flash-lite-tts" });
-  // toEqual, not toMatchObject, so a stray language or style fails the test.
   expect(request.query.input).toEqual(TODAYS_INPUT);
   expect(request.query.generation_config).toEqual(TODAYS_GENERATION_CONFIG);
 });

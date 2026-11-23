@@ -15,7 +15,6 @@ const segmentUsageSchema = z
   .strict();
 export type SegmentUsage = z.infer<typeof segmentUsageSchema>;
 
-/** How much audio a narration document needs and how much its owner can still reserve. */
 export const insufficientDurationSchema = z
   .object({
     requiredMilliseconds: z.number().int().positive(),
@@ -26,12 +25,6 @@ export type InsufficientDuration = z.infer<typeof insufficientDurationSchema>;
 
 export type PreparedConversionStatus = "insufficient-duration" | "synthesizing" | "ready";
 
-/**
- * Derives a prepared conversion's status from its segments' reservations and settlements.
- *
- * Reservations are taken for the whole narration document or not at all, so a prepared conversion
- * without any did not fit the available duration.
- */
 export function derivePreparedConversionStatus(
   usage: readonly Pick<SegmentUsage, "state">[],
 ): PreparedConversionStatus {
@@ -41,11 +34,6 @@ export function derivePreparedConversionStatus(
   return usage.some((segment) => segment.state === "reserved") ? "synthesizing" : "ready";
 }
 
-/**
- * Returns the settled durations of a conversion's segments in sequence order when its narration
- * track exists, which is when the ledger has segments and every one of them is settled. A ready
- * conversion with a failed segment has no narration track.
- */
 export function findNarrationTrackDurations(
   usage: readonly Pick<SegmentUsage, "sequence" | "state" | "actualMilliseconds">[],
 ): number[] | undefined {
@@ -54,7 +42,6 @@ export function findNarrationTrackDurations(
   }
 
   const segments = [...usage].sort((left, right) => left.sequence - right.sequence);
-  // Reservations cover the whole narration document, so settled rows are never partial.
   if (segments.some((segment, index) => segment.sequence !== index)) {
     throw new CupError("Narration track segments must have consecutive sequences from 0");
   }
@@ -62,10 +49,6 @@ export function findNarrationTrackDurations(
   return segments.map((segment) => segment.actualMilliseconds);
 }
 
-/**
- * Lays the given lengths end to end, such as a narration track's segment durations or byte lengths:
- * each one starts at the sum of the lengths before it.
- */
 export function layOutConsecutively(lengths: readonly number[]): {
   startOffsets: number[];
   totalLength: number;
@@ -83,7 +66,6 @@ export function estimateAudioDuration(narrationTextCharacters: number): number {
   if (!Number.isSafeInteger(narrationTextCharacters) || narrationTextCharacters < 1) {
     throw new CupError("Narration character count must be a positive safe integer");
   }
-  // Reserve 70 seconds per 1,000 characters, with a one-second minimum (ADR 0022).
   const estimate = Math.max(1_000, narrationTextCharacters * 70);
   if (!Number.isSafeInteger(estimate)) {
     throw new CupError("Estimated duration exceeds supported precision");

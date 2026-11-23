@@ -62,10 +62,6 @@ export function deriveProjectedState(entry: RegistryEntry, nowMs: number): Proje
   return "open";
 }
 
-/**
- * Matches the owner's balance: an overrun can leave reserved and spent duration above the allowance
- * until reservations settle, and the balance then reports no availability.
- */
 export function deriveAvailableMilliseconds(usage: {
   allowanceMilliseconds: number;
   reservedMilliseconds: number;

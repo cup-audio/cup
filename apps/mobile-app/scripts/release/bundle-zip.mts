@@ -1,7 +1,3 @@
-/*
- * Reads the entries of an Android App Bundle, a zip archive, with Node's zlib and no extra tools.
- * Only what Gradle's bundles use is supported: stored or deflated entries, no ZIP64, no encryption.
- */
 import zlib from "node:zlib";
 
 const END_OF_CENTRAL_DIRECTORY_SIGNATURE = 0x06_05_4b_50;
@@ -15,7 +11,6 @@ const DEFLATED = 8;
 
 export type ZipEntry = { name: string; read(): Buffer };
 
-/** Lists a zip archive's entries from its central directory; `read` inflates one on demand. */
 export function readZipEntries(zip: Buffer): ZipEntry[] {
   const endOffset = findEndOfCentralDirectory(zip);
   const entryCount = zip.readUInt16LE(endOffset + 10);
@@ -87,7 +82,6 @@ function readEntryData({
       `The bundle's entry ${name} has no local header where the central directory says.`,
     );
   }
-  // The local header's name and extra field lengths can differ from the central directory's.
   const dataOffset =
     localHeaderOffset +
     30 +

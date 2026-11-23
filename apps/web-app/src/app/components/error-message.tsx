@@ -19,7 +19,6 @@ function ErrorMessage({
   );
 }
 
-/** Replaces a page that has nothing to show because loading it failed. */
 export function ErrorScreen({
   error,
   fallbackTitle,
@@ -46,7 +45,6 @@ export function ErrorScreen({
   );
 }
 
-/** Error screen for routes without their own; trying again reruns the route loaders. */
 export function RouteErrorScreen({ error }: ErrorComponentProps): React.JSX.Element {
   const router = useRouter();
 
@@ -54,7 +52,6 @@ export function RouteErrorScreen({ error }: ErrorComponentProps): React.JSX.Elem
     <ErrorScreen
       error={error}
       fallbackTitle="This page could not be loaded."
-      // Invalidating also resets the error boundary that rendered this screen.
       onRetry={() => void router.invalidate()}
     />
   );

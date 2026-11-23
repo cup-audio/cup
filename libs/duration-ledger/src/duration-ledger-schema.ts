@@ -10,10 +10,6 @@ import {
   type AnySQLiteColumn,
 } from "drizzle-orm/sqlite-core";
 
-/**
- * Tables shared by every duration allowance owner. Each owner's Durable Object keeps its own copy;
- * owner schemas re-export these tables so that their migrations create them.
- */
 export const creditBalances = sqliteTable(
   "credit_balances",
   {
@@ -97,10 +93,6 @@ export const creditLedger = sqliteTable(
   ],
 );
 
-/**
- * Defines the owner's audio segment table. Only the referenced conversion table differs between
- * owners, so each owner schema passes its own conversion ID column.
- */
 export function defineAudioSegments(conversionIdColumn: () => AnySQLiteColumn) {
   return sqliteTable(
     "audio_segments",
@@ -112,7 +104,6 @@ export function defineAudioSegments(conversionIdColumn: () => AnySQLiteColumn) {
       state: text({ enum: ["reserved", "settled", "released"] }).notNull(),
       actualMilliseconds: integer("actual_milliseconds").notNull(),
       chargedMilliseconds: integer("charged_milliseconds").notNull(),
-      // The reservation operation currently backing this segment; a re-reservation replaces it.
       operationId: text("operation_id")
         .notNull()
         .unique()

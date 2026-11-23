@@ -7,11 +7,6 @@ import type { ErrorCode } from "@cup/listener-api.routes";
 
 export type { ErrorCode } from "@cup/listener-api.routes";
 
-/**
- * Every value of {@link RpcError.code}, the contract's `ERROR_CODE` as the client's own value: only
- * the contract's types are imported, so the client does not bundle the contract's runtime, and
- * `satisfies` fails to compile when a code is missing here or not in the contract.
- */
 export const ERROR_CODE = {
   ACCOUNT_BLOCKED: "account-blocked",
   ACCOUNT_SESSION_REQUIRED: "account-session-required",
@@ -48,16 +43,8 @@ export const ERROR_CODE = {
   UNSUPPORTED_MEDIA_TYPE: "unsupported-media-type",
 } as const satisfies ErrorCodeConstants<ErrorCode>;
 
-/**
- * An unsuccessful listener API response, carrying the API error code, HTTP status, retry delay, and
- * the request's Sentry trace ID.
- */
 export class RpcError extends ApiRpcError<ErrorCode> {}
 
-/**
- * Preserves Hono's inferred successful payload and throws {@link RpcError} for every unsuccessful
- * response; a response without a known error code gets `operational-error`.
- */
 export const parseOkResponse = createOkResponseParser({
   errorCodes: ERROR_CODE,
   fallbackCode: ERROR_CODE.OPERATIONAL_ERROR,

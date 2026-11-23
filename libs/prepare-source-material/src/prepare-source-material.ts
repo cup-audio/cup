@@ -18,7 +18,6 @@ import {
 } from "#src/html-tree.ts";
 import { extractMetadataDescriptions, findSourceSubtitleElement } from "#src/source-subtitle.ts";
 
-/** A cookie installed before source-page navigation. */
 export type SourcePageCookie = {
   name: string;
   value: string;
@@ -53,17 +52,12 @@ const IRRELEVANT_ELEMENT_TAG_NAMES = new Set<string>([
   "style",
   "svg",
 ]);
-// The loader marks the visible headline in the source page; `prepareLoadedSourcePage` reads it.
 export const VISIBLE_HEADLINE_ATTRIBUTE = "data-cup-visible-headline";
-// The loader marks screen-reader-only content in the source page; `prepareLoadedSourcePage` drops it.
 export const SCREEN_READER_ONLY_CONTENT_ATTRIBUTE = "data-cup-screen-reader-only";
-// Keep equivalent static pages; rendering often adds small dynamic counters and page chrome.
 const BETTER_SOURCE_MATERIAL_TEXT_FACTOR = 1.1;
 const SOURCE_PAGE_JAVASCRIPT_MODES = [false, true] as const;
-// A declaration travels in a workflow step result, so its size must stay bounded.
 const MAX_COVER_IMAGE_URL_LENGTH = 2048;
 const MAX_COVER_IMAGE_ALTERNATIVE_TEXT_LENGTH = 500;
-// In order of preference; the secure variant names the same image as `og:image`.
 const OPEN_GRAPH_IMAGE_URL_PROPERTIES = [
   "og:image:secure_url",
   "og:image",
@@ -114,7 +108,6 @@ type SourcePage = {
   close(): Promise<void>;
 };
 
-/** Supplies browser pages used to load source material. */
 export type Browser = {
   newPage(options: { javaScriptEnabled: boolean }): Promise<SourcePage>;
 };
@@ -124,41 +117,27 @@ type InterceptedRoute = {
   abort(errorCode: "blockedbyclient"): Promise<void>;
 };
 
-/** The image a source page declares in its metadata to represent its source content. */
 export type CoverImageDeclaration = {
   url: string;
   alternativeText?: string;
 };
 
-/**
- * The language a source page declares for itself, each value exactly as declared and absent when
- * the page does not declare it. Narration language detection validates the values.
- */
 export type DeclaredLanguage = {
-  /** The `lang` attribute of the page's `<html>` element. */
   htmlLang?: string;
-  /** The `og:locale` metadata, often in underscore form such as `de_AT`. */
   ogLocale?: string;
 };
 
-/**
- * Cleaned source HTML, the title used to begin narration, the source subtitle when the page has
- * one, the URL the page was loaded from, the declared cover image, and the declared language.
- */
 export type SourceMaterial = {
   html: string;
   title: string;
-  /** The URL the source page was finally loaded from, after redirects. */
   fetchedUrl: string;
   subtitle?: string;
   coverImage?: CoverImageDeclaration;
   declaredLanguage?: DeclaredLanguage;
 };
 
-/** Prepares source material from a URL through a supplied transport. */
 export type SourceMaterialPreparer = (url: string) => Promise<SourceMaterial>;
 
-/** Supplies the browser and URL used to load one source page. */
 export type LoadSourcePageOptions = {
   cookies?: SourcePageCookie[];
   browser: Browser;
@@ -166,31 +145,22 @@ export type LoadSourcePageOptions = {
   url: string;
 };
 
-/** Browser-loaded page content before source cleanup and title selection. */
 export type LoadedSourcePage = {
   bodyHtml: string;
   documentTitle: string;
-  /**
-   * Descriptions the page declares in metadata; a source subtitle candidate whose
-   * whitespace-normalized text equals one of them is accepted.
-   */
   metadataDescriptions?: readonly string[];
   coverImage?: CoverImageDeclaration;
   declaredLanguage?: DeclaredLanguage;
-  /** The URL the page was finally loaded from, after redirects. */
   fetchedUrl: string;
   responseStatus: number;
 };
 
-/** Loads source-page HTML and document metadata through a browser. */
 export type SourcePageLoader = (options: LoadSourcePageOptions) => Promise<LoadedSourcePage>;
 
-/** Supplies the browser, URL, and page loader used to prepare source material. */
 export type PrepareOptions = Omit<LoadSourcePageOptions, "javaScriptEnabled"> & {
   loadSourcePage?: SourcePageLoader;
 };
 
-/** Loads static and rendered source-page candidates and selects the better source material. */
 export async function prepareSourceMaterial({
   browser,
   cookies = [],
@@ -207,13 +177,8 @@ export async function prepareSourceMaterial({
   );
 
   if (sourceMaterials.length > 0) {
-    // Each load detects its own source subtitle, so it always belongs to the selected HTML.
-    // The declared language comes from the load whose source material is kept.
     const { html, title, subtitle, fetchedUrl, declaredLanguage } =
       selectBetterSourceMaterial(sourceMaterials);
-    // Independent of which load has more text: `SOURCE_PAGE_JAVASCRIPT_MODES` puts the rendered
-    // load last, and its metadata is the fuller declaration because a static shell often carries
-    // none or only a site-wide image.
     const coverImage = sourceMaterials.at(-1)?.coverImage ?? sourceMaterials[0]?.coverImage;
 
     return {
@@ -240,7 +205,6 @@ export async function prepareSourceMaterial({
   );
 }
 
-/** Applies production cleanup and title selection to an already loaded source page. */
 export function prepareLoadedSourcePage(sourcePage: LoadedSourcePage): SourceMaterial {
   if (sourcePage.responseStatus < 200 || sourcePage.responseStatus >= 300) {
     throw new CupError(`Source page responded with HTTP ${sourcePage.responseStatus}`);
@@ -248,7 +212,6 @@ export function prepareLoadedSourcePage(sourcePage: LoadedSourcePage): SourceMat
 
   const documentFragment = parseFragment(sourcePage.bodyHtml);
 
-  // Removed before the source title is read, so hidden text inside the visible headline stays out of it.
   removeScreenReaderOnlyContent(documentFragment);
 
   const visibleHeadline = findFirstElement(
@@ -269,7 +232,6 @@ export function prepareLoadedSourcePage(sourcePage: LoadedSourcePage): SourceMat
   removeAttribute(documentFragment, VISIBLE_HEADLINE_ATTRIBUTE);
   removeIrrelevantAndEmptyElements(documentFragment);
 
-  // After the cut, the first block in document order is the first block after the visible headline.
   const subtitleElement = visibleHeadline
     ? findSourceSubtitleElement(documentFragment, title, sourcePage.metadataDescriptions ?? [])
     : undefined;
@@ -277,7 +239,6 @@ export function prepareLoadedSourcePage(sourcePage: LoadedSourcePage): SourceMat
 
   if (subtitleElement) {
     removeElement(subtitleElement);
-    // The source subtitle's wrapper can be left empty.
     removeIrrelevantAndEmptyElements(documentFragment);
   }
 
@@ -303,7 +264,6 @@ function removeElement(element: HtmlElement): void {
   parentNode.childNodes.splice(parentNode.childNodes.indexOf(element), 1);
 }
 
-/** Loads a public source page while blocking scripts and non-public subresources. */
 export async function loadPublicSourcePage({
   browser,
   cookies = [],
@@ -376,7 +336,6 @@ export async function loadPublicSourcePage({
       await page.locator("html").getAttribute("lang"),
       headHtml,
     );
-    // The marks must be in the DOM before the body is serialized below.
     await page.evaluate(markVisibleHeadline, VISIBLE_HEADLINE_ATTRIBUTE);
     await page.evaluate(markScreenReaderOnlyContent, SCREEN_READER_ONLY_CONTENT_ATTRIBUTE);
     const bodyHtml = await page.locator("body").innerHTML();
@@ -384,7 +343,6 @@ export async function loadPublicSourcePage({
     return {
       bodyHtml,
       documentTitle: await page.title(),
-      // `bodyHtml` lacks the head, and cleanup in `prepareLoadedSourcePage` drops body scripts.
       metadataDescriptions: extractMetadataDescriptions(`${headHtml}${bodyHtml}`),
       ...(coverImage === undefined ? {} : { coverImage }),
       ...(declaredLanguage === undefined ? {} : { declaredLanguage }),
@@ -396,11 +354,6 @@ export async function loadPublicSourcePage({
   }
 }
 
-/**
- * Marks the first `<h1>` that renders visibly with {@link VISIBLE_HEADLINE_ATTRIBUTE}, so the
- * source title never comes from a hidden heading such as a consent wall's. The browser serializes
- * this function into the source page, so it must stay self-contained.
- */
 function markVisibleHeadline(attributeName: string): void {
   const visibleHeadline = Array.from(document.querySelectorAll("h1")).find((heading) => {
     const boundingRectangle = heading.getBoundingClientRect();
@@ -408,7 +361,6 @@ function markVisibleHeadline(attributeName: string): void {
     return (
       (heading.textContent?.trim() ?? "").length > 0 &&
       heading.checkVisibility({ opacityProperty: true, visibilityProperty: true }) &&
-      // Visually hidden headings, such as `.sr-only`, keep a one-pixel box.
       boundingRectangle.width > 1 &&
       boundingRectangle.height > 1
     );
@@ -417,29 +369,17 @@ function markVisibleHeadline(attributeName: string): void {
   visibleHeadline?.setAttribute(attributeName, "");
 }
 
-/**
- * Marks screen-reader-only content with {@link SCREEN_READER_ONLY_CONTENT_ATTRIBUTE}: each
- * outermost rendered element that holds text but is visually hidden, either a box of at most one
- * pixel that clips its content (the `.sr-only` pattern) or placed wholly beyond the page's left or
- * top edge (the older `left: -9999px` pattern). Content hidden from everyone, such as a collapsed
- * section, is not marked, because it can be source content. The browser serializes this function
- * into the source page, so it must stay self-contained.
- */
 function markScreenReaderOnlyContent(attributeName: string): void {
   const markScreenReaderOnlyDescendants = (parentElement: Element): void => {
     for (const element of Array.from(parentElement.children)) {
-      // An element with `display: contents` has no box of its own, so only its children are measured.
       const style = getComputedStyle(element);
       const hasOwnBox = style.display !== "contents";
       const boundingRectangle = element.getBoundingClientRect();
-      // A zero-size wrapper of an absolutely positioned label shows its content; `.sr-only` variants
-      // all clip it, through `overflow`, `clip` or `clip-path`.
       const clipsContent =
         style.overflow !== "visible" || style.clip !== "auto" || style.clipPath !== "none";
       const isScreenReaderOnly =
         hasOwnBox &&
         (element.textContent?.trim() ?? "").length > 0 &&
-        // Excludes content hidden from everyone, such as `display: none`, which has no box either.
         element.checkVisibility() &&
         ((boundingRectangle.width <= 1 && boundingRectangle.height <= 1 && clipsContent) ||
           boundingRectangle.right + window.scrollX <= 0 ||
@@ -456,15 +396,12 @@ function markScreenReaderOnlyContent(attributeName: string): void {
   markScreenReaderOnlyDescendants(document.body);
 }
 
-/** Reads the publisher-declared cover image from page metadata; body images are never considered. */
 export function extractCoverImageDeclaration(
   headHtml: string,
   sourcePageUrl: string,
 ): CoverImageDeclaration | undefined {
   const metadata = collectMetadata(parseFragment(headHtml));
   const openGraphImage = selectFirstOpenGraphImage(metadata);
-  // Each candidate keeps the alternative text declared for it. An unusable declaration, such as
-  // an embedded image, falls through to the next candidate.
   const candidates = [
     ...OPEN_GRAPH_IMAGE_URL_PROPERTIES.map((property) => ({
       declaredUrl: findMetadataContent(openGraphImage, property),
@@ -492,7 +429,6 @@ export function extractCoverImageDeclaration(
   return undefined;
 }
 
-/** Reads `<html lang>` and `og:locale`; an empty declaration declares nothing. */
 function extractDeclaredLanguage(
   htmlLang: string | null,
   headHtml: string,
@@ -522,11 +458,6 @@ function resolveCoverImageUrl(
     : undefined;
 }
 
-/**
- * Open Graph attaches structured properties such as `og:image:secure_url` and `og:image:alt` to the
- * `og:image` they accompany. A page can declare several images; only the first one's properties are
- * returned, so a later image's properties never describe the first.
- */
 function selectFirstOpenGraphImage(metadata: readonly Metadata[]): Metadata[] {
   const firstIndex = metadata.findIndex(isOpenGraphImageProperty);
 
@@ -553,7 +484,6 @@ function findMetadataContent(metadata: readonly Metadata[], property: string): s
   return metadata.find((item) => item.property === property)?.content;
 }
 
-/** Removes the element and everything before it in document order; its ancestors stay. */
 function cutBeforeAndIncluding(element: HtmlElement): void {
   let node: DefaultTreeAdapterMap["childNode"] = element;
   let parentNode = element.parentNode;
@@ -643,7 +573,6 @@ export function cleanAudiobookSourceMaterialHtml(html: string): string {
   return serialize(documentFragment);
 }
 
-/** Rejects private, loopback, link-local, and metadata-service destinations. */
 export function assertPublicSourceUrl(value: string): void {
   const url = new URL(value);
   if (url.protocol !== "http:" && url.protocol !== "https:") {

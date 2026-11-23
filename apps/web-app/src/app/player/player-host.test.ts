@@ -25,10 +25,6 @@ const HAVE_METADATA = 1;
 const HAVE_ENOUGH_DATA = 4;
 const MEDIA_ERROR_MESSAGE = "Audio could not be played. Press Play to try again.";
 
-/**
- * An audio element that records what the player asks of it. Tests dispatch the media events a
- * browser would fire, so the order of events is under their control.
- */
 class FakeAudioElement extends EventTarget implements NarrationAudioElement {
   readonly calls: string[] = [];
   preload = "";
@@ -39,12 +35,10 @@ class FakeAudioElement extends EventTarget implements NarrationAudioElement {
   playbackRate = 1;
   duration = Number.NaN;
   error: { code: number } | null = null;
-  /** The error the next `play()` rejects with, as a browser refusing to start. */
   nextPlayError: Error | null = null;
   private source = "";
   private time = 0;
   private loadGeneration = 0;
-  /** Counts the seeks asked for, so a queued `seeked` ends only the latest one. */
   private seekGeneration = 0;
   private isSeekPending = false;
 
@@ -62,7 +56,6 @@ class FakeAudioElement extends EventTarget implements NarrationAudioElement {
     return this.time;
   }
 
-  /** Browsers report the target as the time at once and fire `seeked` from a queued task. */
   set currentTime(value: number) {
     this.calls.push(`currentTime:${value}`);
     this.time = value;
@@ -97,8 +90,6 @@ class FakeAudioElement extends EventTarget implements NarrationAudioElement {
     }
 
     this.paused = true;
-    // Browsers fire `pause` from a queued task, after the call returned. Loading another source
-    // removes the element's queued event tasks.
     const loadGeneration = this.loadGeneration;
     queueMicrotask(() => {
       if (loadGeneration === this.loadGeneration) {
@@ -119,7 +110,6 @@ class FakeAudioElement extends EventTarget implements NarrationAudioElement {
     }
   }
 
-  /** The browser read the track's metadata. */
   loadMetadata(durationSeconds: number) {
     this.readyState = HAVE_METADATA;
     this.duration = durationSeconds;
@@ -127,30 +117,19 @@ class FakeAudioElement extends EventTarget implements NarrationAudioElement {
     this.fire("loadedmetadata");
   }
 
-  /** Moves playback forward without recording a seek, as the browser does while playing. */
   advanceTo(seconds: number) {
-    // Playback goes on from where a seek landed, after the seek finished.
     this.finishSeek();
     this.readyState = HAVE_ENOUGH_DATA;
     this.time = seconds;
     this.fire("timeupdate");
   }
 
-  /**
-   * The source failed. A failure while the element plays leaves it paused; one before playback
-   * starts, such as a track that cannot be fetched after `play()`, leaves it unpaused, as the HTML
-   * spec's media source failure steps do in Chromium.
-   */
   fail({ paused = true } = {}) {
     this.error = { code: 2 };
     this.paused = paused;
     this.fire("error");
   }
 
-  /**
-   * Chromium drops a seek that a pause interrupts before the track's first data arrived: from the
-   * pause on, the element reports the time as 0, and `seeked` follows the pause's event there.
-   */
   dropSeek() {
     this.seekGeneration += 1;
     this.isSeekPending = false;
@@ -160,7 +139,6 @@ class FakeAudioElement extends EventTarget implements NarrationAudioElement {
     queueMicrotask(() => this.fire("seeked"));
   }
 
-  /** Ends a seek the element was asked for, where it was asked to land. */
   finishSeek() {
     if (!this.isSeekPending) {
       return;
@@ -171,7 +149,6 @@ class FakeAudioElement extends EventTarget implements NarrationAudioElement {
     this.fire("seeked");
   }
 
-  /** The listener changed the playback speed. */
   setPlaybackRate(rate: number) {
     this.playbackRate = rate;
     this.fire("ratechange");
@@ -183,7 +160,6 @@ class FakeAudioElement extends EventTarget implements NarrationAudioElement {
 
   private resetMedia() {
     this.loadGeneration += 1;
-    // Loading a source aborts a seek without a `seeked` event.
     this.seekGeneration += 1;
     this.isSeekPending = false;
     this.seeking = false;
@@ -194,13 +170,8 @@ class FakeAudioElement extends EventTarget implements NarrationAudioElement {
   }
 }
 
-/**
- * The system's media controls, as far as the host reports to them. `calls` lists every state report
- * in order; the other fields hold what the controls currently show.
- */
 class FakeMediaSession implements MediaSessionPort {
   readonly calls: string[] = [];
-  /** Each audiobook shown, and `null` for each clear. */
   readonly published: Array<string | null> = [];
   playbackState = "none";
   positionState: MediaPositionStateInput | null = null;
@@ -235,7 +206,6 @@ class FakeMediaSession implements MediaSessionPort {
     this.handlers = null;
   }
 
-  /** The handlers the controls call, which exist only while an audiobook is loaded. */
   action() {
     if (!this.handlers) {
       throw new Error("Expected media session action handlers.");
@@ -253,14 +223,12 @@ function createHost({
   findRunningPlayer = (): Promise<RunningPlayer | null> => Promise.resolve(null),
   initialAccount = null as PlayerHostAccount | null,
 } = {}) {
-  // The browser's players, which the host reaches only through the `Player` port.
   const element = new FakeAudioElement();
   const elements = [element];
   const mediaSession = new FakeMediaSession();
   const saved: Array<{ position: PlaybackPosition; subject: string | null }> = [];
   const fetchedConversionIds: string[] = [];
   const clock = { now: 0 };
-  /** The loaded session's armed save retry, which tests fire in place of the timer. */
   const saveRetry: { fire: (() => void) | null } = { fire: null };
   let account: PlayerHostAccount = initialAccount ?? { status: "known", subject };
 
@@ -271,7 +239,6 @@ function createHost({
       new PlaybackSession(request, {
         savePosition: (position, savedSubject) => {
           saved.push({ position, subject: savedSubject });
-          // Listeners without an account keep their position on the device.
           if (savedSubject === null) {
             localPositions.set(request.conversionId, position);
           }
@@ -296,7 +263,6 @@ function createHost({
     now: () => clock.now,
   });
   host.accountChanged();
-  /** Changes the account and reports it, like the provider does after a render. */
   const setAccount = (value: PlayerHostAccount) => {
     account = value;
     host.accountChanged();
@@ -323,10 +289,8 @@ function createHost({
   };
 }
 
-/** Lets queued media events and settled saves run. */
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-/** The player ignores a ready segment's own audio; only the narration track plays. */
 const ready = (sequence: number) => ({
   sequence,
   status: "ready" as const,
@@ -350,7 +314,6 @@ function createAudiobook(
     originalUrl: "https://source.example.test/fixture",
     narrationDocument: { html: "<article></article>", synchronizationUnits: UNITS },
     segments: UNITS.map((_unit, sequence) => ready(sequence)),
-    // Units of 4, 6 and 5 seconds.
     narrationTrack: {
       url: `https://example.com/${title}/narration-track.mp3?token=fixture`,
       durationMilliseconds: 15_000,
@@ -487,7 +450,6 @@ test("loading restores the saved unit and offset once metadata is loaded and sta
     createAudiobook("First", { synchronizationUnitId: "unit-2", offsetMilliseconds: 1_500 }),
   );
   host.loadShown();
-  // The highlight shows the restored unit before the browser read the track.
   expect(player().getSnapshot()).toMatchObject({
     currentUnitIndex: 1,
     positionMilliseconds: 5_500,
@@ -548,7 +510,6 @@ test("a seek the element drops twice is left where the element landed", async ()
 
   player().seekTo(7_000);
   element.dropSeek();
-  // The player hears the `seeked` first and seeks again; the element drops that seek too.
   element.addEventListener("seeked", () => element.dropSeek(), { once: true });
   await settle();
 
@@ -671,7 +632,6 @@ test("saves during playback at most every save interval, and on pause", async ()
     clock.now = second * 1_000;
     element.advanceTo(second);
   }
-  // A time update while seeking reports where the seek started, not a listening position.
   element.seeking = true;
   clock.now = 20_000;
   element.advanceTo(2);
@@ -719,7 +679,6 @@ test("skipping moves the element's time by the given amount and saves the new po
   expect(element.calls.slice(2)).toEqual(["currentTime:7.5", "currentTime:9.5"]);
   expect(player().getSnapshot().currentUnitIndex).toBe(1);
   expect(saved.map(({ position }) => position)).toEqual([
-    // the first time update during playback is due
     { synchronizationUnitId: "unit-3", offsetMilliseconds: 2_500 },
     { synchronizationUnitId: "unit-2", offsetMilliseconds: 3_500 },
     { synchronizationUnitId: "unit-2", offsetMilliseconds: 5_500 },
@@ -764,7 +723,6 @@ test("metadata without a duration holds the restored position until the duration
   );
   host.loadShown();
 
-  // WebKit's GStreamer backend can report its metadata before it has read the track's length.
   element.loadMetadata(0);
   expect(element.calls).toEqual([`src:${FIRST_TRACK_URL}`]);
   expect(player().getSnapshot().positionMilliseconds).toBe(12_000);
@@ -785,7 +743,6 @@ test("a seek while the metadata has no duration waits for any event that finds i
   expect(element.calls).toEqual([`src:${FIRST_TRACK_URL}`]);
   expect(player().getSnapshot().positionMilliseconds).toBe(4_000);
 
-  // That backend corrects the duration without firing `durationchange`.
   element.duration = 15;
   element.fire("timeupdate");
 
@@ -798,7 +755,6 @@ test("a seek after the metadata is read but before its event replaces an earlier
   host.loadShown();
   player().seekTo(14_000);
 
-  // Browsers update `readyState` before the queued `loadedmetadata` event is dispatched.
   element.readyState = HAVE_METADATA;
   element.duration = 15;
   player().seekTo(0);
@@ -961,7 +917,6 @@ test("Play more than 12 hours after receiving the track URL renews it and keeps 
   element.loadMetadata(15);
   expect(element.calls.at(-1)).toBe("currentTime:6");
 
-  // The renewed URL is fresh: the next Play needs no refetch.
   host.pause();
   host.play();
   expect(fetchedConversionIds).toEqual(["first"]);
@@ -994,7 +949,6 @@ test("a track URL received more than 12 hours ago is renewed on Play, however re
   const { host, element, fetchedConversionIds, clock } = createHost({
     fetchAudiobook: () => Promise.resolve(withTrackUrl(FIRST, RENEWED_TRACK_URL)),
   });
-  // The page shows an audiobook its cache received at 0, as when it is opened again later.
   clock.now = TWELVE_HOURS_MILLISECONDS + 1;
   host.showConversion("first", FIRST, 0);
 
@@ -1174,7 +1128,6 @@ test("a renewal that finds the track gone unloads it and reports it as no longer
   await settle();
 
   expect(element.calls.slice(-2)).toEqual(["removeAttribute:src", "load"]);
-  // A position of a track that no longer exists has nowhere to go.
   expect(saved).toEqual([]);
   expect(host.getSnapshot()).toMatchObject({
     loaded: null,
@@ -1182,7 +1135,6 @@ test("a renewal that finds the track gone unloads it and reports it as no longer
     unavailable: { conversionId: "first", message: "This track is no longer available." },
   });
 
-  // The page still shows its last response, which neither loads nor plays the track again.
   host.showConversion("first", { ...FIRST });
   host.playShown();
   expect(host.getSnapshot().loaded).toBeNull();
@@ -1215,10 +1167,8 @@ test("releasing a track being deleted unloads it until Play", async () => {
   await settle();
   expect(element.calls.slice(-2)).toEqual(["removeAttribute:src", "load"]);
   expect(host.getSnapshot().loaded).toBeNull();
-  // A save would race the deletion of the track it belongs to.
   expect(saved).toEqual([]);
 
-  // A newer response for the page, such as a poll, loads nothing.
   host.showConversion("first", { ...FIRST });
   expect(host.getSnapshot().loaded).toBeNull();
   expect(host.getSnapshot().shown?.canPlay).toBe(true);
@@ -1230,7 +1180,6 @@ test("releasing a track being deleted unloads it until Play", async () => {
 
 test("an audiobook whose listening session is refused fails the tap and leaves the loaded one playing", async () => {
   const { host, element, mediaSession } = createHost();
-  // The start offsets do not match the units, which the listening session refuses.
   const broken: PlayableAudiobook = {
     ...FIRST,
     narrationTrack: { ...FIRST.narrationTrack, startMilliseconds: [0, 4_000] },
@@ -1242,7 +1191,6 @@ test("an audiobook whose listening session is refused fails the tap and leaves t
   expect(() => host.playShown()).toThrow("2 start offsets for 3 synchronization units");
   await settle();
 
-  // The tap touched nothing that plays, and the player still takes the listener's controls.
   expect(host.getSnapshot().loaded?.conversionId).toBe("second");
   expect(element.calls).toEqual([`src:${SECOND_TRACK_URL}`, "play"]);
   expect(mediaSession.published.at(-1)).toBe("Second");
@@ -1275,7 +1223,6 @@ test("an audiobook whose listening session is refused leaves a track URL renewal
 test("a segment tap made while the host handles another event plays once the player is built", () => {
   const { host, element } = createHost();
   host.showConversion("first", FIRST);
-  // A listener that taps from within the host's own notification, as a nested call would.
   let hasTapped = false;
   host.subscribe(() => {
     if (!hasTapped && host.getSnapshot().shown?.conversionId === "second") {
@@ -1380,7 +1327,6 @@ test("playing another audiobook sets its narration track on the same element", a
   element.advanceTo(3);
   host.hideConversion("first");
   host.showConversion("second", SECOND);
-  // Showing another audiobook keeps the loaded one playing.
   expect(host.getSnapshot().loaded?.conversionId).toBe("first");
   expect(element.paused).toBe(false);
 
@@ -1391,7 +1337,6 @@ test("playing another audiobook sets its narration track on the same element", a
   expect(element.calls.slice(-3)).toEqual(["pause", `src:${SECOND_TRACK_URL}`, "play"]);
   expect(host.getSnapshot().loaded?.conversionId).toBe("second");
   expect(mediaSession.published).toEqual(["First", null, "Second"]);
-  // The previous audiobook's position is saved when it is replaced.
   expect(saved[0]?.position).toEqual({
     synchronizationUnitId: "unit-1",
     offsetMilliseconds: 3_000,
@@ -1601,7 +1546,6 @@ test("a change of the signed-in user unloads the element", async () => {
   expect(element.calls.slice(-3)).toEqual(["pause", "removeAttribute:src", "load"]);
   expect(saved.map(({ subject }) => subject)).toEqual(["user-1", "user-1"]);
   expect(mediaSession.published).toEqual(["First", null]);
-  // The shown audiobook stays unloaded until the new user plays it.
   expect(host.getSnapshot().loaded).toBeNull();
   host.playShown();
   expect(host.getSnapshot().loaded?.subject).toBe("user-2");
@@ -1633,7 +1577,6 @@ test("loading publishes the audiobook to the system's media controls, paused at 
   expect(mediaSession.published).toEqual(["First"]);
   expect(mediaSession.handlers).not.toBeNull();
   expect(mediaSession.playbackState).toBe("paused");
-  // The restored position is reported before the browser read the track.
   expect(mediaSession.positionState).toEqual({
     durationMilliseconds: 15_000,
     positionMilliseconds: 5_500,
@@ -1730,14 +1673,12 @@ test("the system's media controls are told the state on each playback change, an
   await settle();
 
   expect(mediaSession.calls).toEqual([
-    // `play` before the element has data: playing, but waiting for it.
     "playbackState:playing, waiting",
     "positionState:0/15000@1",
     "playbackState:playing",
     "positionState:0/15000@1",
     "playbackState:playing",
     "positionState:3250/15000@1.5",
-    // While it waits for data, the system must not move the position on.
     "playbackState:playing, waiting",
     "positionState:3250/15000@1.5",
     "playbackState:playing",
@@ -1763,7 +1704,6 @@ test("a seek and the end of the audiobook are reported to the system's media con
   expect(mediaSession.calls).toEqual([
     "playbackState:paused",
     "positionState:9000/15000@1",
-    // A finished audiobook starts over.
     "playbackState:paused, ended",
     "positionState:0/15000@1",
   ]);
@@ -1773,7 +1713,6 @@ test("the reported duration is the narration track's, and the position is clampe
   const { host, element, mediaSession } = createHost();
   host.showConversion("first", FIRST);
   host.loadShown();
-  // The file reads longer than the track's listed duration.
   element.loadMetadata(15.6);
 
   element.advanceTo(15.4);

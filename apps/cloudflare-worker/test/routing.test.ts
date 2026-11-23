@@ -4,13 +4,10 @@ import { test } from "vitest";
 import { useWorker } from "#test/use-worker.ts";
 import { PRODUCTION_CONFIG_PATH, readWranglerConfig } from "#test/wrangler-configs.ts";
 
-/** The canonical custom domain; wrangler-config.test.ts checks that wrangler.jsonc routes it. */
 const CANONICAL_ORIGIN = "https://cup.audio";
 
-/** The test runtime's stand-in for the built web app shell (wrangler.test.jsonc, `assets`). */
 const FIXTURE_INDEX_HTML = await fs.readFile(new URL("assets/index.html", import.meta.url), "utf8");
 
-/** Every custom domain of the production config other than the canonical one. */
 const REDIRECTED_HOSTNAMES = readProductionRouteHostnames().filter(
   (hostname) => hostname !== new URL(CANONICAL_ORIGIN).hostname,
 );

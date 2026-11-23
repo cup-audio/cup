@@ -16,7 +16,6 @@ test("injects a debug ID into every chunk and its source map, then moves the map
     "served/app/assets/entry-abc.js.map": sourceMap("entry-abc.js"),
     "served/app/assets/chunk-def.js": 'console.log("chunk");\n',
     "served/app/assets/chunk-def.js.map": sourceMap("chunk-def.js"),
-    // Rolldown emits its runtime helper without a source map; it still gets a debug ID.
     "served/app/assets/runtime-ghi.js": "var runtime = 1;\n",
   });
 

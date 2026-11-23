@@ -9,16 +9,9 @@ import { renderSchemaDiagram, writeSchemaDiagram } from "#src/schema-diagram.ts"
 type Journal = { entries: { idx: number; tag: string }[] };
 
 type GenerateMigrationsOptions = {
-  /** The Markdown page, relative to the package directory, that holds each store's schema diagram. */
   schemaDiagramPage: string;
 };
 
-/**
- * Generates SQLite migrations for each store from its schema files under `src/`, then bundles the
- * journal and SQL into `src/migrations/<store>.ts`, and renders the store's schema diagram into
- * `schemaDiagramPage`. Runs in the current package directory and passes the process arguments to
- * `drizzle-kit generate`.
- */
 export async function generateMigrations(
   stores: Record<string, string[]>,
   { schemaDiagramPage }: GenerateMigrationsOptions,
@@ -27,7 +20,6 @@ export async function generateMigrations(
   const isCustomMigration = args.includes("--custom");
 
   for (const [store, schemaFiles] of Object.entries(stores)) {
-    // Runs the calling package's drizzle-kit devDependency, which its migration tests also use.
     childProcess.execFileSync(
       "pnpm",
       [
@@ -83,10 +75,6 @@ export async function generateMigrations(
 
 type Snapshot = { id: string; prevId: string };
 
-/**
- * Drizzle Kit gives a custom migration a copy of the previous snapshot. The handwritten SQL must
- * produce the current schema, so record that schema as the snapshot for later diffs.
- */
 async function writeCurrentSnapshot(store: string, schemaFiles: string[], idx: number) {
   const snapshotPath = `drizzle/${store}/meta/${formatMigrationIndex(idx)}_snapshot.json`;
   const copiedSnapshot: Snapshot = JSON.parse(await fs.readFile(snapshotPath, "utf8"));

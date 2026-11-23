@@ -1,8 +1,3 @@
-/*
- * Runs the typed log-event helper through Sentry's own Cloudflare SDK, with the Worker options,
- * against the Sentry stub: what the operator sees for a warning that carries a wrapped error.
- */
-
 import * as Sentry from "@sentry/cloudflare";
 import { expect, test } from "vitest";
 
@@ -13,7 +8,6 @@ import { TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
 import { logEvent } from "#src/log-event.ts";
 import { createWorkerSentryOptions } from "#src/worker-sentry-options.ts";
 
-/** Drizzle's query error: it embeds the SQL parameters and does not set `name`. */
 class DrizzleQueryError extends Error {
   constructor(query: string, params: unknown[], cause: unknown) {
     super(`Failed query: ${query}\nparams: ${params.join(",")}`, { cause });
@@ -60,9 +54,7 @@ test("a warning log arrives with its event name, root cause and exception chain"
     props: {},
   };
 
-  // The wrapper returns a promise at runtime, although its type follows the synchronous handler.
   await Promise.resolve(handler.fetch?.(new Request("https://cup.audio/api/x"), env, context));
-  // Sentry flushes through `waitUntil`, after the handler returned.
   await Promise.all(pending);
 
   await sentry.waitFor("a log record", () => sentry.logs("cup-worker").length > 0);

@@ -6,25 +6,18 @@ import { DEFAULT_SDK_ROOT, resolveAndroidSdkRoot } from "@cup/mobile-app/android
 
 import { run } from "#src/host.ts";
 
-/** Paths of the host tools the Android run needs, checked to exist. */
 export type AndroidHost = {
   readonly sdkRoot: string;
   readonly adb: string;
   readonly emulator: string;
   readonly avdManager: string;
-  /** The value Gradle and Appium get as `JAVA_HOME`, or undefined when `java` comes from `PATH`. */
   readonly javaHome: string | undefined;
 };
 
-/** The `sdkmanager` package of the system image the suite's emulator runs. */
 export const SYSTEM_IMAGE_PACKAGE = "system-images;android-36;google_apis;arm64-v8a";
 
 const ANDROID_STUDIO_JAVA_HOME = "/Applications/Android Studio.app/Contents/jbr/Contents/Home";
 
-/**
- * Checks that the host has every tool an Android run needs, before any device starts, and fails
- * with every missing tool and its fix rather than skipping the platform.
- */
 export async function checkAndroidHost(): Promise<AndroidHost> {
   const problems: string[] = [];
 
@@ -78,12 +71,10 @@ export async function checkAndroidHost(): Promise<AndroidHost> {
   return { sdkRoot, adb, emulator, avdManager, javaHome };
 }
 
-/** The Java home Gradle and Appium get, or undefined when `java` comes from `PATH`. */
 export function resolveJavaHome(): string | undefined {
   return process.env["JAVA_HOME"];
 }
 
-/** The `java` executable Gradle runs with `javaHome`. */
 export function javaExecutable(javaHome: string | undefined): string {
   return javaHome === undefined ? "java" : path.join(javaHome, "bin", "java");
 }
@@ -92,7 +83,6 @@ async function checkJava21(javaHome: string | undefined): Promise<string | undef
   const java = javaExecutable(javaHome);
   let output: string;
   try {
-    // `java -version` writes to stderr.
     output = (await run(java, ["-version"])).stderr;
   } catch {
     return javaHome === undefined

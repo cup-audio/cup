@@ -15,7 +15,6 @@ import {
 const DEBUG_ID = "a6580e48-f307-57eb-82d5-d80321925191";
 const OTHER_DEBUG_ID = "0b6d1f43-3f8e-5c0a-9d7e-2a4f7c1e9b52";
 const MAPPING = "# compiler: R8\naudio.cup.app.MainActivity -> a.a:\n";
-/** What `sentry-cli proguard uuid` computes for `MAPPING`. */
 const MAPPING_UUID = "7a1b9f15-36ce-53ce-96a4-e420b2139992";
 const OTHER_UUID = "3f1e2d4c-5b6a-5978-8a9b-0c1d2e3f4a5b";
 
@@ -129,8 +128,6 @@ test.for([
 test("fails when Sentry rejects the upload", async ({ onTestFinished }) => {
   const root = await createRelease(onTestFinished);
   const sentry = await startFailingSentry(onTestFinished);
-  // An empty home directory has no `~/.sentryclirc`, so the operator's upload token cannot be used;
-  // the token and the URL come from the same source, so Sentry CLI talks to the local server only.
   const environment = {
     PATH: process.env["PATH"],
     HOME: root,
@@ -307,10 +304,6 @@ function androidTarget(root: string): Extract<ShellSymbolsTarget, { platform: "a
   };
 }
 
-/**
- * A web build's source maps, the same bundle packed into the Android project and into an Xcode
- * archive, and the archive's dSYMs, laid out as Capacitor and Xcode leave them.
- */
 async function createRelease(
   onTestFinished: TestContext["onTestFinished"],
   { packedDebugId = DEBUG_ID } = {},
@@ -328,7 +321,6 @@ async function createRelease(
       debugId: DEBUG_ID,
     }),
     "android-public/app/assets/entry-abc.js": chunk,
-    // Capacitor adds its own scripts, which carry no debug ID.
     "android-public/cordova.js": "",
     "App.xcarchive/Products/Applications/App.app/public/app/assets/entry-abc.js": chunk,
     "App.xcarchive/Products/Applications/App.app/public/cordova.js": "",
@@ -347,7 +339,6 @@ function recordSentryCli(failingCommand?: string) {
   const runSentryCli: RunSentryCli = async (args) => {
     const commandLine = args.join(" ");
     commands.push(commandLine);
-    // Like Sentry CLI, writes the UUID of `MAPPING`, the only mapping file the tests create.
     const propertiesIndex = args.indexOf("--write-properties");
     if (propertiesIndex !== -1) {
       await fs.writeFile(args[propertiesIndex + 1]!, `io.sentry.ProguardUuids=${MAPPING_UUID}\n`);

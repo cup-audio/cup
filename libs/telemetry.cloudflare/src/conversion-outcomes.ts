@@ -3,12 +3,10 @@ import { TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
 
 import { logEvent } from "#src/log-event.ts";
 
-/** How a preparation ended, as the owner recorded it. */
 export type PreparationOutcome =
   | { outcome: "ready" | "insufficient-duration" }
   | { outcome: "failed"; failureCategory: ConversionFailureCategory };
 
-/** Sends `conversion-preparation-settled` once a conversion owner recorded a preparation outcome. */
 export function logPreparationSettled(
   input: PreparationOutcome & {
     conversionId: string;
@@ -32,20 +30,13 @@ export function logPreparationSettled(
   );
 }
 
-/**
- * Sends `audio-segment-settled` once a conversion owner settled or released a segment and, when no
- * segment of the conversion is still reserved afterwards, `conversion-synthesis-settled`.
- */
 export function logAudioSegmentSettled(input: {
   conversionId: string;
   sequence: number;
   outcome: "settled" | "released";
-  /** When the segment's reservation was taken; absent when the owner cannot tell. */
   reservedAtMs: number | undefined;
-  /** The synthesis attempts the segment's Workflow reported; absent for an alarm's release. */
   attempts: number | undefined;
   conversionCreatedAtMs: number;
-  /** The states of all of the conversion's segments after this one settled. */
   segmentStates: readonly ("reserved" | "settled" | "released")[];
   settledAtMs: number;
 }): void {
@@ -75,7 +66,6 @@ export function logAudioSegmentSettled(input: {
       attributes: {
         [TELEMETRY_ATTRIBUTES.CONVERSION_ID]: input.conversionId,
         [TELEMETRY_ATTRIBUTES.CONVERSION_FAILED_SEGMENTS]: failedSegments,
-        // Without a failed segment, this is when the narration track came to exist.
         [TELEMETRY_ATTRIBUTES.CONVERSION_ELAPSED_MS]:
           input.settledAtMs - input.conversionCreatedAtMs,
       },

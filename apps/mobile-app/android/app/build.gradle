@@ -4,9 +4,6 @@ import java.security.MessageDigest
 
 apply plugin: 'com.android.application'
 
-// `android:release` (scripts/android-release.mts) passes the release version (ADR 0032) as these
-// properties and the upload key as these environment variables; the password is no `-P` argument,
-// which would show it in the process list. Release tasks fail without all four.
 def releaseVersionCode = findProperty("cupVersionCode")
 def releaseVersionName = findProperty("cupVersionName")
 def uploadKeystorePath = System.getenv("CUP_UPLOAD_KEYSTORE_PATH")
@@ -19,23 +16,17 @@ android {
         applicationId "audio.cup.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        // Debug builds keep these fixed, so local `adb` builds and the mobile E2E suite's Turbo cache
-        // keys stay stable; release builds replace them in `androidComponents` below.
         versionCode 1
         versionName "0.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
-             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
-             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
     signingConfigs {
         upload {
-            // Left empty without the environment; `checkCupReleaseInputs` then stops release tasks.
             if (uploadKeystorePath && uploadKeystorePassword) {
                 storeFile file(uploadKeystorePath)
-                // PKCS12 uses one password for the store and the key (scripts/android-upload-key-create.mts).
                 storePassword uploadKeystorePassword
                 keyAlias "upload"
                 keyPassword uploadKeystorePassword
@@ -44,9 +35,6 @@ android {
     }
     buildTypes {
         release {
-            // R8 shrinks code and resources, and AGP embeds its mapping file in the bundle for Play's
-            // crash reports. Capacitor core's consumer rules keep every plugin class, so
-            // `proguard-rules.pro` holds no rules of its own (decision: issue #437; mobile app README).
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
@@ -57,7 +45,6 @@ android {
 
 androidComponents {
     onVariants(selector().withBuildType("release")) { variant ->
-        // Invalid or missing values stop the build in `checkCupReleaseInputs`, so only valid ones are applied.
         if (releaseVersionCode?.toString()?.isInteger() && releaseVersionName) {
             variant.outputs.each { output ->
                 output.versionCode.set(releaseVersionCode.toString().toInteger())
@@ -65,8 +52,6 @@ androidComponents {
             }
         }
 
-        // Sentry matches an event's obfuscated Java frames to R8's mapping file through this UUID,
-        // which the SDK reads from the asset; `symbols:upload` uploads the mapping file under it.
         def sentryDebugMeta = tasks.register(
             "generate${variant.name.capitalize()}SentryDebugMeta",
             GenerateSentryDebugMetaTask,
@@ -77,11 +62,6 @@ androidComponents {
     }
 }
 
-/**
- * Writes `sentry-debug-meta.properties` with the R8 mapping file's ProGuard UUID, which is what
- * `sentry-cli proguard uuid` computes: a UUIDv5 of the file's bytes in the namespace that is the
- * UUIDv5 of "guardsquare.com" in the DNS namespace.
- */
 abstract class GenerateSentryDebugMetaTask extends DefaultTask {
     private static final UUID DNS_NAMESPACE = UUID.fromString("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
 
@@ -147,7 +127,6 @@ def checkCupReleaseInputs = tasks.register("checkCupReleaseInputs") {
         }
     }
 }
-// `preReleaseBuild` runs first in every release variant task, such as `bundleRelease` and `assembleRelease`.
 tasks.matching { it.name == "preReleaseBuild" }.configureEach {
     dependsOn checkCupReleaseInputs
 }
@@ -158,9 +137,6 @@ repositories {
     }
 }
 
-// Sentry's NDK integration is off (`io.sentry.ndk.enable=false` in the manifest, ADR 0031), and native
-// crashes reach Sentry as Android tombstones through sentry-android-core. Its modules only add native
-// libraries, which the bundle safety check refuses (mobile app README, "Bundle safety check").
 configurations.configureEach {
     exclude group: "io.sentry", module: "sentry-android-ndk"
     exclude group: "io.sentry", module: "sentry-native-ndk"
@@ -172,13 +148,9 @@ dependencies {
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
-    // `io.sentry.android.core.InMemoryInstallation` reaches into this version's package-private
-    // `Installation`; the check below keeps it equal to the version @sentry/capacitor brings.
     implementation "io.sentry:sentry-android-core:$sentryAndroidVersion"
-    // The narration track's engine and the media session that keeps it playing in the background.
     implementation "androidx.media3:media3-exoplayer:$androidxMedia3Version"
     implementation "androidx.media3:media3-session:$androidxMedia3Version"
-    // The mobile E2E suite's launch arguments (src/debug) inject a document-start script.
     debugImplementation "androidx.webkit:webkit:$androidxWebkitVersion"
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
@@ -188,9 +160,6 @@ dependencies {
 
 apply from: 'capacitor.build.gradle'
 
-// Fails every build whose pinned Sentry Android core differs from the `io.sentry:sentry-android`
-// version that @sentry/capacitor's native plugin declares: an update of the plugin must move the pin,
-// after checking that the in-memory installation ID still works with that version.
 gradle.projectsEvaluated {
     def sentryPlugin = rootProject.findProject(':sentry-capacitor')
     if (sentryPlugin == null) {

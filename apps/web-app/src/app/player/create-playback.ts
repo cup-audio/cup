@@ -15,7 +15,6 @@ import type { CreatePlayer, FindRunningPlayer } from "#src/app/player/player.js"
 import { cachePlaybackPosition, savePlaybackPosition } from "#src/data-fetching/reader.js";
 import { mediaPlaybackPlugin } from "#src/platform/media-playback.android.js";
 
-/** Connects a loaded audiobook's playback session to position storage. */
 export function createPlaybackSession(request: PlaybackSessionRequest): PlaybackSession {
   const services: PlaybackSessionServices = {
     savePosition: (position, subject) =>
@@ -30,12 +29,6 @@ export function createPlaybackSession(request: PlaybackSessionRequest): Playback
   return new PlaybackSession(request, services);
 }
 
-/**
- * The players of the platform: the Android app's native ExoPlayer, whose session can outlive the
- * page, or one `<audio>` element in browsers and the iOS app, where nothing plays when the page
- * starts. The element sets no `crossOrigin`: the narration track's signed URL carries its own
- * authorization, so the request needs no cookie.
- */
 export function createPlatformPlayers(): {
   createPlayer: CreatePlayer;
   findRunningPlayer: FindRunningPlayer;
@@ -62,11 +55,6 @@ export function createPlatformPlayers(): {
   };
 }
 
-/**
- * Calls `callback` when the connection may be back: the device went online, or the app returned to
- * the foreground. Android can cut a backgrounded app's network access, so a save sent while the app
- * was in the background or the screen was locked can fail to resolve the API host (CUP-71).
- */
 function listenForReconnect(callback: () => void): () => void {
   globalThis.addEventListener("online", callback);
   const stopListeningForVisible = listenForVisible(callback);
@@ -76,7 +64,6 @@ function listenForReconnect(callback: () => void): () => void {
   };
 }
 
-/** Calls `callback` whenever the page becomes visible again, until the returned function. */
 function listenForVisible(callback: () => void): () => void {
   const handleVisibilityChange = () => {
     if (document.visibilityState === "visible") {

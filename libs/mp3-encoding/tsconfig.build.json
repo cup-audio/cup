@@ -5,7 +5,6 @@
     "@patricktree-stack/config-typescript/tsconfig.composite-emit-declaration-only.json"
   ],
   "compilerOptions": {
-    /* Modules */
     "rootDir": "./src",
     "types": ["node"]
   },

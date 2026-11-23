@@ -12,7 +12,6 @@ import {
 } from "#src/storage/registry-sqlite-schema.ts";
 import { migrateRegistry } from "#src/storage/sqlite-migrations.ts";
 
-// https://developers.cloudflare.com/durable-objects/platform/limits/
 const MAX_SQL_PARAMETERS = 100;
 const GRANTS_PER_BATCH = Math.floor(
   MAX_SQL_PARAMETERS / Object.keys(getTableColumns(registryGrantTable)).length,
@@ -57,7 +56,6 @@ export class RegistrySqlite {
       .run();
   }
 
-  /** Only account conversions are deleted one at a time, so a trial owner is never removed here. */
   removeAccountConversionOwner(conversionId: string): void {
     this.database
       .delete(conversionOwners)
@@ -108,7 +106,6 @@ export class RegistrySqlite {
   }
 
   async save(record: RegistryRecord): Promise<void> {
-    // Callers hold a storage transaction across the delete and every insert batch.
     this.database.delete(registryGrantTable).run();
     for (let offset = 0; offset < record.grants.length; offset += GRANTS_PER_BATCH) {
       this.database

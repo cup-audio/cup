@@ -1,13 +1,8 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-/** A version that could not be read; the cached suite task fails on it before it runs. */
 export type Unreadable = { unreadable: string };
 
-/**
- * Reads one version of a toolchain key. A failing read becomes an `Unreadable` naming `source`, so
- * the reader still writes every other version and `assertReadableKeyFile` reports the reason.
- */
 export async function readVersion<T>(
   source: string,
   read: () => Promise<T>,
@@ -24,18 +19,12 @@ export function unreadable(reason: string): Unreadable {
   return { unreadable: reason };
 }
 
-/** Writes a key as formatted JSON, creating the file's directory if needed. */
 export async function writeKeyFile(file: string, key: unknown): Promise<void> {
   await fs.mkdir(path.dirname(file), { recursive: true });
   await fs.writeFile(file, `${JSON.stringify(key, undefined, 2)}\n`);
 }
 
-/**
- * Throws unless `file` is a key file whose every version was read. A cached suite task runs this
- * before its suite, so a pass is never cached under a key that does not describe the toolchain.
- */
 export async function assertReadableKeyFile(keyFile: string, suiteName: string): Promise<void> {
-  // A suite task runs in its package directory, so a relative path would mislead at the root.
   const file = path.resolve(keyFile);
   const failurePrefix = `The ${suiteName} suite did not start:`;
   const rerunHint =

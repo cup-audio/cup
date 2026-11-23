@@ -5,10 +5,6 @@ import { CupError } from "@cup/errors";
 import { segmentUnitTexts } from "#src/segmentation-version-1/unit-text-segmentation.ts";
 import type { NarrationBlock, UnitRange } from "#src/segmentation.ts";
 
-// Segmentation version 1 is frozen: its golden fixtures fail on any change to its units, and a
-// change to them must become a new segmentation version. That is why it keeps its own copy of the
-// element classification instead of sharing presentation's, which may change at any time.
-
 const EXCLUDED_TAG_NAMES = new Set([
   "audio",
   "canvas",
@@ -66,10 +62,8 @@ const NARRATION_ELEMENT_SEPARATOR = "\n\n";
 type SourceElement = DefaultTreeAdapterMap["element"];
 type SourceChildNode = DefaultTreeAdapterMap["childNode"];
 
-// Nodes that segmentation creates itself, such as normalized line breaks, have no source node.
 type SafeText = { type: "text"; value: string; source?: SourceChildNode };
 type SafeBoundary = { type: "boundary"; children: readonly SafeNode[] };
-// A flattened inline element; units treat its content as if it stood in its parent's place.
 type SafeFlattened = { type: "flattened"; children: readonly SafeNode[]; source: SourceElement };
 type SafeElement = {
   type: "element";
@@ -83,12 +77,6 @@ type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K>
 
 const LINE_BREAK: SafeElement = { type: "element", tagName: "br", children: [] };
 
-/**
- * Divides narration source material into synchronization units with segmentation version 1's rules:
- * every table cell, `caption`, `dt` and `dd` is its own unit, `pre` collapses whitespace and is
- * split mid-line past 2,000 characters, and a heading before a container joins the container's
- * first unit.
- */
 export function segmentWithVersion1({
   sourceTitle,
   sourceSubtitle,
@@ -138,7 +126,6 @@ export function segmentWithVersion1({
       ({ text }) => text,
     );
 
-    // A block without text keeps the pending headings for the next block.
     if (unitTexts.length === 0) {
       return;
     }
@@ -255,7 +242,6 @@ export function segmentWithVersion1({
   addSynchronizationUnit(normalizedSourceTitle, { type: "source-title" });
 
   if (normalizedSourceSubtitle !== undefined) {
-    // Added before any body block, so the source subtitle never absorbs a pending heading.
     addSynchronizationUnit(normalizedSourceSubtitle, { type: "source-subtitle" });
   }
 
@@ -287,11 +273,6 @@ function createSynchronizationUnitId(sequence: number): string {
   return `narration-unit-${String(sequence + 1).padStart(4, "0")}`;
 }
 
-/**
- * Replaces each flattened element that holds block content with its children, so that block content
- * ends the surrounding inline run. A flattened element without block content stays whole, so an
- * inline run keeps it as one source node.
- */
 function expandFlattenedBlockContent(nodes: readonly SafeNode[]): SafeNode[] {
   return nodes.flatMap((node) =>
     node.type === "flattened" && hasBlockContent(node.children)
@@ -401,7 +382,6 @@ function normalizeSafeElement(element: SafeElement): SafeElement {
   return { ...element, children: normalizeSafeNodes(element.children) };
 }
 
-// Mirrors the whitespace that the narration document shows, which unit texts are read from.
 function normalizeSafeNodes(nodes: readonly SafeNode[]): SafeNode[] {
   const normalizedNodes: SafeNode[] = [];
   let hasVisibleText = false;
@@ -509,7 +489,6 @@ function appendSafeText(output: SafeNode[], value: string): void {
   }
 }
 
-// Unit texts are read from tag names and text alone, so the markup carries no attributes.
 function serializeSafeNode(node: SafeNode): string {
   if (node.type === "text") {
     return escapeHtmlText(node.value);

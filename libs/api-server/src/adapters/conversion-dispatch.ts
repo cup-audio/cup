@@ -3,7 +3,6 @@ import type { ConversionOwner, InsufficientDuration } from "@cup/conversion-cont
 import type { ApiServerEnvironment } from "#src/api-server-environment.ts";
 
 export type ConversionDispatch = {
-  /** Reserves and dispatches every segment lacking audio, or reserves nothing. */
   startSynthesis(
     narrationTextCharactersBySegment: readonly number[],
   ): Promise<
@@ -14,7 +13,6 @@ export type ConversionDispatch = {
   retryPreparation(): Promise<void>;
 };
 
-/** Dispatch requires operation-specific request authorization before calling the owner. */
 export function resolveConversionDispatch(
   env: ApiServerEnvironment,
   conversionId: string,

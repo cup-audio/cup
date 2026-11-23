@@ -8,39 +8,23 @@ import { CupError } from "@cup/errors";
 import type { ApiServerEnvironment } from "#src/api-server-environment.ts";
 import { accountAuthError, jsonError, requireAccessibleGrantState } from "#src/http/http-errors.ts";
 
-/**
- * Who a signed media URL was issued to: the account or the grant that owned the audiobook when the
- * URL was issued. Delivery checks this principal's current access on every request.
- */
 export type MediaUrlPrincipal = ConversionOwner;
 
-/**
- * What a signed URL's token authorizes beyond the media routes. A token without a purpose is a
- * media token; a `"position"` token authorizes only the listening-position route (a signed position
- * URL). Each route accepts only its own kind.
- */
 type SignedUrlPurpose = "position";
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
-/**
- * How long a signed media URL authorizes requests after its issue time, the start of the UTC day it
- * was handed out on. Every URL therefore stays valid for at least 24 hours after it is handed out.
- */
 const SIGNED_MEDIA_URL_LIFETIME_MS = 2 * DAY_MS;
 
 const TOKEN_QUERY_PARAMETER = "token";
 const TOKEN_VERSION = "v1";
 
-/** A media route under `/api/files/audiobooks/{conversionId}/`. */
 type AudiobookMediaResource = "cover-image" | "narration-track.mp3";
 
-/** The settings that signing reads. */
 type SigningEnvironment = Pick<
   ApiServerEnvironment,
   "MEDIA_URL_SIGNING_KEY" | "LOCAL_DEVELOPMENT" | "LOCAL_SIGNED_URL_LIFETIME_SECONDS"
 >;
 
-/** Signs media URLs on the request's origin for one principal, which must have access. */
 export function createMediaUrlSigner(
   context: { req: { url: string }; env: SigningEnvironment },
   principal: MediaUrlPrincipal,
@@ -56,10 +40,6 @@ export function createMediaUrlSigner(
     });
 }
 
-/**
- * The shortened lifetime of local development, `LOCAL_SIGNED_URL_LIFETIME_SECONDS`, with which the
- * mobile E2E suite sees URLs expire within a test; `undefined` everywhere else.
- */
 function readLocalLifetimeMs(env: SigningEnvironment): number | undefined {
   const seconds = Number(env.LOCAL_SIGNED_URL_LIFETIME_SECONDS);
   if (
@@ -73,11 +53,6 @@ function readLocalLifetimeMs(env: SigningEnvironment): number | undefined {
   return seconds * 1_000;
 }
 
-/**
- * Signs the position URL of an audiobook on the request's origin for one account, which must own
- * it: the listening-position route with a position token, so a client can save the position without
- * the listener's session.
- */
 export function signPositionUrl(
   context: { req: { url: string }; env: SigningEnvironment },
   principal: Extract<MediaUrlPrincipal, { kind: "account" }>,
@@ -94,7 +69,6 @@ export function signPositionUrl(
   });
 }
 
-/** Issues the signed media URL of one media resource of an audiobook, on the request's origin. */
 function signAudiobookMediaUrl({
   requestUrl,
   signingKey,
@@ -120,15 +94,6 @@ function signAudiobookMediaUrl({
   });
 }
 
-/**
- * Appends a `token` query parameter that authorizes requests to `url` for one audiobook and one
- * principal, until {@link SIGNED_MEDIA_URL_LIFETIME_MS} after the start of the UTC day of `nowMs`.
- * Within one UTC day, the same URL and principal therefore get a byte-identical URL, which lets
- * browsers cache cover images (ADR 0013). The token is stateless: rotating `signingKey` invalidates
- * every outstanding URL. A `purpose` is added to the payload last, so tokens without one stay
- * byte-identical to the media tokens issued before purposes existed. With `lifetimeMs`, local
- * development's shortened lifetime, the token instead expires that long after `nowMs`.
- */
 export async function signMediaUrl({
   url,
   conversionId,
@@ -154,7 +119,6 @@ export async function signMediaUrl({
     new TextEncoder().encode(
       JSON.stringify({
         conversionId,
-        // Rebuilt in a fixed key order, so equal principals always encode to the same token.
         principal:
           principal.kind === "account"
             ? { kind: principal.kind, accountId: principal.accountId }
@@ -179,10 +143,6 @@ export async function signMediaUrl({
   return signedUrl.href;
 }
 
-/**
- * Authorizes a media request by its signed media URL token, the only credential media routes
- * accept. Without an owner, the route answers its own not-found response.
- */
 export async function requireSignedMediaUrl(
   env: ApiServerEnvironment,
   requestUrl: string,
@@ -215,12 +175,6 @@ type SignedPositionUrlVerification =
   | { result: "valid"; accountId: string }
   | { result: "denied"; response: Response };
 
-/**
- * Authorizes a listening-position save by its signed position URL token: its signature, expiry and
- * purpose, and that it was issued for this audiobook. Then the account it names must still own the
- * audiobook and be active, answered as a media request with a media token would be. Whether the
- * audiobook still exists is the route's check.
- */
 export async function verifySignedPositionUrl(
   env: ApiServerEnvironment,
   requestUrl: string,
@@ -246,8 +200,6 @@ export async function verifySignedPositionUrl(
       ),
     };
   }
-  // A position URL is issued to accounts only, so an audiobook without an account owner is
-  // not this account's: not found, not the trial's grant-session answer.
   if (owner?.kind !== "account") {
     return {
       result: "denied",
@@ -261,11 +213,6 @@ export async function verifySignedPositionUrl(
   return { result: "valid", accountId: token.principal.accountId };
 }
 
-/**
- * Runs the authoritative checks behind a signed media URL whose signature and expiry are valid: the
- * principal must still own the audiobook, as an active account or an unexpired, unrevoked grant.
- * Denials answer as the same request with the account's or grant's own credentials would.
- */
 async function requireSignedMediaAccess(
   env: ApiServerEnvironment,
   owner: ConversionOwner,
@@ -308,11 +255,6 @@ type MediaUrlTokenVerification =
   | { result: "invalid" }
   | { result: "valid"; principal: MediaUrlPrincipal };
 
-/**
- * Checks the `token` query parameter of a request for `conversionId`: its signature, its expiry,
- * that it was issued for this audiobook, and that it carries exactly `purpose` (none for a media
- * token). The principal's current access is not checked here.
- */
 async function verifyMediaUrlToken({
   requestUrl,
   conversionId,
@@ -350,7 +292,6 @@ async function verifyMediaUrlToken({
     return { result: "invalid" };
   }
 
-  // `verify` compares in constant time.
   const isAuthentic = await crypto.subtle.verify(
     "HMAC",
     await importSigningKey(signingKey),
@@ -395,7 +336,6 @@ function encodeBase64Url(bytes: Uint8Array): string {
     .replace(/=+$/, "");
 }
 
-/** Throws for input that is not base64url. */
 function decodeBase64Url(value: string): Uint8Array<ArrayBuffer> {
   if (!/^[A-Za-z0-9_-]*$/.test(value)) {
     throw new CupError("Invalid base64url value");

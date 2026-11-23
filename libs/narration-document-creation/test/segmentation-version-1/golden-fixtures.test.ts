@@ -14,8 +14,6 @@ const SEGMENTATION_FIXTURE_SCHEMA = z
   })
   .strict();
 
-// The expected units were generated from createNarrationDocument before segmentation was split out
-// of it, and are frozen: a change that alters them must become a new segmentation version.
 const FIXTURES_DIRECTORY = path.join(import.meta.dirname, "golden-fixtures");
 
 const FIXTURE_FILE_NAMES = fs

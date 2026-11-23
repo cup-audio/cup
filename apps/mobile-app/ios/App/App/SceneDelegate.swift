@@ -1,10 +1,6 @@
 import Capacitor
 import UIKit
 
-/// Cup's only window scene. UIKit creates its window and `MainViewController` from `Main.storyboard`,
-/// named in `Info.plist`'s scene manifest. Incoming URLs, such as the Share Extension's
-/// `audio.cup.app://share` links, arrive here and reach Capacitor's App plugin through its proxy,
-/// which delivers a cold start's URL once the bridge has loaded its plugins.
 class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
 

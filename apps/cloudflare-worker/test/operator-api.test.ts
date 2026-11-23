@@ -13,14 +13,8 @@ const DEVELOPMENT_OPERATOR_HEADERS = {
   "Content-Type": "application/json",
 };
 
-/**
- * Both concurrent tests below reuse this ID; if they shared storage, one would get
- * "already-issued".
- */
 const SHARED_REQUEST_ID = "4a0c2b4e-8f5d-4c39-9a51-0d7f3c2e6b18";
 
-// libs/api-server tests inject the operator access check; only the production default export wires
-// the Cloudflare Access validation that must not accept the development token on a public hostname.
 test("the development operator token works on localhost but not on the canonical domain", async ({
   expect,
   onTestFinished,

@@ -3,7 +3,6 @@ import { delay, http } from "msw";
 import { accountStory } from "#src/ui-gallery/account-fixtures.jsx";
 
 export const ActiveAccount = accountStory({ path: "/recent/account" });
-/** The account snapshot never answers, so the dialog keeps loading the account. */
 export const LoadingAccount = accountStory({
   path: "/recent/account",
   handlers: [http.get("/api/account", () => delay("infinite"))],

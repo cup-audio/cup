@@ -14,13 +14,11 @@ export type CommandResult = {
 type RunOptions = {
   cwd?: string;
   env?: NodeJS.ProcessEnv;
-  /** The exit codes that count as success; only 0 by default. */
   successExitCodes?: readonly number[];
 };
 
 const TAKEOVER_ABANDONED_AFTER_MS = 10_000;
 
-/** Runs a command to completion and throws with its output when it exits with another code. */
 export async function run(
   command: string,
   args: readonly string[],
@@ -37,7 +35,6 @@ export async function run(
   child.stderr.setEncoding("utf8").on("data", (chunk: string) => (stderr += chunk));
 
   const exitCode = await new Promise<number | null>((resolve, reject) => {
-    // A missing executable emits `error` instead of `close`.
     child.on("error", reject);
     child.on("close", resolve);
   });
@@ -49,7 +46,6 @@ export async function run(
   return { exitCode, stdout, stderr };
 }
 
-/** Asks the operating system for a free port on the loopback interface. */
 export async function reservePort(): Promise<number> {
   const server = net.createServer();
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -64,7 +60,6 @@ export async function reservePort(): Promise<number> {
   return port;
 }
 
-/** Polls `check` until it returns a value other than undefined, or throws after `timeoutMs`. */
 export async function waitFor<T>(
   description: string,
   check: () => Promise<T | undefined>,
@@ -83,7 +78,6 @@ export async function waitFor<T>(
   }
 }
 
-/** Stops a child process with SIGTERM, then SIGKILL after `graceMs`. */
 export async function stopChild(child: childProcess.ChildProcess, graceMs = 10_000): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null) {
     return;
@@ -95,12 +89,6 @@ export async function stopChild(child: childProcess.ChildProcess, graceMs = 10_0
   clearTimeout(timeout);
 }
 
-/**
- * Runs `action` while holding a lock that serializes it across processes, such as runs in several
- * checkouts or the Android and iOS processes of one parallel run. The lock is the directory
- * `lockPath`, which `mkdir` creates atomically, holding the holder's PID; a dead holder's lock is
- * taken over.
- */
 export async function withLock<T>(
   options: { lockPath: string; waitingFor: string; timeoutMs: number },
   action: () => Promise<T>,
@@ -134,7 +122,6 @@ export async function withLock<T>(
   }
 }
 
-/** The PID in the lock directory, or undefined while the lock is gone or its PID not yet written. */
 async function readLockHolder(lockPath: string): Promise<number | undefined> {
   const holder = Number.parseInt(
     await fs.readFile(path.join(lockPath, "pid"), "utf8").catch(() => ""),
@@ -143,13 +130,6 @@ async function readLockHolder(lockPath: string): Promise<number | undefined> {
   return Number.isInteger(holder) ? holder : undefined;
 }
 
-/**
- * Removes the lock if its holder is dead, while holding a second lock, `<lockPath>.takeover`.
- * Without it, two waiters that both saw the dead holder could both remove the lock, the second
- * removing the lock a new holder took in between. Under the takeover lock, the holder is read
- * again, and a lock whose holder is dead can only be removed here, so the removal hits exactly the
- * stale lock.
- */
 async function takeOverStaleLock(lockPath: string): Promise<void> {
   const takeoverPath = `${lockPath}.takeover`;
   try {
@@ -172,10 +152,6 @@ async function takeOverStaleLock(lockPath: string): Promise<void> {
   }
 }
 
-/**
- * A takeover takes milliseconds, so a takeover lock older than `TAKEOVER_ABANDONED_AFTER_MS` was
- * left by a process that died during its takeover, and would otherwise block every later takeover.
- */
 async function removeAbandonedTakeover(takeoverPath: string): Promise<void> {
   const stats = await fs.stat(takeoverPath).catch(() => undefined);
   if (

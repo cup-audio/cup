@@ -30,16 +30,10 @@
 
         </activity>
 
-        <!--
-            The native Sentry SDK, which the web app starts through @sentry/capacitor, keeping no
-            identifier on the device: see the mobile app README's Sentry section and ADR 0031.
-        -->
         <meta-data android:name="io.sentry.auto-init" android:value="false" />
-        <!-- No release health, no scope written to disk, and no sentry-native, which stores its own installation ID. -->
         <meta-data android:name="io.sentry.auto-session-tracking.enable" android:value="false" />
         <meta-data android:name="io.sentry.enable-scope-persistence" android:value="false" />
         <meta-data android:name="io.sentry.ndk.enable" android:value="false" />
-        <!-- Native crashes as Android's tombstones, from this launch on only. -->
         <meta-data android:name="io.sentry.tombstone.enable" android:value="true" />
         <meta-data android:name="io.sentry.tombstone.attach-raw" android:value="false" />
         <meta-data android:name="io.sentry.tombstone.report-historical" android:value="false" />
@@ -50,12 +44,10 @@
         <meta-data android:name="io.sentry.memory-limiter.report-historical" android:value="false" />
         <meta-data android:name="io.sentry.external-storage-context" android:value="false" />
         <meta-data android:name="io.sentry.enable-root-check" android:value="false" />
-        <!-- Activity spans with frames, which carry the app start; no user-interaction spans. -->
         <meta-data android:name="io.sentry.traces.sample-rate" android:value="1.0" />
         <meta-data android:name="io.sentry.traces.activity.enable" android:value="true" />
         <meta-data android:name="io.sentry.traces.frames-tracking" android:value="true" />
         <meta-data android:name="io.sentry.traces.user-interaction.enable" android:value="false" />
-        <!-- Nothing that can show what the listener sees or types, and no profiling. -->
         <meta-data android:name="io.sentry.attach-screenshot" android:value="false" />
         <meta-data android:name="io.sentry.attach-view-hierarchy" android:value="false" />
         <meta-data android:name="io.sentry.feedback.use-shake-gesture" android:value="false" />
@@ -64,8 +56,6 @@
         <meta-data android:name="io.sentry.traces.profiling.session-sample-rate" android:value="0.0" />
         <meta-data android:name="io.sentry.profiling.enable-app-start" android:value="false" />
 
-        <!-- The native player's media session service; no MediaButtonReceiver, so a media button after it
-             stopped does not start Cup again. -->
         <service
             android:name=".MediaPlaybackService"
             android:exported="true"
@@ -75,7 +65,6 @@
             </intent-filter>
         </service>
 
-        <!-- The native player's alarm for when a paused session's URLs expire. -->
         <receiver
             android:name=".ExpiryAlarmReceiver"
             android:exported="false" />
@@ -91,12 +80,8 @@
         </provider>
     </application>
 
-    <!-- Permissions -->
-
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- The playback engine retries a failed listening-position save when a network is back. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <!-- No POST_NOTIFICATIONS: media session notifications are exempt, and Cup has no others. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 </manifest>

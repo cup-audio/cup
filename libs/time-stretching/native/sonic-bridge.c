@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <sonic.h>
 
-// JavaScript copies PCM in and out through one fixed buffer per stretcher.
 #define PCM_SAMPLE_CAPACITY 4608
 #define STRETCHER_OK 0
 #define STRETCHER_ERROR_INVALID_ARGUMENT -1
@@ -14,7 +13,6 @@ typedef struct Stretcher {
   struct Stretcher *next;
 } Stretcher;
 
-// JavaScript supplies raw numeric handles, so validate membership before dereferencing one.
 static Stretcher *live_stretchers;
 
 static Stretcher *find_live_stretcher(const Stretcher *candidate) {
@@ -32,7 +30,6 @@ static Stretcher *find_live_stretcher(const Stretcher *candidate) {
 
 EMSCRIPTEN_KEEPALIVE
 Stretcher *stretcher_create(int sample_rate, float speed) {
-  // Sonic clamps values outside its supported ranges; reject them instead of stretching wrongly.
   if (sample_rate < SONIC_MIN_SAMPLE_RATE || sample_rate > SONIC_MAX_SAMPLE_RATE) {
     return NULL;
   }
@@ -52,7 +49,6 @@ Stretcher *stretcher_create(int sample_rate, float speed) {
   }
 
   sonicSetSpeed(stretcher->stream, speed);
-  // Disables Sonic's speed-up heuristics, as the `sonic -q` CLI flag does.
   sonicSetQuality(stretcher->stream, 1);
 
   stretcher->next = live_stretchers;
@@ -105,7 +101,6 @@ int stretcher_flush(Stretcher *stretcher) {
   return STRETCHER_OK;
 }
 
-// Returns the number of stretched samples copied into the PCM buffer; 0 once none are left.
 EMSCRIPTEN_KEEPALIVE
 int stretcher_read(Stretcher *stretcher) {
   Stretcher *live_stretcher = find_live_stretcher(stretcher);

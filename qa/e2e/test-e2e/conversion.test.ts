@@ -9,7 +9,6 @@ import {
 import { captureNarrationAudio, readNarrationAudio } from "#test-e2e/narration-audio.ts";
 import { readAudiobook, waitForGeneratedAudio } from "#test-e2e/synthesis.ts";
 
-// The source title and source subtitle of the controlled source page, `src/fixtures/source.html`.
 const SOURCE_TITLE = "A deterministic document about careful testing";
 const SOURCE_SUBTITLE = "Real boundaries and fake providers make every run the same.";
 
@@ -34,7 +33,6 @@ test("generates audio for the whole document, then plays its narration track", a
   const { narrationTrack } = audiobook;
   const units = audiobook.narrationDocument.synchronizationUnits;
 
-  // The source subtitle is the second unit, shown between the source title and the host.
   expect(units[1]!.narrationText).toBe(SOURCE_SUBTITLE);
   await expect(page.locator(`hgroup > h1[data-synchronization-unit="${units[0]!.id}"]`)).toHaveText(
     SOURCE_TITLE,
@@ -48,14 +46,10 @@ test("generates audio for the whole document, then plays its narration track", a
   await expect(play).toBeEnabled({ timeout: 30_000 });
   await expect(page.getByRole("link", { name: /Download/ })).toHaveCount(0);
   const position = page.getByRole("slider");
-  // The progress bar spans the whole narration track, as the element reads it from the file.
   await expect(position).toHaveAttribute("max", String(narrationTrack.durationMilliseconds));
-  // Opening the audiobook loads nothing; only Play does.
   expect((await readNarrationAudio(page)).src).toBe("");
 
-  // Playing crosses from the first unit into the second.
   await play.click();
-  // Each audiobook response signs a fresh URL, so only the track itself is compared.
   const trackPath = new URL(narrationTrack.url).pathname;
   expect(new URL((await readNarrationAudio(page)).src).pathname).toBe(trackPath);
   await expect(page.locator(`[data-synchronization-unit="${units[0]!.id}"]`)).toHaveAttribute(
@@ -72,21 +66,18 @@ test("generates audio for the whole document, then plays its narration track", a
   expect((await readNarrationAudio(page)).currentTime * 1_000).toBeGreaterThanOrEqual(
     narrationTrack.startMilliseconds[1]!,
   );
-  // The system's media controls show the source title only.
   expect(
     await page.evaluate(() => {
       const metadata = navigator.mediaSession.metadata;
       return metadata && { title: metadata.title, artist: metadata.artist, album: metadata.album };
     }),
   ).toEqual({ title: SOURCE_TITLE, artist: "", album: "" });
-  // So does the player sheet.
   const playerSheet = page.getByRole("contentinfo", { name: "Player" });
   await expect(
     playerSheet.getByRole("slider", { name: `Position in ${SOURCE_TITLE}`, exact: true }),
   ).toBeVisible();
   await expect(playerSheet.getByText(SOURCE_SUBTITLE)).toHaveCount(0);
 
-  // A unit tap seeks the same track to the unit's start offset.
   await page.locator(`[data-synchronization-unit="${units[2]!.id}"]`).click();
   await expect(page.locator(`[data-synchronization-unit="${units[2]!.id}"]`)).toHaveAttribute(
     "aria-current",
@@ -99,7 +90,6 @@ test("generates audio for the whole document, then plays its narration track", a
     narrationTrack.startMilliseconds[3] ?? narrationTrack.durationMilliseconds,
   );
 
-  // Tapping the source subtitle plays from it, like any other unit.
   await page.locator(`[data-synchronization-unit="${units[1]!.id}"]`).click();
   await expect(page.locator(`[data-synchronization-unit="${units[1]!.id}"]`)).toHaveAttribute(
     "aria-current",
@@ -118,7 +108,6 @@ test("generates audio for the whole document, then plays its narration track", a
   await page.getByRole("button", { name: "Pause", exact: true }).click();
   await expect(page.getByRole("alert")).toHaveCount(0);
   const pausedAt = (await readNarrationAudio(page)).currentTime;
-  // A trial listener's position is kept on the device.
   await expect
     .poll(() => page.evaluate((key) => localStorage.getItem(key), `cup:position:v1:${id}`))
     .toBe(
@@ -129,8 +118,6 @@ test("generates audio for the whole document, then plays its narration track", a
     );
   await validateNarrationTrack({ conversionId: id, origin: workerEnvironment.origin, page });
 
-  // After a reload the position saved on pause is shown without loading the track, and Play
-  // resumes from it.
   await page.reload();
   await waitForAudiobook(page);
   await expect(play).toBeEnabled({ timeout: 30_000 });
@@ -144,7 +131,6 @@ test("generates audio for the whole document, then plays its narration track", a
     .poll(async () => (await readNarrationAudio(page)).currentTime)
     .toBeGreaterThanOrEqual(pausedAt);
   await page.getByRole("button", { name: "Pause", exact: true }).click();
-  // Play resumed at the saved position, not further along: the track played for a moment only.
   expect((await readNarrationAudio(page)).currentTime).toBeLessThan(pausedAt + 5);
   expect(await (await fetch(workerEnvironment.origin + "/__qa/speech-calls")).json()).toEqual(
     calls,
@@ -207,7 +193,6 @@ test("trial article links require the owning grant session for reading, and medi
   for (const url of [coverImageUrl, workerEnvironment.origin + trackPath]) {
     expect((await anonymous.request.get(url, { headers: otherGrantHeaders })).status()).toBe(401);
   }
-  // Media accepts only the signed media URL, not the owning grant session.
   const ownerHeaders = await getTrialSessionHeaders(page);
   expect(
     (
@@ -227,7 +212,6 @@ test("trial article links require the owning grant session for reading, and medi
     beforeAnonymous,
   );
 
-  // Revoking the trial blocks its unexpired track URL, as it blocks the trial's other requests.
   const revocation = await fetch(
     `${workerEnvironment.origin}/api/operator/grants/${grantId}/revocation`,
     {
@@ -256,8 +240,6 @@ test.describe("segment failure and recovery", () => {
     });
     await waitForAudiobook(page);
     await expect(page.getByRole("button", { name: "Play", exact: true })).toBeDisabled();
-    // The failure arrives at once, so the detail view's Back link may still be preloading its route;
-    // a restart would refuse that chunk.
     await page.waitForLoadState("networkidle");
     await workerEnvironment.restart("success");
     await page.getByRole("button", { name: "Retry", exact: true }).click();
@@ -281,7 +263,6 @@ test.describe("preparation recovery", () => {
     await expect(
       page.getByRole("heading", { name: "This track could not be prepared." }),
     ).toBeVisible({ timeout: 90000 });
-    // The detail view's Back link preloads its route once in view; a restart would refuse that chunk.
     await page.waitForLoadState("networkidle");
     await workerEnvironment.restart("success");
     await page.getByRole("button", { name: "Retry", exact: true }).click();

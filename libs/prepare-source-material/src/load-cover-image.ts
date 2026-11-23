@@ -15,19 +15,16 @@ export const COVER_IMAGE_CONTENT_TYPES = [
 ] as const;
 export type CoverImageContentType = (typeof COVER_IMAGE_CONTENT_TYPES)[number];
 
-/** Why a cover image that could be requested is deliberately not kept. Retrying cannot change it. */
 export type CoverImageRefusalReason =
   | "non-public-destination"
   | "http-error"
   | "too-large"
   | "unsupported-type";
 
-/** A refusal is an expected outcome; transport failures and timeouts throw instead. */
 export type LoadCoverImageResult =
   | { result: "loaded"; bytes: Uint8Array; contentType: CoverImageContentType }
   | { result: "refused"; reason: CoverImageRefusalReason };
 
-/** Loads the declared cover image of the source page at the given URL. */
 export type CoverImageLoader = (
   declaration: CoverImageDeclaration,
   sourceUrl: string,
@@ -61,12 +58,10 @@ type CoverImagePage = {
   close(): Promise<void>;
 };
 
-/** Supplies browser pages used to request a cover image as a browser navigation. */
 export type CoverImageBrowser = {
   newPage(options: { javaScriptEnabled: boolean }): Promise<CoverImagePage>;
 };
 
-/** Supplies the browser, declaration, and source page used to load one cover image. */
 export type LoadCoverImageOptions = {
   browser: CoverImageBrowser;
   cookies?: SourcePageCookie[];
@@ -77,10 +72,6 @@ export type LoadCoverImageOptions = {
 export const MAX_COVER_IMAGE_BYTES = 10 * 1024 * 1024;
 const COVER_IMAGE_TIMEOUT_MS = 10_000;
 
-/**
- * Requests the declared cover image through a browser, so the request carries the browser's network
- * identity, the source page as referrer, and the cookies configured for the image's host.
- */
 export async function loadCoverImage({
   browser,
   cookies = [],
@@ -104,11 +95,8 @@ export async function loadCoverImage({
     if (cookies.length > 0) {
       await page.context().addCookies(cookies);
     }
-    // A navigation asks for a document by default; publishers that negotiate should send an image.
     await page.setExtraHTTPHeaders({ Accept: `${COVER_IMAGE_CONTENT_TYPES.join(",")},*/*;q=0.5` });
 
-    // Resolving at commit leaves the body unread, so an oversized image is refused by its
-    // declared length before the browser has buffered it.
     const response = await page.goto(declaration.url, {
       referer: sourceUrl,
       timeout: COVER_IMAGE_TIMEOUT_MS,
@@ -119,7 +107,6 @@ export async function loadCoverImage({
       throw new CupError("Expected cover-image navigation to return an HTTP response");
     }
 
-    // Request interception does not see redirect hops, so they are checked once the chain is known.
     if (!getRedirectChainUrls(response.request()).every(isPublicUrl)) {
       return { result: "refused", reason: "non-public-destination" };
     }
@@ -134,7 +121,6 @@ export async function loadCoverImage({
 
     const bytes = await rejectAfterTimeout(response.body(), COVER_IMAGE_TIMEOUT_MS);
 
-    // The declared length is optional and unverified.
     if (bytes.byteLength > MAX_COVER_IMAGE_BYTES) {
       return { result: "refused", reason: "too-large" };
     }
@@ -149,11 +135,6 @@ export async function loadCoverImage({
   }
 }
 
-/**
- * Identifies an accepted raster format from the file's leading bytes. The response header is not
- * trusted, and SVG is deliberately left out because it can carry scripts. Animation is not a reason
- * to refuse an image: the original is kept, and a surface decides how to show it.
- */
 export function detectCoverImageContentType(bytes: Uint8Array): CoverImageContentType | undefined {
   if (startsWith(bytes, [0xff, 0xd8, 0xff])) {
     return "image/jpeg";
@@ -229,13 +210,11 @@ function readAscii(bytes: Uint8Array, start: number, end: number): string {
   return String.fromCodePoint(...bytes.subarray(start, end));
 }
 
-/** The major brand and the compatible brands of an ISO base media file's leading `ftyp` box. */
 function listFileTypeBrands(bytes: Uint8Array): string[] {
   const boxLength = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(0);
   const boxEnd = Math.min(boxLength, bytes.byteLength);
   const brands = [readAscii(bytes, 8, 12)];
 
-  // Bytes 12 to 16 hold the minor version; compatible brands follow in four-byte entries.
   for (let offset = 16; offset + 4 <= boxEnd; offset += 4) {
     brands.push(readAscii(bytes, offset, offset + 4));
   }

@@ -1,16 +1,9 @@
-/*
- * The live Resend contract test, opt-in through `pnpm test:resend-live` and part of no validation
- * command. It checks what no local test can: that the Resend stub's model matches the real API.
- * Every test sends real emails, to `delivered@resend.dev` only, under a fresh idempotency key.
- */
-
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import https from "node:https";
 import { test } from "vitest";
 
 const RESEND_BASE_URL = "https://api.resend.com";
-/** The sender of deletion notices in `libs/registry/src/providers/resend-email.ts`. */
 const DEFAULT_FROM = "Cup <no-reply@cup.audio>";
 
 const resendApiKey = process.env["RESEND_API_KEY"] ?? "";
@@ -82,7 +75,6 @@ function createIdempotencyKey(): string {
   return `cup-live-test/${crypto.randomUUID()}`;
 }
 
-/** An email shaped like the deletion notices the deletion coordinator sends. */
 function createEmail() {
   return {
     from: resendFrom,
@@ -110,7 +102,6 @@ async function postEmail(
   return { status: response.status, body: await response.json() };
 }
 
-/** `fetch` always sends a User-Agent, so this request goes through `node:https`. */
 async function postWithoutUserAgent(
   idempotencyKey: string,
   email: ReturnType<typeof createEmail>,

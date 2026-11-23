@@ -3,10 +3,7 @@
   "noUpdateNotifier": true,
   "concurrency": "100%",
   "agentGuidance": false,
-  "globalDependencies": [
-    /* Library Worker types are generated from this config, so its runtime changes must invalidate cached tasks. */
-    "apps/cloudflare-worker/wrangler.jsonc",
-  ],
+  "globalDependencies": ["apps/cloudflare-worker/wrangler.jsonc"],
   "futureFlags": {
     "watchUsingTaskInputs": true,
   },
@@ -17,47 +14,19 @@
     },
     "turbo:build": {
       "cache": false,
-      "inputs": [
-        /* default inputs = all git tracked files */
-        "$TURBO_DEFAULT$",
-        /* exclude markdown files */
-        "!*.md",
-        /* exclude license files */
-        "!LICENSE",
-      ],
+      "inputs": ["$TURBO_DEFAULT$", "!*.md", "!LICENSE"],
     },
     "turbo:lint": {
       "cache": false,
-      "inputs": [
-        /* default inputs = all git tracked files */
-        "$TURBO_DEFAULT$",
-        /* exclude markdown files */
-        "!*.md",
-        /* exclude license files */
-        "!LICENSE",
-      ],
+      "inputs": ["$TURBO_DEFAULT$", "!*.md", "!LICENSE"],
     },
     "turbo:lint:fix": {
       "cache": false,
-      "inputs": [
-        /* default inputs = all git tracked files */
-        "$TURBO_DEFAULT$",
-        /* exclude markdown files */
-        "!*.md",
-        /* exclude license files */
-        "!LICENSE",
-      ],
+      "inputs": ["$TURBO_DEFAULT$", "!*.md", "!LICENSE"],
     },
     "turbo:test": {
       "cache": false,
-      "inputs": [
-        /* default inputs = all git tracked files */
-        "$TURBO_DEFAULT$",
-        /* exclude markdown files */
-        "!*.md",
-        /* exclude license files */
-        "!LICENSE",
-      ],
+      "inputs": ["$TURBO_DEFAULT$", "!*.md", "!LICENSE"],
     },
   },
 }

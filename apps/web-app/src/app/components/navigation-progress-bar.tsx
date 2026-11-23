@@ -4,25 +4,15 @@ import React from "react";
 
 import { useHasViewTransitionStarted } from "#src/app/cover-transition.js";
 
-/** A navigation that resolves sooner shows no progress bar. */
 const SHOW_DELAY_MS = 100;
 
-/**
- * A thin indeterminate bar across the top of the screen while a navigation from a shown screen
- * waits for its route's loader, over the previous screen and later over the route's pending
- * component. It follows the router's state, so links, the Android back button and swipe-back all
- * show it.
- */
 export function NavigationProgressBar(): React.ReactNode {
-  // A cold start or deep link has no previous screen to hold, and shows the route's skeleton alone.
   const isNavigationPending = useRouterState({
     select: (state) => state.status === "pending" && state.resolvedLocation !== undefined,
   });
   const pendingLocation = useRouterState({ select: (state) => state.location });
-  // The router waits on the browser to capture a View Transition after the next screen has loaded.
   const isWaitingOnViewTransition = useHasViewTransitionStarted(pendingLocation);
 
-  // Mounting it per navigation restarts its delay.
   return isNavigationPending && !isWaitingOnViewTransition ? <DelayedProgressBar /> : null;
 }
 

@@ -1,24 +1,8 @@
-/*
- * The bundle safety check: what proves a release bundle is safe to hand to testers (#438). It reads the
- * merged release manifest Gradle writes as plain XML, because the bundle holds the manifest as
- * protobuf, and the bundle's own zip entries (`bundle-zip.mts`).
- */
 import { readZipEntries } from "#scripts/release/bundle-zip.mts";
 
 const DEBUG_APPLICATION_CLASS = "DebugApplication";
-/**
- * R8's mapping file, which AGP embeds in the bundle. R8 may rename a debug class that no keep rule
- * covers, such as `TestApiOrigin`, so its dex descriptor changes; the mapping still lists it under
- * its original name.
- */
 const R8_MAPPING_ENTRY = "BUNDLE-METADATA/com.android.tools.build.obfuscation/proguard.map";
 
-/**
- * Returns a message for every violation: debug networking or the debug application class in the
- * manifest, one of `debugClassNames` (the debug source set's classes, fully qualified, such as the
- * mobile E2E suite's hooks) in any dex or as an original class in R8's mapping file, and any native
- * library. Empty when the bundle is safe.
- */
 export function findBundleViolations({
   debugClassNames,
   manifestXml,
@@ -112,10 +96,6 @@ function readApplicationAttributes(manifestXml: string): Map<string, string> {
   return attributes;
 }
 
-/**
- * Reads the original class names from an R8 mapping file, whose class lines read `original.Name ->
- * obfuscated.Name:` and whose member lines are indented.
- */
 function readOriginalClassNames(mapping: string): Set<string> {
   const classNames = new Set<string>();
   for (const match of mapping.matchAll(/^([^\s#][^\s]*) -> [^\s]+:$/gm)) {
@@ -124,7 +104,6 @@ function readOriginalClassNames(mapping: string): Set<string> {
   return classNames;
 }
 
-/** `audio.cup.app.TestApiOrigin` becomes the dex class descriptor `Laudio/cup/app/TestApiOrigin;`. */
 function descriptorOf(className: string): string {
   return `L${className.replaceAll(".", "/")};`;
 }

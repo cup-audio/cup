@@ -42,7 +42,6 @@ test("submits share URLs through the form", async ({ page, mount }) => {
   });
   const input = page.getByRole("textbox", { name: "URL", exact: true });
   await expect(input).toHaveValue("https://example.com/first?a=1&b=2#section");
-  // A share that arrives while this start is pending waits for it to settle.
   await expect.poll(() => starts).toEqual(["https://example.com/first?a=1&b=2#section"]);
   await expect(page.getByRole("button", { name: "Listen" })).toBeEnabled();
   for (const value of [

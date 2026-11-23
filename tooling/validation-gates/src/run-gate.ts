@@ -14,12 +14,6 @@ type StepOutcome =
 
 type StepResult = { step: Step; outcome: StepOutcome };
 
-/**
- * Checks the gate's prerequisites, then runs its steps in order and stops at the first failure.
- * Step output goes to the terminal; the returned summary is Markdown meant to be posted verbatim.
- * Every failure, including an error from the runner's own git or turbo calls, ends up named in the
- * summary rather than thrown.
- */
 export async function runGate(gate: Gate): Promise<{ isPassed: boolean; summary: string }> {
   const startedAt = performance.now();
   const results: StepResult[] = gate.steps.map((step) => ({
@@ -48,7 +42,6 @@ export async function runGate(gate: Gate): Promise<{ isPassed: boolean; summary:
   );
   const problemList = problems
     .filter((problem) => problem !== undefined)
-    // Indents continuation lines so that a multi-line problem stays one list item.
     .map((problem) => `- ${problem.replaceAll(/\n(?=.)/g, "\n  ")}`)
     .join("\n");
   if (problemList !== "") {
@@ -67,7 +60,6 @@ export async function runGate(gate: Gate): Promise<{ isPassed: boolean; summary:
   return finish({ gate, commit, results, startedAt, failure: undefined });
 }
 
-/** Runs one step and records its outcome; returns why the gate stops, or undefined to go on. */
 async function runStep(result: StepResult): Promise<string | undefined> {
   const { step } = result;
 
@@ -86,7 +78,6 @@ async function runStep(result: StepResult): Promise<string | undefined> {
 
   log(`${step.name}: ${step.command.join(" ")}`);
   const stepStartedAt = performance.now();
-  // A teed step's output goes through a pipe, so Turbo is told to keep its colors.
   const { exitCode, output } = step.isReplayMarked
     ? await runCommand(step.command, { output: "teed", env: { ...process.env, FORCE_COLOR: "1" } })
     : await runCommand(step.command, { output: "streamed" });
@@ -104,11 +95,6 @@ async function runStep(result: StepResult): Promise<string | undefined> {
   return undefined;
 }
 
-/**
- * Whether every E2E suite task in `output` was replayed: Turbo prints `<package>:turbo:e2e: cache
- * hit` (or `turbo:e2e:android`, `turbo:e2e:ios`) for a replayed task and `cache miss` for one it
- * runs. The uncached toolchain-key task and the builds the suite depends on do not count.
- */
 function isEveryE2eTaskReplayed(output: string): boolean {
   // oxlint-disable-next-line no-control-regex -- strips the ANSI color codes Turbo prints.
   const plain = output.replaceAll(/\u001B\[[0-9;]*m/g, "");
@@ -129,7 +115,6 @@ function finish({
   commit: string;
   results: StepResult[];
   startedAt: number;
-  /** A Markdown paragraph or list saying why the gate stopped. */
   failure: string | undefined;
 }): { isPassed: boolean; summary: string } {
   const rows = results.map(({ step, outcome }) => {
@@ -159,7 +144,6 @@ function finish({
   return { isPassed: failure === undefined, summary };
 }
 
-/** The short SHA, marked when tracked files differ from it, since the gate then ran on other code. */
 async function describeCommit(): Promise<string> {
   const sha = `\`${(await runGit(["rev-parse", "--short", "HEAD"])).trim()}\``;
   return (await findTrackedChanges()) === "" ? sha : `${sha} with uncommitted changes`;

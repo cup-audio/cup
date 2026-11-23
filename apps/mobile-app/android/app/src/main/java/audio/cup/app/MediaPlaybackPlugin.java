@@ -10,20 +10,6 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import org.json.JSONObject;
 
-/**
- * The page's side of the narration track's {@link PlaybackEngine}: the player port
- * ({@code native-track-player.ts}) drives it through these methods. The page sets the loaded
- * audiobook with {@code load}, which prepares nothing, and the first {@code play} starts the
- * service. After every change of the player but those of {@code load}, which the page shows
- * already, and after a native stop, the plugin sends one {@code state} event; the page asks for
- * {@code getState} whenever it becomes visible, since events sent while the WebView suspends the
- * hidden page can be lost, and when it starts, to take over a session that outlived the previous
- * page.
- *
- * <p>ExoPlayer handles audio focus with speech attributes, so a call or a navigation prompt pauses
- * Cup and resumes it afterwards, and another app's media pauses it for good; it also pauses when
- * headphones disconnect.
- */
 @UnstableApi
 @CapacitorPlugin(name = "CupMediaPlayback")
 public class MediaPlaybackPlugin extends Plugin {
@@ -31,19 +17,16 @@ public class MediaPlaybackPlugin extends Plugin {
 
     @Override
     public void load() {
-        // The engine outlives this plugin's activity, so a relaunched Cup's page reaches the same session.
         getBridge().executeOnMainThread(() -> engine().setListener(stateListener));
     }
 
     @Override
     protected void handleOnResume() {
-        // Back in the foreground, the connection may be back too: a failed save is retried.
         getBridge().executeOnMainThread(() -> engine().reconnected());
     }
 
     @Override
     protected void handleOnDestroy() {
-        // A playing session outlives the activity; only the page or a native stop ends it.
         getBridge().executeOnMainThread(() -> engine().clearListener(stateListener));
     }
 
@@ -127,10 +110,6 @@ public class MediaPlaybackPlugin extends Plugin {
         onLoadedEngine(call, engine -> engine.replaceUrls(urls));
     }
 
-    /**
-     * Ends the session; the service stops, which removes the notification and releases the player.
-     * `position` is `"save"` for one final save, or `"discard"`.
-     */
     @PluginMethod
     public void close(PluginCall call) {
         String position = call.getString("position");
@@ -166,7 +145,6 @@ public class MediaPlaybackPlugin extends Plugin {
     }
 
     private interface EngineCommand {
-        /** Returns false when no audiobook is loaded. */
         boolean run(PlaybackEngine engine);
     }
 
@@ -181,7 +159,6 @@ public class MediaPlaybackPlugin extends Plugin {
             });
     }
 
-    /** The `trackUrl`, `positionUrl` and `urlsIssuedAt` of a load or a replacement, or null without one. */
     @Nullable
     private static SignedUrls readUrls(PluginCall call) {
         String trackUrl = call.getString("trackUrl");
@@ -193,10 +170,6 @@ public class MediaPlaybackPlugin extends Plugin {
         return new SignedUrls(trackUrl, positionUrl, urlsIssuedAt);
     }
 
-    /**
-     * The `timeline` of a load, each synchronization unit's `synchronizationUnitId` and
-     * `startMilliseconds` in document order, or null when it is missing or malformed.
-     */
     @Nullable
     private static ListeningPositions readTimeline(PluginCall call) {
         JSArray timeline = call.getArray("timeline");
@@ -218,10 +191,6 @@ public class MediaPlaybackPlugin extends Plugin {
         return new ListeningPositions(unitIds, startMilliseconds);
     }
 
-    /**
-     * A whole number of milliseconds. JavaScript numbers arrive as integers, longs or doubles, and
-     * `PluginCall.getDouble` reads no long, such as an epoch time.
-     */
     @Nullable
     private static Long readMilliseconds(PluginCall call, String name) {
         Object value = call.getData().opt(name);

@@ -4,7 +4,6 @@ export function createAccountArtifactPrefix(accountId: string): string {
   return `accounts/${accountId}/`;
 }
 
-/** Omitting the owner preserves the trial storage layout used by production defaults. */
 export function createConversionArtifactPrefix(
   conversionId: string,
   owner?: ConversionOwner,
@@ -14,7 +13,6 @@ export function createConversionArtifactPrefix(
   return `${root}${conversionId}/`;
 }
 
-/** Recognizes this account's conversion prefix, including nested execution artifacts. */
 export function getAccountConversionIdFromArtifactPrefix(
   prefix: string,
   accountId: string,

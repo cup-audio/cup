@@ -27,8 +27,6 @@ export type NarrationContentSelectionEvalInput = {
 
 export type NarrationContentSelectionEvalOutput = {
   selectedElementIds: string[];
-  // Only the fields narration document creation writes: the optional `continuesNarrationBlock`,
-  // kept for reading speech policy 7 manifests, is no JSON value under `exactOptionalPropertyTypes`.
   synchronizationUnits: Pick<SynchronizationUnit, "id" | "narrationText">[];
 };
 
@@ -55,7 +53,6 @@ export function createNarrationContentSelectionHarness(
         sourceMaterialHtml: input.inputHtml,
         ...(signal ? { signal } : {}),
       });
-      // Segments with the version preparation uses, so the goldens hold the units production produces.
       const { synchronizationUnits } = segmentNarrationDocument({
         segmentationVersion: CURRENT_SEGMENTATION_VERSION,
         sourceTitle: input.sourceTitle,

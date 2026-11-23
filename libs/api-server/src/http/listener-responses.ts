@@ -23,13 +23,6 @@ import type {
 
 type ReadyAudiobook = Extract<Audiobook, { status: "ready" }>;
 
-/*
- * Listener handlers send Durable Object results through these mappings, which copy only the fields
- * the listener contract declares. `satisfies` rejects missing or mismatched fields but not extra
- * ones in nested values, so copying field by field is what keeps internal fields, such as an
- * outcome's storage reference, out of listener responses. Route tests parse responses strictly.
- */
-
 export function toAccountSnapshotResponse(snapshot: StoredAccountSnapshot) {
   return {
     accountId: snapshot.accountId,
@@ -55,7 +48,6 @@ export function toDeletionChallengeResponse(challenge: ReturnType<AccountLifecyc
   } satisfies DeletionChallenge;
 }
 
-/** `signCoverImageUrl` issues the signed media URL of a conversion's cover image. */
 export async function toAccountHistoryResponse(
   page: AccountHistoryPage,
   signCoverImageUrl: (conversionId: string) => Promise<string>,
@@ -103,19 +95,16 @@ const PREPARATION_PHASE_BY_CONVERSION_PHASE = {
   [ConversionPhase.SOURCE_MATERIAL_PREPARATION]: "reading-page",
   [ConversionPhase.NARRATION_CONTENT_SELECTION]: "selecting-content",
   [ConversionPhase.NARRATION_DOCUMENT_CREATION]: "preparing-text",
-  // Preparation never starts these two phases; speech synthesis runs per segment after it.
   [ConversionPhase.AUDIO_SEGMENT_PRODUCTION]: undefined,
   [ConversionPhase.AUDIOBOOK_ASSEMBLY]: undefined,
   [ConversionPhase.AUDIOBOOK_STORAGE]: "preparing-text",
   [ConversionPhase.FINALIZATION]: "preparing-text",
 } as const satisfies Record<ConversionPhase, PreparationPhase | undefined>;
 
-/** The preparation phase listeners see for the phase a pending conversion last started. */
 export function toPreparationPhase(phase: ConversionPhase): PreparationPhase | undefined {
   return PREPARATION_PHASE_BY_CONVERSION_PHASE[phase];
 }
 
-/** Leaves the field out when no listener phase applies. */
 export function toPreparationPhaseField(phase: ConversionPhase): {
   preparationPhase?: PreparationPhase;
 } {
@@ -151,11 +140,6 @@ export function toPlaybackPositionResponse(position: PlaybackPosition | null) {
       } satisfies ReadyAudiobook["playbackPosition"]);
 }
 
-/**
- * `durations` are the settled segment durations in sequence order. Each segment starts at the sum
- * of the durations before it; the constant decoder delay at each join is not corrected for.
- * `positionUrl` is the signed position URL, which only account principals get.
- */
 export function toNarrationTrackResponse(
   url: string,
   durations: readonly number[],

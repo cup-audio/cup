@@ -7,7 +7,6 @@
   ],
   "compilerOptions": {
     "types": ["../conversion-grants/worker-configuration.d.ts", "node", "vitest/globals"]
-    /* Modules */
   },
   "include": ["test/**/*", "**/*.test.ts"],
   "references": [{ "path": "./tsconfig.build.json" }]

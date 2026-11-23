@@ -10,7 +10,6 @@ import type {
 
 import { createHonoClient, type HonoClient } from "#src/hono-client.ts";
 
-/** Typed public API client; account requests use an authenticated scoped client. */
 export class ListenerApiClient {
   #honoClient: HonoClient;
   #baseUrl: string;
@@ -112,7 +111,6 @@ export class AuthenticatedRpcClient {
 
   async deleteConversion(params: ConversionParams) {
     return this.#honoClient.api.account.conversions[":conversionId"].$delete(
-      // Without a body, but the session-mutation guard still requires the JSON content type.
       { param: params, header: browserHeaders() },
       this.#options(),
     );

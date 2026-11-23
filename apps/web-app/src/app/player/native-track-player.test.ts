@@ -12,7 +12,6 @@ import { SAVE_RETRY_FAILURE_MESSAGE } from "#src/app/player/position-saves-machi
 import type { MediaSessionPort } from "#src/platform/media-session.ts";
 import { expect, test } from "#src/test-utils/component-test.ts";
 
-/** On Android the native player's own Media3 session reports to the system. */
 const NO_MEDIA_SESSION: MediaSessionPort = {
   setMetadata: () => undefined,
   setPlaybackState: () => undefined,
@@ -23,15 +22,9 @@ const NO_MEDIA_SESSION: MediaSessionPort = {
 const MEDIA_ERROR_MESSAGE = "Audio could not be played. Press Play to try again.";
 const TWELVE_HOURS_MILLISECONDS = 12 * 60 * 60 * 1_000;
 
-/**
- * The Android app's media playback plugin, as far as the page sees it: it records the commands it
- * receives, and tests emit the `state` events ExoPlayer's changes would send.
- */
 class FakeMediaPlaybackPlugin implements MediaPlaybackPlugin {
   readonly calls: Array<{ method: string; options?: unknown }> = [];
-  /** What `getState` answers, as the plugin's current state. */
   currentState: NativePlaybackState | null = null;
-  /** What removing the state listener rejects with, if anything. */
   listenerRemovalError: Error | null = null;
   private stateListener: ((state: NativePlaybackState) => void) | null = null;
 
@@ -83,13 +76,11 @@ class FakeMediaPlaybackPlugin implements MediaPlaybackPlugin {
     });
   }
 
-  /** ExoPlayer changed; the plugin reports its state. */
   emit(state: NativePlaybackState) {
     this.currentState = state;
     this.stateListener?.(state);
   }
 
-  /** The commands sent, without `getState`. */
   commands() {
     return this.calls.filter(({ method }) => method !== "getState");
   }
@@ -119,7 +110,6 @@ function createAudiobook(
     narrationDocument: { html: "<article></article>", synchronizationUnits: UNITS },
     segments: UNITS.map((_unit, sequence) => ({ sequence, status: "ready" as const })),
     coverImage: { url: `https://example.com/${title}/cover?token=fixture` },
-    // Units of 4, 6 and 5 seconds.
     narrationTrack: {
       url: `https://example.com/${title}/narration-track.mp3?token=fixture`,
       positionUrl: `https://example.com/api/audiobooks/${title}/position?token=fixture`,
@@ -155,13 +145,9 @@ function createHost({
   const plugin = new FakeMediaPlaybackPlugin();
   const saved: PlaybackPosition[] = [];
   const clock = { now: 1_000_000 };
-  /** The ticks that move a playing position on, which tests run in place of the timer. */
   const ticks = new Set<() => void>();
-  /** The page became visible again, which tests trigger in place of `visibilitychange`. */
   const visibility = new Set<() => void>();
-  /** The audiobooks the host fetched. */
   const fetched: string[] = [];
-  /** The listening positions written into the cached audiobooks, as `conversion unit+offset`. */
   const cached: string[] = [];
   let account = initialAccount;
   const nativeServices = {
@@ -241,7 +227,6 @@ function createHost({
   };
 }
 
-/** A state the plugin reports for the first audiobook, read at `positionReadAt`. */
 function stateOf(state: Partial<NativePlaybackState> = {}): NativePlaybackState {
   return {
     conversionId: "first",
@@ -259,7 +244,6 @@ function stateOf(state: Partial<NativePlaybackState> = {}): NativePlaybackState 
   };
 }
 
-/** Lets settled plugin calls run. */
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 test("loading the shown audiobook sets it in the plugin at its listening position, without playing", () => {
@@ -276,9 +260,7 @@ test("loading the shown audiobook sets it in the plugin at its listening positio
         subject: "user-1",
         trackUrl: "https://example.com/First/narration-track.mp3?token=fixture",
         positionUrl: "https://example.com/api/audiobooks/First/position?token=fixture",
-        // The page received the URLs with the audiobook, when it showed it.
         urlsIssuedAt: 1_000_000,
-        // The plugin saves listening positions, which it converts with each unit's start.
         timeline: [
           { synchronizationUnitId: "unit-1", startMilliseconds: 0 },
           { synchronizationUnitId: "unit-2", startMilliseconds: 4_000 },
@@ -326,7 +308,6 @@ test("Play, Pause, a seek and the skips go to the plugin, and the player shows t
     { method: "play" },
     { method: "pause" },
     { method: "seekTo", options: { positionMilliseconds: 14_999 } },
-    // The plugin skips from ExoPlayer's own position, which may be ahead of the page's.
     { method: "skipBy", options: { deltaMilliseconds: -15_000 } },
     { method: "seekTo", options: { positionMilliseconds: 10_000 } },
     { method: "play" },
@@ -350,7 +331,6 @@ test("while the plugin reports playing, the position moves on from the time it w
     currentUnitIndex: 1,
   });
 
-  // Waiting for data, the position stands still.
   plugin.emit(
     stateOf({
       isPlaying: true,
@@ -415,7 +395,6 @@ test("a playback error pauses with the message to press Play, and Play continues
 
   host.togglePlayback();
 
-  // ExoPlayer prepares the same item again where it stopped; the URL needs no renewal.
   expect(plugin.commands().at(-1)).toEqual({ method: "play" });
   expect(player().getSnapshot()).toMatchObject({ isPlaying: true, error: null });
 });
@@ -468,7 +447,6 @@ test("every state the plugin reports writes its listening position into the cach
 
   plugin.emit(stateOf({ isPlaying: true, positionMilliseconds: 6_000 }));
   plugin.emit(stateOf({ positionMilliseconds: 11_500 }));
-  // The last position of a native stop too, which the next Play on this page saves.
   plugin.emit(stateOf({ positionMilliseconds: 2_000, closedReason: "taskRemoved" }));
 
   expect(cached).toEqual(["first unit-2+2000", "first unit-3+1500", "first unit-1+2000"]);
@@ -482,7 +460,6 @@ test("saves that fail for a reason that can pass show plain words once the plugi
   plugin.emit(stateOf({ positionSave: { status: "failing" } }));
   expect(player().getSnapshot().error).toBeNull();
 
-  // A retry failed too, or saves have failed for the retry delay.
   plugin.emit(stateOf({ positionSave: { status: "stillFailing" } }));
   expect(player().getSnapshot().error).toBe(SAVE_RETRY_FAILURE_MESSAGE);
 
@@ -591,7 +568,6 @@ test("loading another audiobook sets it in the running session without closing i
   expect(plugin.commands().at(-1)).toMatchObject({
     options: { conversionId: "second", startPositionMilliseconds: 0 },
   });
-  // The first audiobook's late states no longer reach the page.
   plugin.emit(stateOf({ isPlaying: true, positionMilliseconds: 3_000 }));
   expect(player().getSnapshot()).toMatchObject({ isPlaying: false, positionMilliseconds: 0 });
 });
@@ -601,7 +577,6 @@ test("after a native stop the audiobook stays loaded at the last position, and t
   host.showConversion("first", FIRST);
   host.playShown();
 
-  // The listener swiped Cup from recents while it was paused.
   plugin.emit(stateOf({ positionMilliseconds: 8_000, closedReason: "taskRemoved" }));
   expect(player().getSnapshot()).toMatchObject({
     isPlaying: false,
@@ -609,7 +584,6 @@ test("after a native stop the audiobook stays loaded at the last position, and t
     error: null,
     needsNewTrackUrl: false,
   });
-  // The plugin dropped its item, so a skip only moves the position the next load starts from.
   player().skipBy(2_000);
   expect(player().getSnapshot().positionMilliseconds).toBe(10_000);
   host.play();
@@ -708,7 +682,6 @@ test("a page that starts while the plugin plays the listener's audiobook takes t
   expect(fetched).toEqual(["first"]);
   expect(host.getSnapshot().loaded).toMatchObject({ conversionId: "first", subject: "user-1" });
   expect(plugin.commands()).toEqual([]);
-  // The page shows the plugin's position, not the account's.
   expect(player().getSnapshot()).toMatchObject({ isPlaying: true, positionMilliseconds: 9_000 });
   host.togglePlayback();
   expect(plugin.commands()).toEqual([{ method: "pause" }]);

@@ -407,7 +407,6 @@ test("uses Gemini through AI Gateway and accounts for cached input and reasoning
           throw new Error("Expected a JSON request body");
         }
         const body: unknown = JSON.parse(init.body);
-        // Gemini rejects sampling parameters on upcoming models.
         expect(body).not.toHaveProperty("temperature");
         expect(body).toMatchObject({
           model: "gemini-3.8-flash",

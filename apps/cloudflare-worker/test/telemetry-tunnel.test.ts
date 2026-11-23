@@ -6,7 +6,6 @@ import { useWorker } from "#test/use-worker.ts";
 
 const TUNNEL_URL = "https://cup.audio/_/e";
 
-/** An envelope as the client SDK sends it: one error event of a signed-out listener. */
 function eventEnvelope(dsn: string, eventId: string): string {
   return [
     JSON.stringify({ event_id: eventId, dsn, sent_at: "2026-11-16T12:00:00.000Z" }),
@@ -19,7 +18,6 @@ function eventEnvelope(dsn: string, eventId: string): string {
   ].join("\n");
 }
 
-/** Waits for the `http.server` span of the tunnel request, which the Worker sends to `cup-worker`. */
 async function waitForTunnelRequestSpan(sentry: SentryStub): Promise<void> {
   await sentry.waitFor("the http.server span of /_/e", () =>
     sentry

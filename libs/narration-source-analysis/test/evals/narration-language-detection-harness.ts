@@ -20,13 +20,11 @@ export type NarrationLanguageDetectionCandidate = NarrationLanguageDetectionConf
 export type NarrationLanguageDetectionEvalInput = {
   caseId: string;
   sourceTitle: string;
-  /** The narration source material rebuilt from the case's committed selection golden. */
   sourceMaterialHtml: string;
   declaredLanguage?: DeclaredLanguage;
 };
 
 export type NarrationLanguageDetectionEvalOutput = {
-  /** The language subtag of the detected narration language, without the region rule's region. */
   language?: string;
   fallbackReason?: NarrationLanguageFallbackReason;
 };

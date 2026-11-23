@@ -101,10 +101,6 @@ test("adding account usage projections keeps identities and leaves them unprojec
   }
 });
 
-/**
- * Finds a migration by its journal tag without its number prefix, so renumbering it after a rebase
- * keeps the test valid; also returns the keys of all migrations that run before it.
- */
 function findMigration(name: string) {
   const keys = Object.keys(registryMigrations.migrations);
   const index = registryMigrations.journal.entries.findIndex((entry) =>

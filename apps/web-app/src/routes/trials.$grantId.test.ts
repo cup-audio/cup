@@ -57,7 +57,6 @@ test("renders grant-load-error", { tag: VISUAL_TAG }, async ({ mount, page }) =>
   await expect(
     component.getByRole("heading", { name: "The trial link could not be opened." }),
   ).toBeVisible();
-  // The server's trace ID, which the operator pastes into Sentry's search.
   await expect(component.getByText("Reference: 0af7651916cd43dd8448eb211c80319c")).toBeVisible();
   await expect(component).toHaveScreenshot("grant-load-error.png");
 
@@ -158,7 +157,6 @@ test("retrying a trial submission reuses its key and sends only the source URL",
   await component.getByRole("textbox", { name: "URL", exact: true }).fill(sourceUrl);
   for (const count of [1, 2]) {
     await component.getByRole("button", { name: "Listen" }).click();
-    // A server failure carries no message meant for users.
     await expect(component.getByRole("alert")).toHaveText("The conversion could not start.");
     await expect.poll(() => keys.length).toBe(count);
   }
@@ -167,12 +165,6 @@ test("retrying a trial submission reuses its key and sends only the source URL",
   expect(payloads).toEqual([{ sourceUrl }, { sourceUrl }]);
 });
 
-/**
- * Try again loads the trial page again as a new document, without the credential fragment, so the
- * reloaded page opens the Trial with the grant session instead of exchanging the credential again
- * ("renders an open Trial" shows that page). The gallery serves no app at the trial path, so the
- * reloaded document is answered with an empty page.
- */
 async function expectTryAgainToReloadTheTrialWithoutItsCredential(
   page: Page,
   pressTryAgain: () => Promise<void>,

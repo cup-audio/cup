@@ -5,7 +5,6 @@ import { followAccountSession, type TelemetryUser } from "#src/telemetry-user.ts
 const SUBJECT = "0b8e8f4c-6f1d-4a43-9a52-2f5d4bb0f6a1";
 const ACCOUNT_ID = "5d2c7a4e-1b9f-4c8e-8a3d-6e0f2b1c9d7a";
 
-/** A fake account session whose sign-in state the test changes, and whose account load it settles. */
 function createFakeAccountSession() {
   let subject: string | null = null;
   const listeners = new Set<() => void>();

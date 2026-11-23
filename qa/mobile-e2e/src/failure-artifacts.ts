@@ -4,24 +4,18 @@ import path from "node:path";
 import type { MobilePlatform } from "#src/app-device.ts";
 
 const PACKAGE_ROOT = path.resolve(import.meta.dirname, "..");
-/** Git-ignored; holds one folder per platform, with one folder per failed test of its last run. */
 const OUTPUT_FOLDER = path.join(PACKAGE_ROOT, "test-output");
-/** How long one capture may take, so a hung command cannot hold up the teardown for long. */
 const CAPTURE_TIMEOUT_MS = 20_000;
 
 export type FailureArtifact = {
-  /** The file name inside the test's folder, such as `screenshot.png`. */
   readonly fileName: string;
-  /** Reads the artifact's content; a rejection is written as the reason it is missing. */
   readonly capture: () => Promise<string | Buffer>;
 };
 
-/** Removes what the platform's previous run left, so the folder holds this run's failures only. */
 export async function clearFailureArtifacts(platform: MobilePlatform): Promise<void> {
   await fs.rm(path.join(OUTPUT_FOLDER, platform), { recursive: true, force: true });
 }
 
-/** A failed test's own folder, named after its spec file, its `describe` blocks and its name. */
 export function failureArtifactFolder(options: {
   platform: MobilePlatform;
   specFile: string;
@@ -31,11 +25,6 @@ export function failureArtifactFolder(options: {
   return path.join(OUTPUT_FOLDER, options.platform, spec, slugify(options.testNames.join(" ")));
 }
 
-/**
- * Captures each artifact in turn and writes it into `folder`. An artifact that fails or takes
- * longer than `CAPTURE_TIMEOUT_MS` is written as `<fileName>.missing.txt` with the reason, so one
- * broken capture never hides the others or the test's own error.
- */
 export async function writeFailureArtifacts(
   folder: string,
   artifacts: readonly FailureArtifact[],
@@ -54,16 +43,8 @@ export async function writeFailureArtifacts(
   }
 }
 
-/**
- * The artifacts every platform captures, in this order: the device log, which needs no Appium
- * session, then through the session the screenshot, the native page source and the WebView's DOM.
- * The WebView's DOM comes from the context the test was in when that is a WebView, otherwise from
- * Cup's WebView if the app shows one. Once the session leaves a capture unanswered, the remaining
- * session captures are skipped, so a wedged session costs one timeout, not one per artifact.
- */
 export function appiumFailureArtifacts(options: {
   driver: WebdriverIO.Browser;
-  /** Cup's WebView context, or undefined when the app shows none. */
   findWebViewContext: () => Promise<string | undefined>;
   readDeviceLog: () => Promise<string>;
 }): FailureArtifact[] {
