@@ -414,13 +414,13 @@ test("skips a visible headline that names the site and takes the source title fr
 });
 
 test.each([
-  '<h1 data-cup-visible-heading><a href="/">Masthead</a></h1>',
-  '<h1 data-cup-visible-heading><a href="https://publisher.example/?ref=logo">Masthead</a></h1>',
-  '<a href="/"><h1 data-cup-visible-heading>Masthead</h1></a>',
-])("skips a visible headline that links to the front page: %s", (mastheadHtml) => {
+  '<h1 data-cup-visible-heading><a href="/">Site name</a></h1>',
+  '<h1 data-cup-visible-heading><a href="https://publisher.example/?ref=logo">Site name</a></h1>',
+  '<a href="/"><h1 data-cup-visible-heading>Site name</h1></a>',
+])("skips a visible headline that links to the front page: %s", (siteHeadingHtml) => {
   expect(
     prepareLoadedSourcePage({
-      bodyHtml: `<header>${mastheadHtml}<a href="/about">About</a></header><main><p>Kicker</p><h1 data-cup-visible-heading>Article headline</h1><p>First paragraph.</p></main>`,
+      bodyHtml: `<header>${siteHeadingHtml}<a href="/about">About</a></header><main><p>Kicker</p><h1 data-cup-visible-heading>Article headline</h1><p>First paragraph.</p></main>`,
       documentTitle: "Document title",
       fetchedUrl: SOURCE_URL,
       responseStatus: 200,

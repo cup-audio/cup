@@ -44,7 +44,7 @@ _Avoid_: headline alone, first heading
 
 ## site heading
 
-A top-level heading that names the site rather than the source content, such as a blog's masthead. It is never the visible headline and is left out of audiobook source material.
+A top-level heading that names the site rather than the source content, such as a blog's name at the top of every page. It is never the visible headline and is left out of audiobook source material.
 
 _Avoid_: masthead, site title
 

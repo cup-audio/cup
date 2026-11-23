@@ -4,7 +4,7 @@ status: partially superseded by ADR 0035
 
 # Cut source material at the visible headline and carry the source subtitle in the narration document
 
-[CUP-103](https://linear.app/cup-audio/issue/CUP-103/give-tracks-a-title-when-the-article-has-no-title-heading) refines the visible headline (2026-11-23): the browser marks every `<h1>` that renders visibly, and source preparation skips [site headings](../GLOSSARY.md#site-heading), such as a blog's masthead, before taking the first as the visible headline. Without one, the source title comes from the page metadata title before the document title, with the site name removed ([source preparation](../architecture/conversion.md)).
+[CUP-103](https://linear.app/cup-audio/issue/CUP-103/give-tracks-a-title-when-the-article-has-no-title-heading) refines the visible headline (2026-11-23): the browser marks every `<h1>` that renders visibly, and source preparation skips [site headings](../GLOSSARY.md#site-heading), such as a blog's name at the top of every page, before taking the first as the visible headline. Without one, the source title comes from the page metadata title before the document title, with the site name removed ([source preparation](../architecture/conversion.md)).
 
 [ADR 0035](0035-render-the-narration-document-on-request-from-the-stored-narration-source-material-with-versioned-frozen-segmentation.md) amends "the narration document is the only carrier" (2026-11-20, [cup-audio/cup#496](https://github.com/cup-audio/cup/issues/496)): a conversion prepared since then also records its source subtitle in the audiobook manifest, as an input for rendering its narration document on request. The listener API and the stores still carry the source title alone. The original decision follows.
 
