@@ -153,7 +153,7 @@ test("waits for rendered narration content without requiring an h1", async () =>
 
 test("takes the source title from the visible headline and cuts the source material there", () => {
   const sourceMaterial = prepareLoadedSourcePage({
-    bodyHtml: `<h1 class="hidden">Hidden page heading</h1><main><p class="kicker">Kicker</p><header><a href="/hub">Hub</a><h1 class="title" data-cup-visible-headline>  The visible
+    bodyHtml: `<h1 class="hidden">Hidden page heading</h1><main><p class="kicker">Kicker</p><header><a href="/hub">Hub</a><h1 class="title" data-cup-visible-heading>  The visible
       headline </h1><p>Summary line</p></header><p>First paragraph.</p></main>`,
     documentTitle: "Document title | Publisher",
     fetchedUrl: SOURCE_URL,
@@ -170,7 +170,7 @@ test("takes the source title from the visible headline and cuts the source mater
 test("removes every visible headline mark from the source material", () => {
   const { html } = prepareLoadedSourcePage({
     bodyHtml:
-      "<main><h1 data-cup-visible-headline>Visible headline</h1><p>First paragraph.</p><h1 data-cup-visible-headline>Later heading</h1><p>Second paragraph.</p></main>",
+      "<main><h1 data-cup-visible-heading>Visible headline</h1><p>First paragraph.</p><h1 data-cup-visible-heading>Later heading</h1><p>Second paragraph.</p></main>",
     documentTitle: "Document title",
     fetchedUrl: SOURCE_URL,
     responseStatus: 200,
@@ -184,7 +184,7 @@ test("removes every visible headline mark from the source material", () => {
 test("removes screen-reader-only content from the source material", () => {
   const { html } = prepareLoadedSourcePage({
     bodyHtml:
-      '<main><h1 data-cup-visible-headline>Visible headline</h1><p>We paused <a href="/training">internal training⁠<span data-cup-screen-reader-only>(opens in a new window)</span></a> for now.</p></main>',
+      '<main><h1 data-cup-visible-heading>Visible headline</h1><p>We paused <a href="/training">internal training⁠<span data-cup-screen-reader-only>(opens in a new window)</span></a> for now.</p></main>',
     documentTitle: "Document title",
     fetchedUrl: SOURCE_URL,
     responseStatus: 200,
@@ -198,7 +198,7 @@ test("removes screen-reader-only content from the source material", () => {
 test("leaves screen-reader-only content out of the source title", () => {
   const { title } = prepareLoadedSourcePage({
     bodyHtml:
-      "<main><h1 data-cup-visible-headline>Visible headline<span data-cup-screen-reader-only>, article</span></h1><p>First paragraph.</p></main>",
+      "<main><h1 data-cup-visible-heading>Visible headline<span data-cup-screen-reader-only>, article</span></h1><p>First paragraph.</p></main>",
     documentTitle: "Document title",
     fetchedUrl: SOURCE_URL,
     responseStatus: 200,
@@ -226,7 +226,7 @@ test("falls back to the document title and cuts nothing without a visible headli
 
 test("detects a source subtitle that equals a metadata description and removes it", () => {
   const sourceMaterial = prepareLoadedSourcePage({
-    bodyHtml: `<main><header><h1 data-cup-visible-headline>Source title</h1><div class="lead"><p class="text-lg">  A short
+    bodyHtml: `<main><header><h1 data-cup-visible-heading>Source title</h1><div class="lead"><p class="text-lg">  A short
       summary line. </p></div></header><p>First paragraph.</p></main>`,
     documentTitle: "Source title | Publisher",
     metadataDescriptions: ["A teaser", "A short summary line."],
@@ -250,7 +250,7 @@ test.each([
   ["a class word on the wrapper", '<div class="ArtDesc GNDescCopy"><p>Summary line</p></div>'],
 ])("detects a source subtitle marked by %s", (_description, subtitleHtml) => {
   const sourceMaterial = prepareLoadedSourcePage({
-    bodyHtml: `<main><h1 data-cup-visible-headline>Source title</h1>${subtitleHtml}<p>First paragraph.</p></main>`,
+    bodyHtml: `<main><h1 data-cup-visible-heading>Source title</h1>${subtitleHtml}<p>First paragraph.</p></main>`,
     documentTitle: "Source title | Publisher",
     fetchedUrl: SOURCE_URL,
     responseStatus: 200,
@@ -268,7 +268,7 @@ test.each([
   ["a word that only contains a subtitle word", '<p class="descendant">Teaser line</p>'],
   ["a subtitle word on an attribute that is not inspected", '<p id="summary">Teaser line</p>'],
 ])("detects no source subtitle for %s", (_description, candidateHtml) => {
-  const bodyHtml = `<main><h1 data-cup-visible-headline>Source title</h1>${candidateHtml}<p>First paragraph.</p></main>`;
+  const bodyHtml = `<main><h1 data-cup-visible-heading>Source title</h1>${candidateHtml}<p>First paragraph.</p></main>`;
 
   expect(
     prepareLoadedSourcePage({
@@ -301,7 +301,7 @@ test.each([
   ],
 ])("skips %s before the source subtitle candidate", (_description, blockHtml) => {
   const sourceMaterial = prepareLoadedSourcePage({
-    bodyHtml: `<main><h1 data-cup-visible-headline>Source title</h1><p>${blockHtml}</p><p>Summary line</p><p>First paragraph.</p></main>`,
+    bodyHtml: `<main><h1 data-cup-visible-heading>Source title</h1><p>${blockHtml}</p><p>Summary line</p><p>First paragraph.</p></main>`,
     documentTitle: "Source title",
     metadataDescriptions: ["Summary line"],
     fetchedUrl: SOURCE_URL,
@@ -319,7 +319,7 @@ test.each([
 test("detects a source subtitle that only mentions a date in an inline time element", () => {
   const sourceMaterial = prepareLoadedSourcePage({
     bodyHtml:
-      '<main><h1 data-cup-visible-headline>Source title</h1><p class="summary">What changed after the vote on <time datetime="2026-01-09">January 9</time>.</p><p>First paragraph.</p></main>',
+      '<main><h1 data-cup-visible-heading>Source title</h1><p class="summary">What changed after the vote on <time datetime="2026-01-09">January 9</time>.</p><p>First paragraph.</p></main>',
     documentTitle: "Source title",
     fetchedUrl: SOURCE_URL,
     responseStatus: 200,
@@ -337,7 +337,7 @@ test.each(["article-author", "byline", "PostDate"])(
   "skips a block whose class names it %s before the source subtitle candidate",
   (className) => {
     const sourceMaterial = prepareLoadedSourcePage({
-      bodyHtml: `<main><h1 data-cup-visible-headline>Source title</h1><p class="${className}">Jane Doe, Publisher</p><p class="summary">Summary line</p></main>`,
+      bodyHtml: `<main><h1 data-cup-visible-heading>Source title</h1><p class="${className}">Jane Doe, Publisher</p><p class="summary">Summary line</p></main>`,
       documentTitle: "Source title",
       fetchedUrl: SOURCE_URL,
       responseStatus: 200,
@@ -350,7 +350,7 @@ test.each(["article-author", "byline", "PostDate"])(
 test("detects no source subtitle when the candidate repeats the source title", () => {
   const sourceMaterial = prepareLoadedSourcePage({
     bodyHtml:
-      '<main><h1 data-cup-visible-headline>Source title</h1><p class="summary">Source  title</p><p>First paragraph.</p></main>',
+      '<main><h1 data-cup-visible-heading>Source title</h1><p class="summary">Source  title</p><p>First paragraph.</p></main>',
     documentTitle: "Source title",
     metadataDescriptions: ["Source title"],
     fetchedUrl: SOURCE_URL,
@@ -367,7 +367,7 @@ test("detects no source subtitle when the candidate repeats the source title", (
 test("detects no source subtitle when the metadata description only nearly equals the candidate", () => {
   const sourceMaterial = prepareLoadedSourcePage({
     bodyHtml:
-      "<main><h1 data-cup-visible-headline>Source title</h1><p>Polls show tight races, making it hard to tell.</p><p>First paragraph.</p></main>",
+      "<main><h1 data-cup-visible-heading>Source title</h1><p>Polls show tight races, making it hard to tell.</p><p>First paragraph.</p></main>",
     documentTitle: "Source title",
     metadataDescriptions: ["Polls show tight races, making it difficult to tell."],
     fetchedUrl: SOURCE_URL,
@@ -381,7 +381,7 @@ test("detects no source subtitle when the metadata description only nearly equal
 test("tries no further block when the first candidate is not a source subtitle", () => {
   const sourceMaterial = prepareLoadedSourcePage({
     bodyHtml:
-      '<main><h1 data-cup-visible-headline>Source title</h1><p id="siteSub">From the free encyclopedia</p><p class="summary">Summary line</p></main>',
+      '<main><h1 data-cup-visible-heading>Source title</h1><p id="siteSub">From the free encyclopedia</p><p class="summary">Summary line</p></main>',
     documentTitle: "Source title",
     metadataDescriptions: ["Summary line"],
     fetchedUrl: SOURCE_URL,
@@ -395,9 +395,117 @@ test("tries no further block when the first candidate is not a source subtitle",
   });
 });
 
+test("skips a visible headline that names the site and takes the source title from page metadata", () => {
+  expect(
+    prepareLoadedSourcePage({
+      bodyHtml:
+        "<header><h1 data-cup-visible-heading>Example Weblog</h1></header><main><p>First paragraph.</p></main>",
+      documentTitle: "Post title | Example Weblog",
+      metadataTitle: "Post title",
+      siteName: "Example Weblog",
+      fetchedUrl: SOURCE_URL,
+      responseStatus: 200,
+    }),
+  ).toEqual({
+    fetchedUrl: SOURCE_URL,
+    html: "<main><p>First paragraph.</p></main>",
+    title: "Post title",
+  });
+});
+
+test.each([
+  '<h1 data-cup-visible-heading><a href="/">Site name</a></h1>',
+  '<h1 data-cup-visible-heading><a href="https://publisher.example/?ref=logo">Site name</a></h1>',
+  '<a href="/"><h1 data-cup-visible-heading>Site name</h1></a>',
+])("skips a visible headline that links to the front page: %s", (siteHeadingHtml) => {
+  expect(
+    prepareLoadedSourcePage({
+      bodyHtml: `<header>${siteHeadingHtml}<a href="/about">About</a></header><main><p>Kicker</p><h1 data-cup-visible-heading>Article headline</h1><p>First paragraph.</p></main>`,
+      documentTitle: "Document title",
+      fetchedUrl: SOURCE_URL,
+      responseStatus: 200,
+    }),
+  ).toEqual({
+    fetchedUrl: SOURCE_URL,
+    html: "<main><p>First paragraph.</p></main>",
+    title: "Article headline",
+  });
+});
+
+test("keeps a visible headline that links to the article itself", () => {
+  const { title } = prepareLoadedSourcePage({
+    bodyHtml:
+      '<main><h1 data-cup-visible-heading><a href="/story">Article headline</a></h1><p>First paragraph.</p></main>',
+    documentTitle: "Document title",
+    siteName: "Publisher",
+    fetchedUrl: SOURCE_URL,
+    responseStatus: 200,
+  });
+
+  expect(title).toBe("Article headline");
+});
+
+test.each([
+  {
+    bodyHtml:
+      '<main><h1 data-cup-visible-heading><a href="/">Front page headline</a></h1><p>First paragraph.</p></main>',
+    fetchedUrl: "https://publisher.example/",
+  },
+  {
+    bodyHtml:
+      '<main><a href="/"><h1 data-cup-visible-heading>Front page headline</h1><p>Teaser.</p></a><p>First paragraph.</p></main>',
+    fetchedUrl: SOURCE_URL,
+  },
+])(
+  "keeps a visible headline linking to the front page that is not a site heading: $bodyHtml",
+  ({ bodyHtml, fetchedUrl }) => {
+    const { title } = prepareLoadedSourcePage({
+      bodyHtml,
+      documentTitle: "Document title",
+      fetchedUrl,
+      responseStatus: 200,
+    });
+
+    expect(title).toBe("Front page headline");
+  },
+);
+
+test.each([
+  ["Post title | Example Weblog", "Post title"],
+  ["Example Weblog — Post title", "Post title"],
+  ["Post title - with a dash | Example Weblog", "Post title - with a dash"],
+  ["Example Weblog", "Example Weblog"],
+])(
+  "takes the document title %j without the site name as source title without page metadata title",
+  (documentTitle, expectedTitle) => {
+    const { title } = prepareLoadedSourcePage({
+      bodyHtml: "<main><p>First paragraph.</p></main>",
+      documentTitle,
+      siteName: "Example Weblog",
+      fetchedUrl: SOURCE_URL,
+      responseStatus: 200,
+    });
+
+    expect(title).toBe(expectedTitle);
+  },
+);
+
+test("prefers the document title over a page metadata title that names the site", () => {
+  const { title } = prepareLoadedSourcePage({
+    bodyHtml: "<main><p>First paragraph.</p></main>",
+    documentTitle: "Post title | Example’s Weblog",
+    metadataTitle: "Example's weblog",
+    siteName: "Example’s Weblog",
+    fetchedUrl: SOURCE_URL,
+    responseStatus: 200,
+  });
+
+  expect(title).toBe("Post title");
+});
+
 test("leaves the subtitle field absent when the page has no source subtitle", () => {
   const sourceMaterial = prepareLoadedSourcePage({
-    bodyHtml: "<main><h1 data-cup-visible-headline>Source title</h1><p>First paragraph.</p></main>",
+    bodyHtml: "<main><h1 data-cup-visible-heading>Source title</h1><p>First paragraph.</p></main>",
     documentTitle: "Source title",
     fetchedUrl: SOURCE_URL,
     responseStatus: 200,
@@ -432,7 +540,7 @@ test("uses the JavaScript-rendered source page when the static page has no sourc
       return javaScriptEnabled
         ? {
             bodyHtml:
-              "<main><h1 data-cup-visible-headline>Rendered document</h1><p>Complete source text.</p></main>",
+              "<main><h1 data-cup-visible-heading>Rendered document</h1><p>Complete source text.</p></main>",
             documentTitle: "Rendered document | Publisher",
             fetchedUrl: SOURCE_URL,
             responseStatus: 200,
@@ -485,14 +593,14 @@ test("uses the source page with more source content when both loads are usable",
       javaScriptEnabled
         ? {
             bodyHtml:
-              "<main><h1 data-cup-visible-headline>Rendered document</h1><p>First paragraph.</p><p>Second paragraph.</p></main>",
+              "<main><h1 data-cup-visible-heading>Rendered document</h1><p>First paragraph.</p><p>Second paragraph.</p></main>",
             documentTitle: "Rendered document | Publisher",
             fetchedUrl: SOURCE_URL,
             responseStatus: 200,
           }
         : {
             bodyHtml:
-              "<main><h1 data-cup-visible-headline>Static document</h1><p>Preview.</p></main>",
+              "<main><h1 data-cup-visible-heading>Static document</h1><p>Preview.</p></main>",
             documentTitle: "Static document | Publisher",
             fetchedUrl: SOURCE_URL,
             responseStatus: 200,
@@ -517,7 +625,7 @@ test.each([
       browser: UNUSED_BROWSER,
       url: SOURCE_URL,
       loadSourcePage: async ({ javaScriptEnabled }) => ({
-        bodyHtml: `<main><h1 data-cup-visible-headline>Source title</h1><p class="summary">${javaScriptEnabled ? "Rendered summary" : "Static summary"}</p>${hasRenderedLoadMoreText === javaScriptEnabled ? paragraphs : "<p>Preview.</p>"}</main>`,
+        bodyHtml: `<main><h1 data-cup-visible-heading>Source title</h1><p class="summary">${javaScriptEnabled ? "Rendered summary" : "Static summary"}</p>${hasRenderedLoadMoreText === javaScriptEnabled ? paragraphs : "<p>Preview.</p>"}</main>`,
         documentTitle: "Source title | Publisher",
         fetchedUrl: SOURCE_URL,
         responseStatus: 200,
@@ -538,7 +646,7 @@ test("keeps the static source page when rendering adds only dynamic page chrome"
     "<article><p>This complete source paragraph contains enough narration text to make a small dynamic posting count immaterial when the two source pages are compared.</p><ul><li>Open comments</li></ul></article>";
   const staticBodyHtml = staticSourceMaterialHtml.replace(
     "<article>",
-    "<article><h1 data-cup-visible-headline>Source title</h1>",
+    "<article><h1 data-cup-visible-heading>Source title</h1>",
   );
   const sourceMaterial = await prepareSourceMaterial({
     browser: UNUSED_BROWSER,
@@ -571,7 +679,7 @@ test("uses the static source page when the JavaScript-enabled load fails", async
 
       return Promise.resolve({
         bodyHtml:
-          "<main><h1 data-cup-visible-headline>Static document</h1><p>Complete source text.</p></main>",
+          "<main><h1 data-cup-visible-heading>Static document</h1><p>Complete source text.</p></main>",
         documentTitle: "Static document | Publisher",
         fetchedUrl: SOURCE_URL,
         responseStatus: 200,
@@ -706,7 +814,7 @@ test("takes the cover image from the rendered load even when the static load win
     url: SOURCE_URL,
     loadSourcePage: async ({ javaScriptEnabled }) => ({
       bodyHtml:
-        "<main><h1 data-cup-visible-headline>Source title</h1><p>Complete source text.</p></main>",
+        "<main><h1 data-cup-visible-heading>Source title</h1><p>Complete source text.</p></main>",
       documentTitle: "Source title | Publisher",
       coverImage: {
         url: javaScriptEnabled
@@ -732,7 +840,7 @@ test("keeps the static load's cover image when the rendered load declares none",
     url: SOURCE_URL,
     loadSourcePage: async ({ javaScriptEnabled }) => ({
       bodyHtml:
-        "<main><h1 data-cup-visible-headline>Source title</h1><p>Complete source text.</p></main>",
+        "<main><h1 data-cup-visible-heading>Source title</h1><p>Complete source text.</p></main>",
       documentTitle: "Source title | Publisher",
       ...(javaScriptEnabled
         ? {}
@@ -912,8 +1020,8 @@ test("takes the declared language from the source page load it keeps", async () 
     url: SOURCE_URL,
     loadSourcePage: async ({ javaScriptEnabled }) => ({
       bodyHtml: javaScriptEnabled
-        ? "<main><h1 data-cup-visible-headline>Source title</h1><p>Short.</p></main>"
-        : "<main><h1 data-cup-visible-headline>Source title</h1><p>The complete and much longer source text.</p></main>",
+        ? "<main><h1 data-cup-visible-heading>Source title</h1><p>Short.</p></main>"
+        : "<main><h1 data-cup-visible-heading>Source title</h1><p>The complete and much longer source text.</p></main>",
       documentTitle: "Source title | Publisher",
       declaredLanguage: { htmlLang: javaScriptEnabled ? "en-US" : "de-AT" },
       fetchedUrl: SOURCE_URL,
@@ -961,14 +1069,14 @@ test("carries the fetched URL of the kept load to the source material", async ()
       javaScriptEnabled
         ? {
             bodyHtml:
-              "<main><h1 data-cup-visible-headline>Rendered document</h1><p>First paragraph.</p><p>Second paragraph.</p></main>",
+              "<main><h1 data-cup-visible-heading>Rendered document</h1><p>First paragraph.</p><p>Second paragraph.</p></main>",
             documentTitle: "Rendered document | Publisher",
             fetchedUrl: "https://publisher.example/rendered",
             responseStatus: 200,
           }
         : {
             bodyHtml:
-              "<main><h1 data-cup-visible-headline>Static document</h1><p>Preview.</p></main>",
+              "<main><h1 data-cup-visible-heading>Static document</h1><p>Preview.</p></main>",
             documentTitle: "Static document | Publisher",
             fetchedUrl: "https://publisher.example/static",
             responseStatus: 200,

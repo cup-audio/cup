@@ -1,0 +1,269 @@
+<html>
+  <head>
+    <title>External sandboxes for coding agents</title>
+  </head>
+  <body>
+    <div id="smallhead">
+      <div id="smallhead-inner">
+        <a id="smallhead-about" href="/newsletters/">Newsletter</a>
+      </div>
+    </div>
+
+    <div id="sponsored-banner" class="sponsor-scheme-sky">
+      <div id="sponsored-banner-inner">
+        <strong class="sponsored-label">Sponsored by:</strong> WorkOS — Auth.md: signup built for
+        agents.
+        <a
+          class="sponsor-learn-more-label"
+          href="https://10xn.link/simon-workos"
+          rel="sponsored noopener"
+          target="_blank"
+          >See how it works</a
+        >
+      </div>
+    </div>
+
+    <div id="wrapper">
+      <div id="primary">
+        <div class="entry entryPage">
+          <p class="mobile-date-eyebrow">17th November 2026 - Link Blog</p>
+
+          <div data-permalink-context="/2026/Nov/17/external-sandboxes-for-coding-agents/">
+            <p>
+              <strong
+                ><a href="https://blog.primeradiant.com/external-sandboxes-for-coding-agents/"
+                  >External sandboxes for coding agents</a
+                ></strong
+              >. I've been exploring new ways to sandbox code that is executed by agents, with a
+              focus on making it safer to try out local models without worrying that a mistake or
+              prompt injection attack might cause them to take damaging actions on a machine.
+            </p>
+            <p>
+              I worked on this project with <a href="https://primeradiant.com">Prime Radiant</a>,
+              the AI research lab behind Superpowers and
+              <a href="https://github.com/orgs/prime-radiant-inc/repositories">other projects</a>.
+            </p>
+            <p>
+              <a href="https://blog.primeradiant.com/external-sandboxes-for-coding-agents/"
+                >My post</a
+              >
+              on the Prime Radiant blog introduces the <strong>external sandbox</strong> pattern,
+              where code executed by the agent runs inside a dedicated sandbox while the agent
+              itself lives outside of that sandbox.
+            </p>
+            <p>To demonstrate this pattern we've released three sandbox server implementations:</p>
+            <ul>
+              <li>
+                <a href="https://github.com/prime-radiant-inc/external-sandbox-v86"
+                  >external-sandbox-v86</a
+                >
+                runs a Node.js server which then uses
+                <a href="https://github.com/copy/v86">v86</a> to run Alpine Linux inside
+                WebAssembly.
+              </li>
+              <li>
+                <a href="https://github.com/prime-radiant-inc/external-sandbox-container"
+                  >external-sandbox-container</a
+                >
+                is a Python web server which runs the sandbox in Alpine Linux inside an Apple
+                Containers instance.
+              </li>
+              <li>
+                <a href="https://github.com/prime-radiant-inc/external-sandbox-quicksand"
+                  >external-sandbox-quicksand</a
+                >
+                is another Python web server, this time using Microsoft's
+                <a href="https://github.com/microsoft/quicksand">Quicksand</a> sandboxing library,
+                which bundles QEMU <em>and</em> Alpine Linux in a Python package!
+              </li>
+            </ul>
+            <p>
+              Each of these implementations offers the same localhost API. You can then configure
+              Pi, Claude Code, or Codex to send API calls to that sandbox any time they want to
+              execute code.
+            </p>
+            <p>
+              The sandboxes also include an optional HTTP/HTTPS allow-list proxy, so you can control
+              exactly which hosts your agent's code is allowed to communicate with - plus a
+              credential replacement mechanism to make authenticated API calls without sharing a
+              secret with the agent. Here's the UI you can use to reconfigure that proxy while the
+              sandbox is still running:
+            </p>
+            <p>
+              <img
+                alt="The network policy page with allowed destinations, the policy JSON editor and recent proxy activity"
+                src="https://static.simonwillison.net/static/2026/sandbox-proxy.png"
+              />
+            </p>
+            <p>
+              I continue to be fascinated by the challenge of safely running untrusted code. This
+              external sandbox pattern provides a neat way to experiment with different approaches.
+            </p>
+          </div>
+          <div class="entryFooter">
+            Posted <a href="/2026/Nov/17/">17th November 2026</a> at 10:52 pm
+          </div>
+        </div>
+
+        <div class="recent-articles">
+          <h2>Recent articles</h2>
+          <ul class="bullets">
+            <li>
+              <a href="/2026/Nov/17/datasette-lite/"
+                >Running the full server-side Datasette Python app in the browser with service
+                workers and Pyodide</a
+              >
+              - 17th November 2026
+            </li>
+
+            <li>
+              <a href="/2026/Nov/9/mysterious-beeps/"
+                >Locating the source of a mysterious beep with Claude</a
+              >
+              - 9th November 2026
+            </li>
+
+            <li>
+              <a href="/2026/Nov/9/details-summary/"
+                >Hide your slop PR descriptions behind &lt;details&gt;&lt;summary&gt;</a
+              >
+              - 9th November 2026
+            </li>
+
+            <li>
+              <a href="/2026/Nov/3/qwen-can-interpret-model-weights/"
+                >Qwen 3.8 27B on my laptop can interpret model weights, too</a
+              >
+              - 3rd November 2026
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <div id="secondary">
+        <div class="metabox">
+          <p class="this-is">
+            This is a <strong>link post</strong> by Simon Willison, posted on
+            <a href="/2026/Nov/17/">17th November 2026</a>.
+          </p>
+
+          <a class="item-tag" href="/tags/sandboxing/" rel="tag">
+            sandboxing
+            <span>59</span>
+          </a>
+
+          <a class="item-tag" href="/tags/security/" rel="tag">
+            security
+            <span>647</span>
+          </a>
+
+          <a class="item-tag" href="/tags/ai/" rel="tag">
+            ai
+            <span>2,334</span>
+          </a>
+
+          <a class="item-tag" href="/tags/webassembly/" rel="tag">
+            webassembly
+            <span>137</span>
+          </a>
+
+          <a class="item-tag" href="/tags/generative-ai/" rel="tag">
+            generative-ai
+            <span>2,072</span>
+          </a>
+
+          <a class="item-tag" href="/tags/llms/" rel="tag">
+            llms
+            <span>2,036</span>
+          </a>
+
+          <a class="item-tag" href="/tags/coding-agents/" rel="tag">
+            coding-agents
+            <span>268</span>
+          </a>
+
+          <a class="item-tag" href="/tags/claude-code/" rel="tag">
+            claude-code
+            <span>136</span>
+          </a>
+
+          <a class="item-tag" href="/tags/codex/" rel="tag">
+            codex
+            <span>62</span>
+          </a>
+
+          <a class="item-tag" href="/tags/pi/" rel="tag">
+            pi
+            <span>7</span>
+          </a>
+
+          <section
+            style="
+              /* .promo */
+              border-radius: 8px;
+              margin: 1.5rem 0;
+              padding: 1rem 1.25rem;
+              /* .variant-a */
+              border: 2px solid #6c3eb9;
+            "
+          >
+            <h3 style="/* h3 */ margin: 0 0 0.5rem; font-size: 1.25rem">Monthly briefing</h3>
+            <p style="/* p */ margin: 0 0 1rem; line-height: 1.4">
+              Sponsor me for <strong>$10/month</strong> and get a curated email digest of the
+              month's most important LLM developments.
+            </p>
+            <p style="/* p */ margin: 0 0 1rem; line-height: 1.4">Pay me to send you less!</p>
+            <a
+              href="https://github.com/sponsors/simonw/"
+              style="
+                /* a.button */
+                display: inline-block;
+                padding: 0.5rem 1rem;
+                background: #6c3eb9;
+                color: #fff;
+                text-decoration: none;
+                border-radius: 4px;
+                font-weight: 600;
+              "
+            >
+              Sponsor &amp; subscribe
+            </a>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <div id="ft">
+      <ul>
+        <li><a href="/about/#disclosures">Disclosures</a></li>
+        <li><a href="/about/#about-site">Colophon</a></li>
+        <li>©</li>
+        <li><a href="/2002/">2002</a></li>
+        <li><a href="/2003/">2003</a></li>
+        <li><a href="/2004/">2004</a></li>
+        <li><a href="/2005/">2005</a></li>
+        <li><a href="/2006/">2006</a></li>
+        <li><a href="/2007/">2007</a></li>
+        <li><a href="/2008/">2008</a></li>
+        <li><a href="/2009/">2009</a></li>
+        <li><a href="/2010/">2010</a></li>
+        <li><a href="/2011/">2011</a></li>
+        <li><a href="/2012/">2012</a></li>
+        <li><a href="/2013/">2013</a></li>
+        <li><a href="/2014/">2014</a></li>
+        <li><a href="/2015/">2015</a></li>
+        <li><a href="/2016/">2016</a></li>
+        <li><a href="/2017/">2017</a></li>
+        <li><a href="/2018/">2018</a></li>
+        <li><a href="/2019/">2019</a></li>
+        <li><a href="/2020/">2020</a></li>
+        <li><a href="/2021/">2021</a></li>
+        <li><a href="/2022/">2022</a></li>
+        <li><a href="/2023/">2023</a></li>
+        <li><a href="/2024/">2024</a></li>
+        <li><a href="/2025/">2025</a></li>
+        <li><a href="/2026/">2026</a></li>
+      </ul>
+    </div>
+  </body>
+</html>

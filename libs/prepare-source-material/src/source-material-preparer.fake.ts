@@ -1,7 +1,7 @@
 import {
   assertPublicSourceUrl,
   prepareLoadedSourcePage,
-  VISIBLE_HEADLINE_ATTRIBUTE,
+  VISIBLE_HEADING_ATTRIBUTE,
   type CoverImageDeclaration,
   type DeclaredLanguage,
   type SourceMaterialPreparer,
@@ -28,7 +28,7 @@ export function createControlledSourceMaterialPreparer({
     }
 
     return prepareLoadedSourcePage({
-      bodyHtml: html.replace("<h1", `<h1 ${VISIBLE_HEADLINE_ATTRIBUTE}`),
+      bodyHtml: html.replace("<h1", `<h1 ${VISIBLE_HEADING_ATTRIBUTE}`),
       documentTitle: "Controlled source fixture",
       ...(coverImage === undefined ? {} : { coverImage }),
       ...(declaredLanguage === undefined ? {} : { declaredLanguage }),
