@@ -10,6 +10,8 @@ const OTHER_SUBJECT = "70fcf2d9-63c5-48be-b897-d3670f24ed43";
 const GOOGLE_ISSUER = "https://accounts.google.com";
 const GOOGLE_SUBJECT = "qa-google";
 const APPLE_SUBJECT = "000123.qa-apple.0456";
+const APPLE_ISSUER = "https://appleid.apple.com";
+const APPLE_NATIVE_CLIENT_ID = "audio.cup.app";
 const READER_EMAIL = "reader@example.test";
 const IOS_AUTH_CALLBACK_URL = "audio.cup.app://auth/callback";
 const SUPABASE_API_VERSION = "2024-01-01";
@@ -214,6 +216,30 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
       }),
     );
   };
+  const issueAppleCredential = async (
+    request: http.IncomingMessage,
+    response: http.ServerResponse,
+  ) => {
+    const body = await readJson(request);
+    if (!body || typeof body !== "object" || !("nonce" in body) || typeof body.nonce !== "string") {
+      throw new Error("Invalid QA Apple credential request");
+    }
+    const now = nowSeconds();
+    response.end(
+      JSON.stringify({
+        identityToken: sign({
+          iss: APPLE_ISSUER,
+          aud: APPLE_NATIVE_CLIENT_ID,
+          sub: APPLE_SUBJECT,
+          email: appleEmail,
+          nonce: body.nonce,
+          iat: now,
+          exp: now + 300,
+        }),
+        authorizationCode: `qa-apple-code-${crypto.randomUUID()}`,
+      }),
+    );
+  };
   const exchange = async (
     url: URL,
     request: http.IncomingMessage,
@@ -331,7 +357,7 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
       !body ||
       typeof body !== "object" ||
       !("provider" in body) ||
-      body.provider !== "google" ||
+      (body.provider !== "google" && body.provider !== "apple") ||
       !("id_token" in body) ||
       typeof body.id_token !== "string" ||
       !("nonce" in body) ||
@@ -340,14 +366,20 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
       throw new Error("Invalid ID token exchange");
     }
     const claims = verify(body.id_token);
-    if (claims?.["iss"] !== GOOGLE_ISSUER) {
+    const { provider } = body;
+    if (
+      claims === undefined ||
+      (provider === "google"
+        ? claims["iss"] !== GOOGLE_ISSUER
+        : claims["iss"] !== APPLE_ISSUER || claims["aud"] !== APPLE_NATIVE_CLIENT_ID)
+    ) {
       throw new Error("ID token verification failed");
     }
     if (claims["nonce"] !== crypto.createHash("sha256").update(body.nonce).digest("hex")) {
       throw new Error("ID token nonce mismatch");
     }
     exchanges += 1;
-    const user = userSignedInWith("google");
+    const user = userSignedInWith(provider);
     response.end(
       sessionFor({ userId: user.id, authenticatedAt: nowSeconds(), method: "id_token" }),
     );
@@ -376,6 +408,10 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
       }
       if (url.pathname === "/qa/google-id-token" && request.method === "POST") {
         await issueGoogleIdToken(request, response);
+        return;
+      }
+      if (url.pathname === "/qa/apple-credential" && request.method === "POST") {
+        await issueAppleCredential(request, response);
         return;
       }
       if (url.pathname === "/auth/v1/token") {
