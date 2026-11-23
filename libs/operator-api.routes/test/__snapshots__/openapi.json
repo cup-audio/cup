@@ -143,12 +143,14 @@
                           "type": "string",
                           "enum": [
                             "account-not-active",
+                            "account-not-apple-linked",
                             "account-not-found",
                             "account-unavailable",
                             "adjustment-exceeds-available-duration",
                             "allowance-below-used-duration",
                             "conversion-not-account-owned",
                             "conversion-not-found",
+                            "email-mismatch",
                             "grant-not-found",
                             "idempotency-conflict",
                             "invalid-cursor",
@@ -200,12 +202,14 @@
                           "type": "string",
                           "enum": [
                             "account-not-active",
+                            "account-not-apple-linked",
                             "account-not-found",
                             "account-unavailable",
                             "adjustment-exceeds-available-duration",
                             "allowance-below-used-duration",
                             "conversion-not-account-owned",
                             "conversion-not-found",
+                            "email-mismatch",
                             "grant-not-found",
                             "idempotency-conflict",
                             "invalid-cursor",
@@ -289,6 +293,22 @@
                           },
                           "overdue": {
                             "type": "boolean"
+                          },
+                          "googleRevocation": {
+                            "type": "string",
+                            "enum": [
+                              "unavailable",
+                              "revoked",
+                              "failed"
+                            ]
+                          },
+                          "appleRevocation": {
+                            "type": "string",
+                            "enum": [
+                              "unavailable",
+                              "revoked",
+                              "not-revoked"
+                            ]
                           }
                         },
                         "required": [
@@ -298,7 +318,9 @@
                           "identityDone",
                           "accountDone",
                           "failures",
-                          "overdue"
+                          "overdue",
+                          "googleRevocation",
+                          "appleRevocation"
                         ],
                         "additionalProperties": false
                       }
@@ -355,12 +377,14 @@
                           "type": "string",
                           "enum": [
                             "account-not-active",
+                            "account-not-apple-linked",
                             "account-not-found",
                             "account-unavailable",
                             "adjustment-exceeds-available-duration",
                             "allowance-below-used-duration",
                             "conversion-not-account-owned",
                             "conversion-not-found",
+                            "email-mismatch",
                             "grant-not-found",
                             "idempotency-conflict",
                             "invalid-cursor",
@@ -412,12 +436,14 @@
                           "type": "string",
                           "enum": [
                             "account-not-active",
+                            "account-not-apple-linked",
                             "account-not-found",
                             "account-unavailable",
                             "adjustment-exceeds-available-duration",
                             "allowance-below-used-duration",
                             "conversion-not-account-owned",
                             "conversion-not-found",
+                            "email-mismatch",
                             "grant-not-found",
                             "idempotency-conflict",
                             "invalid-cursor",
@@ -562,12 +588,14 @@
                           "type": "string",
                           "enum": [
                             "account-not-active",
+                            "account-not-apple-linked",
                             "account-not-found",
                             "account-unavailable",
                             "adjustment-exceeds-available-duration",
                             "allowance-below-used-duration",
                             "conversion-not-account-owned",
                             "conversion-not-found",
+                            "email-mismatch",
                             "grant-not-found",
                             "idempotency-conflict",
                             "invalid-cursor",
@@ -619,12 +647,14 @@
                           "type": "string",
                           "enum": [
                             "account-not-active",
+                            "account-not-apple-linked",
                             "account-not-found",
                             "account-unavailable",
                             "adjustment-exceeds-available-duration",
                             "allowance-below-used-duration",
                             "conversion-not-account-owned",
                             "conversion-not-found",
+                            "email-mismatch",
                             "grant-not-found",
                             "idempotency-conflict",
                             "invalid-cursor",
@@ -676,12 +706,14 @@
                           "type": "string",
                           "enum": [
                             "account-not-active",
+                            "account-not-apple-linked",
                             "account-not-found",
                             "account-unavailable",
                             "adjustment-exceeds-available-duration",
                             "allowance-below-used-duration",
                             "conversion-not-account-owned",
                             "conversion-not-found",
+                            "email-mismatch",
                             "grant-not-found",
                             "idempotency-conflict",
                             "invalid-cursor",
@@ -733,12 +765,322 @@
                           "type": "string",
                           "enum": [
                             "account-not-active",
+                            "account-not-apple-linked",
                             "account-not-found",
                             "account-unavailable",
                             "adjustment-exceeds-available-duration",
                             "allowance-below-used-duration",
                             "conversion-not-account-owned",
                             "conversion-not-found",
+                            "email-mismatch",
+                            "grant-not-found",
+                            "idempotency-conflict",
+                            "invalid-cursor",
+                            "invalid-input",
+                            "method-not-allowed",
+                            "not-found",
+                            "operational-error",
+                            "operator-unauthorized",
+                            "request-too-large",
+                            "unsupported-media-type"
+                          ]
+                        },
+                        "message": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "traceId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{32}$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "traceId"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/operator/accounts/{accountId}/lost-apple-account-deletion": {
+      "post": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "accountId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "email"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Deletion scheduled without Apple revocation; the scheduled-deletion notice follows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "accountId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "attemptId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "recoveryDeadlineMs": {
+                      "type": "integer"
+                    },
+                    "appleRevocation": {
+                      "type": "string",
+                      "enum": [
+                        "not-revoked"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "accountId",
+                    "attemptId",
+                    "recoveryDeadlineMs",
+                    "appleRevocation"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "account-not-active",
+                            "account-not-apple-linked",
+                            "account-not-found",
+                            "account-unavailable",
+                            "adjustment-exceeds-available-duration",
+                            "allowance-below-used-duration",
+                            "conversion-not-account-owned",
+                            "conversion-not-found",
+                            "email-mismatch",
+                            "grant-not-found",
+                            "idempotency-conflict",
+                            "invalid-cursor",
+                            "invalid-input",
+                            "method-not-allowed",
+                            "not-found",
+                            "operational-error",
+                            "operator-unauthorized",
+                            "request-too-large",
+                            "unsupported-media-type"
+                          ]
+                        },
+                        "message": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "traceId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{32}$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "traceId"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Account not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "account-not-active",
+                            "account-not-apple-linked",
+                            "account-not-found",
+                            "account-unavailable",
+                            "adjustment-exceeds-available-duration",
+                            "allowance-below-used-duration",
+                            "conversion-not-account-owned",
+                            "conversion-not-found",
+                            "email-mismatch",
+                            "grant-not-found",
+                            "idempotency-conflict",
+                            "invalid-cursor",
+                            "invalid-input",
+                            "method-not-allowed",
+                            "not-found",
+                            "operational-error",
+                            "operator-unauthorized",
+                            "request-too-large",
+                            "unsupported-media-type"
+                          ]
+                        },
+                        "message": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "traceId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{32}$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "traceId"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Account not active, without an Apple identity, or holding another email address.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "account-not-active",
+                            "account-not-apple-linked",
+                            "account-not-found",
+                            "account-unavailable",
+                            "adjustment-exceeds-available-duration",
+                            "allowance-below-used-duration",
+                            "conversion-not-account-owned",
+                            "conversion-not-found",
+                            "email-mismatch",
+                            "grant-not-found",
+                            "idempotency-conflict",
+                            "invalid-cursor",
+                            "invalid-input",
+                            "method-not-allowed",
+                            "not-found",
+                            "operational-error",
+                            "operator-unauthorized",
+                            "request-too-large",
+                            "unsupported-media-type"
+                          ]
+                        },
+                        "message": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "traceId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{32}$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "traceId"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Operational error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "account-not-active",
+                            "account-not-apple-linked",
+                            "account-not-found",
+                            "account-unavailable",
+                            "adjustment-exceeds-available-duration",
+                            "allowance-below-used-duration",
+                            "conversion-not-account-owned",
+                            "conversion-not-found",
+                            "email-mismatch",
                             "grant-not-found",
                             "idempotency-conflict",
                             "invalid-cursor",
@@ -1182,12 +1524,14 @@
                           "type": "string",
                           "enum": [
                             "account-not-active",
+                            "account-not-apple-linked",
                             "account-not-found",
                             "account-unavailable",
                             "adjustment-exceeds-available-duration",
                             "allowance-below-used-duration",
                             "conversion-not-account-owned",
                             "conversion-not-found",
+                            "email-mismatch",
                             "grant-not-found",
                             "idempotency-conflict",
                             "invalid-cursor",
@@ -1239,12 +1583,14 @@
                           "type": "string",
                           "enum": [
                             "account-not-active",
+                            "account-not-apple-linked",
                             "account-not-found",
                             "account-unavailable",
                             "adjustment-exceeds-available-duration",
                             "allowance-below-used-duration",
                             "conversion-not-account-owned",
                             "conversion-not-found",
+                            "email-mismatch",
                             "grant-not-found",
                             "idempotency-conflict",
                             "invalid-cursor",
@@ -1409,12 +1755,14 @@
                           "type": "string",
                           "enum": [
                             "account-not-active",
+                            "account-not-apple-linked",
                             "account-not-found",
                             "account-unavailable",
                             "adjustment-exceeds-available-duration",
                             "allowance-below-used-duration",
                             "conversion-not-account-owned",
                             "conversion-not-found",
+                            "email-mismatch",
                             "grant-not-found",
                             "idempotency-conflict",
                             "invalid-cursor",
@@ -1466,12 +1814,14 @@
                           "type": "string",
                           "enum": [
                             "account-not-active",
+                            "account-not-apple-linked",
                             "account-not-found",
                             "account-unavailable",
                             "adjustment-exceeds-available-duration",
                             "allowance-below-used-duration",
                             "conversion-not-account-owned",
                             "conversion-not-found",
+                            "email-mismatch",
                             "grant-not-found",
                             "idempotency-conflict",
                             "invalid-cursor",
@@ -1577,12 +1927,14 @@
                           "type": "string",
                           "enum": [
                             "account-not-active",
+                            "account-not-apple-linked",
                             "account-not-found",
                             "account-unavailable",
                             "adjustment-exceeds-available-duration",
                             "allowance-below-used-duration",
                             "conversion-not-account-owned",
                             "conversion-not-found",
+                            "email-mismatch",
                             "grant-not-found",
                             "idempotency-conflict",
                             "invalid-cursor",
@@ -1634,12 +1986,14 @@
                           "type": "string",
                           "enum": [
                             "account-not-active",
+                            "account-not-apple-linked",
                             "account-not-found",
                             "account-unavailable",
                             "adjustment-exceeds-available-duration",
                             "allowance-below-used-duration",
                             "conversion-not-account-owned",
                             "conversion-not-found",
+                            "email-mismatch",
                             "grant-not-found",
                             "idempotency-conflict",
                             "invalid-cursor",
@@ -1691,12 +2045,14 @@
                           "type": "string",
                           "enum": [
                             "account-not-active",
+                            "account-not-apple-linked",
                             "account-not-found",
                             "account-unavailable",
                             "adjustment-exceeds-available-duration",
                             "allowance-below-used-duration",
                             "conversion-not-account-owned",
                             "conversion-not-found",
+                            "email-mismatch",
                             "grant-not-found",
                             "idempotency-conflict",
                             "invalid-cursor",
@@ -1748,12 +2104,14 @@
                           "type": "string",
                           "enum": [
                             "account-not-active",
+                            "account-not-apple-linked",
                             "account-not-found",
                             "account-unavailable",
                             "adjustment-exceeds-available-duration",
                             "allowance-below-used-duration",
                             "conversion-not-account-owned",
                             "conversion-not-found",
+                            "email-mismatch",
                             "grant-not-found",
                             "idempotency-conflict",
                             "invalid-cursor",
@@ -2076,12 +2434,14 @@
                           "type": "string",
                           "enum": [
                             "account-not-active",
+                            "account-not-apple-linked",
                             "account-not-found",
                             "account-unavailable",
                             "adjustment-exceeds-available-duration",
                             "allowance-below-used-duration",
                             "conversion-not-account-owned",
                             "conversion-not-found",
+                            "email-mismatch",
                             "grant-not-found",
                             "idempotency-conflict",
                             "invalid-cursor",
@@ -2133,12 +2493,14 @@
                           "type": "string",
                           "enum": [
                             "account-not-active",
+                            "account-not-apple-linked",
                             "account-not-found",
                             "account-unavailable",
                             "adjustment-exceeds-available-duration",
                             "allowance-below-used-duration",
                             "conversion-not-account-owned",
                             "conversion-not-found",
+                            "email-mismatch",
                             "grant-not-found",
                             "idempotency-conflict",
                             "invalid-cursor",
@@ -2190,12 +2552,14 @@
                           "type": "string",
                           "enum": [
                             "account-not-active",
+                            "account-not-apple-linked",
                             "account-not-found",
                             "account-unavailable",
                             "adjustment-exceeds-available-duration",
                             "allowance-below-used-duration",
                             "conversion-not-account-owned",
                             "conversion-not-found",
+                            "email-mismatch",
                             "grant-not-found",
                             "idempotency-conflict",
                             "invalid-cursor",
@@ -2365,12 +2729,14 @@
                           "type": "string",
                           "enum": [
                             "account-not-active",
+                            "account-not-apple-linked",
                             "account-not-found",
                             "account-unavailable",
                             "adjustment-exceeds-available-duration",
                             "allowance-below-used-duration",
                             "conversion-not-account-owned",
                             "conversion-not-found",
+                            "email-mismatch",
                             "grant-not-found",
                             "idempotency-conflict",
                             "invalid-cursor",
@@ -2422,12 +2788,14 @@
                           "type": "string",
                           "enum": [
                             "account-not-active",
+                            "account-not-apple-linked",
                             "account-not-found",
                             "account-unavailable",
                             "adjustment-exceeds-available-duration",
                             "allowance-below-used-duration",
                             "conversion-not-account-owned",
                             "conversion-not-found",
+                            "email-mismatch",
                             "grant-not-found",
                             "idempotency-conflict",
                             "invalid-cursor",
@@ -2936,12 +3304,14 @@
                           "type": "string",
                           "enum": [
                             "account-not-active",
+                            "account-not-apple-linked",
                             "account-not-found",
                             "account-unavailable",
                             "adjustment-exceeds-available-duration",
                             "allowance-below-used-duration",
                             "conversion-not-account-owned",
                             "conversion-not-found",
+                            "email-mismatch",
                             "grant-not-found",
                             "idempotency-conflict",
                             "invalid-cursor",
@@ -2993,12 +3363,14 @@
                           "type": "string",
                           "enum": [
                             "account-not-active",
+                            "account-not-apple-linked",
                             "account-not-found",
                             "account-unavailable",
                             "adjustment-exceeds-available-duration",
                             "allowance-below-used-duration",
                             "conversion-not-account-owned",
                             "conversion-not-found",
+                            "email-mismatch",
                             "grant-not-found",
                             "idempotency-conflict",
                             "invalid-cursor",
@@ -3050,12 +3422,14 @@
                           "type": "string",
                           "enum": [
                             "account-not-active",
+                            "account-not-apple-linked",
                             "account-not-found",
                             "account-unavailable",
                             "adjustment-exceeds-available-duration",
                             "allowance-below-used-duration",
                             "conversion-not-account-owned",
                             "conversion-not-found",
+                            "email-mismatch",
                             "grant-not-found",
                             "idempotency-conflict",
                             "invalid-cursor",
@@ -3227,12 +3601,14 @@
                           "type": "string",
                           "enum": [
                             "account-not-active",
+                            "account-not-apple-linked",
                             "account-not-found",
                             "account-unavailable",
                             "adjustment-exceeds-available-duration",
                             "allowance-below-used-duration",
                             "conversion-not-account-owned",
                             "conversion-not-found",
+                            "email-mismatch",
                             "grant-not-found",
                             "idempotency-conflict",
                             "invalid-cursor",
@@ -3284,12 +3660,14 @@
                           "type": "string",
                           "enum": [
                             "account-not-active",
+                            "account-not-apple-linked",
                             "account-not-found",
                             "account-unavailable",
                             "adjustment-exceeds-available-duration",
                             "allowance-below-used-duration",
                             "conversion-not-account-owned",
                             "conversion-not-found",
+                            "email-mismatch",
                             "grant-not-found",
                             "idempotency-conflict",
                             "invalid-cursor",
@@ -3341,12 +3719,14 @@
                           "type": "string",
                           "enum": [
                             "account-not-active",
+                            "account-not-apple-linked",
                             "account-not-found",
                             "account-unavailable",
                             "adjustment-exceeds-available-duration",
                             "allowance-below-used-duration",
                             "conversion-not-account-owned",
                             "conversion-not-found",
+                            "email-mismatch",
                             "grant-not-found",
                             "idempotency-conflict",
                             "invalid-cursor",
@@ -3398,12 +3778,14 @@
                           "type": "string",
                           "enum": [
                             "account-not-active",
+                            "account-not-apple-linked",
                             "account-not-found",
                             "account-unavailable",
                             "adjustment-exceeds-available-duration",
                             "allowance-below-used-duration",
                             "conversion-not-account-owned",
                             "conversion-not-found",
+                            "email-mismatch",
                             "grant-not-found",
                             "idempotency-conflict",
                             "invalid-cursor",
@@ -3566,12 +3948,14 @@
                           "type": "string",
                           "enum": [
                             "account-not-active",
+                            "account-not-apple-linked",
                             "account-not-found",
                             "account-unavailable",
                             "adjustment-exceeds-available-duration",
                             "allowance-below-used-duration",
                             "conversion-not-account-owned",
                             "conversion-not-found",
+                            "email-mismatch",
                             "grant-not-found",
                             "idempotency-conflict",
                             "invalid-cursor",
@@ -3623,12 +4007,14 @@
                           "type": "string",
                           "enum": [
                             "account-not-active",
+                            "account-not-apple-linked",
                             "account-not-found",
                             "account-unavailable",
                             "adjustment-exceeds-available-duration",
                             "allowance-below-used-duration",
                             "conversion-not-account-owned",
                             "conversion-not-found",
+                            "email-mismatch",
                             "grant-not-found",
                             "idempotency-conflict",
                             "invalid-cursor",
@@ -3680,12 +4066,14 @@
                           "type": "string",
                           "enum": [
                             "account-not-active",
+                            "account-not-apple-linked",
                             "account-not-found",
                             "account-unavailable",
                             "adjustment-exceeds-available-duration",
                             "allowance-below-used-duration",
                             "conversion-not-account-owned",
                             "conversion-not-found",
+                            "email-mismatch",
                             "grant-not-found",
                             "idempotency-conflict",
                             "invalid-cursor",
@@ -3857,12 +4245,14 @@
                           "type": "string",
                           "enum": [
                             "account-not-active",
+                            "account-not-apple-linked",
                             "account-not-found",
                             "account-unavailable",
                             "adjustment-exceeds-available-duration",
                             "allowance-below-used-duration",
                             "conversion-not-account-owned",
                             "conversion-not-found",
+                            "email-mismatch",
                             "grant-not-found",
                             "idempotency-conflict",
                             "invalid-cursor",
@@ -3914,12 +4304,14 @@
                           "type": "string",
                           "enum": [
                             "account-not-active",
+                            "account-not-apple-linked",
                             "account-not-found",
                             "account-unavailable",
                             "adjustment-exceeds-available-duration",
                             "allowance-below-used-duration",
                             "conversion-not-account-owned",
                             "conversion-not-found",
+                            "email-mismatch",
                             "grant-not-found",
                             "idempotency-conflict",
                             "invalid-cursor",
@@ -3971,12 +4363,14 @@
                           "type": "string",
                           "enum": [
                             "account-not-active",
+                            "account-not-apple-linked",
                             "account-not-found",
                             "account-unavailable",
                             "adjustment-exceeds-available-duration",
                             "allowance-below-used-duration",
                             "conversion-not-account-owned",
                             "conversion-not-found",
+                            "email-mismatch",
                             "grant-not-found",
                             "idempotency-conflict",
                             "invalid-cursor",
@@ -4100,12 +4494,14 @@
                           "type": "string",
                           "enum": [
                             "account-not-active",
+                            "account-not-apple-linked",
                             "account-not-found",
                             "account-unavailable",
                             "adjustment-exceeds-available-duration",
                             "allowance-below-used-duration",
                             "conversion-not-account-owned",
                             "conversion-not-found",
+                            "email-mismatch",
                             "grant-not-found",
                             "idempotency-conflict",
                             "invalid-cursor",
@@ -4157,12 +4553,14 @@
                           "type": "string",
                           "enum": [
                             "account-not-active",
+                            "account-not-apple-linked",
                             "account-not-found",
                             "account-unavailable",
                             "adjustment-exceeds-available-duration",
                             "allowance-below-used-duration",
                             "conversion-not-account-owned",
                             "conversion-not-found",
+                            "email-mismatch",
                             "grant-not-found",
                             "idempotency-conflict",
                             "invalid-cursor",

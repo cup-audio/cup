@@ -141,6 +141,8 @@ const deletions: ListAccountDeletionsResponse = {
       accountDone: false,
       failures: 1,
       overdue: true,
+      googleRevocation: "revoked",
+      appleRevocation: "unavailable",
     },
   ],
   receipts: [

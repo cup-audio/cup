@@ -772,6 +772,20 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
     await this.reconcileLifecycle();
     return { result: "scheduled", attempt } as const;
   }
+  async scheduleOperatorDeletion(email: string) {
+    await this.ctx.storage.setAlarm(Temporal.Now.instant().epochMilliseconds + 60_000);
+    let attempt;
+    try {
+      attempt = this.lifecycle.scheduleByOperator(email);
+    } catch (error) {
+      if (error instanceof AccountLifecycleConflictError) {
+        return { result: "conflict" } as const;
+      }
+      throw error;
+    }
+    await this.reconcileLifecycle();
+    return { result: "scheduled", attempt } as const;
+  }
   async restoreAccount(challengeId: string, authenticatedAtSeconds: number) {
     await this.ctx.storage.setAlarm(Temporal.Now.instant().epochMilliseconds + 60_000);
     try {
