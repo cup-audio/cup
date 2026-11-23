@@ -11,18 +11,13 @@ import type { ApiServerEnvironment } from "#src/api-server-environment.ts";
 import { createApiServer } from "#src/api-server.ts";
 import { signMediaUrl } from "#src/http/signed-media-url.ts";
 
-vi.mock("@cup/conversion-grants", async () => ({
-  ...(await import("@cup/conversion-grants/contracts")),
-  ...(await import("@cup/conversion-grants/session")),
-}));
-
 const SIGNING_KEY = "test-media-url-signing-key";
 const HOUR_MS = 60 * 60 * 1_000;
 const conversionId = "f9cc2e59-46a3-4890-b923-bda04d03b4d0";
 const accountId = "d1a52e64-3e4d-4a7f-a711-7fb11501e9af";
 const grantId = "6b0f5f2e-8d7c-4b8e-9a51-0f7c3c2d1e4a";
 const subject = "f355f913-ba12-45d6-a7d2-4df95f7cf11f";
-const supabaseUrl = "https://access-test.supabase.co";
+const supabaseUrl = "https://signed-media-url.supabase.co";
 const origin = "https://cup.audio";
 const audiobookPath = `/api/audiobooks/${conversionId}`;
 const historyPath = "/api/account/conversions";

@@ -4,14 +4,6 @@ import { afterEach, beforeAll, beforeEach, expect, test, vi } from "vitest";
 import type { ApiServerEnvironment } from "#src/api-server-environment.ts";
 import { createApiServer } from "#src/api-server.ts";
 
-vi.mock("@cup/conversion-grants", async () => ({
-  ...(await import("@cup/conversion-grants/contracts")),
-  clearGrantSessionCookie: () => "",
-  createGrantSessionCookie: () => "",
-  createRootCredential: () => "",
-  getGrantSessionCookie: () => undefined,
-}));
-
 const SUBJECT = "d1a52e64-3e4d-4a7f-a711-7fb11501e9af";
 const ACCOUNT_ID = "5b0e6f3a-8c1d-4e2f-9a7b-3c4d5e6f7a8b";
 const APPLE_SUBJECT = "000123.linked-apple.0456";

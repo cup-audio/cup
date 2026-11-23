@@ -5,25 +5,8 @@ import { afterEach, beforeAll, beforeEach, expect, test, vi } from "vitest";
 import type { ApiServerEnvironment } from "#src/api-server-environment.ts";
 import { createApiServer } from "#src/api-server.ts";
 
-vi.mock("@cup/conversion-grants", async () => ({
-  ...(await import("@cup/conversion-grants/contracts")),
-  clearGrantSessionCookie: () => "",
-  createGrantSessionCookie: () => "",
-  createRootCredential: () => "",
-  getGrantSessionCookie: () => undefined,
-}));
-const mocks = vi.hoisted(() => ({
-  authenticate: vi.fn<(...args: unknown[]) => Promise<unknown>>(),
-  captureException: vi.fn<(...args: unknown[]) => void>(),
-}));
-vi.mock("#src/http/account-auth.ts", async (original) => ({
-  ...(await original<typeof import("#src/http/account-auth.ts")>()),
-  authenticateAccountRequest: mocks.authenticate,
-}));
-vi.mock("@sentry/core", async (original) => ({
-  ...(await original<typeof import("@sentry/core")>()),
-  captureException: mocks.captureException,
-}));
+import { createAccountTokenIssuer } from "#test/account-tokens.ts";
+import { recordSentry, stopRecordingSentry, type SentryRecorder } from "#test/sentry-recorder.ts";
 
 const SUBJECT = "d1a52e64-3e4d-4a7f-a711-7fb11501e9af";
 const CHALLENGE_ID = "6f1c0f0e-3f7a-4d8e-9b6a-2c1d0e9f8a7b";
@@ -32,7 +15,10 @@ const REFRESH_TOKEN = "apple-refresh-token-value";
 const AUTHORIZATION_CODE = "apple-authorization-code-value";
 const EXCHANGED_REFRESH_TOKEN = "apple-refresh-token-from-code";
 const APPLE_ORIGIN = "https://apple.example.test";
-const SUPABASE_URL = "https://auth.example.test";
+const accountTokens = await createAccountTokenIssuer(
+  "https://apple-deletion-confirmation.supabase.co",
+);
+const SUPABASE_URL = accountTokens.supabaseUrl;
 
 type AppleCall = { path: string; form: Record<string, string>; clientSecret: unknown };
 
@@ -40,7 +26,17 @@ let signingKeys: { privateKey: CryptoKey; publicKey: CryptoKey };
 let appleCalls: AppleCall[];
 let apple: { tokenStatus: number; revokeStatus: number; subject: string };
 let order: string[];
+let providers: string[];
+let sentry: SentryRecorder;
 const account = {
+  inspect: async () => ({
+    accountId: SUBJECT,
+    subject: SUBJECT,
+    createdAtMs: 1,
+    executionEpoch: 1,
+    state: "active",
+    balance: { unit: "audio-millisecond", available: 0, reserved: 0 },
+  }),
   scheduleDeletion: vi.fn<(...args: unknown[]) => Promise<unknown>>(),
 };
 
@@ -53,17 +49,8 @@ beforeEach(async () => {
   appleCalls = [];
   order = [];
   apple = { tokenStatus: 200, revokeStatus: 200, subject: APPLE_SUBJECT };
-  mocks.authenticate.mockResolvedValue({
-    result: "authenticated",
-    identity: {
-      subject: SUBJECT,
-      email: "listener@example.com",
-      providers: ["google", "apple"],
-      authenticatedAtSeconds: 10,
-    },
-    snapshot: { state: "active" },
-    account,
-  });
+  providers = ["google", "apple"];
+  sentry = recordSentry();
   account.scheduleDeletion.mockImplementation(async () => {
     order.push("schedule");
     return { result: "scheduled", attempt: { attemptId: CHALLENGE_ID, deadlineMs: 100 } };
@@ -73,9 +60,14 @@ beforeEach(async () => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  stopRecordingSentry();
 });
 
 async function fakeProviders(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const keySet = accountTokens.respondToKeySetRequest(input);
+  if (keySet !== undefined) {
+    return keySet;
+  }
   const url = new URL(input instanceof Request ? input.url : input);
   if (url.origin === SUPABASE_URL && url.pathname === `/auth/v1/admin/users/${SUBJECT}`) {
     return Response.json({
@@ -121,7 +113,7 @@ async function fakeProviders(input: RequestInfo | URL, init?: RequestInit): Prom
 }
 
 async function environment() {
-  const env: Partial<ApiServerEnvironment> = {
+  const env = {
     SUPABASE_URL,
     SUPABASE_SECRET_KEY: "supabase-secret",
     APPLE_ORIGIN,
@@ -130,8 +122,22 @@ async function environment() {
     APPLE_TEAM_ID: "APPLETEAM1",
     APPLE_WEB_CLIENT_ID: "audio.cup.app.web",
     APPLE_NATIVE_CLIENT_ID: "audio.cup.app",
+    REGISTRY: {
+      idFromName: (name: string) => name,
+      get: () => ({
+        findIdentity: async () => ({ accountId: SUBJECT, subject: SUBJECT, phase: "active" }),
+      }),
+    },
+    ACCOUNTS: { idFromName: (name: string) => name, get: () => account },
   };
+  if (!isEnvironment(env)) {
+    throw new Error("Missing fixture bindings");
+  }
   return env;
+}
+
+function isEnvironment(value: unknown): value is ApiServerEnvironment {
+  return typeof value === "object" && value !== null && "REGISTRY" in value;
 }
 
 async function scheduleDeletion(body: unknown) {
@@ -140,6 +146,7 @@ async function scheduleDeletion(body: unknown) {
     {
       method: "POST",
       headers: {
+        Authorization: `Bearer ${await accountTokens.sign(SUBJECT, { providers, authenticatedAtSeconds: 10 })}`,
         "Content-Type": "application/json",
         "X-Create-Audiobook-From-URL-Request": "1",
       },
@@ -274,9 +281,9 @@ test("an expired or reused authorization code answers Apple's retryable failure,
   expect(await response.json()).toMatchObject({ error: { code: "apple-confirmation-failed" } });
   expect(order).toStrictEqual(["/auth/token"]);
   expect(account.scheduleDeletion).not.toHaveBeenCalled();
-  expect(mocks.captureException).toHaveBeenCalledOnce();
+  expect(sentry.exceptions).toHaveLength(1);
   const logged = JSON.stringify(
-    mocks.captureException.mock.calls.map(([error]) =>
+    sentry.exceptions.map((error) =>
       error instanceof Error ? { message: error.message, cause: String(error.cause) } : error,
     ),
   );
@@ -327,9 +334,9 @@ test.each([
     expect(await response.json()).toMatchObject({ error: { code: "apple-confirmation-failed" } });
     expect(order).toStrictEqual(calls);
     expect(account.scheduleDeletion).not.toHaveBeenCalled();
-    expect(mocks.captureException).toHaveBeenCalledOnce();
+    expect(sentry.exceptions).toHaveLength(1);
     const logged = JSON.stringify(
-      mocks.captureException.mock.calls.map(([error]) =>
+      sentry.exceptions.map((error) =>
         error instanceof Error ? { message: error.message, cause: String(error.cause) } : error,
       ),
     );
@@ -339,17 +346,7 @@ test.each([
 );
 
 test("a Google-only deletion still schedules without reaching Apple and records no Apple revocation", async () => {
-  mocks.authenticate.mockResolvedValue({
-    result: "authenticated",
-    identity: {
-      subject: SUBJECT,
-      email: "listener@example.com",
-      providers: ["google"],
-      authenticatedAtSeconds: 10,
-    },
-    snapshot: { state: "active" },
-    account,
-  });
+  providers = ["google"];
 
   const response = await scheduleDeletion({ challengeId: CHALLENGE_ID });
 

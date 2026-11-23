@@ -1,4 +1,4 @@
-import { expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 
 import { healthResponseSchema } from "@cup/listener-api.routes";
 
@@ -7,13 +7,7 @@ import { createApiServer } from "#src/api-server.ts";
 
 import { toStrictSchema } from "#test/strict-schema.ts";
 
-vi.mock("cloudflare:workers", () => ({
-  DurableObject: class {
-    readonly mocked = true;
-  },
-}));
-
-const SETTINGS: Partial<ApiServerEnvironment> = { SUPABASE_URL: "https://access-test.supabase.co" };
+const SETTINGS: Partial<ApiServerEnvironment> = { SUPABASE_URL: "https://health.supabase.co" };
 
 test("the health endpoint answers 200 without touching a binding", async () => {
   const touched: string[] = [];

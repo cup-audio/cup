@@ -1,4 +1,3 @@
-import { captureException } from "@sentry/core";
 import { Temporal } from "temporal-polyfill";
 import { afterEach, expect, test, vi } from "vitest";
 
@@ -9,24 +8,12 @@ import {
   type SegmentUsage,
 } from "@cup/conversion-contracts";
 import type { GrantState } from "@cup/conversion-grants/contracts";
-import { logEvent } from "@cup/telemetry.cloudflare";
 
 import type { ApiServerEnvironment } from "#src/api-server-environment.ts";
 import { createApiServer } from "#src/api-server.ts";
 import { signMediaUrl } from "#src/http/signed-media-url.ts";
 
-vi.mock("@cup/conversion-grants", async () => ({
-  ...(await import("@cup/conversion-grants/contracts")),
-  ...(await import("@cup/conversion-grants/session")),
-}));
-vi.mock(import("@cup/telemetry.cloudflare"), async (importOriginal) => ({
-  ...(await importOriginal()),
-  logEvent: vi.fn<typeof logEvent>(),
-}));
-vi.mock(import("@sentry/core"), async (importOriginal) => ({
-  ...(await importOriginal()),
-  captureException: vi.fn<typeof captureException>(),
-}));
+import { recordSentry, stopRecordingSentry } from "#test/sentry-recorder.ts";
 
 const SIGNING_KEY = "test-media-url-signing-key";
 const conversionId = "f9cc2e59-46a3-4890-b923-bda04d03b4d0";
@@ -38,13 +25,10 @@ const trialOwner: ConversionOwner = { kind: "trial", grantId };
 const accountOwner: ConversionOwner = { kind: "account", accountId };
 const SETTLED_DURATIONS = [48, 72, 24];
 
-afterEach(() => vi.restoreAllMocks());
-
-function recordLogEvents() {
-  const log = vi.mocked(logEvent);
-  log.mockClear();
-  return log;
-}
+afterEach(() => {
+  vi.restoreAllMocks();
+  stopRecordingSentry();
+});
 
 type SegmentRow = Pick<SegmentUsage, "sequence" | "state" | "actualMilliseconds">;
 
@@ -127,7 +111,7 @@ function fixture({
   };
 
   const env = {
-    SUPABASE_URL: "https://access-test.supabase.co",
+    SUPABASE_URL: "https://narration-track.supabase.co",
     MEDIA_URL_SIGNING_KEY: SIGNING_KEY,
     ACCOUNTS: { idFromName: (name: string) => name, get: () => account },
     CONVERSION_GRANTS: { idFromName: (name: string) => name, get: () => grant },
@@ -310,18 +294,16 @@ test("a first touched segment whose size differs from its settled duration fails
   const { app, env, storedSegments } = fixture();
   const [firstKey] = storedSegments.keys();
   storedSegments.set(firstKey!, new Uint8Array(770));
-  const log = recordLogEvents();
-  const capture = vi.mocked(captureException);
-  capture.mockClear();
+  const sentry = recordSentry();
 
   const response = await app.request(await signTrackUrl(), {}, env);
 
   expect(response.status).toBe(500);
-  expect(capture).toHaveBeenCalledTimes(1);
-  expect(capture).toHaveBeenCalledWith(expect.any(Error), {
-    tags: { "cup.audio_segment.sequence": "0" },
-  });
-  expect(log).toHaveBeenCalledWith("narration-track-segment-mismatch", expect.any(String), {
+  expect(sentry.exceptions).toEqual([expect.any(Error)]);
+  expect(sentry.events[0]?.tags).toMatchObject({ "cup.audio_segment.sequence": "0" });
+  expect(sentry.logs).toContainEqual({
+    event: "narration-track-segment-mismatch",
+    message: expect.any(String),
     attributes: {
       "cup.conversion.id": conversionId,
       "cup.audio_segment.sequence": 0,
@@ -340,7 +322,7 @@ test("a later segment whose size differs or which is missing errors the stream a
     } else {
       storedSegments.delete(lastKey);
     }
-    const log = recordLogEvents();
+    const sentry = recordSentry();
 
     const response = await app.request(await signTrackUrl(), {}, env);
 
@@ -348,7 +330,9 @@ test("a later segment whose size differs or which is missing errors the stream a
     await expect(response.arrayBuffer()).rejects.toThrow(
       "Narration track segment 2 could not be read",
     );
-    expect(log).toHaveBeenCalledWith("narration-track-segment-mismatch", expect.any(String), {
+    expect(sentry.logs).toContainEqual({
+      event: "narration-track-segment-mismatch",
+      message: expect.any(String),
       attributes: {
         "cup.conversion.id": conversionId,
         "cup.audio_segment.sequence": 2,

@@ -5,20 +5,12 @@ import { scheduleLostAppleAccountDeletionResponseSchema } from "@cup/operator-ap
 import type { ApiServerEnvironment } from "#src/api-server-environment.ts";
 import { createApiServer } from "#src/api-server.ts";
 
-vi.mock("@cup/conversion-grants", async () => ({
-  ...(await import("@cup/conversion-grants/contracts")),
-  clearGrantSessionCookie: () => "",
-  createGrantSessionCookie: () => "",
-  createRootCredential: () => "",
-  getGrantSessionCookie: () => undefined,
-}));
-
 const ACCOUNT_ID = "d1a52e64-3e4d-4a7f-a711-7fb11501e9af";
 const UNKNOWN_ACCOUNT_ID = "5b0f6a3e-8d0e-4c51-9f0e-2a8f0c6f5d11";
 const SUBJECT = "f355f913-ba12-45d6-a7d2-4df95f7cf11f";
 const ATTEMPT_ID = "6f1c0f0e-3f7a-4d8e-9b6a-2c1d0e9f8a7b";
 const ACCOUNT_EMAIL = "abc123@privaterelay.appleid.com";
-const SUPABASE_URL = "https://auth.example.test";
+const SUPABASE_URL = "https://lost-apple-account-deletion.supabase.co";
 const APPLE_ORIGIN = "https://apple.example.test";
 const DEADLINE_MS = 1_800_000_000_000;
 

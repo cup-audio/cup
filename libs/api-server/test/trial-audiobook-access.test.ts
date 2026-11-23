@@ -8,11 +8,6 @@ import type { ApiServerEnvironment } from "#src/api-server-environment.ts";
 import { createApiServer } from "#src/api-server.ts";
 import { signMediaUrl } from "#src/http/signed-media-url.ts";
 
-vi.mock("@cup/conversion-grants", async () => ({
-  ...(await import("@cup/conversion-grants/contracts")),
-  ...(await import("@cup/conversion-grants/session")),
-}));
-
 const SIGNING_KEY = "test-media-url-signing-key";
 const conversionId = "f9cc2e59-46a3-4890-b923-bda04d03b4d0";
 const grantId = "d1a52e64-3e4d-4a7f-a711-7fb11501e9af";
@@ -65,7 +60,7 @@ function fixture(state: GrantState = "open", hasCoverImage = true) {
     listAudioSegments: async () => [{ sequence: 0, state: "settled", actualMilliseconds: 1_000 }],
   };
   const env = {
-    SUPABASE_URL: "https://access-test.supabase.co",
+    SUPABASE_URL: "https://trial-audiobook-access.supabase.co",
     MEDIA_URL_SIGNING_KEY: SIGNING_KEY,
     CONVERSION_GRANTS: { idFromName: (name: string) => name, get: () => grant },
     REGISTRY: {
