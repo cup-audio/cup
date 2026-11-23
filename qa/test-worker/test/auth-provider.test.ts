@@ -275,6 +275,71 @@ test("an Apple sign-in through Hide My Email is a user of its own that the admin
   }
 });
 
+test("a native Apple sign-in exchanges the sheet's identity token and raw nonce for an Apple session", async () => {
+  const authProvider = await startAuthProvider();
+  try {
+    const { origin } = authProvider;
+    const apple = await appleCredential(hash("the nonce"), origin);
+
+    const session = await sessionOf(
+      await exchangeIdToken(apple.identityToken, "the nonce", origin, "apple"),
+    );
+
+    expect(claimsOf(apple.identityToken)).toMatchObject({
+      iss: "https://appleid.apple.com",
+      aud: "audio.cup.app",
+      nonce: hash("the nonce"),
+      email: "reader@example.test",
+    });
+    expect(apple.authorizationCode).toEqual(expect.any(String));
+    expect(claimsOf(session.access_token)).toMatchObject({
+      email: "reader@example.test",
+      app_metadata: { provider: "apple", providers: ["apple"] },
+      amr: [{ method: "id_token" }],
+    });
+  } finally {
+    await authProvider.close();
+  }
+});
+
+test("a native Apple sign-in issues its identity token for the email a test sets", async () => {
+  const authProvider = await startAuthProvider();
+  try {
+    authProvider.setAppleEmail("qa-relay@privaterelay.appleid.com");
+    const { origin } = authProvider;
+    const apple = await appleCredential(hash("the nonce"), origin);
+
+    const session = await sessionOf(
+      await exchangeIdToken(apple.identityToken, "the nonce", origin, "apple"),
+    );
+
+    expect(claimsOf(session.access_token)).toMatchObject({
+      email: "qa-relay@privaterelay.appleid.com",
+    });
+  } finally {
+    await authProvider.close();
+  }
+});
+
+test("rejects a native Apple sign-in whose raw nonce does not hash to the identity token's", async () => {
+  const { identityToken } = await appleCredential(hash("the nonce"));
+
+  const response = await exchangeIdToken(identityToken, "another nonce", undefined, "apple");
+
+  expect(response.status).toBe(400);
+});
+
+test("rejects an Apple identity token exchanged as Google's, and Google's as Apple's", async () => {
+  const { identityToken } = await appleCredential(hash("the nonce"));
+  const googleToken = await googleIdToken(hash("the nonce"));
+
+  const asGoogle = await exchangeIdToken(identityToken, "the nonce", undefined, "google");
+  const asApple = await exchangeIdToken(googleToken, "the nonce", undefined, "apple");
+
+  expect(asGoogle.status).toBe(400);
+  expect(asApple.status).toBe(400);
+});
+
 test("stands in for Apple: validates a web sign-in's refresh token with the linked Apple subject, then revokes it", async () => {
   const authProvider = await startAuthProvider();
   try {
@@ -502,15 +567,37 @@ async function googleIdToken(
   return body["idToken"];
 }
 
+async function appleCredential(
+  hashedNonce: string,
+  origin = startedAuthProvider().origin,
+): Promise<{ identityToken: string; authorizationCode: string }> {
+  const response = await fetch(`${origin}/qa/apple-credential`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ nonce: hashedNonce }),
+  });
+  expect(response.status).toBe(200);
+  const body: unknown = await response.json();
+  if (
+    !isRecord(body) ||
+    typeof body["identityToken"] !== "string" ||
+    typeof body["authorizationCode"] !== "string"
+  ) {
+    throw new Error("The fake auth provider returned no Apple credential.");
+  }
+  return { identityToken: body["identityToken"], authorizationCode: body["authorizationCode"] };
+}
+
 function exchangeIdToken(
   idToken: string,
   nonce: string,
   origin = startedAuthProvider().origin,
+  provider: "google" | "apple" = "google",
 ): Promise<Response> {
   return fetch(`${origin}/auth/v1/token?grant_type=id_token`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ provider: "google", id_token: idToken, nonce }),
+    body: JSON.stringify({ provider, id_token: idToken, nonce }),
   });
 }
 

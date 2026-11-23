@@ -1,8 +1,12 @@
 import { registerPlugin } from "@capacitor/core";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { SignInCancelledError, UserFacingError } from "#src/errors.js";
 import type { GoogleSignInOptions } from "#src/platform/account-auth.js";
-import { initializeAuthStorage as initializeSecureAuthStorage } from "#src/platform/account-auth.native.js";
+import {
+  createNonce,
+  initializeAuthStorage as initializeSecureAuthStorage,
+} from "#src/platform/account-auth.native.js";
 import { googleAuthorizationParams } from "#src/platform/account-auth.web.js";
 
 export { watchAppState } from "#src/platform/account-auth.native.js";
@@ -43,6 +47,39 @@ export async function signInWithGoogle(
   if (exchange.error) {
     throw exchange.error;
   }
+}
+
+type AppleSignInPlugin = {
+  signIn(options: { nonce: string }): Promise<{ identityToken: string; authorizationCode: string }>;
+};
+
+const appleSignIn = registerPlugin<AppleSignInPlugin>("AppleSignIn");
+
+export async function signInWithApple(client: {
+  auth: Pick<SupabaseClient["auth"], "signInWithIdToken">;
+}) {
+  const { nonce, hashedNonce } = await createNonce();
+  let sheet;
+  try {
+    sheet = await appleSignIn.signIn({ nonce: hashedNonce });
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "CANCELED") {
+      throw new SignInCancelledError({ provider: "Apple", cause: error });
+    }
+    throw new UserFacingError({
+      title: "Apple sign-in could not be completed. Try again.",
+      cause: error,
+    });
+  }
+  const exchange = await client.auth.signInWithIdToken({
+    provider: "apple",
+    token: sheet.identityToken,
+    nonce,
+  });
+  if (exchange.error) {
+    throw exchange.error;
+  }
+  return { provider: "apple" as const, authorizationCode: sheet.authorizationCode };
 }
 
 export async function clearNativeSignIn(): Promise<void> {}
