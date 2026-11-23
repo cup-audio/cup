@@ -53,6 +53,15 @@ export async function signInWithApple(
 }
 
 export async function completePendingSignIn(client: ExchangingClient): Promise<void> {
+  webAuthentication
+    .addListener("pendingCallback", () => {
+      void exchangePendingCallback(client);
+    })
+    .catch(reportFailure("Failed to listen for sign-ins Android delivers late"));
+  await exchangePendingCallback(client);
+}
+
+async function exchangePendingCallback(client: ExchangingClient): Promise<void> {
   try {
     const { url, sessionStorage } = await webAuthentication.takePendingCallback();
     if (url === undefined) {

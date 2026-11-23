@@ -23,6 +23,7 @@ public class WebAuthenticationPlugin extends Plugin {
     private static final String CALLBACK_PATH = "/callback";
     private static final String PREFERENCES = "audio.cup.app.web_authentication";
     private static final String SESSION_STORAGE = "sessionStorage";
+    private static final String PENDING_CALLBACK_EVENT = "pendingCallback";
 
     private PluginCall customTabCall;
     private String pendingCallbackUrl;
@@ -76,7 +77,7 @@ public class WebAuthenticationPlugin extends Plugin {
                 keepSessionStorage(null);
                 call.resolve(callbackResult(callbackUrl));
             } else {
-                pendingCallbackUrl = callbackUrl;
+                keepPendingCallback(callbackUrl);
             }
             return;
         }
@@ -130,8 +131,13 @@ public class WebAuthenticationPlugin extends Plugin {
             customTabCall.resolve(callbackResult(callbackUrl));
             customTabCall = null;
         } else {
-            pendingCallbackUrl = callbackUrl;
+            keepPendingCallback(callbackUrl);
         }
+    }
+
+    private void keepPendingCallback(String callbackUrl) {
+        pendingCallbackUrl = callbackUrl;
+        notifyListeners(PENDING_CALLBACK_EVENT, new JSObject(), true);
     }
 
     private void keepSessionStorage(String sessionStorage) {

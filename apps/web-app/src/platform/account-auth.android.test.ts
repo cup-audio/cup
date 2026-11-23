@@ -398,6 +398,83 @@ test("Apple sign-in hands the browser tab the session storage to keep while Cup 
   );
 });
 
+test("an Auth Tab result Android redelivers after Cup already asked for a pending callback at startup is still exchanged", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    let pendingUrl: string | undefined;
+    const listeners: Array<(event: unknown) => void> = [];
+    Object.assign(window, {
+      androidBridge: {},
+      exchangedCodes: [],
+      redeliverAuthTabResult: (url: string) => {
+        pendingUrl = url;
+        for (const listener of listeners) {
+          listener({});
+        }
+      },
+      Capacitor: {
+        PluginHeaders: [
+          {
+            name: "WebAuthentication",
+            methods: [
+              { name: "takePendingCallback", rtype: "promise" },
+              { name: "addListener" },
+              { name: "removeListener", rtype: "promise" },
+            ],
+          },
+        ],
+        nativeCallback: (
+          plugin: string,
+          _method: string,
+          options: { eventName: string },
+          listener: (event: unknown) => void,
+        ) => {
+          if (plugin === "WebAuthentication" && options.eventName === "pendingCallback") {
+            listeners.push(listener);
+          }
+          return `${plugin}-${options.eventName}`;
+        },
+        nativePromise: async (plugin: string, method: string) => {
+          if (plugin === "WebAuthentication" && method === "takePendingCallback") {
+            const url = pendingUrl;
+            pendingUrl = undefined;
+            return url === undefined ? {} : { url };
+          }
+          throw new Error(`Unexpected native call ${plugin}.${method}`);
+        },
+      },
+    });
+  });
+  await page.goto("");
+  await page.evaluate(async () => {
+    const exchangedCodes: string[] = Reflect.get(window, "exchangedCodes");
+    const client = {
+      auth: {
+        exchangeCodeForSession: async (code: string) => {
+          exchangedCodes.push(code);
+          return { data: { session: { provider_refresh_token: "the-late-refresh-token" } } };
+        },
+      },
+    };
+    const modulePath = "/src/platform/account-auth.android.ts";
+    const { completePendingSignIn } = await import(modulePath);
+    await completePendingSignIn(client);
+  });
+  expect(await page.evaluate(() => structuredClone(Reflect.get(window, "exchangedCodes")))).toEqual(
+    [],
+  );
+
+  await page.evaluate(() => {
+    Reflect.get(window, "redeliverAuthTabResult")("audio.cup.app://auth/callback?code=late-code");
+  });
+
+  await expect
+    .poll(() => page.evaluate(() => structuredClone(Reflect.get(window, "exchangedCodes"))))
+    .toEqual(["late-code"]);
+  expect(await takeCompletedAppleSignIn(page)).toEqual([true, false]);
+});
+
 test("a callback Android delivered while Cup was not running is exchanged on startup with the session storage the sign-in started from", async ({
   page,
 }) => {
