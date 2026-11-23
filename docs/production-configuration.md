@@ -107,10 +107,11 @@ Google Play grants the account nothing until it is invited, which Terraform cann
 Supabase's Apple provider needs a client secret for Apple sign-in on the web and on Android, a JWT signed with the Sign in with Apple key `6Y358M9M9A` that Apple accepts for at most six months. The GitHub Actions workflow [`rotate-apple-client-secret.yml`](../.github/workflows/rotate-apple-client-secret.yml), Cup's only CI, replaces it at 06:17 UTC on the 1st of every month, and on demand through **Run workflow** (`workflow_dispatch`) on `main` ([ADR 0118](adr/0118-rotate-supabases-apple-client-secret-from-a-scheduled-github-actions-workflow.md)). Each run:
 
 1. Fetches the source of the commit it runs on with plain `git`, without a token or the submodule.
-2. Fails from 30 days before the Supabase access token expires, with a message to [renew it](#renew-the-supabase-access-token).
-3. Signs a secret valid for 179 days with [`tooling/apple-client-secret`](../tooling/apple-client-secret/README.md), using the runner's `node`, and masks it in the log.
-4. Authenticates to the Terraform state bucket through Workload Identity Federation as `apple-client-secret-rotation@cup-infrastructure.iam.gserviceaccount.com` and applies the [apple-client-secret root](../terraform/README.md#apple-client-secret), which writes only `external_apple_secret`.
-5. Checks in to the Sentry cron monitor `apple-client-secret-rotation` through the public `cup-worker` DSN key.
+2. Fails at once, with a message to move the job to a newer runner image, when the runner's `node` is older than 22.18 (or 23.0 to 23.5), the versions that cannot run the TypeScript CLI without flags; the job installs no Node of its own, since its only actions are the two below.
+3. Fails from 30 days before the Supabase access token expires, with a message to [renew it](#renew-the-supabase-access-token).
+4. Signs a secret valid for 179 days with [`tooling/apple-client-secret`](../tooling/apple-client-secret/README.md), using the runner's `node`, and masks it in the log.
+5. Authenticates to the Terraform state bucket through Workload Identity Federation as `apple-client-secret-rotation@cup-infrastructure.iam.gserviceaccount.com` and applies the [apple-client-secret root](../terraform/README.md#apple-client-secret), which writes only `external_apple_secret`.
+6. Checks in to the Sentry cron monitor `apple-client-secret-rotation` through the public `cup-worker` DSN key.
 
 A run that fails leaves the previous secret in place, valid for about five more months. GitHub mails the failure, and the cron monitor opens an issue, which the [alerts](architecture/observability.md#alerts-and-monitors) email, for a missed or failed month, including when GitHub disables the schedule after 60 days without repository activity. Native iOS sign-in and the Worker do not use this secret.
 

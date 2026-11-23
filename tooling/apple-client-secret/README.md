@@ -1,6 +1,6 @@
 # Apple client secret
 
-This CLI signs the client secret Supabase's Apple provider sends to Apple, and checks that the Supabase access token the rotation workflow uses is not about to expire. The monthly [rotation workflow](../../docs/production-configuration.md#apple-client-secret-rotation) runs it with the runner's own `node` before any `pnpm install`, so `src/` imports nothing but Node built-ins and runs on Node 22.18 or newer through type stripping ([ADR 0118](../../docs/adr/0118-rotate-supabases-apple-client-secret-from-a-scheduled-github-actions-workflow.md)).
+This CLI signs the client secret Supabase's Apple provider sends to Apple, and checks that the Supabase access token the rotation workflow uses is not about to expire. The monthly [rotation workflow](../../docs/production-configuration.md#apple-client-secret-rotation) runs it with the runner's own `node` before any `pnpm install`, so `src/` imports nothing but Node built-ins and runs on Node 22.18 or newer through type stripping; the workflow checks the runner's Node version before it runs the CLI ([ADR 0118](../../docs/adr/0118-rotate-supabases-apple-client-secret-from-a-scheduled-github-actions-workflow.md)).
 
 ## Usage
 
