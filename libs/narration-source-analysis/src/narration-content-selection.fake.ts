@@ -9,7 +9,6 @@ export type FakeNarrationContentSelectorOptions = {
   failure?: Error;
 };
 
-/** Creates a deterministic selector that keeps every annotated source element. */
 export function createFakeNarrationContentSelector(
   options: FakeNarrationContentSelectorOptions = {},
 ) {

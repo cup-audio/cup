@@ -5,7 +5,6 @@ import { WEB_APP_CSP_NONCE_PLACEHOLDER } from "@cup/listener-api.routes";
 
 import { useWorker } from "#test/use-worker.ts";
 
-/** The test runtime's stand-in for the built web app (wrangler.test.jsonc, `assets`). */
 const FIXTURE_INDEX_HTML = await fs.readFile(new URL("assets/index.html", import.meta.url), "utf8");
 const FIXTURE_CSS = await fs.readFile(
   new URL("assets/app/assets/fixture.css", import.meta.url),
@@ -82,7 +81,6 @@ test("the CSP lets the web app play media only from the API's file routes", asyn
 
   const response = await worker.fetch("/app/audiobooks/c4be3f43-4a43-4d6b-9a3f-6f0d2f6e2d51");
 
-  // The API shares the web app's origin, which the narration track's signed URL points at.
   expect(response.headers.get("Content-Security-Policy")).toMatch(
     /(?:^|; )media-src https?:\/\/[^/;\s]+\/api\/files\/(?:;|$)/,
   );

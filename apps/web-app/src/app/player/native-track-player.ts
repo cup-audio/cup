@@ -17,60 +17,29 @@ import {
 } from "#src/app/player/player.ts";
 import { SAVE_RETRY_FAILURE_MESSAGE } from "#src/app/player/position-saves-machine.ts";
 
-/** Why the plugin ended its session without the page. */
 export type NativeClosedReason =
-  /** The listener swiped Cup from recents while it was paused. */
   | "taskRemoved"
-  /** The listener swiped the notification away, after the service left the foreground. */
   | "notificationDismissed"
-  /** The listener pressed Close on the notification or the lock screen. */
   | "closed"
-  /** The URLs expired while paused, or the server refused the track URL. */
   | "trackUrlExpired"
-  /** Android stopped the service for another reason. */
   | "serviceStopped";
 
-/**
- * How the plugin's listening-position saves fare, by the web player's rules
- * (`PlaybackSession.getSaveFailure`).
- */
 export type NativePositionSave =
-  /** The last save succeeded, or none failed yet. */
   | { status: "ok" }
-  /**
-   * Saves fail for a reason that can pass, such as a lost connection; the plugin retries the
-   * latest.
-   */
   | { status: "failing" }
-  /** Saves still fail: a retry failed too, or saves have failed for the retry delay. */
   | { status: "stillFailing" }
-  /** The server refused the last save for good, in its words. */
   | { status: "refused"; refusal: string };
 
-/** What the Android app's plugin reports after every change of its ExoPlayer. */
 export type NativePlaybackState = {
   conversionId: string;
-  /** The signed-in user the audiobook was loaded for. */
   subject: string;
-  /** Whether ExoPlayer plays or waits for data to play; `false` while focus loss suppresses it. */
   isPlaying: boolean;
   isBuffering: boolean;
-  /** The audiobook just reached its end; ExoPlayer is paused back at its start. */
   hasEnded: boolean;
-  /** `0` until ExoPlayer read the track's duration. */
   durationMilliseconds: number;
   positionMilliseconds: number;
-  /** When ExoPlayer was at `positionMilliseconds`, in epoch milliseconds, the page's clock. */
   positionReadAt: number;
-  /**
-   * `"playback"`: loading the track failed, and ExoPlayer paused. `"trackUrlExpired"`: only newly
-   * signed URLs play, and the session closed.
-   */
   error: "playback" | "trackUrlExpired" | null;
-  /**
-   * Set when the plugin ended the session without the page and dropped its media item; the position
-   * is the last one. It keeps reporting this state until the next `load`.
-   */
   closedReason: NativeClosedReason | null;
   positionSave: NativePositionSave;
 };
@@ -79,42 +48,27 @@ export type NativeLoadOptions = {
   conversionId: string;
   subject: string;
   trackUrl: string;
-  /** The signed position URL, through which the plugin saves the listening position. */
   positionUrl: string;
-  /** When the page received the audiobook response that carried the URLs, by the page's clock. */
   urlsIssuedAt: number;
-  /** Where each synchronization unit starts, in document order, to convert positions to save. */
   timeline: Array<{ synchronizationUnitId: string; startMilliseconds: number }>;
   title: string;
   artworkUrl: string | undefined;
-  /** The narration track's listed duration, which the system's media controls show. */
   durationMilliseconds: number;
   startPositionMilliseconds: number;
 };
 
-/**
- * The Android app's media playback plugin (`MediaPlaybackPlugin.java`): a Media3 ExoPlayer in a
- * `mediaPlayback` media session service, which plays the narration track and serves the system's
- * media controls without the page. Its session outlives the page.
- */
 export type MediaPlaybackPlugin = {
-  /** Sets the media item without preparing it: nothing is fetched or shown until Play. */
   load(options: NativeLoadOptions): Promise<void>;
-  /** Prepares and plays; the first Play starts the service in the foreground. */
   play(): Promise<void>;
   pause(): Promise<void>;
   seekTo(options: { positionMilliseconds: number }): Promise<void>;
-  /** Skips from ExoPlayer's own position. */
   skipBy(options: { deltaMilliseconds: number }): Promise<void>;
-  /** Replaces the URLs, which the page received at `urlsIssuedAt`, keeping the position. */
   replaceUrls(options: {
     trackUrl: string;
     positionUrl: string;
     urlsIssuedAt: number;
   }): Promise<void>;
-  /** Releases ExoPlayer and stops the service; `"save"` saves the position one last time. */
   close(options: { position: PositionOnClose }): Promise<void>;
-  /** The current state, the last native stop's, or `null` without a session. */
   getState(): Promise<{ state: NativePlaybackState | null }>;
   addListener(
     eventName: "state",
@@ -123,26 +77,14 @@ export type MediaPlaybackPlugin = {
 };
 
 export type NativePlayerServices = {
-  /** The client clock, in epoch milliseconds, which the plugin's `positionReadAt` shares. */
   now(): number;
-  /** Calls `callback` repeatedly until the returned function stops it. */
   setInterval(callback: () => void, intervalMilliseconds: number): () => void;
-  /** Calls `callback` whenever the page becomes visible again, until the returned function. */
   onVisible(callback: () => void): () => void;
-  /**
-   * Writes a listening position into the cached audiobook without a request, so an audiobook opened
-   * again shows where the plugin, which saved it, reported it.
-   */
   cachePosition(conversionId: string, position: PlaybackPosition): void;
 };
 
-/** How often the shown position moves on while ExoPlayer plays, like a media element's updates. */
 const POSITION_UPDATE_INTERVAL_MILLISECONDS = 250;
 
-/**
- * Plays every loaded audiobook on the Android app's native player. Only signed-in listeners play in
- * the app (ADR 0017), and the plugin's session belongs to the account it was loaded for.
- */
 export function createNativePlayers(
   plugin: MediaPlaybackPlugin,
   services: NativePlayerServices,
@@ -162,10 +104,8 @@ export function createNativePlayers(
   };
 }
 
-/** The signed URLs of one audiobook response, which expire together; `SignedUrls` in the plugin. */
 type NativeUrls = { trackUrl: string; positionUrl: string; urlsReceivedAt: number };
 
-/** The server issues the position URL to every account, and only accounts play in the app. */
 function readNativeUrls(
   conversionId: string,
   narrationTrack: NarrationTrack,
@@ -177,10 +117,6 @@ function readNativeUrls(
   return { trackUrl: narrationTrack.url, positionUrl: narrationTrack.positionUrl, urlsReceivedAt };
 }
 
-/**
- * Finds the plugin's session when the page starts, which outlives a reload, a renderer crash, a
- * live update and a relaunch while it plays. A session the plugin closed is not running.
- */
 export function createRunningPlayerFinder(
   plugin: MediaPlaybackPlugin,
   services: NativePlayerServices,
@@ -211,22 +147,10 @@ export function createRunningPlayerFinder(
   };
 }
 
-/** How the player starts: loading the audiobook, or taking over the session that plays it. */
 type NativePlayerStart =
   | { kind: "load"; subject: string; urls: NativeUrls }
   | { kind: "adopt"; state: NativePlaybackState };
 
-/**
- * Plays a loaded audiobook on the Android app's ExoPlayer, through its plugin.
- *
- * The plugin is the only playback state: the snapshot follows its `state` events, and while it
- * plays, the position moves on from the time it was read. A command shows its effect at once, until
- * the plugin reports. The plugin owns the listening position, so this player saves nothing: it
- * writes the reported position into the cached audiobook, and words how the plugin's saves fare.
- *
- * After a native stop the plugin has no media item. The audiobook stays loaded at the last
- * position, seeks move only that position, and the next Play loads the audiobook again and plays.
- */
 class NativeTrackPlayer implements Player {
   private readonly session: PlaybackSession;
   private readonly plugin: MediaPlaybackPlugin;
@@ -237,7 +161,6 @@ class NativeTrackPlayer implements Player {
   private readonly stopListeningForVisibility: () => void;
   private stopPositionUpdates: (() => void) | null = null;
   private state: NativePlaybackState;
-  /** The URLs the next load uses, and when the page received them. */
   private urls: NativeUrls | null;
   private failure: string | null = null;
   private isClosed = false;
@@ -256,7 +179,6 @@ class NativeTrackPlayer implements Player {
     this.stateListener = plugin.addListener("state", this.handleState);
     if (start.kind === "adopt") {
       this.state = start.state;
-      // The session's URLs came from an earlier page, which the next Play renews.
       this.urls = null;
     } else {
       this.state = {
@@ -348,7 +270,6 @@ class NativeTrackPlayer implements Player {
     }
   };
 
-  /** After a native stop the plugin has no item to replace, so the next load uses the URLs. */
   replaceUrls = (narrationTrack: NarrationTrack, urlsReceivedAt: number) => {
     const urls = readNativeUrls(this.session.conversionId, narrationTrack, urlsReceivedAt);
     this.urls = urls;
@@ -368,7 +289,6 @@ class NativeTrackPlayer implements Player {
     this.publish();
   };
 
-  /** Unloading closes the plugin's session; another audiobook's `load` replaces its item instead. */
   close = (position: PositionOnClose, ending: PlayerEnding) => {
     if (this.isClosed) {
       return;
@@ -424,7 +344,6 @@ class NativeTrackPlayer implements Player {
     }
 
     this.setState(state);
-    // The plugin saved this position, or keeps trying to; a closed session's next Play saves it.
     this.services.cachePosition(
       this.session.conversionId,
       this.session.listeningPositionAt(state.positionMilliseconds),
@@ -434,7 +353,6 @@ class NativeTrackPlayer implements Player {
     }
   };
 
-  /** Events sent while the WebView suspended the hidden page can be lost. */
   private refreshState = () => {
     void this.readPluginState();
   };
@@ -450,12 +368,10 @@ class NativeTrackPlayer implements Player {
     }
   }
 
-  /** The plugin ended its session without the page, so it has no media item. */
   private isNativelyStopped() {
     return this.state.closedReason !== null;
   }
 
-  /** The current state with the position read now, changed by `changes`. */
   private stateAt(changes: Partial<NativePlaybackState>): Partial<NativePlaybackState> {
     return {
       positionMilliseconds: this.readPosition(),
@@ -481,7 +397,6 @@ class NativeTrackPlayer implements Player {
   }
 
   private readDuration() {
-    // The track's listed duration stands in until ExoPlayer read the file's own.
     return this.state.durationMilliseconds > 0
       ? this.state.durationMilliseconds
       : this.session.timeline.durationMilliseconds;
@@ -504,8 +419,6 @@ class NativeTrackPlayer implements Player {
       isPlaying: this.state.isPlaying,
       isBuffering: this.state.isBuffering,
       playbackRate: 1,
-      // A failed load is retried at the same URL; ExoPlayer prepares the item again on Play. Only
-      // expired URLs, or a session taken over with URLs of unknown age, need new ones.
       needsNewTrackUrl: this.state.error === "trackUrlExpired" || this.urls === null,
       error:
         this.failure ??
@@ -514,17 +427,14 @@ class NativeTrackPlayer implements Player {
     };
   }
 
-  /** The plugin's save failure in the web player's words (`PlaybackSession.getSaveFailure`). */
   private readSaveFailure(): string | null {
     const { positionSave } = this.state;
     if (positionSave.status === "refused") {
       return positionSave.refusal;
     }
-    // A failure that can pass stays quiet until the plugin reports that saves still fail.
     return positionSave.status === "stillFailing" ? SAVE_RETRY_FAILURE_MESSAGE : null;
   }
 
-  /** Replaces the snapshot only when a value changed, as `useSyncExternalStore` re-renders. */
   private publish() {
     if (this.isClosed) {
       return;
@@ -541,7 +451,6 @@ class NativeTrackPlayer implements Player {
     }
   }
 
-  /** A command the plugin rejects shows as a failure to play. */
   private send(call: Promise<unknown>) {
     call.catch((error: unknown) => {
       console.error("The media playback plugin rejected a command.", error);

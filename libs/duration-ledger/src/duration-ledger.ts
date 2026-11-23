@@ -19,7 +19,6 @@ export type DurationTotals = {
   spentMilliseconds: number;
 };
 
-/** One ledger event; segment events carry their conversion ID as their cause. */
 type DurationLedgerEntry = Pick<
   typeof creditLedger.$inferSelect,
   | "eventKind"
@@ -31,10 +30,6 @@ type DurationLedgerEntry = Pick<
   | "cause"
 >;
 
-/**
- * Keeps one owner's duration allowance, reservations, and encoded-duration charges in an
- * append-only ledger. The balance row caches the ledger's sums so that checks stay cheap.
- */
 export class DurationLedger {
   private readonly database: DrizzleSqliteDODatabase;
   private readonly segmentsTable: AudioSegmentsTable;
@@ -44,7 +39,6 @@ export class DurationLedger {
     this.segmentsTable = segmentsTable;
   }
 
-  /** Opens the ledger with its first allowance grant. */
   initialize(operationId: string, amount: number, cause: string, nowMs: number): void {
     this.database.transaction(() => {
       this.database
@@ -91,19 +85,10 @@ export class DurationLedger {
     };
   }
 
-  /**
-   * Orders the ledger's states: every change to the allowance, reserved, or spent duration appends
-   * an event, and events are never removed, so the count grows with each change and only then.
-   */
   revision(): number {
     return requireRow(this.database.select({ events: count() }).from(creditLedger).get()).events;
   }
 
-  /**
-   * Reserves every segment lacking audio, or none when their whole estimate exceeds the available
-   * duration. `refuseNewReservations` lets the owner refuse when anything would be reserved, while
-   * a request that only finds existing reservations still succeeds.
-   */
   reserveMissing<Refusal extends string = never>(
     conversionId: string,
     narrationTextCharactersBySegment: readonly number[],
@@ -208,8 +193,6 @@ export class DurationLedger {
         .set({ state: "consumed" })
         .where(eq(creditOperations.operationId, segment.operationId))
         .run();
-      // An overrun can temporarily exceed the unreserved balance. Keep other reservations intact,
-      // cap total charges at the remaining allowance, and expose zero availability until they settle.
       this.appendEntry(
         segment.operationId,
         "consume",
@@ -223,7 +206,6 @@ export class DurationLedger {
     });
   }
 
-  /** Releases the conversion's open reservations, or only `sequence`'s; returns how many. */
   releaseReservations(conversionId: string, nowMs: number, sequence?: number): number {
     return this.database.transaction(() => {
       let releasedCount = 0;
@@ -259,7 +241,6 @@ export class DurationLedger {
     });
   }
 
-  /** When the segment's current reservation was taken, or `undefined` for a segment without one. */
   reservedAtMs(conversionId: string, sequence: number): number | undefined {
     return this.database
       .select({ createdAtMs: creditLedger.createdAtMs })
@@ -288,10 +269,6 @@ export class DurationLedger {
       .map(toSegmentUsage);
   }
 
-  /**
-   * Records a signed allowance change once per request ID. A reduction may not exceed the available
-   * duration, so reserved and spent duration always stay covered.
-   */
   adjustAllowance(requestId: string, amount: number, cause: string, nowMs: number): void {
     z.number().int().nonnegative().safe().parse(nowMs);
     z.uuidv4().parse(requestId);
@@ -333,7 +310,6 @@ export class DurationLedger {
     });
   }
 
-  /** Verifies that the cached balance equals the ledger's sums. */
   inspectAccounting() {
     const totals = requireRow(
       this.database
@@ -356,12 +332,6 @@ export class DurationLedger {
     };
   }
 
-  /**
-   * Reads up to `limit` ledger events in the order they were appended, after the event at
-   * `afterPosition`. A position is the event's implicit SQLite rowid. The ledger never deletes an
-   * event before the whole owner is erased, and Durable Object storage is never vacuumed, so rowids
-   * only grow and paging by them never skips or repeats an event.
-   */
   entries(page: { afterPosition?: number; limit: number }): {
     entries: DurationLedgerEntry[];
     nextPosition: number | undefined;
@@ -509,7 +479,6 @@ function toSegmentUsage(row: AudioSegmentsTable["$inferSelect"]): SegmentUsage {
   };
 }
 
-/** Preserves the fail-fast behavior of storage cursors for required rows. */
 function requireRow<T>(row: T | undefined): T {
   if (row === undefined) {
     throw new CupError("Required SQLite row is missing");

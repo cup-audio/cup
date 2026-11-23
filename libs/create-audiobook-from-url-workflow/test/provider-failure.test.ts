@@ -18,12 +18,10 @@ vi.mock("cloudflare:workers", () => ({
 vi.mock("cloudflare:workflows", () => ({
   NonRetryableError: class NonRetryableError extends Error {},
 }));
-// The Worker's failure tests check the event that reaches the Sentry stub.
 vi.mock(import("@sentry/core"), async (importOriginal) => ({
   ...(await importOriginal()),
   captureException: vi.fn<typeof captureException>(),
 }));
-// The helper itself is tested against the Sentry stub in @cup/telemetry.cloudflare.
 vi.mock(import("@cup/telemetry.cloudflare"), async (importOriginal) => ({
   ...(await importOriginal()),
   logEvent: vi.fn<typeof logEvent>(),
@@ -57,7 +55,6 @@ import {
 } from "#src/run-prepare-audiobook-workflow.ts";
 import type { AudiobookWorkflowEnvironment } from "#src/workflow-environment.ts";
 
-// The test Worker adds a hook to its owner classes that runs their alarm on demand.
 type WithAlarmHook<Owner> = Owner & { reconcileForTest(): Promise<void> };
 type TestEnvironment = Omit<AudiobookWorkflowEnvironment, "ACCOUNTS" | "CONVERSION_GRANTS"> & {
   ACCOUNTS: DurableObjectNamespace<WithAlarmHook<AccountDurableObject>>;
@@ -72,8 +69,6 @@ const COVER_IMAGE_DECLARATION = {
   alternativeText: "A lighthouse at dusk",
 };
 const COVER_IMAGE_BYTES = Uint8Array.of(0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10);
-// The language fields of a Gemini request from before policy 5, as recorded by
-// createRecordingSpeechSynthesisAi.
 const TODAYS_SPEECH_REQUEST = {
   content: [{ type: "text", text: expect.any(String) }],
   generationConfig: { speech_config: [{ voice: "Charon" }] },
@@ -138,7 +133,6 @@ test.each(["trial", "account"] as const)(
     const conversionId = kind === "account" ? started.conversion.conversionId : trialConversionId;
     const owner = kind === "account" ? account : grant;
 
-    // Stop the workflow right after it recorded the ready outcome, before it dispatches.
     const step = createImmediateRetryStep();
     const runStep = step.do.bind(step);
     step.do = ((name: string, ...rest: unknown[]) =>
@@ -162,7 +156,6 @@ test.each(["trial", "account"] as const)(
         (await workflow.get(`segment-${conversionId}-${sequence}`)).status(),
       ).resolves.toBeDefined();
     }
-    // Dispatched work keeps its reservation until it settles or reports a failure.
     expect((await owner.listAudioSegments(conversionId)).map((segment) => segment.state)).toEqual([
       "reserved",
       "reserved",
@@ -292,7 +285,6 @@ test.each([
     });
 
     expect((await owner.getConversion(conversionId))?.status).toBe("ready");
-    // A manifest without a narration language has no field at all, not a `null` sentinel.
     const { narrationLanguage: storedLanguage = "(absent)" } = await loadReadyAudiobook(
       owner,
       conversionId,
@@ -468,8 +460,6 @@ test.each([
 ] as const)("%s is synthesized with today's requests", async (_, rewriteManifest) => {
   const { owner, grantId, conversionId, artifactPrefix, segmentOwner } =
     await createOwnedConversion("trial");
-  // Replace the stored manifest with one prepared before policy 5, keeping its narration language
-  // to show that the request policy, not the missing language, keeps the request unchanged.
   const step = createImmediateRetryStep();
   const runStep = step.do.bind(step);
   step.do = async (name: string, ...rest: unknown[]) => {
@@ -548,7 +538,6 @@ test("a narration over the content limit logs one content-limit warning, also wh
       },
       step,
       services: {
-        // More narration text than the content limit of 40,000 characters.
         prepareSourceMaterial: createControlledSourceMaterialPreparer({
           url: SOURCE_URL,
           html: `<article><h1>Too long</h1><p>${"word ".repeat(9_000)}</p></article>`,
@@ -562,7 +551,6 @@ test("a narration over the content limit logs one content-limit warning, also wh
     });
 
   await expect(run()).rejects.toThrow("Narration exceeds the conversion content ceiling");
-  // A replay reruns the code between steps and reuses each step's recorded result.
   await expect(run()).rejects.toThrow("Narration exceeds the conversion content ceiling");
 
   expect(await grant.getConversion(conversionId)).toMatchObject({
@@ -678,8 +666,6 @@ test("a retried account preparation step reuses the source material it already s
   const { owner, grantId, accountId, conversionId, artifactPrefix } =
     await createOwnedConversion("account");
   const versionsAfterFirstAttempt = new Map<string, string | undefined>();
-  // Runs each storing step's callback twice, as a retry after a failure late in the first attempt
-  // would, and records what the first attempt stored.
   const step = createImmediateRetryStep();
   const runStep = step.do.bind(step);
   step.do = async (name: string, ...rest: unknown[]) => {
@@ -739,7 +725,6 @@ test.each([
       });
 
     await run();
-    // A replay reruns the code between steps and reuses each step's recorded result.
     await run();
 
     expect(loggedEvents("narration-language-fallback")).toHaveLength(1);
@@ -774,7 +759,6 @@ test("a failed preparation is captured once, also when the run is replayed, unde
 
 test("a failed preparation whose owner cannot record the failure is left to the owner's alarm to capture", async () => {
   const { grantId } = await createConversion();
-  // The grant knows no such conversion, so it refuses every phase and outcome of the run.
   const unknownConversionId = crypto.randomUUID();
 
   await expect(runConversion(grantId, unknownConversionId, undefined, true)).rejects.toBeInstanceOf(
@@ -786,7 +770,6 @@ test("a failed preparation whose owner cannot record the failure is left to the 
 
 test("a document exceeding the available duration reserves nothing", async () => {
   const { grant, grantId, conversionId, now } = await createConversion();
-  // Enough for either segment alone, but not for the whole document.
   await grant.setDurationAllowance(2_500, now);
   await runConversion(grantId, conversionId);
   expect((await grant.getConversion(conversionId))?.status).toBe("ready");
@@ -803,7 +786,6 @@ test("an account document exceeding the available duration reserves nothing unti
     createdAtMs: Temporal.Now.instant().epochMilliseconds,
   });
   const welcomeAllowance = (await account.inspect()).balance.available;
-  // Leave enough for either segment alone, but not for the whole document.
   await account.adjustAllowance(crypto.randomUUID(), 2_500 - welcomeAllowance, "test");
   const started = await account.startConversion({
     sourceUrl: SOURCE_URL,
@@ -858,14 +840,12 @@ test.each([400, 503])(
       reservedMilliseconds: other.estimatedMilliseconds,
       spentMilliseconds: 0,
     });
-    // A segment never reserves for itself: without the owner's retry it has nothing to spend.
     const ai = createFakeSpeechSynthesisAi();
     const gateway = vi.spyOn(ai, "gateway");
     await expect(runSegment(conversionId, { kind: "trial", grantId }, 0, ai)).rejects.toThrow(
       "no duration reservation",
     );
     expect(gateway).not.toHaveBeenCalled();
-    // The owner's retry reserves the released segment again and it produces accessible audio once.
     await expect(
       grant.startSynthesis(conversionId, [
         failing.narrationTextCharacters,
@@ -938,7 +918,6 @@ test("account segment retry preserves its ledger and earlier successful audio", 
       createFakeSpeechSynthesisAi({ failureStatus: 503 }),
     ),
   ).rejects.toThrow("Configured deterministic speech failure");
-  // Only the failed segment returns its reservation; the settled charge stays.
   expect((await account.inspect()).balance).toEqual({
     unit: "audio-millisecond",
     available: balance.available + balance.reserved,
@@ -990,7 +969,6 @@ test("a stale account execution epoch cannot reserve duration or publish segment
   const ai = createFakeSpeechSynthesisAi();
   const gateway = vi.spyOn(ai, "gateway");
 
-  // Wrangler's RPC transport can hide the original rejection; verify the storage effects below.
   await expect(
     runSegment(conversionId, { kind: "account", accountId }, 0, ai, 2),
   ).rejects.toBeInstanceOf(Error);
@@ -1087,7 +1065,6 @@ async function createConversion() {
   return { grant, grantId, conversionId: accepted.conversion.conversionId, now };
 }
 
-/** Creates a pending conversion under either owner, with a uniform view of what tests assert. */
 async function createOwnedConversion(kind: "trial" | "account") {
   const { grant, grantId, conversionId: trialConversionId } = await createConversion();
   if (kind === "trial") {
@@ -1103,7 +1080,6 @@ async function createOwnedConversion(kind: "trial" | "account") {
           grant.getReadyAudiobookReference(conversionId),
         hasCoverImage: async (conversionId: string) => {
           const conversion = await grant.getConversion(conversionId);
-          // The RPC stub's type drops the ready variant, so the flag is read structurally.
           return (
             conversion !== undefined &&
             "hasCoverImage" in conversion &&
@@ -1168,7 +1144,6 @@ async function loadReadyAudiobook(
   return loadAudiobook({ bucket: environment.AUDIO_BUCKET, audiobookReference });
 }
 
-/** Runs the segment workflow for every synchronization unit of a ready conversion, in order. */
 async function runAllSegments(
   owner: Parameters<typeof loadReadyAudiobook>[0],
   conversionId: string,
@@ -1188,7 +1163,6 @@ const GEMINI_REQUEST_SCHEMA = z.object({
   }),
 });
 
-/** Wraps the fake speech AI to record the language-bearing fields of each Gemini request. */
 function createRecordingSpeechSynthesisAi() {
   const fakeGateway = createFakeSpeechSynthesisAi().gateway("default");
   const run = vi.fn<ReturnType<SpeechSynthesisAi["gateway"]>["run"]>(
@@ -1204,7 +1178,6 @@ function createRecordingSpeechSynthesisAi() {
   return { ai, speechRequests };
 }
 
-/** Reads the synthesis-language metadata of the conversion's two audio segments. */
 async function storedSynthesisLanguages(artifactPrefix: string) {
   return Promise.all(
     [0, 1].map(async (sequence) => {
@@ -1216,7 +1189,6 @@ async function storedSynthesisLanguages(artifactPrefix: string) {
   );
 }
 
-/** The details of each log record of one event since the test started. */
 function loggedEvents(event: LogEventName) {
   return vi
     .mocked(logEvent)
@@ -1230,7 +1202,6 @@ function runConversion(
   accountId?: string,
   shouldFailPreparation = false,
   step = createImmediateRetryStep(),
-  // Supplying a loader makes the source page declare a cover image.
   loadCoverImage?: CoverImageLoader,
   {
     declaredLanguage,
@@ -1284,7 +1255,6 @@ function runConversion(
 }
 
 function createImmediateRetryStep(): WorkflowStep {
-  // Execute the production retry count without the platform's wall-clock retry delays.
   return {
     do: doStep,
     sleep: vi.fn<WorkflowStep["sleep"]>().mockRejectedValue(new Error("Unexpected workflow sleep")),
@@ -1297,10 +1267,6 @@ function createImmediateRetryStep(): WorkflowStep {
   };
 }
 
-/**
- * A step whose runs share recorded outcomes, as a replay of a Workflow run reuses them: a recorded
- * step returns its result or rejects with its error again, without running its callback.
- */
 function createReplayingStep(): WorkflowStep {
   const outcomes = new Map<string, { result: unknown } | { error: unknown }>();
   const step = createImmediateRetryStep();

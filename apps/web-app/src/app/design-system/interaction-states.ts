@@ -1,10 +1,5 @@
 import { css } from "@linaria/core";
 
-/**
- * The undrawn pressed and hover state of the redesigned controls: an 8 % ink overlay in the
- * element's own shape, on hover only for pointers that can hover. The focus ring is global (see
- * `global-styles.ts`).
- */
 export const pressableOverlay = css`
   /* containing block for the overlay below */
   position: relative;

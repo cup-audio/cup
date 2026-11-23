@@ -10,11 +10,6 @@ import {
   signInFromLandingPage,
 } from "#src/journeys.ts";
 
-/**
- * Links that leave Cup open in the system's browser, not in Cup's WebView: Capacitor hands every
- * navigation away from Cup's origin to Android. The test Worker's hosts are unreachable from the
- * browser, so the test checks only which app is in front.
- */
 const app = useMobileApp();
 
 const APP_PACKAGE = "audio.cup.app";

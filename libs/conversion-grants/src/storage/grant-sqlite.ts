@@ -81,7 +81,6 @@ export class ConversionGrantSqlite {
     return record;
   }
 
-  /** Saves the grant and its conversions; duration changes go through `duration` instead. */
   async save(record: Omit<GrantRecord, "segmentUsage" | "duration">): Promise<void> {
     const mutableGrant = {
       revokedAtMs: record.revokedAtMs ?? null,
@@ -125,10 +124,6 @@ function conversionRowToUnknown(row: ConversionRow): unknown {
     createdAtMs: row.createdAtMs,
     ...(row.workflowStartedAtMs === null ? {} : { workflowStartedAtMs: row.workflowStartedAtMs }),
     lastStartedPhase: row.lastStartedPhase,
-    /*
-     * Code from before migration 0005 writes no stage start, so a row it wrote during a rollback
-     * has none. Such a row reads the way the migration backfilled the rows it found.
-     */
     stageStartedAtMs: row.stageStartedAtMs ?? row.completedAtMs ?? row.createdAtMs,
     ...(row.stuckReportedAtMs === null ? {} : { stuckReportedAtMs: row.stuckReportedAtMs }),
   };

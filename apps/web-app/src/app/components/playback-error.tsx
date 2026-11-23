@@ -6,7 +6,6 @@ import { usePlayerState } from "#src/app/player/player-host-provider.js";
 import type { Player } from "#src/app/player/player.js";
 import { composeClassnames } from "#src/app/utils.js";
 
-/** The loaded audiobook's playback failure, such as a refused start or save. */
 export function PlaybackError({ player }: { player: Player }): React.ReactNode {
   const message = usePlayerState(player, (state) => state.error);
   if (!message) {
@@ -16,7 +15,6 @@ export function PlaybackError({ player }: { player: Player }): React.ReactNode {
   return <PlaybackErrorMessage message={message} />;
 }
 
-/** A playback failure without a loaded audiobook, such as a track that no longer exists. */
 export function PlaybackErrorMessage({ message }: { message: string }): React.JSX.Element {
   return (
     <p

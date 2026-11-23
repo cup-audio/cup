@@ -3,7 +3,6 @@ import {
   TRACK_COVER_TRANSITION_NAME,
 } from "#src/app/view-transition-names.js";
 
-/** Cross-browser baseline styles applied before application styles. */
 export const cssReset = css`
   @layer reset {
     /* based on https://www.joshwcomeau.com/css/custom-css-reset/ */
@@ -79,13 +78,8 @@ export const cssReset = css`
   }
 `;
 
-/**
- * Marks a subtree as redesigned: the global Space Mono rule for `span` and `input` does not reach
- * into it, so it renders in Inter only.
- */
 export const interTypefaceScope = { "data-typeface": "inter" } as const;
 
-/** Global design tokens and base document styles. */
 export const cssBase = css`
   @layer base {
     :root {
@@ -95,14 +89,11 @@ export const cssBase = css`
       font-family: var(--font-family-1);
       font-size: ${16 / 16}rem;
       color: var(--color-fg);
-      /* inherited, so it styles every scroll container */
       scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
       background-color: var(--color-bg);
       --font-family-1: "Inter Variable", sans-serif;
       --font-family-2: "Space Mono", monospace;
 
-      /* design tokens */
-      /* one ink color at several strengths; the redesigned screens use no other text color */
       --color-ink-rgb: 18 18 18;
       --color-ink: rgb(var(--color-ink-rgb));
       --color-ink-60: rgb(var(--color-ink-rgb) / 60%);
@@ -112,7 +103,6 @@ export const cssBase = css`
       --color-ink-4: rgb(var(--color-ink-rgb) / 4%);
       --color-page: #f6f6f3;
       --color-surface: #fff;
-      /* skeletons, cover placeholders and the scrubber track */
       --color-placeholder: #ececec;
       --color-error: #b42318;
       --color-fg: var(--color-ink);
@@ -129,12 +119,10 @@ export const cssBase = css`
       --font-size-xxl: 26px;
       --font-size-xxxl: 30px;
       --font-size-display: 36px;
-      /* sizes of the text styles in text-styles.ts that the scale above does not hold */
       --font-size-h1: 32px;
       --font-size-h2: 24px;
       --font-size-callout: 20px;
       --font-weight-inter-figma-medium: 500;
-      /* line heights of the text styles in text-styles.ts; H1 is drawn at 24 px but kept at 1 or above */
       --line-height-h1: 32px;
       --line-height-h2: 26px;
       --line-height-h3: 20px;
@@ -147,7 +135,6 @@ export const cssBase = css`
       --letter-spacing-tight: -0.02em;
 
       --spacing-base: 8px;
-      /* page padding, gaps and card padding of the redesigned screens */
       --spacing-gutter: 12px;
       --app-padding-block: calc(1.5 * var(--spacing-base));
       --app-padding-inline: calc(2 * var(--spacing-base));
@@ -158,13 +145,11 @@ export const cssBase = css`
       --border-radius-full: 9999px;
 
       --shadow-card: 4px -4px 20px rgb(0 0 0 / 12%);
-      /* transparent-to-white fades behind the tab bar and the player sheet, opaque from the given stop */
       --background-fade-tab-bar: linear-gradient(to bottom, transparent, var(--color-surface));
       --background-fade-player-sheet: linear-gradient(to bottom, transparent, var(--color-surface));
 
       --background-dialog-backdrop: rgb(var(--color-ink-rgb) / 40%);
 
-      /* the focus ring, also drawn by containers whose focused element shows none */
       --focus-ring: 2px solid var(--color-ink);
       --focus-ring-offset: 2px;
 
@@ -172,41 +157,29 @@ export const cssBase = css`
       --scrollbar-track: transparent;
     }
 
-    /* not inherited; the thin variant is the one that draws no arrow buttons */
     * {
       scrollbar-width: thin;
     }
 
-    /* undrawn state: every interactive element shows the same focus ring */
     :focus-visible {
       outline: var(--focus-ring);
       outline-offset: var(--focus-ring-offset);
     }
 
-    /*
-     * No view transition captures the document, so only named elements animate, which each screen's
-     * content is too. While the document is captured, the browser measures sticky positions
-     * against the snapshot, which extends under a bottom browser toolbar, and would draw the bottom
-     * bars that much lower.
-     */
     :root {
       view-transition-name: none;
     }
 
-    /* a track's cover moving between Recents and its detail view, named in cover-transition.ts */
     ::view-transition-group(${TRACK_COVER_TRANSITION_NAME}) {
-      /* above the screens' content, whose sticky header would otherwise paint over it */
       z-index: 1;
       animation-duration: 300ms;
       animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
     }
 
-    /* the screens' bottom bars (bottomBarDuringViewTransition): a moving cover passes under them */
     ::view-transition-group(${BOTTOM_BAR_TRANSITION_NAME}) {
       z-index: 2;
     }
 
-    /* the bars differ in height, and both end at the bottom of the screen */
     ::view-transition-old(${BOTTOM_BAR_TRANSITION_NAME}),
     ::view-transition-new(${BOTTOM_BAR_TRANSITION_NAME}) {
       top: auto;
@@ -231,22 +204,12 @@ export const cssBase = css`
     h6 {
       font-family: var(--font-family-1);
     }
-    /* Pages that are not redesigned keep Space Mono; redesigned screens opt out with \`interTypefaceScope\`. */
     :where(span, input):not(:where([data-typeface="inter"], [data-typeface="inter"] *)) {
       font-family: var(--font-family-2);
     }
   }
 `;
 
-/**
- * Returns a template string through a `css` tag that triggers CSS syntax highlighting in the VS
- * Code extension
- * [`styled-components.vscode-styled-components`](https://marketplace.visualstudio.com/items?itemName=styled-components.vscode-styled-components).
- *
- * @param strings - The static segments of the tagged template.
- * @param args - The interpolated string or number values.
- * @returns The concatenated CSS source.
- */
 function css(strings: TemplateStringsArray, ...args: Array<string | number>): string {
   let result = strings[0] ?? "";
   for (const [index, argument] of args.entries()) {

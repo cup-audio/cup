@@ -4,11 +4,6 @@
   "main": "test/worker.ts",
   "compatibility_flags": ["nodejs_compat"],
   "compatibility_date": "2026-08-15",
-  /*
-   * Registry tests that send through a Resend stub pass its origin explicitly; nothing reaches Resend.
-   * Only the SENTRY_* test objects run Sentry, which sends to the discard port unless a test points
-   * SENTRY_DSN at a Sentry stub.
-   */
   "vars": {
     "CONVERSION_OWNER_LIMIT": "10",
     "RESEND_BASE_URL": "http://127.0.0.1:9",

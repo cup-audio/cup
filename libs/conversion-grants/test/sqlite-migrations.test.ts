@@ -150,7 +150,6 @@ test("adopting the duration ledger turns allowance and segment usage into equal 
     applyMigrations(database, [key]);
 
     expect(database.prepare("SELECT * FROM credit_balances").all()).toEqual([
-      // 20,000 allowance - 1,200 spent - 2,000 reserved
       { unit: "audio-millisecond", available: 16_800, reserved: 2_000 },
     ]);
     expect(
@@ -337,10 +336,6 @@ test("the stuck-conversion check starts existing conversions' stages at completi
   }
 });
 
-/**
- * Finds a migration by its journal tag without its number prefix, so renumbering it after a rebase
- * keeps the test valid; also returns the keys of all migrations that run before it.
- */
 function findMigration(name: string) {
   const keys = Object.keys(grantMigrations.migrations);
   const index = grantMigrations.journal.entries.findIndex((entry) =>
@@ -352,7 +347,6 @@ function findMigration(name: string) {
   return { key: keys[index]!, earlierKeys: keys.slice(0, index) };
 }
 
-/** Runs migrations in one transaction with enforced foreign keys, like the Durable Object migrator. */
 function applyMigrations(database: sqlite.DatabaseSync, keys: string[]) {
   const migrations: Record<string, string> = grantMigrations.migrations;
   database.exec("BEGIN");
@@ -364,10 +358,6 @@ function applyMigrations(database: sqlite.DatabaseSync, keys: string[]) {
   database.exec("COMMIT");
 }
 
-/**
- * Compares schema objects independently of identifier quoting, whitespace, and column order;
- * columns added by `ALTER TABLE` are appended, while a fresh baseline lists them in schema order.
- */
 function readSchema(database: sqlite.DatabaseSync) {
   return database
     .prepare(
@@ -384,7 +374,6 @@ function readSchema(database: sqlite.DatabaseSync) {
     });
 }
 
-/** Splits a `CREATE TABLE` statement into its sorted top-level column and constraint clauses. */
 function splitTableDefinition(sql: string) {
   const bodyStart = sql.indexOf("(");
   const clauses: string[] = [];

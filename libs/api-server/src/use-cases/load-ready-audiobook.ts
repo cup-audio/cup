@@ -5,7 +5,6 @@ export type LoadReadyAudiobookDependencies = {
   loadAudiobook(reference: AudiobookReference): Promise<Audiobook>;
 };
 
-/** Loads the canonical audiobook for a ready conversion. */
 export async function loadReadyAudiobook(
   dependencies: LoadReadyAudiobookDependencies,
 ): Promise<Audiobook | undefined> {

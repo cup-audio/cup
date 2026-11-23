@@ -14,10 +14,6 @@ const MOBILE_APP_ROOT = path.resolve(
 );
 const ANDROID_PROJECT = path.join(MOBILE_APP_ROOT, "android");
 
-/**
- * Copies the built production web bundle into the Android project and builds the debug APK, so a
- * run never tests a stale build. The root `test:e2e:mobile` script builds the web bundle first.
- */
 export async function buildAndroidDebugApp(host: AndroidHost): Promise<string> {
   const environment: NodeJS.ProcessEnv = {
     ...process.env,

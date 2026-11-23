@@ -3,10 +3,6 @@ import path from "node:path";
 import url from "node:url";
 import { expect, test } from "vitest";
 
-/*
- * The Worker serves the web app's build output as its static assets, and `cap sync` packs the same
- * directory into the shells. Turbo builds it before this package's tests (`^turbo:build`).
- */
 const WEB_APP_DIRECTORY = path.dirname(
   url.fileURLToPath(import.meta.resolve("@cup/web-app/package.json")),
 );
@@ -33,7 +29,6 @@ test("every JS chunk of the served web output carries a debug ID that its upload
       chunksWithoutDebugId.push(chunk);
     }
 
-    // Rolldown's runtime and preload helpers have no source map; every other chunk has one.
     if (sourceMaps.has(`${chunk}.map`)) {
       const sourceMap: unknown = JSON.parse(
         await fs.readFile(path.join(WEB_SOURCE_MAPS, `${chunk}.map`), "utf8"),

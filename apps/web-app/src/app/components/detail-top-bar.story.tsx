@@ -34,11 +34,6 @@ export const Compact = createTopBarStory({
   menu: MENU,
 });
 
-/**
- * The bar links back with the router, so it renders as the root of a router of its own. The router
- * is created on first mount, because the gallery evaluates every story module, also for other
- * stories, and a router created then takes over theirs.
- */
 function createTopBarStory(props: DetailTopBarStoryProps): Story {
   let router: ReturnType<typeof createTopBarRouter> | undefined;
   return {

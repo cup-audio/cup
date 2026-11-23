@@ -22,7 +22,6 @@ type StoryGroup = {
 const THUMBNAIL_VIEWPORT = { height: 844, width: 390 };
 const GRID_THUMBNAIL_SCALE = 0.6;
 const STRIP_THUMBNAIL_SCALE = 0.2;
-// stories need the gallery's origin for its mock service worker and for browser storage
 const STORY_FRAME_SANDBOX =
   "allow-downloads allow-forms allow-modals allow-popups allow-same-origin allow-scripts";
 
@@ -39,9 +38,6 @@ const mockingReady = parameters.has("canvas")
   : Promise.resolve();
 
 let root: Root | undefined;
-// Tests that block service workers mount stories on the index, because the canvas starts the mock
-// service worker. The index renders only after loading every story module, which can finish after
-// a story is mounted, so a mounted story replaces the index and keeps it from rendering.
 let galleryRoot: Root | undefined;
 let isStoryRequested = false;
 
@@ -175,10 +171,6 @@ function readStoryPath(filePath: string): string {
   return filePath.replace(/^(\.\.\/)+src\//, "").replace(/\.story\.\w+$/, "");
 }
 
-/**
- * A story that focuses an element, such as one opening a dialog, would otherwise scroll the
- * thumbnail grid of `StoryGrid` to its frame.
- */
 function keepFocusFromScrolling(): void {
   const prototype: { focus: (this: HTMLElement, options?: FocusOptions) => void } =
     HTMLElement.prototype;
@@ -196,13 +188,10 @@ function createGalleryUrl(searchParameters: Record<string, string>, hash = ""): 
 }
 
 function StoryGrid({ storyGroups }: { storyGroups: StoryGroup[] }): React.ReactNode {
-  // `StoryView` links back to the grid with the story it shows as the URL fragment
   const [originStoryId] = React.useState(() => decodeURIComponent(window.location.hash.slice(1)));
 
-  // The browser cannot scroll to the fragment itself, because the grid renders after the page load.
   React.useEffect(
     function revealOriginStory() {
-      // `StoryThumbnail` uses the story ID as its element ID
       document.getElementById(originStoryId)?.scrollIntoView({ block: "center" });
     },
     [originStoryId],
@@ -241,7 +230,6 @@ function StoryGrid({ storyGroups }: { storyGroups: StoryGroup[] }): React.ReactN
 
 type StoryThumbnailProps = {
   isCurrent?: boolean;
-  /** Replaces the navigation of an unmodified click, so that the gallery stays mounted. */
   onSelect?: () => void;
   scale: number;
   storyId: string;
@@ -287,7 +275,6 @@ function StoryThumbnail({
         }}
       >
         <iframe
-          // inert so that a click reaches the surrounding link instead of the story
           inert
           loading="lazy"
           sandbox={STORY_FRAME_SANDBOX}
@@ -351,7 +338,6 @@ function StoryView({ initialSelection, storyGroups }: StoryViewProps): React.Rea
   const stripRef = React.useRef<HTMLElement>(null);
   React.useEffect(function revealCurrentThumbnail() {
     stripRef.current
-      // `StoryThumbnail` marks the current story with `aria-current`
       ?.querySelector('[aria-current="page"]')
       ?.scrollIntoView({ block: "nearest", inline: "nearest" });
   });
@@ -413,12 +399,10 @@ function StoryView({ initialSelection, storyGroups }: StoryViewProps): React.Rea
           aria-label={`Stories of ${storyPath}`}
           ref={stripRef}
           style={{
-            // hidden instead of unmounted, so that showing the strip again does not reload its frames
             display: isStripVisible ? "flex" : "none",
             fontSize: 11,
             gap: 12,
             overflowX: "auto",
-            // room for the outline of the thumbnails, which the scroll container would clip
             padding: "2px 16px 12px",
           }}
         >
@@ -438,8 +422,6 @@ function StoryView({ initialSelection, storyGroups }: StoryViewProps): React.Rea
         </nav>
       </header>
       <iframe
-        // Remounting the frame reloads the story from scratch. Changing `src` on a mounted frame
-        // would instead add a history entry, so that going back navigates the frame only.
         key={`${storyId}#${resetCount}`}
         sandbox={STORY_FRAME_SANDBOX}
         src={createGalleryUrl({ canvas: "1", story: storyId })}

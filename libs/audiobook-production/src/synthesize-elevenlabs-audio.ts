@@ -9,7 +9,6 @@ import {
 
 const REQUEST_TIMEOUT_MILLISECONDS = 90_000;
 
-/** Requests raw signed 16-bit little-endian mono PCM for the shared MP3 encoder. */
 export async function synthesizeElevenLabsAudio({
   ai,
   conversionId,
@@ -62,7 +61,6 @@ export async function synthesizeElevenLabsAudio({
   }
 
   const contentType = response.headers.get("content-type")?.split(";")[0]?.trim();
-  // The PCM endpoint uses audio/pcm or application/octet-stream, not an MP3 container.
   if (contentType !== "audio/pcm" && contentType !== "application/octet-stream") {
     throw new PermanentNarrationSynthesisError(
       `ElevenLabs narration synthesis returned unexpected audio content type: ${contentType ?? "missing"}`,

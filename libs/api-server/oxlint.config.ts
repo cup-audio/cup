@@ -2,9 +2,6 @@ import { defineConfig } from "oxlint";
 
 import { config as repoConfig, restrictImports } from "@cup/config-oxlint/oxlint-base.js";
 
-/*
- * Enforces the import directions between the source folders that AGENTS.md describes.
- */
 export default defineConfig({
   extends: [repoConfig],
   overrides: [

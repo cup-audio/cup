@@ -8,7 +8,6 @@ import {
   type SpeechConfig,
 } from "#src/speech-synthesis-config.ts";
 
-// https://developers.cloudflare.com/r2/platform/limits/
 const R2_OBJECT_METADATA_MAX_BYTE_LENGTH = 8_192;
 
 const SEGMENT_METADATA_KEYS = {
@@ -25,7 +24,6 @@ const SEGMENT_METADATA_KEYS = {
   voice: "synthesis-voice",
 } as const;
 
-/** Identifies one stored MP3 segment and its position within a conversion. */
 export type AudioSegmentReference = {
   conversionId: string;
   sequence: number;
@@ -36,7 +34,6 @@ export type AudioSegmentReference = {
   speechConfig?: SpeechConfig;
 };
 
-/** R2 object metadata required to validate and reuse an audio segment. */
 export type StoredAudioSegment = {
   key: string;
   size: number;
@@ -44,7 +41,6 @@ export type StoredAudioSegment = {
   customMetadata?: Record<string, string>;
 };
 
-/** Creates the canonical R2 key for a conversion's segment sequence. */
 export function createAudioSegmentKey(
   conversionId: string,
   sequence: number,
@@ -53,7 +49,6 @@ export function createAudioSegmentKey(
   return `${artifactPrefix ?? createConversionArtifactPrefix(conversionId)}audio-segments/${sequence}.mp3`;
 }
 
-/** Serializes the synthesis identity and optional analyzed audio metadata for R2. */
 export function createAudioSegmentMetadata(
   narrationText: string,
   durationMilliseconds?: number,
@@ -80,13 +75,11 @@ export function createAudioSegmentMetadata(
     [SEGMENT_METADATA_KEYS.channelCount]: AUDIO_FORMAT.channelCount.toString(),
     [SEGMENT_METADATA_KEYS.encoding]: AUDIO_FORMAT.encoding,
     [SEGMENT_METADATA_KEYS.model]: speechConfig.model,
-    // JSON preserves the exact input while keeping line breaks safe for metadata header transport.
     [SEGMENT_METADATA_KEYS.narrationText]: JSON.stringify(narrationText),
     [SEGMENT_METADATA_KEYS.policyVersion]: speechConfig.policyVersion,
     [SEGMENT_METADATA_KEYS.provider]: speechConfig.provider,
     [SEGMENT_METADATA_KEYS.sampleRate]: AUDIO_FORMAT.sampleRate.toString(),
     [SEGMENT_METADATA_KEYS.voice]: speechConfig.voice,
-    // The manifest's narration language, also when synthesis left it out as unspeakable.
     ...(narrationLanguage === undefined
       ? {}
       : { [SEGMENT_METADATA_KEYS.language]: narrationLanguage }),
@@ -103,7 +96,6 @@ export function createAudioSegmentMetadata(
   return metadata;
 }
 
-/** Verifies that a stored object still matches its segment reference and synthesis identity. */
 export function assertStoredAudioSegment(
   audioObject: StoredAudioSegment,
   audioSegment: AudioSegmentReference,
@@ -154,7 +146,6 @@ export function assertStoredAudioSegment(
   }
 }
 
-/** Verifies that an existing object is safe to reuse for the requested synthesis input. */
 export function assertMatchingAudioSegmentIdentity(
   audioObject: StoredAudioSegment,
   expectedMetadata: Readonly<Record<string, string>>,
@@ -174,7 +165,6 @@ export function assertMatchingAudioSegmentIdentity(
   getStoredAudioSegmentCrc32(customMetadata);
 }
 
-/** Builds a reusable segment reference from validated stored-object metadata. */
 export function createAudioSegmentReference(
   audioObject: StoredAudioSegment,
   conversionId: string,
@@ -236,8 +226,6 @@ function hasSameSynthesisMetadata(
   actual: Readonly<Record<string, string>>,
   expected: Readonly<Record<string, string>>,
 ): boolean {
-  // The synthesis language is compared even when it is expected to be absent, so a segment
-  // synthesized in a narration language is not reused for a conversion without one.
   const expectedKeys = new Set([...Object.keys(expected), SEGMENT_METADATA_KEYS.language]);
 
   return [...expectedKeys].every((key) => actual[key] === expected[key]);
@@ -279,7 +267,6 @@ function assertR2MetadataFits(metadata: Readonly<Record<string, string>>): void 
   }
 }
 
-/** Reads the original synthesis identity independently of the current production default. */
 export function getStoredSpeechConfig(audioObject: StoredAudioSegment): SpeechConfig {
   const metadata = audioObject.customMetadata ?? {};
   const speechConfig = {

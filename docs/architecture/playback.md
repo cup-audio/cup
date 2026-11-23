@@ -55,7 +55,7 @@ stateDiagram-v2
   }
 ```
 
-Leaving `renewingTrackUrl` cancels a renewal, so one that arrives after Pause, an unload or another load plays nothing. An audiobook whose listening session would be refused fails the tap without leaving `loaded`. The machine's comments and [ADR 0034](../adr/0034-model-the-player-host-and-position-saves-as-xstate-machines.md) hold the rest: how `loading` keeps Play within the tap's gesture, and why a failing port is reported instead of stopping the host.
+Leaving `renewingTrackUrl` cancels a renewal, so one that arrives after Pause, an unload or another load plays nothing. An audiobook whose listening session would be refused fails the tap without leaving `loaded`. [ADR 0034](../adr/0034-model-the-player-host-and-position-saves-as-xstate-machines.md) and [ADR 0041](../adr/0041-renew-track-urls-and-scope-listening-positions-in-the-player-host.md) hold the rest: how `loading` keeps Play within the tap's gesture, and why a failing port is reported instead of stopping the host.
 
 ## Listening positions
 

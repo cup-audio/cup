@@ -8,7 +8,6 @@ type DSButtonGroupProps = {
   className?: string;
 };
 
-/** Lays out actions in a right-aligned row, wrapping when they do not fit on one line. */
 export const DSButtonGroup: React.FC<DSButtonGroupProps> = ({ children, className }) => {
   return (
     <div

@@ -30,10 +30,6 @@ import { SKIP_MILLISECONDS } from "#src/app/player/player.js";
 import { composeClassnames } from "#src/app/utils.js";
 import { BOTTOM_BAR_TRANSITION_NAME } from "#src/app/view-transition-names.js";
 
-/**
- * The player sheet's fade. The page above leaves `fadeFooterClearance(PLAYER_SHEET_HEIGHTS)` free
- * at its end; the sheet takes its own row below the page, however tall a playback error makes it.
- */
 export const PLAYER_SHEET_HEIGHTS = {
   fadeHeightPixels: 70,
 } as const;
@@ -51,13 +47,6 @@ type SheetPlayback =
       togglePlayback: () => void;
     };
 
-/**
- * The detail view's player, fixed at the bottom on the drawn fade: the status line, a scrubber, the
- * elapsed and remaining time, and −15 s / play-pause / +15 s. It controls the shown audiobook and
- * is disabled until that audiobook has a narration track. Before the shown audiobook is loaded it
- * shows where loading resumes, the listener's listening position; Play, seeking and skipping load
- * it, replacing another loaded audiobook.
- */
 export function PlayerSheet({ statusLine }: { statusLine: string }): React.JSX.Element {
   const host = usePlayerHost();
   const { loaded, shown, unavailable } = usePlayerHostSnapshot();
@@ -113,7 +102,6 @@ export function PlayerSheet({ statusLine }: { statusLine: string }): React.JSX.E
             display: grid;
             width: 100%;
 
-            /* as wide as the page's text above */
             max-width: calc(var(--app-max-width) - 2 * var(--app-padding-inline));
             margin-inline: auto;
           `}
@@ -143,7 +131,6 @@ function LoadedControls({ loaded }: { loaded: LoadedAudiobook }): React.JSX.Elem
       playback={{
         status: "enabled",
         title: loaded.audiobook.title,
-        // The position never exceeds the length.
         positionMilliseconds: Math.min(positionMilliseconds, durationMilliseconds),
         durationMilliseconds,
         isPlaying,
@@ -155,7 +142,6 @@ function LoadedControls({ loaded }: { loaded: LoadedAudiobook }): React.JSX.Elem
   );
 }
 
-/** Draws the scrubber, times and buttons; disabled, at 24 % ink with unknown times. */
 function SheetControls({ playback }: { playback: SheetPlayback }): React.JSX.Element {
   const isDisabled = playback.status === "disabled";
   const positionMilliseconds = isDisabled ? 0 : playback.positionMilliseconds;
@@ -167,7 +153,6 @@ function SheetControls({ playback }: { playback: SheetPlayback }): React.JSX.Ele
       <Slider.Root
         value={positionMilliseconds}
         min={0}
-        // A disabled scrubber still needs a range to draw its empty track.
         max={isDisabled ? 1 : durationMilliseconds}
         step={1_000}
         disabled={isDisabled}
@@ -192,7 +177,6 @@ function SheetControls({ playback }: { playback: SheetPlayback }): React.JSX.Ele
               cursor: not-allowed;
             }
 
-            /* the thumb is invisible, so the scrubber shows its focus ring */
             &:has(:focus-visible) {
               outline: var(--focus-ring);
               outline-offset: var(--focus-ring-offset);

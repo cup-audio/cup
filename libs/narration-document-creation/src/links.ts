@@ -1,8 +1,3 @@
-/**
- * Resolves a link's `href` against the URL of the page it came from. Returns the absolute URL of a
- * link the narration document keeps, or `undefined` for one it shows as plain text: a link that
- * can't be resolved, one with a scheme other than `http:` or `https:`, and one to the page itself.
- */
 export function resolveLink({
   href,
   baseUrl,
@@ -28,8 +23,6 @@ export function resolveLink({
     return undefined;
   }
 
-  // A footnote or other jump within the page, or a link to the page itself, would leave Cup only to
-  // land on the publisher's copy of the text the listener is already reading.
   if (withoutHash(url) === withoutHash(pageUrl)) {
     return undefined;
   }

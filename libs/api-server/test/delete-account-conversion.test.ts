@@ -24,7 +24,6 @@ const jwk = { ...(await exportJWK(keys.publicKey)), kid: "delete-conversion" };
 
 afterEach(() => vi.unstubAllGlobals());
 
-/** An account object that knows its own conversions and marks each one once, as the real one does. */
 function createAccount(id: string, state: string, conversionIds: string[]) {
   const marked = new Set<string>();
   return {

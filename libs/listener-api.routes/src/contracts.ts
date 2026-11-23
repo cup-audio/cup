@@ -26,26 +26,14 @@ const LOWERCASE_UUID_V4_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const CREDENTIAL_PATTERN = /^v1\.[A-Za-z0-9_-]{43}$/;
 
-/*
- * Listener request and response schemas drop unknown fields instead of rejecting them: installed
- * apps keep sending fields a newer Worker no longer reads, and keep parsing responses from newer
- * Workers. Strict schemas shared with internal boundaries (storage, workflows, operator contracts)
- * are rebuilt here from their shapes; the trial conversion snapshot only describes listener
- * responses, so it is tolerant where it is defined. Route tests parse responses with strict
- * variants of these schemas.
- */
-
 export { sourceUrlSchema, grantConversionSnapshotSchema, grantConversionsSchema };
 export type { GrantConversionSnapshot, GrantConversions, GrantState };
 
 const durationBalanceResponseSchema = z.object(durationBalanceSchema.shape);
 const accountDurationBalanceResponseSchema = z.object(accountDurationBalanceSchema.shape);
-// Units of manifests prepared under speech policy 7 may carry `continuesNarrationBlock`, which
-// listeners never need.
 const synchronizationUnitResponseSchema = z.object(
   SYNCHRONIZATION_UNIT_SCHEMA.pick({ id: true, narrationText: true }).shape,
 );
-/** The saved-position request body and the position in audiobook responses. */
 export const playbackPositionSchema = z.object(sharedPlaybackPositionSchema.shape);
 
 export const grantSnapshotSchema = z.object({
@@ -58,15 +46,12 @@ export const uuidV4Schema = z
   .string()
   .regex(LOWERCASE_UUID_V4_PATTERN, "Must be a lowercase UUIDv4");
 
-/** The health endpoint's answer while the Worker runs. */
 export const healthResponseSchema = z.object({ status: z.literal("ok") });
 
 export const authConfigResponseSchema = z.object({
   supabaseUrl: z.string(),
   publishableKey: z.string().min(1),
-  /** Absent when Google sign-in is unavailable, which happens only in local development. */
   googleWebClientId: z.string().min(1).optional(),
-  /** Advertised only in local development; see ADR 0012. */
   testAccount: z.object({ email: z.string().min(1), password: z.string().min(1) }).optional(),
 });
 
@@ -107,7 +92,6 @@ export type StartConversionResponse = z.infer<typeof startConversionResponseSche
 
 export type { PlaybackPosition } from "@cup/conversion-contracts";
 const audioSegmentBaseSchema = z.object({ sequence: z.number().int().nonnegative() });
-/** A segment's speech state. Ready segments play through the audiobook's `narrationTrack`. */
 export const audioSegmentSchema = z.discriminatedUnion("status", [
   audioSegmentBaseSchema.extend({ status: z.literal("absent") }),
   audioSegmentBaseSchema.extend({ status: z.literal("generating") }),
@@ -115,22 +99,8 @@ export const audioSegmentSchema = z.discriminatedUnion("status", [
   audioSegmentBaseSchema.extend({ status: z.literal("failed"), explanation: z.string() }),
 ]);
 export type AudioSegment = z.infer<typeof audioSegmentSchema>;
-/**
- * The query of a media route under `/api/files`. `token` is the opaque, expiring authorization a
- * signed media URL carries, the only credential media routes accept.
- */
 export const signedMediaUrlQuerySchema = z.object({ token: z.string() });
-/**
- * The query of the listening-position route. `token` is a signed position URL's authorization, the
- * alternative to the listener's bearer token; a request carries exactly one of the two.
- */
 export const signedPositionUrlQuerySchema = z.object({ token: z.string().optional() });
-/**
- * Where to request the audiobook's narration track (a signed media URL), and where each segment
- * starts in it. `startMilliseconds[i]` is the sum of the settled durations of segments `0..i-1`.
- * `positionUrl`, issued to account principals only, saves the listening position without the
- * listener's session: a signed position URL for `PUT /api/audiobooks/{conversionId}/position`.
- */
 export const narrationTrackSchema = z.object({
   url: z.url(),
   positionUrl: z.url().optional(),
@@ -138,16 +108,11 @@ export const narrationTrackSchema = z.object({
   startMilliseconds: z.array(z.number().int().nonnegative()).min(1),
 });
 export type NarrationTrack = z.infer<typeof narrationTrackSchema>;
-/** Where to request the audiobook's cover image: a signed media URL. */
 export const coverImageSchema = z.object({
   url: z.url(),
   alternativeText: z.string().min(1).optional(),
 });
 export type CoverImage = z.infer<typeof coverImageSchema>;
-/**
- * The step of preparing a pending conversion's narration document that the conversion last started,
- * as listeners see it. Several internal phases share one value.
- */
 export const preparationPhaseSchema = z.enum([
   "starting",
   "reading-page",
@@ -155,11 +120,6 @@ export const preparationPhaseSchema = z.enum([
   "preparing-text",
 ]);
 export type PreparationPhase = z.infer<typeof preparationPhaseSchema>;
-/**
- * Absent when no listener phase applies. A value this client does not know parses as absent, so a
- * newer Worker can add phases without failing the response. Preprocessing keeps the enum in the
- * OpenAPI document, which describes the schema after it.
- */
 const pendingPreparationPhaseSchema = z
   .preprocess(
     (value) =>
@@ -174,10 +134,6 @@ const narrationDocumentSchema = z.object({
   html: z.string().min(1),
   synchronizationUnits: z.array(synchronizationUnitResponseSchema).min(1),
 });
-/**
- * Whether the audiobook response carries the narration document; absent means `include`. A reader
- * that already holds the document polls with `omit`, so the Worker does not render it again.
- */
 export const audiobookQuerySchema = z.object({
   narrationDocument: z.enum(["include", "omit"]).optional(),
 });
@@ -189,12 +145,9 @@ function createAudiobookSchema<NarrationDocument extends z.ZodType>(
   const preparedBase = {
     ...readerBase,
     title: z.string().min(1),
-    // Absent when the audiobook has no cover image.
     coverImage: coverImageSchema.optional(),
     narrationDocument,
-    // One entry per synchronization unit, in document order.
     segments: z.array(audioSegmentSchema),
-    // Present only when every segment has settled audio.
     narrationTrack: narrationTrackSchema.optional(),
     playbackPosition: playbackPositionSchema.nullable(),
   };
@@ -205,36 +158,27 @@ function createAudiobookSchema<NarrationDocument extends z.ZodType>(
       preparationPhase: pendingPreparationPhaseSchema,
     }),
     z.object({ ...readerBase, status: z.literal("failed"), explanation: z.string() }),
-    // The whole narration document did not fit the available duration; nothing was reserved.
     z.object({
       ...preparedBase,
       status: z.literal("insufficient-duration"),
       ...insufficientDurationSchema.shape,
     }),
     z.object({ ...preparedBase, status: z.literal("synthesizing") }),
-    // Every segment has audio or a final failure, so the total duration is known.
     z.object({ ...preparedBase, status: z.literal("ready") }),
   ]);
 }
 
-/** An audiobook with its narration document, as a reader holds it. */
 export const audiobookSchema = createAudiobookSchema(narrationDocumentSchema);
 export type Audiobook = z.infer<typeof audiobookSchema>;
-/** The audiobook route's response: a prepared audiobook lacks its narration document on `omit`. */
 export const audiobookResponseSchema = createAudiobookSchema(narrationDocumentSchema.optional());
 export type AudiobookResponse = z.infer<typeof audiobookResponseSchema>;
 
-/** A refused retry reserves nothing; the durations tell the reader why. */
 export const retryConversionResponseSchema = z.discriminatedUnion("result", [
   z.object({ result: z.literal("started") }),
   z.object({ result: z.literal("insufficient-duration"), ...insufficientDurationSchema.shape }),
 ]);
 export type RetryConversionResponse = z.infer<typeof retryConversionResponseSchema>;
 
-/**
- * Every `code` of a listener API error response, including the codes of the server-wide middleware
- * that also guards listener routes, such as `request-too-large`.
- */
 export const ERROR_CODE = {
   ACCOUNT_BLOCKED: "account-blocked",
   ACCOUNT_SESSION_REQUIRED: "account-session-required",
@@ -272,7 +216,6 @@ export const ERROR_CODE = {
 } as const;
 export type ErrorCode = (typeof ERROR_CODE)[keyof typeof ERROR_CODE];
 
-/** Sentry's trace ID of the request, which finds the request's trace in Sentry's search. */
 const traceIdSchema = z
   .string()
   .regex(/^[0-9a-f]{32}$/, "Must be a 32-character lowercase hex trace ID");
@@ -292,10 +235,6 @@ export const accountConfirmationSchema = z.object({
 });
 export type AccountConfirmationRequest = z.infer<typeof accountConfirmationSchema>;
 
-/*
- * Keeps the account contract's fields and value checks. The balance is replaced because the spread
- * shape still holds the account contract's strict balance schema.
- */
 export const accountSnapshotSchema = z.object({
   ...sharedAccountSnapshotSchema.shape,
   balance: accountDurationBalanceResponseSchema,
@@ -303,9 +242,7 @@ export const accountSnapshotSchema = z.object({
 
 export type AccountSnapshot = z.infer<typeof accountSnapshotSchema>;
 
-// Follows the option order in `accountOutcomeSchema`; a reordering there fails to compile here.
 const [readyAccountOutcomeSchema, failedAccountOutcomeSchema] = accountOutcomeSchema.options;
-/** An account conversion without its completion time, storage reference, or failure category. */
 export const historyItemSchema = z.object({
   ...accountHistoryItemSchema.pick({
     conversionId: true,
@@ -314,13 +251,11 @@ export const historyItemSchema = z.object({
     createdAtMs: true,
     status: true,
   }).shape,
-  // Reported only while the conversion is pending.
   preparationPhase: pendingPreparationPhaseSchema,
   outcome: z
     .discriminatedUnion("status", [
       z.object({
         ...readyAccountOutcomeSchema.pick({ status: true, title: true, hasCoverImage: true }).shape,
-        // Present exactly when `hasCoverImage` is.
         coverImage: coverImageSchema.pick({ url: true }).optional(),
       }),
       z.object(failedAccountOutcomeSchema.pick({ status: true, explanation: true }).shape),

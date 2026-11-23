@@ -13,7 +13,6 @@ import {
   type PositionOnClose,
 } from "#src/app/player/player.ts";
 
-/** What the player uses of the host's `<audio>` element. */
 export type NarrationAudioElement = EventTarget & {
   src: string;
   currentTime: number;
@@ -46,7 +45,6 @@ const MEDIA_EVENT_TYPES = [
   "ratechange",
   "error",
 ] as const;
-/** The media events the system's media controls must hear of; they extrapolate time updates. */
 const PLAYBACK_CHANGE_EVENT_TYPES = new Set<string>([
   "play",
   "pause",
@@ -57,56 +55,27 @@ const PLAYBACK_CHANGE_EVENT_TYPES = new Set<string>([
   "ended",
 ]);
 
-/**
- * Plays every loaded audiobook on the one element, which loads only the track's metadata until
- * Play; the track itself streams once playback starts.
- */
 export function createElementPlayers(element: NarrationAudioElement): CreatePlayer {
   element.preload = "metadata";
   return (session) => new NarrationTrackPlayer(session, element);
 }
 
-/**
- * Whether the element plays. A source that fails before playback starts leaves it unpaused, as
- * Chromium follows the HTML spec's media source failure steps, though it plays nothing.
- */
 function isElementPlaying(element: Pick<NarrationAudioElement, "paused" | "error">) {
   return !element.paused && !element.error;
 }
 
-/**
- * Whether a seek on the element lands where it asks. WebKit's GStreamer media backend on Linux can
- * fire `loadedmetadata` with a duration of 0 before it has read the track's length; a seek then
- * clamps to that duration, and the backend can settle on a duration of a few milliseconds and end
- * playback at once. A duration above 0 shows the length is known. While the duration is 0, the
- * track plays from the start until the held position is applied.
- */
 function canSeek(element: Pick<NarrationAudioElement, "readyState" | "duration">) {
   return element.readyState >= HAVE_METADATA && element.duration > 0;
 }
 
-/** How far from its target a finished seek may land, as browsers may snap it to an audio frame. */
 const SEEK_TOLERANCE_MILLISECONDS = 100;
 
-/**
- * Plays a loaded audiobook's narration track on the host's one `<audio>` element.
- *
- * The element is the only playback state: the snapshot is read from it whenever it fires a media
- * event. The player adds what the element cannot hold: a position to apply once the track's
- * duration is known, the save cadence, and failures of `play()`; the session reports failed saves.
- */
 export class NarrationTrackPlayer implements Player {
   private readonly session: PlaybackSession;
   private readonly element: NarrationAudioElement;
   private readonly listeners = new Set<() => void>();
   private readonly playbackChangeListeners = new Set<(change: PlaybackChange) => void>();
-  /** Where to seek once the element knows the track's duration; it cannot seek before. */
   private pendingPositionMilliseconds: number | null;
-  /**
-   * Where the element was last asked to seek, until its `seeked` event reports that it got there.
-   * Chromium can drop a seek that a pause interrupts before the track's first data arrived: the
-   * element reports the time as 0 from the pause on, and its `seeked` event lands there.
-   */
   private seek: { targetMilliseconds: number; isRetry: boolean } | null = null;
   private failure: string | null = null;
   private readonly unsubscribeSaveFailure: () => void;
@@ -121,7 +90,6 @@ export class NarrationTrackPlayer implements Player {
     for (const type of MEDIA_EVENT_TYPES) {
       element.addEventListener(type, this.handleMediaEvent);
     }
-    // Setting the source starts loading its metadata and resets the element to the start.
     element.src = session.audiobook.narrationTrack.url;
     this.unsubscribeSaveFailure = session.subscribeSaveFailure(() => this.publish());
     this.snapshot = this.readSnapshot();
@@ -146,11 +114,9 @@ export class NarrationTrackPlayer implements Player {
   play = () => {
     this.failure = null;
 
-    // Called before anything is awaited: Safari refuses audio started after an await.
     const playing = this.element.play();
     this.publish();
     playing.catch((error: unknown) => {
-      // A pause or a new source interrupts a pending start; that is no failure.
       if (this.isClosed || (error instanceof DOMException && error.name === "AbortError")) {
         return;
       }
@@ -161,7 +127,6 @@ export class NarrationTrackPlayer implements Player {
 
   pause = () => {
     this.element.pause();
-    // The element fires `pause` later; a toggle right after must find it paused already.
     this.publish();
   };
 
@@ -179,8 +144,6 @@ export class NarrationTrackPlayer implements Player {
     if (!canSeek(this.element)) {
       this.pendingPositionMilliseconds = position;
     } else {
-      // The element can report its metadata before `loadedmetadata` is dispatched, which must
-      // then not apply an earlier seek.
       this.pendingPositionMilliseconds = null;
       this.seekElement(position);
     }
@@ -193,9 +156,7 @@ export class NarrationTrackPlayer implements Player {
     this.seekTo(this.readPosition() + deltaMilliseconds);
   };
 
-  /** The browser saves through the listener's session, so only the track URL is used. */
   replaceUrls = (narrationTrack: NarrationTrack) => {
-    // A new source resets the element to the start, ends a seek and clears a failed load.
     this.pendingPositionMilliseconds = this.readPosition();
     this.seek = null;
     this.element.src = narrationTrack.url;
@@ -207,7 +168,6 @@ export class NarrationTrackPlayer implements Player {
     this.publish();
   };
 
-  /** Saves the position and releases the element, paused; unloading also empties it. */
   close = (position: PositionOnClose, ending: PlayerEnding) => {
     if (this.isClosed) {
       return;
@@ -218,14 +178,12 @@ export class NarrationTrackPlayer implements Player {
     }
     this.isClosed = true;
     this.unsubscribeSaveFailure();
-    // The player owns the session the host created for it; closing stops its save retries.
     this.session.close();
     for (const type of MEDIA_EVENT_TYPES) {
       this.element.removeEventListener(type, this.handleMediaEvent);
     }
     this.element.pause();
     if (ending === "unload") {
-      // Removing the source and loading nothing stops the element's network activity.
       this.element.removeAttribute("src");
       this.element.load();
     }
@@ -236,8 +194,6 @@ export class NarrationTrackPlayer implements Player {
   private handleMediaEvent = (event: Event) => {
     const { element } = this;
 
-    // WebKit's GStreamer backend corrects a duration of 0 without firing `durationchange`, so any
-    // media event, such as the next `timeupdate`, can be the first to find the duration known.
     if (this.pendingPositionMilliseconds !== null && canSeek(element)) {
       this.applyPendingPosition();
     }
@@ -248,21 +204,18 @@ export class NarrationTrackPlayer implements Player {
         break;
       }
       case "timeupdate": {
-        // While seeking, the time reports where the seek started, not a listening position.
         if (!element.seeking && !element.paused) {
           this.save("if-due", this.readPosition());
         }
         break;
       }
       case "pause": {
-        // Reaching the end also pauses; `ended` handles that.
         if (element.paused && !element.ended) {
           this.save("now", this.readPosition());
         }
         break;
       }
       case "ended": {
-        // A finished audiobook starts over the next time.
         this.seek = null;
         element.currentTime = 0;
         this.save("now", 0);
@@ -293,11 +246,6 @@ export class NarrationTrackPlayer implements Player {
     this.element.currentTime = positionMilliseconds / 1_000;
   }
 
-  /**
-   * Ends the seek the element finished, or asks for its target again when the element landed
-   * elsewhere. It asks once only, so an element that keeps landing elsewhere, such as one whose
-   * file is shorter than the listed track, is not sent seeking for ever.
-   */
   private confirmSeek() {
     const { seek, element } = this;
     if (seek === null || element.seeking) {
@@ -316,7 +264,6 @@ export class NarrationTrackPlayer implements Player {
     this.seekElement(seek.targetMilliseconds, { isRetry: true });
   }
 
-  /** A seek the element has not finished counts as its target, whatever time the element reports. */
   private readPosition() {
     return (
       this.pendingPositionMilliseconds ??
@@ -325,7 +272,6 @@ export class NarrationTrackPlayer implements Player {
     );
   }
 
-  /** The session reports failed saves through `getSaveFailure` and retries them itself. */
   private save(when: "now" | "if-due", positionMilliseconds: number) {
     if (when === "now") {
       void this.session.save(positionMilliseconds);
@@ -342,7 +288,6 @@ export class NarrationTrackPlayer implements Player {
     return {
       currentUnitIndex: findUnitIndexAt(this.session.timeline, positionMilliseconds),
       positionMilliseconds,
-      // The track's listed duration stands in until the element read the file's own.
       durationMilliseconds:
         Number.isFinite(element.duration) && element.duration > 0
           ? Math.round(element.duration * 1_000)
@@ -358,11 +303,6 @@ export class NarrationTrackPlayer implements Player {
     };
   }
 
-  /**
-   * Replaces the snapshot only when a reported value changed. Time updates arrive several times a
-   * second, and React's `useSyncExternalStore` re-renders whenever `getSnapshot` returns a new
-   * object.
-   */
   private publish() {
     if (this.isClosed) {
       return;

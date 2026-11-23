@@ -33,10 +33,6 @@ import { trialBrowserState } from "#src/trial-browser-state.js";
 
 export type { SignInMethod };
 
-/*
- * A thin facade over the account session actor: callers and route loaders keep a promise-based API
- * while the lifecycle, including which async results are still current, lives in the machine.
- */
 const accountSessionActor = createActor(
   accountSessionMachine.provide({
     actors: {
@@ -58,7 +54,6 @@ accountSessionActor.start();
 
 let publishedAuthState = selectAuthState(accountSessionActor.getSnapshot());
 
-/** Returns the same object until the shown state changes, as `useSyncExternalStore` requires. */
 export const authStateSnapshot = (): AccountAuthState => {
   const next = selectAuthState(accountSessionActor.getSnapshot());
   if (!isSameAuthState(publishedAuthState, next)) {
@@ -70,13 +65,10 @@ export const sessionSnapshot = () => {
   const state = authStateSnapshot();
   return state.status === "signed-in" ? state.session : null;
 };
-/** Whether `subject` is still the signed-in account, e.g. before applying a late response. */
 export const isSignedInAs = (subject: string) => sessionSnapshot()?.user.id === subject;
 const DEFAULT_SIGN_IN_METHODS: readonly SignInMethod[] = ["google"];
-/** The sign-in methods the auth configuration offers; Google until account auth initializes. */
 export const signInMethodsSnapshot = () =>
   accountSessionActor.getSnapshot().context.connection?.signInMethods ?? DEFAULT_SIGN_IN_METHODS;
-/** Notifies `listener` when the shown auth state changes, not on every machine transition. */
 export const subscribeAuthState = (listener: () => void) => {
   let last = authStateSnapshot();
   const subscription = accountSessionActor.subscribe(() => {
@@ -105,17 +97,11 @@ export async function ensureAuthInitialized(): Promise<AccountAuthClient> {
   return snapshot.context.connection.client;
 }
 
-/**
- * The signed-in session once account auth has initialized, or `null` when signed out; route
- * `beforeLoad`s await it, so a screen never renders before auth settles. Rejects when auth fails to
- * initialize.
- */
 export async function settleAccountSession(): Promise<Session | null> {
   await ensureAuthInitialized();
   return sessionSnapshot();
 }
 
-/** Resolves to `null` when the session scope ends before the read finishes, e.g. on sign-out. */
 export async function getFreshAccountSession(): Promise<Session | null> {
   await ensureAuthInitialized();
   return request<Session | null>((reply) =>
@@ -123,7 +109,6 @@ export async function getFreshAccountSession(): Promise<Session | null> {
   );
 }
 
-/** Grant-session access must not depend on account auth initializing when no account is signed in. */
 export async function getResourceAccountSession() {
   try {
     return await getFreshAccountSession();
@@ -135,7 +120,6 @@ export async function getResourceAccountSession() {
   }
 }
 
-/** Refused while signing out or while another sign-in is in progress. */
 export async function signIn(method: SignInMethod) {
   await ensureAuthInitialized();
   return request<void>((reply) =>
@@ -143,7 +127,6 @@ export async function signIn(method: SignInMethod) {
   );
 }
 
-/** Authenticates the signed-in account again, with the method its session came from. */
 export async function signInAgain() {
   await ensureAuthInitialized();
   const method: SignInMethod =
@@ -153,10 +136,6 @@ export async function signInAgain() {
   );
 }
 
-/**
- * Shows signed-out and stops audio immediately, then initializes account auth if needed to clear
- * the stored session. Concurrent calls share one sign-out.
- */
 export function signOut() {
   return request<void>((reply) => accountSessionActor.send({ type: "SIGN_OUT", reply }));
 }
@@ -179,7 +158,6 @@ async function loadConnection(): Promise<AccountAuthConnection> {
       storage: platformStorage.storage,
     },
   });
-  // Without Sentry running, outside production, this adds nothing.
   Sentry.addIntegration(clientSupabaseIntegration(client));
   const { storage } = platformStorage;
   const { testAccount } = config;
@@ -201,14 +179,12 @@ async function loadConnection(): Promise<AccountAuthConnection> {
       if (!testAccount) {
         throw new Error("Sign-in is temporarily unavailable.");
       }
-      // A password sign-in always authenticates again, so it is fresh either way.
       const result = await client.auth.signInWithPassword(testAccount);
       if (result.error) {
         throw result.error;
       }
     },
     clearStoredSession: platformStorage.clearStoredSession,
-    // Kept where the session is: local storage on the web, Secure Storage in the shells.
     accountChooserMarker: {
       isSet: async () => (await storage.getItem(ACCOUNT_CHOOSER_MARKER_STORAGE_KEY)) !== null,
       set: async () => {

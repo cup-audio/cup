@@ -44,7 +44,6 @@ export type CreateConversionGrantDependencies = {
   createRootCredential(): Promise<{ credential: string; verifier: string }>;
 };
 
-/** Provisions a conversion grant and issues its one-time root credential. */
 export async function createConversionGrant(
   input: { label: string; requestId: string; issuedAtMs: number },
   dependencies: CreateConversionGrantDependencies,

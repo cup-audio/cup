@@ -31,7 +31,6 @@ test("a late rate-limit response cannot change the next account's pending reques
           user: { id: subject },
         }),
       );
-      // A start from the home page that is still pending keeps a signed-in listener there instead of on Recents.
       sessionStorage.setItem(
         pendingConversionKey,
         JSON.stringify({

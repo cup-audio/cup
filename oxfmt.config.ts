@@ -10,7 +10,6 @@ export default defineConfig({
   ignorePatterns: [
     ...baseConfig.ignorePatterns,
     "**/worker-configuration.d.ts",
-    /* written by the OpenAPI snapshot tests, which compare them byte for byte */
     "libs/*-api.routes/test/__snapshots__/openapi.json",
   ],
   overrides: [
@@ -22,22 +21,18 @@ export default defineConfig({
   ],
   sortImports: {
     customGroups: [
-      /* create a group for create-audiobook-from-url packages to separate them from other external dependencies */
       {
         groupName: "create-audiobook-from-url-packages",
         elementNamePattern: ["@cup/**"],
       },
-      /* create a group for subpath imports = internal dependencies */
       {
         groupName: "subpath-imports",
         elementNamePattern: ["#src/**"],
       },
-      /* create a group for subpath imports for test modules */
       {
         groupName: "subpath-imports-test-modules",
         elementNamePattern: ["#test/**"],
       },
-      /* create a group for subpath imports for E2E test modules */
       {
         groupName: "subpath-imports-test-modules-e2e",
         elementNamePattern: ["#test-e2e/**"],

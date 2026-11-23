@@ -19,20 +19,12 @@ import java.util.regex.Pattern;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-/**
- * Debug builds only. Replaces the Google sign-in plugin of the same name when the mobile E2E suite
- * launches the app with a test origin: {@code signIn} returns an ID token from the suite's fake auth
- * provider that carries the hashed nonce it was given, so the web app's unchanged sign-in runs
- * against the test Worker without Google. The fake auth provider's origin is the {@code supabaseUrl}
- * of the test Worker's auth configuration.
- */
 @CapacitorPlugin(name = "GoogleSignIn")
 public class FakeGoogleSignInPlugin extends Plugin {
     private static final Pattern LOCALHOST_ORIGIN = Pattern.compile("http://localhost:[1-9][0-9]{0,4}");
     private static final int TIMEOUT_MILLISECONDS = 10_000;
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
-    /** Read at load, from the launch intent: a later intent, such as a share, carries no origin. */
     private String apiOrigin;
 
     @Override
@@ -74,7 +66,6 @@ public class FakeGoogleSignInPlugin extends Plugin {
     @NonNull
     private static JSObject signInWithFakeAuthProvider(String apiOrigin, String nonce) throws IOException, JSONException {
         String authOrigin = new JSONObject(request(apiOrigin + "/api/auth/config", null)).getString("supabaseUrl");
-        // Plain HTTP reaches localhost only; never send anything elsewhere.
         if (!LOCALHOST_ORIGIN.matcher(authOrigin).matches()) {
             throw new IllegalStateException("The test Worker's auth provider is not at localhost: " + authOrigin);
         }
@@ -94,7 +85,6 @@ public class FakeGoogleSignInPlugin extends Plugin {
         return result;
     }
 
-    /** Sends a GET, or a JSON POST when a body is given, and returns the response body. */
     @NonNull
     private static String request(String url, String jsonBody) throws IOException {
         HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();

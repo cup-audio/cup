@@ -7,16 +7,6 @@ import {
 } from "#src/app/view-transition-names.js";
 import type { FileRoutesById } from "#src/routeTree.gen.js";
 
-/**
- * Opening a track from Recents, and going back from its detail view to Recents, moves the track's
- * cover from where it was to where it lands, in a View Transition that the router starts for the
- * navigation. One rule names that track's covers, and only while a cover transition runs: a second
- * element with the same name would make the browser skip the whole transition. The screens only
- * cross-fade when a cover starts outside the viewport, because it would cross a long distance
- * within the transition's short duration, and for a detail view opened from the mini player (the
- * `isOpenedFromMiniPlayer` history state), both ways: the press came from the pill, and its card
- * can be anywhere on Recents.
- */
 const COVER_TRANSITION_TYPE = "track-cover";
 const SCREEN_FADE_TYPE = "screen-fade";
 
@@ -26,15 +16,9 @@ const DETAIL_ROUTE_ID = "/_shell/audiobooks/$conversionId" satisfies keyof FileR
 let coverNameRule: CSSStyleSheet | undefined;
 let isPopStateVisualTransition = false;
 
-/** The location of the last navigation the router started a View Transition for. */
 let viewTransitionLocation: ParsedLocation | undefined;
 const viewTransitionLocationListeners = new Set<() => void>();
 
-/**
- * The router's view transition setting: a transition for Recents to a detail view and back, none
- * for any other navigation. Browsers without view transition types get no transition at all, as the
- * router would otherwise start a transition for every navigation.
- */
 export function createCoverViewTransition(router: Pick<AnyRouter, "getMatchedRoutes">):
   | false
   | {
@@ -51,7 +35,6 @@ export function createCoverViewTransition(router: Pick<AnyRouter, "getMatchedRou
     coverNameRule = new CSSStyleSheet();
     document.adoptedStyleSheets.push(coverNameRule);
 
-    // A swipe-back on iOS Safari already animates the page; a second animation would replay it.
     window.addEventListener(
       "popstate",
       (event) => {
@@ -80,7 +63,6 @@ export function createCoverViewTransition(router: Pick<AnyRouter, "getMatchedRou
         fromLocation?.state.isOpenedFromMiniPlayer === true ||
         toLocation.state.isOpenedFromMiniPlayer === true;
       const coverSelector = `[${TRACK_COVER_ATTRIBUTE}="${CSS.escape(conversionId)}"]`;
-      // The router asks before it commits the navigation, so this finds the old screen's cover.
       if (isOpenedFromMiniPlayer || !isInViewport(document.querySelector(coverSelector))) {
         recordViewTransitionStart(toLocation);
         return [SCREEN_FADE_TYPE];
@@ -97,12 +79,6 @@ export function createCoverViewTransition(router: Pick<AnyRouter, "getMatchedRou
   };
 }
 
-/**
- * Whether the router has started a View Transition for the navigation to `location`. It starts one
- * only once the next screen has loaded, but stays pending until the browser has captured the old
- * screen, which can take longer than the navigation progress bar's delay; that wait is not
- * loading.
- */
 export function useHasViewTransitionStarted(location: ParsedLocation): boolean {
   const startedLocation = React.useSyncExternalStore(
     subscribeToViewTransitionLocation,
@@ -123,7 +99,6 @@ function subscribeToViewTransitionLocation(listener: () => void): () => void {
   return () => viewTransitionLocationListeners.delete(listener);
 }
 
-/** Marks a cover as the given conversion's, to move when its detail view opens or closes. */
 export function coverTransitionTarget(conversionId: string): {
   [TRACK_COVER_ATTRIBUTE]: string;
 } {
@@ -141,7 +116,6 @@ function prefersReducedMotion(): boolean {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-/** Whether any part of the element is inside the viewport; no element, such as no cover, is not. */
 function isInViewport(element: Element | null): boolean {
   if (element === null) {
     return false;

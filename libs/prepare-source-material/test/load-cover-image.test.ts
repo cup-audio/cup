@@ -19,7 +19,6 @@ type FakeResponse = {
   status?: number;
 };
 
-/** Records what the loader asks of the browser and answers the navigation with one response. */
 function createBrowser(response: FakeResponse) {
   const observed = {
     cookies: [] as unknown[],

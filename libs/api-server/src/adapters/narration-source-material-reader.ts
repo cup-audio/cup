@@ -5,10 +5,6 @@ import {
 
 import type { ApiServerEnvironment } from "#src/api-server-environment.ts";
 
-/**
- * Reads a new conversion's narration source material from the audio bucket, only through the
- * reference its manifest records.
- */
 export function createNarrationSourceMaterialReader(
   env: Pick<ApiServerEnvironment, "AUDIO_BUCKET">,
 ): (reference: NarrationSourceMaterialReference) => Promise<string> {

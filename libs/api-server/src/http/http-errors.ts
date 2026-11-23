@@ -3,7 +3,6 @@ import { assertUnreachable } from "@cup/errors";
 import type { ErrorCode as ListenerErrorCode } from "@cup/listener-api.routes";
 import type { ErrorCode as OperatorErrorCode } from "@cup/operator-api.routes";
 
-/** Every code an API error response can carry; each API's contract lists the codes it returns. */
 type ErrorCode = ListenerErrorCode | OperatorErrorCode;
 
 export function accountAuthError(
@@ -54,7 +53,6 @@ export function requireAccessibleGrantState(
   return undefined;
 }
 
-/** The error envelope both API contracts declare, with a code from either contract. */
 function createErrorBody(traceId: string, code: ErrorCode, message: string) {
   return { error: { code, message, traceId } };
 }

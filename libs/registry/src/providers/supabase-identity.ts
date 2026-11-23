@@ -9,7 +9,6 @@ export type SupabaseAdminEnvironment = {
   SUPABASE_SECRET_KEY: string;
 };
 
-/** Authoritative existence checks prevent expired/deleted identities from allocating accounts. */
 export async function verifySupabaseIdentity(env: SupabaseAdminEnvironment, subject: string) {
   z.uuid().parse(subject);
   const response = await fetch(`${env.SUPABASE_URL}/auth/v1/admin/users/${subject}`, {
@@ -34,7 +33,6 @@ export async function verifySupabaseIdentity(env: SupabaseAdminEnvironment, subj
   return true;
 }
 
-/** Hard-deletes the identity; an identity that is already gone counts as deleted. */
 export async function deleteSupabaseIdentity(
   env: SupabaseAdminEnvironment,
   subject: string,

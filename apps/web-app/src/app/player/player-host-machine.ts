@@ -35,46 +35,32 @@ import type {
 import type { MediaSessionActionHandlers } from "#src/platform/media-session.ts";
 import { reportFailure } from "#src/report-failure.ts";
 
-/** A track that was loaded and no longer exists, such as one deleted on another device. */
 export type UnavailableTrack = { conversionId: string; message: string };
 
 export type PlayerHostMachineInput = {
   services: PlayerHostServices;
-  /** The system's media controls act like Cup's own controls, which the facade owns. */
   mediaSessionHandlers: MediaSessionActionHandlers;
 };
 
 export type PlayerHostMachineSnapshot = SnapshotFrom<typeof playerHostMachine>;
 
-/**
- * How old a track URL may be before Play renews it. The signed URL stays valid for at least 24
- * hours after the server handed it out, by the server clock; half of that tolerates a skewed client
- * clock.
- */
 const TRACK_URL_RENEWAL_AGE_MILLISECONDS = 12 * 60 * 60 * 1_000;
 const RENEWAL_ERROR_MESSAGE = "The audio could not be loaded again. Press Play to try again.";
 const UNAVAILABLE_TRACK_MESSAGE = "This track is no longer available.";
 
-/** What the listener asked of the shown audiobook: load it, and optionally seek and play. */
 type ShownStart = { seek: ShownSeek | null; play: boolean };
 
-/** Where the listener moves the shown audiobook from the player sheet or its segments. */
 type ShownSeek =
   | { kind: "unit"; unitIndex: number }
   | { kind: "position"; positionMilliseconds: number }
   | { kind: "skip"; deltaMilliseconds: number };
 
-/** The events that start the shown audiobook from the player sheet, its segments or Play. */
 type ShownStartEvent =
   | { type: "LOAD_SHOWN" }
   | { type: "PLAY_SHOWN"; unitIndex: number | undefined }
   | { type: "SEEK_SHOWN"; positionMilliseconds: number }
   | { type: "SKIP_SHOWN"; deltaMilliseconds: number };
 
-/**
- * What `loading` still owes once the player is built: the listener's seeks in the order they were
- * asked for, whether to play, and an unload that arrived while the player was being built.
- */
 type PendingLoad = {
   conversionId: string;
   seeks: ShownSeek[];
@@ -85,47 +71,34 @@ type PendingLoad = {
 type PlayerHostContext = PlayerHostMachineInput & {
   loaded: LoadedAudiobook | null;
   shown: ShownConversion | null;
-  /** The last loaded track found gone, until another audiobook is loaded. */
   unavailable: UnavailableTrack | null;
-  /** When the client received the shown audiobook, whose track URL a load uses. */
   shownAudiobookReceivedAt: number;
-  /** When the client received the loaded audiobook's signed URLs. */
   urlsReceivedAt: number;
-  /** Set while `loading`. */
   pendingLoad: PendingLoad | null;
-  /** The last load failed; the facade rethrows it to the tap that asked for the load. */
   loadFailure: { error: unknown } | null;
-  /** What played when the page started, while the host decides whether to take it over. */
   runningPlayer: RunningPlayer | null;
-  /** Taking over what played failed; the facade rejects `adoptRunningPlayer` with it. */
   adoptionFailure: { error: unknown } | null;
 };
 
-/** What `loading` waits for: the effect that builds a player reports its outcome as one of these. */
 type LoadOutcome =
   | {
       type: "PLAYER_BUILT";
       loaded: LoadedAudiobook;
-      /** A listener's load dates the track URL; a takeover does not know its age. */
       origin: { kind: "load"; urlsReceivedAt: number } | { kind: "takeover" };
     }
   | { type: "LOAD_REFUSED"; error: unknown }
   | { type: "LOAD_FAILED"; error: unknown }
   | { type: "ADOPTION_FAILED"; error: unknown };
 
-/** Queues an effect on the transition's `enq`. */
 type EnqueueEffect = (effect: () => void) => void;
 
-/** Sends an event to the machine itself, from an effect. */
 type SelfRef = { send: (event: LoadOutcome | { type: "PLAYER_CLOSED" }) => void };
 
-/** The adoption is over, whatever became of what played. */
 const ADOPTION_DONE = {
   target: "#playerHost.adoption.done",
   context: { runningPlayer: null },
 } as const;
 
-/** Tells the system's media controls about the loaded audiobook while it is loaded. */
 const showInMediaSessionLogic = createCallbackLogic<
   EventObject,
   { services: PlayerHostServices; loaded: LoadedAudiobook; handlers: MediaSessionActionHandlers }
@@ -151,35 +124,23 @@ const playerHostSetup = setup({
     context: types<PlayerHostContext>(),
     input: types<PlayerHostMachineInput>(),
     events: {
-      // The docs write payload-less events as `types<{}>()`, which the lint forbids as an empty type.
       SHOW: types<{
         conversionId: string;
         audiobook: PreparedAudiobook | undefined;
         receivedAt: number;
       }>(),
       HIDE: types<{ conversionId: string }>(),
-      /** The account's restore finished or the signed-in user changed; the host reads it again. */
       ACCOUNT_CHANGED: z.object({}),
       PLAY: z.object({}),
       PAUSE: z.object({}),
-      /** Loads the shown audiobook, paused, replacing the loaded one. */
       LOAD_SHOWN: z.object({}),
-      /** Plays the shown audiobook, from the start of a unit if given, loading it first. */
       PLAY_SHOWN: types<{ unitIndex: number | undefined }>(),
-      /** Seeks the shown audiobook, loading it paused first. */
       SEEK_SHOWN: types<{ positionMilliseconds: number }>(),
-      /** Skips by an amount in the shown audiobook, loading it paused first. */
       SKIP_SHOWN: types<{ deltaMilliseconds: number }>(),
       UNLOAD: types<{ position: PositionOnClose }>(),
-      /** Unloads `conversionId`, which the listener is deleting, without saving its position. */
       RELEASE: types<{ conversionId: string }>(),
-      /** Looks once for what plays when the page starts, to take it over. */
       FIND_RUNNING_PLAYER: z.object({}),
       FORGET_LOAD_FAILURE: z.object({}),
-      /*
-       * Sent by the machine's own effects, which build and close players: a transition only
-       * computes, so an effect reports what it made as an event, within the same `send`.
-       */
       PLAYER_BUILT: types<Omit<Extract<LoadOutcome, { type: "PLAYER_BUILT" }>, "type">>(),
       LOAD_REFUSED: types<{ error: unknown }>(),
       LOAD_FAILED: types<{ error: unknown }>(),
@@ -187,9 +148,7 @@ const playerHostSetup = setup({
       PLAYER_CLOSED: z.object({}),
     },
     internalEvents: {
-      /** The adoption region found what played and its audiobook; `playback` takes it over. */
       RUNNING_PLAYER_FOUND: types<{ runningPlayer: RunningPlayer; audiobook: PlayableAudiobook }>(),
-      /** The listener loaded an audiobook, which ends any adoption in progress. */
       PLAYER_LOADED: z.object({}),
     },
   },
@@ -207,27 +166,6 @@ const playerHostSetup = setup({
   },
 });
 
-/**
- * Which audiobook the app's player holds, and what the page that is shown can start.
- *
- * Two regions run side by side:
- *
- * - `playback`: `empty` → `loading` → `loaded` when the listener starts the shown audiobook or the
- *   host takes over what played when the page started. `loading` waits for the effect that builds
- *   the player, which reports back within the same `send`, so Play still runs in the tap's gesture;
- *   what the listener asks for meanwhile is kept in `pendingLoad` and applied once it is built.
- *   `loaded` is `ready`, or `renewingTrackUrl` while Play waits for a newly signed track URL;
- *   Pause, unloading or loading another audiobook leaves that state, which stops the request and
- *   discards its result. Unloading closes the player and clears the system's media controls.
- * - `adoption`: runs once, from `FIND_RUNNING_PLAYER`: find what plays → wait until the account is
- *   known and check that it is the listener's → fetch its audiobook → hand it to `playback` and
- *   wait for it to be built. Loading an audiobook in the meantime ends it: the load replaced what
- *   played.
- *
- * The shown conversion and its resume position are context, updated in place on `SHOW`, `HIDE` and
- * account changes. Playback itself (playing, buffering, the position) stays with the `Player`: the
- * element or the native player is that state (ADR 0011).
- */
 export const playerHostMachine = playerHostSetup.createMachine({
   id: "playerHost",
   type: "parallel",
@@ -252,7 +190,6 @@ export const playerHostMachine = playerHostSetup.createMachine({
       return { context: { shown: null } };
     },
     ACCOUNT_CHANGED: ({ context }, enq) => {
-      // The listening position belongs to the user the audiobook was loaded for.
       const account = context.services.getAccount();
       if (
         account.status === "known" &&
@@ -261,18 +198,14 @@ export const playerHostMachine = playerHostSetup.createMachine({
       ) {
         enq.raise({ type: "UNLOAD", position: "save" });
       }
-      // Which listening position applies depends on the account.
       return refreshResumePosition(context);
     },
-    // Playback moved the listening position, which a listener without an account keeps only on
-    // the device, where the shown audiobook does not see it change.
     PLAYER_CLOSED: ({ context }) => refreshResumePosition(context),
     FORGET_LOAD_FAILURE: { context: { loadFailure: null } },
   },
   states: {
     playback: {
       initial: "empty",
-      // `empty` and `loaded` start the shown audiobook alike; `loading` handles these itself.
       on: {
         LOAD_SHOWN: ({ context, event, self }, enq) =>
           startShown(context, toShownStart(event), self, enq),
@@ -334,22 +267,15 @@ export const playerHostMachine = playerHostSetup.createMachine({
                 },
               };
             },
-            // A port refused the listening session before anything that plays was touched.
             LOAD_REFUSED: ({ context, event }) => ({
               target: context.loaded ? "loaded" : "empty",
               context: { pendingLoad: null, loadFailure: { error: event.error } },
             }),
-            // The previous player was closed, and the new one could not be built.
             LOAD_FAILED: ({ event }) => ({
               target: "empty",
               context: { loaded: null, pendingLoad: null, loadFailure: { error: event.error } },
             }),
             ADOPTION_FAILED: { target: "empty", context: { pendingLoad: null } },
-            /*
-             * These arrive here only when they were sent while the machine was handling another
-             * event, so the player that is being built has not reported back yet. A second start
-             * of another audiobook is dropped; the listener can tap again.
-             */
             LOAD_SHOWN: ({ context, event }) => withPendingLoad(context, toShownStart(event)),
             PLAY_SHOWN: ({ context, event }) => withPendingLoad(context, toShownStart(event)),
             SEEK_SHOWN: ({ context, event }) => withPendingLoad(context, toShownStart(event)),
@@ -405,15 +331,10 @@ export const playerHostMachine = playerHostSetup.createMachine({
                   }
                   const { player } = requireLoaded(context);
                   enq(() => runEffect("play", () => player.play()));
-                  // Handled: the queued effect plays without a change of state.
                   return undefined;
                 },
               },
             },
-            /**
-             * Play requests the audiobook again for a newly signed track URL, then sets it at the
-             * same position and plays. Play is ignored meanwhile.
-             */
             renewingTrackUrl: {
               invoke: {
                 src: "fetchAudiobook",
@@ -423,14 +344,11 @@ export const playerHostMachine = playerHostSetup.createMachine({
                 }),
                 onDone: ({ context, event, self }, enq) => {
                   const audiobook = event.output;
-                  // The position of a track that no longer exists has nowhere to go.
                   if (audiobook === null) {
                     return unload(context, "discard", self, enq, markUnavailable(context));
                   }
 
                   const { player } = requireLoaded(context);
-                  // Without a narration track the audiobook is no longer playable, e.g. after a
-                  // retry.
                   if (audiobook.status !== "ready" || !audiobook.narrationTrack) {
                     enq(() => showRenewalError(player));
                     return { target: "ready" };
@@ -446,8 +364,6 @@ export const playerHostMachine = playerHostSetup.createMachine({
                   );
                   return { target: "ready", context: { urlsReceivedAt } };
                 },
-                // The request layer reports the failure itself; the player shows that Play did
-                // not start.
                 onError: ({ context }, enq) => {
                   const { player } = requireLoaded(context);
                   enq(() => showRenewalError(player));
@@ -467,7 +383,6 @@ export const playerHostMachine = playerHostSetup.createMachine({
         },
         adopting: {
           initial: "findingRunningPlayer",
-          // A load replaced what played, so there is nothing left to take over.
           on: { PLAYER_LOADED: ADOPTION_DONE },
           states: {
             findingRunningPlayer: {
@@ -483,14 +398,12 @@ export const playerHostMachine = playerHostSetup.createMachine({
                 onError: ({ event }) => adoptionFailed(event.error),
               },
             },
-            /** Who listens is unknown while the stored account is restored. */
             awaitingAccount: {
               always: ({ context }, enq) => {
                 const account = context.services.getAccount();
                 if (account.status !== "known") {
                   return undefined;
                 }
-                // The listener loaded an audiobook before the account was known.
                 if (isPlaybackBusy(context)) {
                   return ADOPTION_DONE;
                 }
@@ -512,12 +425,9 @@ export const playerHostMachine = playerHostSetup.createMachine({
                 onDone: ({ context, event }, enq) => {
                   const runningPlayer = requireRunningPlayer(context);
                   const audiobook = event.output;
-                  // The listener loaded an audiobook while it was fetched.
                   if (isPlaybackBusy(context)) {
                     return ADOPTION_DONE;
                   }
-                  // A deleted audiobook, or one that lost its narration track, cannot be taken
-                  // over.
                   if (audiobook?.status !== "ready" || !isPlayableAudiobook(audiobook)) {
                     enq(() => discardRunningPlayer(runningPlayer));
                     return ADOPTION_DONE;
@@ -525,12 +435,9 @@ export const playerHostMachine = playerHostSetup.createMachine({
                   enq.raise({ type: "RUNNING_PLAYER_FOUND", runningPlayer, audiobook });
                   return { target: "handingOver" };
                 },
-                // The request layer reports the failure itself; the session plays on, and the
-                // next load replaces it.
                 onError: ADOPTION_DONE,
               },
             },
-            /** `playback` builds the player for what played; adoption is done once it reports. */
             handingOver: {
               on: {
                 PLAYER_BUILT: ADOPTION_DONE,
@@ -545,11 +452,6 @@ export const playerHostMachine = playerHostSetup.createMachine({
   },
 });
 
-/**
- * Starts the shown audiobook from `empty` or `loaded`. A loaded one is sought and played in place.
- * Another one is checked first: an audiobook whose listening session would be refused fails the tap
- * while the loaded audiobook plays on, also through a track URL renewal in progress.
- */
 function startShown(
   context: PlayerHostContext,
   start: ShownStart,
@@ -570,8 +472,6 @@ function startShown(
     if (start.play) {
       enq.raise({ type: "PLAY" });
     }
-    // Nothing to load: the effects above act on the loaded player. A transition that queued an
-    // effect counts as handled even when it returns no target or context.
     return undefined;
   }
 
@@ -594,10 +494,6 @@ function startShown(
   };
 }
 
-/**
- * Merges a start of the audiobook being built into what `loading` owes. A start of another one is
- * dropped, and handled here so it does not reach `playback`, which would build a second player.
- */
 function withPendingLoad(context: PlayerHostContext, start: ShownStart) {
   const pendingLoad = requirePendingLoad(context);
   if (context.shown?.conversionId !== pendingLoad.conversionId) {
@@ -630,7 +526,6 @@ function toShownStart(event: ShownStartEvent): ShownStart {
   return { seek: { kind: "skip", deltaMilliseconds }, play: false };
 }
 
-/** The adoption is over because taking over what played failed; the facade rejects with it. */
 function adoptionFailed(error: unknown) {
   return {
     ...ADOPTION_DONE,
@@ -657,12 +552,10 @@ function applySeek(player: Player, seek: ShownSeek) {
   });
 }
 
-/** Whether `playback` holds or is building an audiobook. */
 function isPlaybackBusy({ loaded, pendingLoad }: PlayerHostContext) {
   return loaded !== null || pendingLoad !== null;
 }
 
-/** A media error, or a track URL older than the renewal age, needs a newly signed URL. */
 function needsNewTrackUrl(context: PlayerHostContext) {
   const { player } = requireLoaded(context);
   return (
@@ -696,7 +589,6 @@ function showConversion(
   };
 }
 
-/** Reads the shown audiobook's resume position again; keeps the same object when unchanged. */
 function refreshResumePosition({ services, shown }: PlayerHostContext) {
   if (!shown) {
     return { context: { shown: null } };
@@ -717,7 +609,6 @@ function refreshResumePosition({ services, shown }: PlayerHostContext) {
   };
 }
 
-/** Keeps the page of a track that no longer exists from playing it. */
 function markUnavailable(context: PlayerHostContext): Partial<PlayerHostContext> {
   const { conversionId } = requireLoaded(context);
   const { shown } = context;
@@ -727,10 +618,6 @@ function markUnavailable(context: PlayerHostContext): Partial<PlayerHostContext>
   };
 }
 
-/**
- * Leaves `loaded` for `empty`. Leaving it stops reporting to the system's media controls; the
- * effect then closes the player, clears the controls, and has the resume position read again.
- */
 function unload(
   context: PlayerHostContext,
   position: PositionOnClose,
@@ -750,13 +637,6 @@ function unload(
   };
 }
 
-/**
- * Builds the shown audiobook's session and player, as an effect. The listening session is created
- * first, since it touches nothing that plays: a port that refuses it leaves the loaded audiobook
- * playing. The previous player is closed next, because it must stop listening to the element before
- * the new player sets its source. A player that cannot be built after that leaves nothing loaded;
- * on Android the previous native session then stays open until the next load or a reload.
- */
 function buildShownPlayer(context: PlayerHostContext): LoadOutcome {
   const { shown, services, loaded } = context;
   if (!shown?.audiobook || !isPlayableAudiobook(shown.audiobook)) {
@@ -792,7 +672,6 @@ function buildShownPlayer(context: PlayerHostContext): LoadOutcome {
   }
 }
 
-/** The session's URLs came from an earlier page, so the first Play renews them. */
 function adoptRunningPlayer(
   services: PlayerHostServices,
   { runningPlayer, audiobook }: { runningPlayer: RunningPlayer; audiobook: PlayableAudiobook },
@@ -813,7 +692,6 @@ function adoptRunningPlayer(
   }
 }
 
-/** Stops the player for good and clears the system's media controls. */
 function closeLoadedPlayer(
   loaded: LoadedAudiobook,
   services: PlayerHostServices,
@@ -832,11 +710,6 @@ function discardRunningPlayer(runningPlayer: RunningPlayer) {
   runEffect("end what played when the page started", () => runningPlayer.discard());
 }
 
-/**
- * Runs an effect on a port and reports its failure instead of throwing: an effect that throws stops
- * the machine for the rest of the page, so the host would ignore every later control. Browsers
- * throw from some Media Session calls, such as an action they do not support.
- */
 function runEffect(description: string, effect: () => void) {
   try {
     effect();
@@ -847,7 +720,6 @@ function runEffect(description: string, effect: () => void) {
   }
 }
 
-/** Signed-in listeners keep their position on the server; others on the device. */
 function sessionRequest(
   services: PlayerHostServices,
   conversionId: string,
@@ -863,10 +735,6 @@ function sessionRequest(
   };
 }
 
-/**
- * Where loading the audiobook resumes: the listener's listening position within the track, or the
- * start while it cannot play or the account is being restored.
- */
 function readResumePositionMilliseconds(
   services: PlayerHostServices,
   conversionId: string,
@@ -886,10 +754,6 @@ function readResumePositionMilliseconds(
   );
 }
 
-/**
- * The duration is the narration track's listed one, the timeline the reader and the position bar
- * use, not the player's.
- */
 function reportToMediaSession(
   services: PlayerHostServices,
   loaded: LoadedAudiobook,
@@ -901,7 +765,6 @@ function reportToMediaSession(
   services.mediaSession.setPlaybackState({
     playbackState: isPlaying ? "playing" : "paused",
     isWaiting: isBuffering,
-    // The player returns to the start at the end, so only the change tells it ended.
     hasEnded: change?.hasEnded ?? false,
   });
   services.mediaSession.setPositionState({
@@ -911,7 +774,6 @@ function reportToMediaSession(
   });
 }
 
-/** `loaded` and its states exist only while an audiobook is loaded. */
 function requireLoaded({ loaded }: Pick<PlayerHostContext, "loaded">): LoadedAudiobook {
   if (!loaded) {
     throw new Error("Expected a loaded audiobook.");
@@ -919,7 +781,6 @@ function requireLoaded({ loaded }: Pick<PlayerHostContext, "loaded">): LoadedAud
   return loaded;
 }
 
-/** `loading` exists only while a player is being built. */
 function requirePendingLoad({ pendingLoad }: PlayerHostContext): PendingLoad {
   if (!pendingLoad) {
     throw new Error("Expected a player being built.");
@@ -927,7 +788,6 @@ function requirePendingLoad({ pendingLoad }: PlayerHostContext): PendingLoad {
   return pendingLoad;
 }
 
-/** The adoption states after `findingRunningPlayer` exist only once a running player was found. */
 function requireRunningPlayer({ runningPlayer }: PlayerHostContext): RunningPlayer {
   if (!runningPlayer) {
     throw new Error("Expected a running player to take over.");

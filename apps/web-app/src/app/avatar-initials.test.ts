@@ -8,7 +8,6 @@ const INITIALS = [
   ["山田 太郎", "山太"],
   ["  Anna 🌸  ", "A"],
   ["(Bob) Dylan", "BD"],
-  // "E" followed by a combining acute accent stays one grapheme.
   ["Émile Zola", "ÉZ"],
 ] as const;
 

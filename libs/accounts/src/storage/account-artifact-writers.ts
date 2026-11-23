@@ -9,7 +9,6 @@ import type { AccountArtifactWriter, AccountSnapshot } from "#src/domain/account
 import { artifactWriters, accountConversions } from "#src/storage/account-sqlite-schema.ts";
 import { requireRow } from "#src/storage/sqlite-row.ts";
 
-/** Tracks account storage effects so deletion waits for acknowledged production writes. */
 export class AccountArtifactWriters {
   private readonly database: DrizzleSqliteDODatabase;
   private readonly account: () => AccountSnapshot;
@@ -132,7 +131,6 @@ export class AccountArtifactWriters {
       .all();
   }
 
-  /** Writer prefixes can be nested below the conversion prefix, such as an execution's prefix. */
   hasUndrainedConversionWriters(conversionId: string): boolean {
     const { accountId } = this.account();
     return this.writers().some(
@@ -141,7 +139,6 @@ export class AccountArtifactWriters {
     );
   }
 
-  /** Conversion deletion cleanup removes the conversion's drained writers once its prefix is swept. */
   removeDrainedConversionWriters(conversionId: string): void {
     const { accountId } = this.account();
     this.database.transaction(() => {
@@ -150,7 +147,6 @@ export class AccountArtifactWriters {
         .from(artifactWriters)
         .where(eq(artifactWriters.state, "drained"))
         .all();
-      // One statement per writer: a conversion can have more writers than SQLite binds parameters.
       for (const writer of writers) {
         if (getAccountConversionIdFromArtifactPrefix(writer.prefix, accountId) === conversionId) {
           this.database

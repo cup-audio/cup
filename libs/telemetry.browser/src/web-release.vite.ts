@@ -2,16 +2,8 @@ import type { Plugin } from "vite";
 
 import { WEB_RELEASE_META_NAME } from "#src/web-release.ts";
 
-/** Enough of the SHA-256 to tell bundles apart in Sentry's release list. */
 const RELEASE_HASH_LENGTH = 16;
 
-/**
- * Names the web bundle's release `web@<content hash of the entry chunk>` in a `<meta>` of the built
- * `index.html`, which `readWebRelease` reads at runtime. The entry chunk imports every other chunk
- * by its hashed file name, so the hash changes exactly when the bundle's code does: an unchanged
- * bundle keeps its release, and Turbo can replay E2E suites that ran it. The release cannot live in
- * the entry chunk itself, whose hash would then depend on it.
- */
 export function webReleasePlugin(): Plugin {
   return {
     name: "cup:web-release",

@@ -16,17 +16,10 @@ import type { AppDevice, MobilePlatform } from "#src/app-device.ts";
 import { failureArtifactFolder, writeFailureArtifacts } from "#src/failure-artifacts.ts";
 import { openIosAppDevice, type IosTarget } from "#src/ios/ios-app-device.ts";
 
-/** Keeps a failed test's Worker persistence directory, as in the web suite. */
 const RETAIN_WORKER_STATE = process.env["E2E_RETAIN_STATE"] === "1";
-/** Writes each test Worker's Wrangler output to stderr while it runs, as in the web suite. */
 const STREAM_WORKER_LOGS = process.env["E2E_STREAM_WRANGLER"] === "1";
-/**
- * How many ports `startExposed` tries; a taken port is rare, five in a row means something is
- * wrong.
- */
 const PORT_ATTEMPTS = 5;
 
-/** The servers a test started and the host ports it exposed to the app for them. */
 type TestServers = {
   authProvider?: AuthProvider;
   sentryStub?: SentryStub;
@@ -35,52 +28,29 @@ type TestServers = {
 };
 
 type UseMobileAppOptions = {
-  /**
-   * Gives each test a Sentry stub, reachable from the app at `127.0.0.1`, whose `cup-app` DSN the
-   * test Worker's telemetry tunnel forwards to. Pass `testSentryDsn` as a launch argument for the
-   * debug build to report to it.
-   */
   sentryStub?: boolean;
 };
 
 declare module "vitest" {
   // oxlint-disable-next-line typescript/consistent-type-definitions -- Vitest types `provide` and `inject` through interface merging.
   interface ProvidedContext {
-    /** Set per Vitest project in `vitest.config.ts`. */
     mobilePlatform: MobilePlatform;
-    /** Provided by the Android project's global setup. */
     androidTarget: AndroidTarget;
-    /** Provided by the iOS project's global setup. */
     iosTarget: IosTarget;
   }
 }
 
 export type MobileApp = {
-  /** The run's device, shared by the spec file's tests. */
   readonly device: AppDevice;
-  /** This test's own Worker. */
   readonly worker: TestWorker;
-  /** The origin the app reaches the Worker at, passed as its launch argument. */
   readonly apiOrigin: string;
-  /**
-   * This test's fake auth provider, whose origin is in the issuer of the tokens it signs. A test
-   * reads its recorded authorization requests and sets its access token lifetime.
-   */
   readonly authProvider: AuthProvider;
-  /** This test's Sentry stub; only with the `sentryStub` option. */
   readonly sentryStub: SentryStub;
-  /** The stub's `cup-app` DSN, which the app reaches through the exposed port. */
   readonly testSentryDsn: string;
 };
 
-/**
- * Opens a session on the platform's device for the spec file, and gives each test its own test
- * Worker and fake auth provider, reachable from the app at `localhost`. When a test fails, it keeps
- * the test's failure artifacts before the teardown stops the app.
- */
 export function useMobileApp(options: UseMobileAppOptions = {}): MobileApp {
   let device: AppDevice | undefined;
-  /** What this test started so far, so the teardown also undoes a half-finished `beforeEach`. */
   let testServers: TestServers = { exposedPorts: [] };
 
   beforeAll(async () => {
@@ -95,17 +65,14 @@ export function useMobileApp(options: UseMobileAppOptions = {}): MobileApp {
     const openedDevice = requireDefined(device, "The device session");
     testServers = { exposedPorts: [] };
     const { exposedPorts } = testServers;
-    // Each test starts signed out, whatever the previous test stored.
     await openedDevice.clearAppData();
     await openedDevice.markTestStart();
-    // Its origin and token issuer are `http://localhost:<port>`, as the app and the Worker see it.
     const authProvider = await startExposed(openedDevice, exposedPorts, {
       start: () => startAuthProvider({ hostname: "localhost" }),
       stop: (server) => server.close(),
     });
     testServers.authProvider = authProvider;
     if (options.sentryStub === true) {
-      // The stub listens on the host's 127.0.0.1, as does the test Worker that forwards to it.
       const { stub } = await startExposed(openedDevice, exposedPorts, {
         start: async () => {
           const startedStub = await startSentryStub();
@@ -157,7 +124,6 @@ export function useMobileApp(options: UseMobileAppOptions = {}): MobileApp {
         await device?.unexposeHostPort(port);
       }
     } finally {
-      // Also when the device does not answer, so no Wrangler process outlives the test.
       await worker?.stop({ retainPersistenceDirectory });
       await authProvider?.close();
       await sentryStub?.close();
@@ -207,12 +173,6 @@ async function openDevice(platform: MobilePlatform): Promise<AppDevice> {
   throw new Error(`Unknown mobile platform: ${String(platform)}`);
 }
 
-/**
- * Starts a server on a port the host's operating system assigns, exposes that port to the app and
- * adds it to `exposedPorts`, which the teardown unexposes. The device can already hold the same
- * port for a socket of its own, which blocks exposing it; the server then starts again on another
- * assigned port. This picks a port; it repeats no test step.
- */
 async function startExposed<T extends { origin: string }>(
   device: AppDevice,
   exposedPorts: number[],
@@ -241,7 +201,6 @@ async function startExposed<T extends { origin: string }>(
   );
 }
 
-/** The app always gets `localhost`, which both platforms map to the host's loopback. */
 function localhostOrigin(port: number): string {
   return `http://localhost:${port}`;
 }
@@ -250,7 +209,6 @@ function portOf(origin: string): number {
   return Number(new URL(origin).port);
 }
 
-/** The test's name, preceded by the names of its `describe` blocks. */
 function namesOf(task: TestContext["task"]): string[] {
   const names = [task.name];
   for (let suite = task.suite; suite?.suite !== undefined; suite = suite.suite) {

@@ -19,12 +19,10 @@ vi.mock("@cup/conversion-grants", async () => ({
   ...(await import("@cup/conversion-grants/contracts")),
   ...(await import("@cup/conversion-grants/session")),
 }));
-// The helper itself is tested against the Sentry stub in @cup/telemetry.cloudflare.
 vi.mock(import("@cup/telemetry.cloudflare"), async (importOriginal) => ({
   ...(await importOriginal()),
   logEvent: vi.fn<typeof logEvent>(),
 }));
-// Records the captures; the Worker integration tests check what reaches Sentry.
 vi.mock(import("@sentry/core"), async (importOriginal) => ({
   ...(await importOriginal()),
   captureException: vi.fn<typeof captureException>(),
@@ -38,7 +36,6 @@ const origin = "https://cup.audio";
 const trackPath = `/api/files/audiobooks/${conversionId}/narration-track.mp3`;
 const trialOwner: ConversionOwner = { kind: "trial", grantId };
 const accountOwner: ConversionOwner = { kind: "account", accountId };
-// Byte lengths 768, 1,152 and 384 (16 bytes per millisecond): 2,304 bytes in total.
 const SETTLED_DURATIONS = [48, 72, 24];
 
 afterEach(() => vi.restoreAllMocks());
@@ -396,8 +393,6 @@ test("the narration track can be played from the apps' https://localhost page", 
   const response = await app.request(await signTrackUrl(accountOwner), {}, env);
 
   expect(response.status).toBe(200);
-  // The Android and iOS apps load the track with a plain <audio> element from another origin; the
-  // signed URL is the authorization, so the resource policy must not block a cross-origin embed.
   expect(response.headers.get("Cross-Origin-Resource-Policy")).toBe("cross-origin");
 });
 
@@ -521,7 +516,6 @@ function getNarrationTrackUrl(audiobook: Record<string, unknown>): string {
   return narrationTrack.url;
 }
 
-/** Bytes that differ per segment and per position, so a misplaced byte fails the comparison. */
 function createSegmentBytes(sequence: number, byteLength: number): Uint8Array {
   return Uint8Array.from({ length: byteLength }, (_, index) => (sequence * 89 + index) % 256);
 }

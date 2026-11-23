@@ -9,10 +9,6 @@ import { interTypefaceScope } from "#src/app/global-styles.js";
 import { composeClassnames } from "#src/app/utils.js";
 
 export type DSDialogProps = {
-  /**
-   * `"alertdialog"` interrupts to confirm an action, such as a destructive one: it is announced as
-   * an alert dialog and a click outside does not close it.
-   */
   role?: "dialog" | "alertdialog";
   open: DialogRootProps["open"];
   onOpenChange: DialogRootProps["onOpenChange"];
@@ -20,13 +16,10 @@ export type DSDialogProps = {
   finalFocus: DialogPopupProps["finalFocus"];
   title: React.ReactNode;
   description?: React.ReactNode;
-  /** Content between the description and the buttons, such as a form. */
   children?: React.ReactNode;
   cancelButtonText: React.ReactNode;
   cancelButtonDisabled: boolean;
-  /** Lets `initialFocus` start on Cancel, the safe choice of a destructive confirmation. */
   cancelButtonRef?: React.Ref<HTMLButtonElement>;
-  /** Actions after Cancel, which is a text button; the primary action comes last. */
   buttonGroupChildren?: React.ReactNode;
   errorMessage?: React.ReactNode;
 };
@@ -46,7 +39,6 @@ export const DSDialog: React.FC<DSDialogProps> = ({
   buttonGroupChildren,
   errorMessage,
 }) => {
-  // Both roots share every other part.
   const Root = role === "alertdialog" ? AlertDialog.Root : Dialog.Root;
 
   return (
@@ -85,7 +77,6 @@ export const DSDialog: React.FC<DSDialogProps> = ({
             transform: translate(-50%, -50%);
           `}
         >
-          {/* keeps the description out of the popup gap, closer to the title */}
           <div>
             <Dialog.Title className={textStyles.h2}>{title}</Dialog.Title>
             {description && (

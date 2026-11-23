@@ -12,7 +12,6 @@ const COVER_IMAGE_CONTENT_TYPES = [
 ] as const;
 export type CoverImageContentType = (typeof COVER_IMAGE_CONTENT_TYPES)[number];
 
-/** What the audiobook manifest records about its stored cover image. */
 export const coverImageSchema = z
   .object({
     contentType: z.enum(COVER_IMAGE_CONTENT_TYPES),
@@ -22,7 +21,6 @@ export const coverImageSchema = z
   .strict();
 export type CoverImage = z.infer<typeof coverImageSchema>;
 
-/** Minimal object-storage operations required to store a cover image. */
 export type CoverImageStorage = {
   put(
     key: string,
@@ -31,7 +29,6 @@ export type CoverImageStorage = {
   ): Promise<{ size: number; httpMetadata?: { contentType?: string } } | null>;
 };
 
-/** Supplies the publisher's original image bytes and where to keep them. */
 export type StoreCoverImageOptions = {
   alternativeText?: string;
   artifactPrefix?: string;
@@ -45,7 +42,6 @@ export function createCoverImageKey(conversionId: string, artifactPrefix?: strin
   return `${artifactPrefix ?? createConversionArtifactPrefix(conversionId)}cover-image`;
 }
 
-/** Stores the cover image unchanged and returns its record for the audiobook manifest. */
 export async function storeCoverImage({
   alternativeText,
   artifactPrefix,
@@ -61,8 +57,6 @@ export async function storeCoverImage({
     throw new CupError(`Cover image upload did not produce an object: ${key}`);
   }
 
-  // The account artifact writer answers a repeated write with the object it already stored, so
-  // the record describes the stored object rather than the bytes offered in this attempt.
   return coverImageSchema.parse({
     contentType: storedImage.httpMetadata?.contentType,
     byteLength: storedImage.size,

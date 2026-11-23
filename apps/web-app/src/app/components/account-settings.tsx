@@ -7,13 +7,6 @@ import { DSButton } from "#src/app/design-system/button.js";
 import { useAccountConfirmation } from "#src/data-fetching/account-confirmation.js";
 import { accountQuery } from "#src/data-fetching/account.js";
 
-/**
- * The account's lifecycle controls: deleting an active account, restoring one whose deletion is
- * scheduled, and confirming either after signing in with Google again. The account dialog offers
- * both; the account recovery page offers restoring only, and sends an active account to Recents.
- * Its route's loader loads the account snapshot, and the route shows `AccountLoading` and
- * `AccountLoadError` in its place.
- */
 export function AccountSettings({
   subject,
   email,
@@ -31,14 +24,11 @@ export function AccountSettings({
     throw account.error;
   }
 
-  // A deletion begun in the account dialog but not confirmed stays stored for this tab; the recovery
-  // page must not offer to finish it.
   const challenge =
     purpose === "recovery" && confirmation.challenge?.action === "delete"
       ? null
       : confirmation.challenge;
 
-  // Each section heading sits one level below the dialog's h2 title or the page's h1.
   const SectionHeading = purpose === "settings" ? "h3" : "h2";
 
   return (
@@ -99,10 +89,6 @@ export function AccountSettings({
   );
 }
 
-/**
- * The recovery page's content for an active account. A recovery just confirmed there leaves the
- * account active, so its result takes the place of the notice that nothing is scheduled.
- */
 function ActiveAccountNotice({ result }: { result: string | null | undefined }): React.ReactNode {
   return (
     <p>
@@ -112,7 +98,6 @@ function ActiveAccountNotice({ result }: { result: string | null | undefined }):
   );
 }
 
-/** The step after signing in with Google again, which carries out the change begun before it. */
 function ConfirmAccountChange({
   action,
   isForThisAccount,

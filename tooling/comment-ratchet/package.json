@@ -1,0 +1,52 @@
+{
+  "name": "@cup/comment-ratchet",
+  "private": true,
+  "bin": {
+    "comment-ratchet": "./src/cli.ts"
+  },
+  "files": [
+    "src/**",
+    "comment-baseline.json"
+  ],
+  "type": "module",
+  "imports": {
+    "#src/*": "./src/*"
+  },
+  "exports": {
+    "./package.json": "./package.json",
+    "./oxlint-plugin": {
+      "types": "./dist/types/oxlint-plugin.d.ts",
+      "default": "./src/oxlint-plugin.ts"
+    }
+  },
+  "scripts": {
+    "build": "turbo run turbo:build",
+    "clean": "del-cli --dot=true \"dist\" \"*.tsbuildinfo\"",
+    "lint": "turbo run turbo:lint",
+    "lint:fix": "turbo run turbo:lint:fix",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "turbo:build": "prepare-declaration-build --declaration-output-dir ./dist/types --build-info-file ./dist/tsconfig.build.tsbuildinfo --source-package-json ./src/package.json && tsc --build ./tsconfig.json",
+    "turbo:lint": "oxlint --type-aware --max-warnings 0 .",
+    "turbo:lint:fix": "pnpm run turbo:lint --fix",
+    "turbo:test": "pnpm run test"
+  },
+  "dependencies": {
+    "@commander-js/extra-typings": "^15.1.0",
+    "commander": "^15.1.0",
+    "typescript": "catalog:",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@cup/config-oxlint": "workspace:*",
+    "@cup/prepare-declaration-build": "workspace:*",
+    "@patricktree-stack/config-typescript": "workspace:*",
+    "@patricktree-stack/config-vitest": "workspace:*",
+    "@types/node": "catalog:",
+    "@typescript/native": "catalog:",
+    "oxlint": "catalog:",
+    "oxlint-tsgolint": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  }
+}

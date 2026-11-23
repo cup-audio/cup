@@ -15,11 +15,6 @@ type DSButtonCustomProps = {
 
 type DSButtonDataAttributes = MapPropsToRequiredDataAttributeProps<DSButtonCustomProps>;
 
-/**
- * Shared application button: a pill in Paragraph text, filled with ink (contained), outlined, or
- * without a surface (text). The outlined and text variants take the surrounding text color. A
- * disabled button fades; a pending one stays opaque behind its spinner.
- */
 export const DSButton: React.FC<DSButtonProps> = ({
   variant = "outlined",
   isPending = false,

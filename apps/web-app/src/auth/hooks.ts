@@ -10,7 +10,6 @@ export function useAccountAuthState() {
   return React.useSyncExternalStore(subscribeAuthState, authStateSnapshot, authStateSnapshot);
 }
 
-/** Account auth initializing changes the shown state, which republishes the offered methods. */
 export function useSignInMethods() {
   return React.useSyncExternalStore(
     subscribeAuthState,

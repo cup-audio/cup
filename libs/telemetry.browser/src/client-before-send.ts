@@ -2,17 +2,8 @@ import type { Breadcrumb, Contexts, ErrorEvent, EventHint } from "@sentry/react"
 
 import { maskBreadcrumbUrls, maskEventUrls } from "@cup/telemetry.core";
 
-/**
- * The mechanism of the errors that Sentry's Supabase integration captures from failed auth calls.
- * The web app handles those failures itself, so the integration adds spans and breadcrumbs only.
- */
 const SUPABASE_AUTH_MECHANISM = "auto.db.supabase.auth";
 
-/**
- * The client's `beforeSend`: only the opaque user ID, no IP address, no device identifiers, masked
- * URLs, and no Supabase auth errors. The device identifiers are those a native SDK copies onto JS
- * events through scope sync; the organisation's scrubbing rule removes them again at ingest.
- */
 export function beforeSendClientEvent(event: ErrorEvent, _hint: EventHint): ErrorEvent | null {
   if (isSupabaseAuthError(event)) {
     return null;
@@ -31,11 +22,6 @@ export function beforeSendClientEvent(event: ErrorEvent, _hint: EventHint): Erro
   return sent;
 }
 
-/**
- * The client's `beforeBreadcrumb`: masks URLs in the message and in every string of its data, such
- * as a request's `url` or a navigation's `from` and `to`. Scope sync copies breadcrumbs onto native
- * events, which no `beforeSend` of Cup's sees.
- */
 export function beforeBreadcrumbClient(breadcrumb: Breadcrumb): Breadcrumb {
   return maskBreadcrumbUrls(breadcrumb);
 }

@@ -54,7 +54,6 @@ async function generateAssets(check: boolean): Promise<void> {
   await writeOutput("apps/web-app/public/app/favicon-dark.svg", darkSource);
 
   for (const output of outputs) {
-    // Nest the complete SVG so the raster exports retain its viewBox and artwork.
     const artwork = source.replace(/<svg\b[^>]*>/, (tag) =>
       tag
         .replace(/\s(?:width|height)="[^"]*"/g, "")
@@ -67,8 +66,6 @@ async function generateAssets(check: boolean): Promise<void> {
     await writeOutput(output.path, await sharp(Buffer.from(canvas)).png().toBuffer());
   }
 
-  // Android's vector format cannot represent arbitrary SVG. Reject unsupported artwork
-  // rather than silently dropping shapes when the source icon changes.
   const viewBox = source.match(/viewBox="([^"]+)"/)?.[1];
   if (viewBox === undefined) {
     throw new Error("Cup SVG requires a viewBox.");

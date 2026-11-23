@@ -20,14 +20,9 @@ export function createWebAppViteConfig() {
     publicDir: path.join(WEB_APP_DIRECTORY, "public"),
     plugins: [
       tanstackRouter({
-        // The app typechecks with `moduleResolution: node16`, which cannot resolve extensionless imports; the generated tree carries `@ts-nocheck`, so unresolved route imports would silently degrade every route type to `any`.
         addExtensions: ".js",
         autoCodeSplitting: true,
         codeSplittingOptions: {
-          // The plugin's default minus `errorComponent`, which stays in the eagerly loaded route module.
-          // The router loads a split error screen only when a loader fails, so a query failing during
-          // render would first suspend on the chunk: the pending component flashes and React warns
-          // about `use()`.
           defaultBehavior: [["component"], ["notFoundComponent"]],
         },
         generatedRouteTree: path.join(WEB_APP_DIRECTORY, "src/routeTree.gen.ts"),
@@ -40,14 +35,10 @@ export function createWebAppViteConfig() {
         keepComments: true,
       }),
       react(),
-      // Names the bundle's Sentry release in the built `index.html` (`src/telemetry.ts` reads it).
       webReleasePlugin(),
     ],
     server: {
-      allowedHosts: [
-        /* Tailscale MagicDNS names, for `pnpm dev:services --tailnet` */
-        ".ts.net",
-      ],
+      allowedHosts: [".ts.net"],
       host: "127.0.0.1",
     },
   });

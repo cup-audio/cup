@@ -6,7 +6,6 @@ import { CupError } from "@cup/errors";
 
 import { rateEvents } from "#src/rate-limit-schema.ts";
 
-/** A serialized rolling window, with no fixed-window boundary burst. */
 export class RollingLimits {
   private readonly database: DrizzleSqliteDODatabase;
   constructor(storage: DurableObjectStorage) {
@@ -47,7 +46,6 @@ export class RollingLimits {
       .select({ next: min(rateEvents.expiresAtMs) })
       .from(rateEvents)
       .get();
-    // An aggregate without GROUP BY always yields one row, even for an empty table.
     if (row === undefined) {
       throw new CupError("Required SQLite row is missing");
     }

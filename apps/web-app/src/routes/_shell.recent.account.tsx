@@ -12,14 +12,8 @@ import { useIsAccountConfirmationPending } from "#src/data-fetching/account-conf
 import { accountQuery } from "#src/data-fetching/account.js";
 import { hasCrashReportsSwitch } from "#src/platform/crash-reporting.js";
 
-/**
- * The account dialog over Recents. Unlike the Add dialog, no route mask hides its URL: confirming a
- * deletion or recovery signs in with Google again, and that sign-in returns to the URL bar's path,
- * where the dialog has to open again to show the confirmation step.
- */
 export const Route = createFileRoute("/_shell/recent/account")({
   component: AccountDialog,
-  // Recents' `beforeLoad` has settled auth and put the signed-in subject into the context.
   loader: async ({ context }) => {
     await context.queryClient.query({ ...accountQuery(context.subject), staleTime: "static" });
   },
@@ -40,7 +34,6 @@ function AccountDialog(): React.ReactNode {
 
   return (
     <AccountDialogFrame>
-      {/* Signed out, Recents behind the dialog redirects home. */}
       {session && (
         <AccountSettings
           key={session.user.id}
@@ -56,10 +49,7 @@ function AccountDialog(): React.ReactNode {
 
 function AccountDialogFrame({ children }: { children: React.ReactNode }): React.JSX.Element {
   const close = useCloseRecentsDialog(Route.id);
-  // Leaving while a step runs would lose the return from Google, which comes back to this URL.
   const isConfirmationPending = useIsAccountConfirmationPending();
-  // Close takes the initial focus: the first tabbable button can be a step such as "Schedule
-  // deletion", which one Enter would run.
   const closeButtonRef = React.useRef<HTMLButtonElement>(null);
 
   return (

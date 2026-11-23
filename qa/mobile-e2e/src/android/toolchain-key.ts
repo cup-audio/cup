@@ -12,19 +12,15 @@ type SdkPackageRevision = { package: string; revision: string };
 
 type JavaVersion = { runtimeVersion: string; vendor: string };
 
-/** The host versions an Android run depends on beyond the repository's files. */
 export type AndroidToolchainKey = {
   platformTools: string | Unreadable;
-  /** The SDK platform the app compiles against, `compileSdkVersion` in `variables.gradle`. */
   platform: SdkPackageRevision | Unreadable;
   emulator: { revision: string; buildId: string } | Unreadable;
   systemImage: SdkPackageRevision | Unreadable;
-  /** The JDK Gradle builds with. */
   java: JavaVersion | Unreadable;
   macos: MacosVersion | Unreadable;
 };
 
-/** Sets the SDK platform the app compiles against, as `compileSdkVersion`. */
 const VARIABLES_GRADLE = path.resolve(
   import.meta.dirname,
   "..",
@@ -59,11 +55,6 @@ export async function readAndroidToolchainKey(): Promise<AndroidToolchainKey> {
   return { platformTools, platform, emulator, systemImage, java, macos };
 }
 
-/**
- * Reads the revision of the SDK platform that `compileSdkVersion` in `variablesGradlePath` names,
- * so that a new compile SDK keys its own platform. A missing setting makes the platform
- * unreadable.
- */
 export async function readPlatformRevision(
   sdkRoot: string,
   variablesGradlePath: string,
@@ -96,7 +87,6 @@ async function readPackageRevision(
 async function readJavaVersion(): Promise<JavaVersion | Unreadable> {
   const java = javaExecutable(resolveJavaHome());
   return readVersion(`${java} -XshowSettings:properties -version`, async () => {
-    // Both the settings and the version go to stderr.
     const { stderr } = await run(java, ["-XshowSettings:properties", "-version"]);
     const properties = parseProperties(stderr, " = ");
     return {

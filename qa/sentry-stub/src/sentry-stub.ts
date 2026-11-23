@@ -1,43 +1,24 @@
-/*
- * A `node:http` stand-in for Sentry's envelope endpoint, one instance per test on an OS-assigned
- * port. It accepts envelopes for Cup's two projects, records them, and answers as Sentry does, so a
- * test can assert what would have reached Sentry, or that nothing did. It forwards nothing.
- *
- * The envelope format follows Sentry's developer docs as read on 2026-11-16
- * (https://develop.sentry.dev/sdk/data-model/envelopes/): a JSON header line, then items, each a
- * JSON item header line followed by a payload that is `length` bytes long when the item header
- * declares a length and runs to the next newline otherwise. SDKs post envelopes to
- * `/api/{projectId}/envelope/` with the DSN's public key in the `sentry_key` query parameter.
- */
-
 import assert from "node:assert/strict";
 import http from "node:http";
 import zlib from "node:zlib";
 
-/** The stub's numeric project IDs; a DSN from {@link SentryStub.dsn} names one of them. */
 export const SENTRY_STUB_PROJECTS = { "cup-worker": "1", "cup-app": "2" } as const;
 
 export type SentryStubProject = keyof typeof SENTRY_STUB_PROJECTS;
 
 export type SentryEnvelopeItem = {
-  /** The item header, such as `{ type: "event", length: 123 }`. */
   header: Record<string, unknown>;
-  /** The parsed JSON payload; the raw text when it is not JSON. */
   payload: unknown;
 };
 
-/** One envelope the stub accepted. */
 export type SentryEnvelope = {
   project: SentryStubProject;
-  /** The DSN's public key, from the `sentry_key` query parameter or the `X-Sentry-Auth` header. */
   publicKey: string | undefined;
-  /** The HTTP request headers, names lowercase, so a test can check what a tunnel forwarded. */
   requestHeaders: Readonly<Record<string, string>>;
   header: Record<string, unknown>;
   items: SentryEnvelopeItem[];
 };
 
-/** An error event's payload, with the fields tests read most; the rest passes through. */
 export type SentryErrorEvent = {
   event_id?: string;
   level?: string;
@@ -53,7 +34,6 @@ export type SentryErrorEvent = {
   [key: string]: unknown;
 };
 
-/** One streamed span; attributes arrive typed, as `{ value, type }`. */
 export type SentryStreamedSpan = {
   name: string;
   trace_id: string;
@@ -64,7 +44,6 @@ export type SentryStreamedSpan = {
   attributes: Record<string, { value: unknown; type: string }>;
 };
 
-/** One log record (`log` items); attributes arrive typed, as `{ value, type }`. */
 export type SentryLog = {
   timestamp: number;
   level: string;
@@ -75,22 +54,12 @@ export type SentryLog = {
 };
 
 export type SentryStub = {
-  /** The stub's origin on 127.0.0.1. */
   url: string;
-  /** A DSN that sends to one of the stub's projects, for `SENTRY_DSN` or a client's `dsn`. */
   dsn(project: SentryStubProject): string;
-  /** Every accepted envelope, in arrival order. */
   envelopes: readonly SentryEnvelope[];
-  /** The payloads of the `event` items (errors and messages) that reached one project. */
   errorEvents(project: SentryStubProject): SentryErrorEvent[];
-  /** The streamed spans (`span` items, `traceLifecycle: "stream"`) that reached one project. */
   spans(project: SentryStubProject): SentryStreamedSpan[];
-  /** The log records (`log` items) that reached one project. */
   logs(project: SentryStubProject): SentryLog[];
-  /**
-   * Resolves once `condition` holds, checking whenever an envelope arrives and at the start.
-   * Rejects after `timeoutMs` (default 10 s), naming `description` in the error.
-   */
   waitFor(
     description: string,
     condition: () => boolean,
@@ -101,7 +70,6 @@ export type SentryStub = {
 
 const DEFAULT_WAIT_TIMEOUT_MS = 10_000;
 
-/** Starts a stub on 127.0.0.1 on a port the OS assigns; the caller closes it. */
 export async function startSentryStub(): Promise<SentryStub> {
   const envelopes: SentryEnvelope[] = [];
   const listeners = new Set<() => void>();
@@ -113,7 +81,6 @@ export async function startSentryStub(): Promise<SentryStub> {
   async function handleRequest(request: http.IncomingMessage, response: http.ServerResponse) {
     const requestUrl = new URL(request.url ?? "/", "http://127.0.0.1");
     const rawBody = await readBody(request);
-    // The native Android SDK compresses its envelopes.
     const body =
       request.headers["content-encoding"] === "gzip" ? zlib.gunzipSync(rawBody) : rawBody;
     const project = findProject(requestUrl.pathname);
@@ -197,10 +164,6 @@ export async function startSentryStub(): Promise<SentryStub> {
   };
 }
 
-/**
- * Starts a stub and closes it when the test finishes. Pass `onTestFinished` from the test's own
- * context, so that concurrent tests each close their own stub.
- */
 export async function useSentryStub({
   onTestFinished,
 }: {
@@ -257,7 +220,6 @@ function parseEnvelope(body: Buffer): Pick<SentryEnvelope, "header" | "items"> {
     let payload: Buffer;
     if (typeof length === "number") {
       payload = body.subarray(offset, offset + length);
-      // A newline may follow a payload of declared length.
       offset += length + (body[offset + length] === 0x0a ? 1 : 0);
     } else {
       payload = readLine();
@@ -277,7 +239,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** A `span` item's payload: the spans in `items`; the stub trusts their shape, as Sentry sent it. */
 function isSpanContainer(value: unknown): value is { items: SentryStreamedSpan[] } {
   return isRecord(value) && Array.isArray(value["items"]);
 }

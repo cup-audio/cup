@@ -13,7 +13,6 @@ const SOURCES: WebAppSources = {
   entry: 'document.title = "Cup";\n',
 };
 
-/** Builds a minimal web app from `sources` and returns the release named in its `index.html`. */
 async function buildRelease(sources: WebAppSources): Promise<string | undefined> {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "cup-web-release-"));
   onTestFinished(() => fs.rm(root, { recursive: true, force: true }));

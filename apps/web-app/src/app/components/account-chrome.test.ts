@@ -37,7 +37,6 @@ for (const story of [
 ]) {
   test(`${story} shows no tab bar`, async ({ mount, page }) => {
     await mount(story);
-    // Some of these pages open a dialog, which hides the page behind it from the accessibility tree.
     await expect(page.getByRole("heading", { includeHidden: true }).first()).toBeVisible();
 
     await expect(page.getByRole("navigation", { name: "Tabs", includeHidden: true })).toHaveCount(

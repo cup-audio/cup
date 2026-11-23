@@ -3,7 +3,6 @@ import { Temporal } from "temporal-polyfill";
 
 import { RpcError } from "#src/data-fetching/api-request.js";
 
-/** Expiration enables a manual retry; it never submits a saved URL automatically. */
 export function useRateLimitCountdown(error: unknown) {
   const [nowMs, setNowMs] = React.useState(() => Temporal.Now.instant().epochMilliseconds);
   const { seconds, deadline } = React.useMemo(() => {

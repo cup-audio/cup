@@ -20,7 +20,6 @@ function readProductionConfig() {
   return readWranglerConfig(PRODUCTION_CONFIG_PATH);
 }
 
-/** The integration tests' config, which must bind the production resources minus paid services. */
 function readTestConfig() {
   return readWranglerConfig(TEST_CONFIG_PATH);
 }
@@ -28,8 +27,6 @@ function readTestConfig() {
 test("the Worker is served only on its custom domains", ({ expect }) => {
   const config = readProductionConfig();
 
-  // libs/api-server/src/http/domain-routing.ts redirects the other hostnames to cup.audio; routing.test.ts
-  // checks that for each route listed here.
   expect(config.routes).toStrictEqual([
     { pattern: "cup.audio", custom_domain: true },
     { pattern: "www.cup.audio", custom_domain: true },
@@ -91,7 +88,6 @@ test("the Durable Object bindings are stable and the integration tests bind the 
   expect(readTestConfig().durable_objects?.bindings).toStrictEqual(expectedBindings);
 });
 
-// Deployed migrations are history: Cloudflare rejects a deploy whose earlier migrations changed.
 test("the deployed Durable Object migrations are never rewritten", ({ expect }) => {
   expect(readProductionConfig().migrations).toStrictEqual([
     {
@@ -219,7 +215,6 @@ test("production's telemetry tunnel forwards only to the cup-app project, and th
   expect(readTestConfig().vars?.["SENTRY_TUNNEL_DSNS"]).toBe("");
 });
 
-/** The SQLite-backed classes that remain after applying every migration in order. */
 function collectSqliteClassNames(migrations: DurableObjectMigration[]): Set<string> {
   const classNames = new Set<string>();
   for (const migration of migrations) {

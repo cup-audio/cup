@@ -28,12 +28,10 @@ import { describeError } from "#src/errors.js";
 export const Route = createFileRoute("/_shell/recent")({
   component: RecentPage,
   beforeLoad: async () => {
-    // Only accounts have Recents; signed-out listeners, including on its dialogs, start at home.
     const session = await settleAccountSession();
     if (!session) {
       throw redirect({ to: "/", replace: true });
     }
-    // Only the subject: query options built here would outlive an account switch.
     return { subject: session.user.id };
   },
   loader: async ({ context }) => {
@@ -49,20 +47,16 @@ export const Route = createFileRoute("/_shell/recent")({
 function RecentPage(): React.ReactNode {
   const session = useAccountSession();
 
-  // Signing out while Recents is shown leaves it; the route sends a signed-out visit home itself.
   if (!session) {
     return <Navigate to="/" replace />;
   }
 
   return (
     <>
-      {/* ahead of the dialogs below, whose own titles then take over while one is open */}
       <PageTitle name="Recent" />
       <RecentsLayout>
         <RecentTracks subject={session.user.id} />
       </RecentsLayout>
-      {/* the Add and account dialogs (`_shell.recent.add.tsx`, `_shell.recent.account.tsx`) open
-          over Recents */}
       <Outlet />
     </>
   );
@@ -96,15 +90,12 @@ function RecentTracks({ subject }: { subject: string }): React.ReactNode {
   const isCoveredByDialog = useChildMatches({ select: (matches) => matches.length > 0 });
 
   const { hasNextPage, isFetching, isFetchNextPageError, fetchNextPage } = recents;
-  // Keeps loading while the end of the list stays in reach, one page at a time. A failed page waits
-  // for the Retry button below, so a persistent failure does not request the page in a loop.
   React.useEffect(() => {
     if (isSentinelInReach && hasNextPage && !isFetching && !isFetchNextPageError) {
       void fetchNextPage();
     }
   }, [isSentinelInReach, hasNextPage, isFetching, isFetchNextPageError, fetchNextPage]);
 
-  // Once tracks are listed, a failed refresh or next page is reported with a toast.
   const items = recents.data.pages.flatMap((page) => page.items);
 
   if (items.length === 0) {
@@ -112,7 +103,6 @@ function RecentTracks({ subject }: { subject: string }): React.ReactNode {
   }
 
   return (
-    // the container for the column count's container queries below
     <div
       className={css`
         container-type: inline-size;
@@ -151,7 +141,6 @@ function RecentTracks({ subject }: { subject: string }): React.ReactNode {
           <RecentsCard key={item.conversionId} item={item} isCoveredByDialog={isCoveredByDialog} />
         ))}
       </ul>
-      {/* loads the next page once the end of the list comes within about one screen */}
       {recents.hasNextPage && <div ref={sentinelRef} />}
       {recents.isFetchNextPageError && (
         <DSButton disabled={recents.isFetching} onClick={() => void recents.fetchNextPage()}>

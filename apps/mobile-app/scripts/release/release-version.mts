@@ -1,12 +1,7 @@
-/*
- * The version of a mobile release build, derived from its UTC build time (ADR 0032).
- */
 import { Temporal } from "temporal-polyfill";
 
 export type ReleaseVersion = {
-  /** Whole minutes since {@link VERSION_EPOCH}. */
   versionCode: number;
-  /** The UTC calendar date, `YYYY.MM.DD`. */
   versionName: string;
 };
 
@@ -33,10 +28,6 @@ export function deriveReleaseVersion(buildTime: Temporal.Instant): ReleaseVersio
   };
 }
 
-/**
- * The Play release name, `<versionName> (<7-character short SHA>)`, which links a build to its
- * commit.
- */
 export function formatReleaseName(versionName: string, commitSha: string): string {
   if (!/^[0-9a-f]{40}$/.test(commitSha)) {
     throw new Error(`Expected a full 40-character commit SHA, got "${commitSha}".`);

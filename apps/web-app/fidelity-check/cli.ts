@@ -14,23 +14,15 @@ import {
 import { readDesignImageSize } from "@cup/fidelity-check";
 
 type CliDependencies = {
-  /** Where relative paths start: the directory the command was typed in. */
   workingDirectory: string;
-  /** Runs the check with Playwright's own arguments and resolves to its exit code. */
   launch: (inputs: FidelityCheckInputs, playwrightArgs: string[]) => Promise<number>;
   output: { log: (message: string) => void; error: (message: string) => void };
 };
 
 const PACKAGE_DIRECTORY = path.resolve(import.meta.dirname, "..");
-/** The name of this package's script, which pnpm reports in `npm_lifecycle_event`. */
 const SCRIPT_NAME = "fidelity-check";
-/** A shell reports a process ended by a signal as 128 plus the signal's number. */
 const SIGNAL_EXIT_CODE_BASE = 128;
 
-/**
- * Checks the command's options, then hands them to the Playwright run, which needs Playwright's
- * runner for the gallery server, the Docker browser and the `mount` fixture.
- */
 export async function runFidelityCheckCli(
   args: string[],
   { workingDirectory, launch, output }: CliDependencies,
@@ -70,7 +62,6 @@ export async function runFidelityCheckCli(
   return launch({ story, designImagePath: image, ignoreTopPixels: ignoreTop }, program.args);
 }
 
-/** Pnpm runs the script in this package and names the directory it was typed in as `INIT_CWD`. */
 export function findWorkingDirectory(
   environment: Record<string, string | undefined>,
   currentDirectory: string,
@@ -81,7 +72,6 @@ export function findWorkingDirectory(
     : currentDirectory;
 }
 
-/** Fails before Playwright starts, so that the error comes with the command's usage. */
 function parseDesignImage(designImagePath: string): string {
   return toCommanderArgument(() => {
     if (!fs.existsSync(designImagePath)) {
@@ -116,8 +106,6 @@ function launchPlaywright(inputs: FidelityCheckInputs, playwrightArgs: string[])
     },
   );
 
-  // A signal sent to this process alone, such as a CI timeout's, would otherwise leave Playwright and
-  // its gallery server running.
   const forwardSignal = (signal: NodeJS.Signals) => child.kill(signal);
   process.on("SIGINT", forwardSignal);
   process.on("SIGTERM", forwardSignal);

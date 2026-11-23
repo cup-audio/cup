@@ -8,16 +8,9 @@ import { checkIosHost } from "#src/ios/preflight.ts";
 import { createSimulator, deleteOrphanedSimulators, type Simulator } from "#src/ios/simulator.ts";
 import { ensureWebDriverAgent } from "#src/ios/web-driver-agent.ts";
 
-/**
- * Starts what the iOS project's specs share: the run's own simulator, an Appium server with a
- * prebuilt WebDriverAgent and the freshly built debug app installed on the simulator. Specs start
- * their own test Worker.
- */
 export default async function setup(project: TestProject): Promise<() => Promise<void>> {
   const host = await checkIosHost();
   await clearFailureArtifacts("ios");
-  // A run killed together with its orphan watcher, such as with its whole process tree, leaves its
-  // simulator behind.
   await deleteOrphanedSimulators();
 
   const started: { simulator?: Simulator; appium?: AppiumServer } = {};
@@ -26,11 +19,9 @@ export default async function setup(project: TestProject): Promise<() => Promise
   };
 
   try {
-    // Settle all three before acting, so a failure in one still stops the others in teardown.
     const [app, simulator, webDriverAgent] = await Promise.allSettled([
       buildIosDebugApp(),
       createSimulator(host).then((createdSimulator) => (started.simulator = createdSimulator)),
-      // Installing the XCUITest driver brings the WebDriverAgent sources to build.
       startAppium({ drivers: ["xcuitest"], env: process.env }).then(async (startedAppium) => {
         started.appium = startedAppium;
         return {

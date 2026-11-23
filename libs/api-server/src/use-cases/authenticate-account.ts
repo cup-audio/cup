@@ -18,7 +18,6 @@ export type AuthenticateAccountDependencies<Account> = {
   getAccount(accountId: string): Account;
 };
 
-/** Resolve a verified identity, provisioning or resuming its account when necessary. */
 export async function authenticateAccount<Account extends { inspect(): Promise<AccountSnapshot> }>(
   subject: string,
   dependencies: AuthenticateAccountDependencies<Account>,
@@ -54,7 +53,6 @@ export async function authenticateAccount<Account extends { inspect(): Promise<A
     const snapshot = await account.inspect();
     return { result: "authenticated", snapshot, account } as const;
   } catch (error) {
-    // Every caller answers this result with a 503.
     captureException(error);
     return { result: "unavailable" } as const;
   }

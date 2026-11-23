@@ -5,7 +5,6 @@ const HEADING_TAG_NAMES = new Set(["h1", "h2", "h3", "h4", "h5", "h6"]);
 
 const IGNORED_TAG_NAMES = new Set(["script", "style", "svg", "template"]);
 
-// Unknown and custom block containers remain boundaries while their visible text is retained.
 const INLINE_TAG_NAMES = new Set([
   "a",
   "abbr",
@@ -38,15 +37,12 @@ const INLINE_TAG_NAMES = new Set([
   "wbr",
 ]);
 
-/** The most characters one unit's narration text holds, within the narration synthesis limit. */
 export const MAX_UNIT_TEXT_CHARACTERS = 2_000;
 
-/** The narration text of one synchronization unit, within the narration synthesis limit. */
 export type UnitText = {
   text: string;
 };
 
-/** Divides selected HTML into ordered unit texts, joining headings to the following text. */
 export function segmentUnitTexts(html: string): UnitText[] {
   const documentFragment = parseFragment(html);
   const unitTexts: UnitText[] = [];
@@ -91,7 +87,6 @@ type ElementVisitor = {
   addPendingHeading(text: string): void;
 };
 
-/** Visits visible text in document order, flushing direct text around nested block boundaries. */
 function visitNarrationElements(
   parentNode: DefaultTreeAdapterMap["parentNode"],
   visitor: ElementVisitor,
@@ -172,7 +167,6 @@ function extractText(parentNode: DefaultTreeAdapterMap["parentNode"]): string {
   return textParts.join("");
 }
 
-// Text-node whitespace is already collapsed; remaining newlines represent explicit breaks.
 function normalizeNarrationText(text: string): string {
   return text
     .replace(/\u00a0/gu, " ")
@@ -182,11 +176,6 @@ function normalizeNarrationText(text: string): string {
     .trim();
 }
 
-/**
- * Splits oversized narration at sentences, falling back to word boundaries when necessary.
- * Segmentation version 2 splits its new kinds of units with it too, so it is as frozen as the rest
- * of version 1.
- */
 export function splitNarrationBlock(text: string): string[] {
   if (text.length <= MAX_UNIT_TEXT_CHARACTERS) {
     return [text];
@@ -239,7 +228,6 @@ export function splitNarrationBlock(text: string): string[] {
   return unitTexts;
 }
 
-/** Splits oversized sentences at whitespace before falling back to hard text boundaries. */
 function splitTextAtWordBoundaries(text: string): string[] {
   if (text.length <= MAX_UNIT_TEXT_CHARACTERS) {
     return [text];
@@ -279,7 +267,6 @@ function splitTextAtWordBoundaries(text: string): string[] {
   return parts;
 }
 
-// Avoid splitting UTF-16 surrogate pairs when no natural boundary is available.
 function splitUnbrokenText(text: string): string[] {
   const parts: string[] = [];
   let currentPart = "";

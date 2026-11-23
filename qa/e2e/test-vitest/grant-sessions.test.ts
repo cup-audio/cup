@@ -56,7 +56,6 @@ test("exchanges persistent cookies and authorizes native requests without a brow
   const segmentAudioUrl = `${origin}/api/files/audiobooks/${conversion.conversionId}/segments/0/audio.mp3`;
   expect((await fetch(audiobookUrl)).status).toBe(401);
   expect((await fetch(audiobookUrl, { headers })).status).toBe(200);
-  // Media accepts only a signed media URL, never the grant session cookie.
   expect((await fetch(coverImageUrl, { headers })).status).toBe(401);
   expect((await fetch(segmentAudioUrl, { headers })).status).toBe(404);
   const otherGrant = await workerEnvironment.createTrial();

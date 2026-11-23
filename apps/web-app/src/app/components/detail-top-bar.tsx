@@ -10,32 +10,20 @@ import { singleLine, textStyles } from "#src/app/design-system/text-styles.js";
 import { interTypefaceScope } from "#src/app/global-styles.js";
 import { composeClassnames } from "#src/app/utils.js";
 
-/**
- * Where Back leads. Only accounts have Recents; trial listeners return to the start. A detail view
- * opened from Recents goes back in history instead, so Recents returns at its scroll position.
- */
 export type DetailBack = { to: "/recent" | "/"; shouldGoBackInHistory: boolean };
 
 type DetailTopBarProps = {
   back: DetailBack;
-  /**
-   * Fades in in the middle once the page's own title has scrolled out of view (`isShown`). Absent
-   * while the audiobook has no title.
-   */
   compactTitle: { title: string; host: string; isShown: boolean } | undefined;
-  /** Absent until the audiobook has loaded. */
   menu: DetailMenuProps | undefined;
 };
 
 type DetailMenuProps = {
   originalUrl: string;
-  /** Absent when the audiobook offers no retry. */
   retry: { isPending: boolean; start: () => void } | undefined;
-  /** Asks to delete the track; absent for a trial track, which cannot be deleted. */
   deletion: { start: () => void } | undefined;
 };
 
-/** The detail view's top bar: back, the compact title once scrolled, and the "…" menu. */
 export function DetailTopBar({ back, compactTitle, menu }: DetailTopBarProps): React.JSX.Element {
   const router = useRouter();
 
@@ -140,8 +128,6 @@ function DetailMenu({ originalUrl, retry, deletion }: DetailMenuProps) {
   return (
     <Menu.Root
       onOpenChangeComplete={(isOpen) => {
-        // The deletion dialog opens once the menu has returned focus to its trigger, so the dialog
-        // can move focus to its Cancel and later return it to the trigger.
         if (!isOpen && isDeletionRequested.current) {
           isDeletionRequested.current = false;
           deletion?.start();
@@ -235,7 +221,6 @@ const menuItemStyles = composeClassnames(
   `,
 );
 
-/** Defined after `menuItemStyles`, so its color comes later in the stylesheet and wins. */
 const destructiveMenuItemStyles = composeClassnames(
   menuItemStyles,
   css`

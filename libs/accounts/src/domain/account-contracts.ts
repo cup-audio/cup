@@ -16,7 +16,6 @@ export const accountIdentitySchema = z
 
 export type AccountIdentity = z.infer<typeof accountIdentitySchema>;
 
-/** The account's duration balance, in milliseconds of generated audio. */
 export const accountDurationBalanceSchema = z
   .object({
     unit: z.literal("audio-millisecond"),
@@ -36,7 +35,6 @@ export const accountSnapshotSchema = accountIdentitySchema
   .strict();
 export type AccountSnapshot = z.infer<typeof accountSnapshotSchema>;
 
-/** The balance next to the totals reconstructed from the credit ledger, for operator inspection. */
 export const accountAccountingInspectionSchema = z
   .object({
     balance: accountDurationBalanceSchema,
@@ -46,11 +44,6 @@ export const accountAccountingInspectionSchema = z
   .strict();
 export type AccountAccountingInspection = z.infer<typeof accountAccountingInspectionSchema>;
 
-/**
- * One event of the account's duration ledger, for operator inspection. Segment events (`reserve`,
- * `consume`, `release`) carry the conversion ID as their cause and keep it after the conversion is
- * deleted; `grant` and `adjustment` events carry the welcome version or the operator's reason.
- */
 export const accountLedgerEntrySchema = z
   .object({
     eventKind: z.enum(["grant", "reserve", "consume", "release", "adjustment"]),
@@ -64,7 +57,6 @@ export const accountLedgerEntrySchema = z
   .strict();
 export type AccountLedgerEntry = z.infer<typeof accountLedgerEntrySchema>;
 
-/** A page of ledger events in append order; `nextCursor` is opaque and `null` on the last page. */
 export const accountLedgerPageSchema = z
   .object({
     unit: z.literal("audio-millisecond"),
@@ -74,10 +66,6 @@ export const accountLedgerPageSchema = z
   .strict();
 export type AccountLedgerPage = z.infer<typeof accountLedgerPageSchema>;
 
-/**
- * An artifact writer for operator inspection. `AccountArtifactWriters.writers()` lists only writers
- * that are not drained, but the schema accepts every stored state.
- */
 export const accountArtifactWriterSchema = z
   .object({
     writerId: z.string(),
@@ -88,10 +76,6 @@ export const accountArtifactWriterSchema = z
   .strict();
 export type AccountArtifactWriter = z.infer<typeof accountArtifactWriterSchema>;
 
-/**
- * A conversion carrying the deletion marker, for operator inspection. See
- * docs/architecture/conversion-deletion.md.
- */
 export const accountConversionDeletionSchema = z
   .object({
     conversionId: z.string(),
@@ -100,13 +84,8 @@ export const accountConversionDeletionSchema = z
   .strict();
 export type AccountConversionDeletion = z.infer<typeof accountConversionDeletionSchema>;
 
-/** Increases when a projected field changes meaning, so the registry can tell older projections. */
 export const ACCOUNT_USAGE_PROJECTION_SCHEMA_VERSION = 1;
 
-/**
- * The account's duration usage as the registry keeps it for operator listings. The account is
- * authoritative; `revision` orders projections so that the registry never replaces newer usage.
- */
 export const accountUsageProjectionSchema = z
   .object({
     accountId: z.uuidv4(),
@@ -126,7 +105,6 @@ export type AccountConversion = {
   sourceUrl: string;
   createdAtMs: number;
   status: "pending" | "ready" | "failed";
-  /** The preparation phase the conversion last started; a settled conversion keeps it. */
   lastStartedPhase: ConversionPhase;
 };
 
@@ -157,17 +135,13 @@ export const accountOutcomeSchema = z.discriminatedUnion("status", [
           etag: z.string().min(1),
         })
         .strict(),
-      /** Recorded only when the audiobook has one, so outcomes without it keep their fingerprint. */
       hasCoverImage: z.literal(true).optional(),
-      /** The manifest's narration language (BCP 47), recorded only when the audiobook has one. */
       narrationLanguage: z.string().min(1).optional(),
     })
     .strict(),
   z
     .object({
       status: z.literal("failed"),
-      // The account alarm recorded a preparation Workflow that errored or was terminated as
-      // `execution-failed` until it took the conversion grant's category; stored outcomes keep it.
       failureCategory: z.preprocess(
         (category) => (category === "execution-failed" ? "workflow-platform" : category),
         conversionFailureCategorySchema,
@@ -178,10 +152,6 @@ export const accountOutcomeSchema = z.discriminatedUnion("status", [
 ]);
 export type AccountConversionOutcome = z.infer<typeof accountOutcomeSchema>;
 
-/**
- * A conversion as account history reports it. A prepared conversion reports the state of its audio
- * instead of its stored `ready` status, as derived by `derivePreparedConversionStatus`.
- */
 export const accountHistoryItemSchema = z
   .object({
     conversionId: z.uuid(),

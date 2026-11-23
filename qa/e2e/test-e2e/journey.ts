@@ -41,7 +41,6 @@ export async function waitForAudiobook(page: Page): Promise<void> {
   ).toBeVisible({ timeout: 90_000 });
 }
 
-/** The signed-in account's access token, for API requests the test makes itself. */
 export async function readAccessToken(page: Page) {
   return page.evaluate(() => {
     const stored = window.localStorage.getItem("cup_supabase_session");
@@ -61,7 +60,6 @@ export async function readAccessToken(page: Page) {
   });
 }
 
-/** Forwards the browser's trial sessions to a request context that does not share its cookies. */
 export async function getTrialSessionHeaders(page: Page): Promise<{ Cookie: string }> {
   const cookies = await page.context().cookies();
   return {

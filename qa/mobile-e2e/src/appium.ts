@@ -12,10 +12,8 @@ export type AppiumServer = {
   stop(): Promise<void>;
 };
 
-/** Whether an app runs and whether it is in the foreground, as `queryAppState` reports it. */
 export type AppiumAppState = "not running" | "background" | "foreground";
 
-/** Appium drivers the suite uses, pinned exactly. */
 const APPIUM_DRIVERS = {
   uiautomator2: "appium-uiautomator2-driver@9.2.1",
   xcuitest: "appium-xcuitest-driver@13.1.1",
@@ -24,23 +22,11 @@ const APPIUM_DRIVERS = {
 export type AppiumDriverName = keyof typeof APPIUM_DRIVERS;
 
 const PACKAGE_ROOT = path.resolve(import.meta.dirname, "..");
-/** Package-local and git-ignored, so `pnpm install` never installs drivers. */
 export const APPIUM_HOME = path.join(PACKAGE_ROOT, ".appium");
-/**
- * Serializes driver installation: the Android and iOS processes of a parallel run, and runs in
- * other checkouts of the same folder, would otherwise write `APPIUM_HOME` at once.
- */
 const DRIVER_INSTALLATION_LOCK = path.join(APPIUM_HOME, ".driver-installation.lock");
-/** The package's own Appium CLI, run by this Node.js so that stopping the child stops Appium. */
-// Vitest's module runner does not support `import.meta.resolve`.
 const require = nodeModule.createRequire(import.meta.url);
 const APPIUM_CLI = path.join(path.dirname(require.resolve("appium/package.json")), "index.js");
 
-/**
- * Installs the drivers into the package-local `APPIUM_HOME` unless the pinned version is already
- * there, one process at a time, then starts one Appium server on a port the operating system
- * assigns.
- */
 export async function startAppium(options: {
   drivers: readonly AppiumDriverName[];
   env: NodeJS.ProcessEnv;
@@ -72,7 +58,6 @@ export async function startAppium(options: {
       "--port",
       String(port),
       "--log-no-colors",
-      // Downloads the Chromedriver that matches the emulator's WebView.
       "--allow-insecure",
       "uiautomator2:chromedriver_autodownload",
     ],
@@ -100,7 +85,6 @@ export async function startAppium(options: {
   return { port, logs, stop: () => stopChild(server) };
 }
 
-/** Opens a session with `capabilities` on the run's Appium server. */
 export async function openAppiumSession(
   appiumPort: number,
   capabilities: WebdriverIO.Capabilities,
@@ -115,10 +99,6 @@ export async function openAppiumSession(
   });
 }
 
-/**
- * Maps Appium's `queryAppState` value, the same on both platforms (`XCUIApplicationState` on iOS):
- * 1 not running, 2 suspended, 3 in the background, 4 in the foreground.
- */
 export function toAppiumAppState(state: unknown, app: string): AppiumAppState {
   switch (state) {
     case 1:

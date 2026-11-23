@@ -9,14 +9,7 @@ const outputRoot = "./playwright-output";
 const isCI = Boolean(process.env["CI"]);
 // oxlint-disable-next-line node/no-process-env -- Playwright publishes the gallery port captured by webServer.wait.stdout to workers through the environment.
 const galleryPort = process.env["CUP_UI_GALLERY_PORT"] ?? "";
-// 8 workers passed three consecutive runs in 4.9 min on an M4 Max; 10 and 12 were slower and each
-// failed a test (web app README, "Runtime").
 const dockerConfig = createPlaywrightDockerConfig({ isCI, maxWorkers: 8 });
-/**
- * Desktop Chromium and mobile WebKit run every test, so both engines and both viewports see every
- * behaviour; the other two projects run only the tests tagged visual
- * (`src/test-utils/component-test.ts`).
- */
 const VISUAL_TESTS_ONLY = new RegExp(VISUAL_TAG);
 
 export default defineConfig({
@@ -60,9 +53,6 @@ export default defineConfig({
     ...(dockerConfig.use?.connectOptions && {
       connectOptions: {
         ...dockerConfig.use.connectOptions,
-        // The browsers reach the gallery through the connection to the Playwright Server: on Docker
-        // Desktop for macOS some new connections from the container to the host never complete,
-        // and WebKit, unlike Chromium, opens no second connection, so its page loads stalled.
         exposeNetwork: "<loopback>",
       },
     }),
@@ -76,14 +66,8 @@ export default defineConfig({
   },
   webServer: [
     {
-      // Each run starts its own gallery on a port the operating system assigns, so concurrent runs and
-      // gallery servers from other checkouts cannot collide with or stand in for this one.
-      // The tests load a build of the gallery rather than the development server, which transforms
-      // modules on request and can push hot updates into a running test (web app README, "Runtime").
       command: "pnpm run build:gallery && pnpm run preview:gallery --port 0",
-      // React's development build keeps the warnings that tests record (`src/test-utils/react-use-warnings.ts`).
       env: { NODE_ENV: "development" },
-      // Playwright exports the named capture group to the environment that workers read above.
       wait: { stdout: /Local:\s+http:\/\/127\.0\.0\.1:(?<CUP_UI_GALLERY_PORT>\d+)\// },
       timeout: 60_000,
     },

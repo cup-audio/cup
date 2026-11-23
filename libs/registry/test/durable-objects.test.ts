@@ -321,7 +321,6 @@ describe("SQLite conversion grant Durable Object", () => {
     const grant = grantStub(name);
     await grant.initialize(grantId(name), CREATED_AT_MS, EXPIRES_AT_MS);
     const storage = await worker.getDurableObjectStorage("CONVERSION_GRANTS", { name });
-    // Mirrors the rows that migration 0002_shared_rate_events copies from `start_attempts`.
     for (let index = 0; index < 10; index += 1) {
       await storage.exec(
         "INSERT INTO rate_events VALUES ('grant-conversion-start', ?, ?, ?)",
@@ -480,11 +479,6 @@ function grantStub(name: string) {
   return environment.CONVERSION_GRANTS.get(environment.CONVERSION_GRANTS.idFromName(name));
 }
 
-/**
- * Records a ready outcome; passing the segment lengths reserves the whole document, as preparation
- * does. Grant tests bind no synthesis Workflow, so a later `startSynthesis` rejects at dispatch
- * once its reservation step has passed, while a refused reservation returns its result.
- */
 function recordReadyWithSegments(
   grant: ReturnType<typeof grantStub>,
   conversionId: string,
@@ -522,7 +516,6 @@ async function expectWorkerRpcRejection(operation: Promise<unknown>): Promise<vo
   try {
     await operation;
   } catch {
-    // Wrangler currently hides the Durable Object's original error behind its RPC transport.
     return;
   }
   throw new Error("The Durable Object operation was expected to reject.");
@@ -706,7 +699,6 @@ test("persists segment usage as constrained rows without resetting the balance",
       "INSERT INTO audio_segments VALUES ('missing-conversion', 0, 10, 1000, 'reserved', 0, 0, 'missing-operation')",
     ),
   ).rejects.toThrow(/FOREIGN KEY constraint failed/);
-  // Continuing generation updates the existing row and leaves the other ledger entries intact.
   await grant.completeAudioSegment(second.conversion.conversionId, 0, 900);
   const after = await storage.exec<SegmentUsage>(selectUsage);
   expect(after).toHaveLength(usage.length);
@@ -733,7 +725,6 @@ test("serializes concurrent duration reservations across conversions and absorbs
     }
     conversionIds.push(accepted.conversion.conversionId);
   }
-  // Each document needs half the allowance, so whichever two reserve first leave none for the third.
   await Promise.all(conversionIds.map((id) => recordReadyWithSegments(grant, id, [1])));
   const segments = await Promise.all(conversionIds.map((id) => grant.listAudioSegments(id)));
   const [first, second, ...rest] = conversionIds.filter(
@@ -767,7 +758,6 @@ test("serializes concurrent duration reservations across conversions and absorbs
   expect(await grant.listAudioSegments(second)).toMatchObject([
     { actualMilliseconds: 1_600, chargedMilliseconds: 500 },
   ]);
-  // A later segment failure releases only open reservations, so the settled charge stays.
   await grant.releaseAudioSegment(second, 0);
   expect(await grant.listAudioSegments(second)).toMatchObject([{ state: "settled" }]);
   expect((await grant.inspect(CREATED_AT_MS)).duration.spentMilliseconds).toBe(2_000);
@@ -785,7 +775,6 @@ test("blocks an oversized reservation without spending or splitting the remainin
   if (accepted.result !== "created") {
     throw new Error("Conversion not accepted");
   }
-  // The first segment would fit alone, but the document reserves whole or not at all.
   await recordReadyWithSegments(grant, accepted.conversion.conversionId, [10, 30]);
   expect(await grant.listAudioSegments(accepted.conversion.conversionId)).toEqual([]);
   expect((await grant.inspect(CREATED_AT_MS)).duration).toEqual({
@@ -812,7 +801,6 @@ test("retries reuse reservations, failures release only unfinished work, and rep
   await expectWorkerRpcRejection(grant.startSynthesis(id, [10, 10]));
   expect((await grant.inspect(CREATED_AT_MS)).duration.reservedMilliseconds).toBe(2_000);
   await grant.completeAudioSegment(id, 0, 700.25);
-  // The second segment fails after retries and releases only its own reservation.
   await grant.releaseAudioSegment(id, 1);
   expect((await grant.inspect(CREATED_AT_MS)).duration).toEqual({
     availableMilliseconds: 7_199_299,
@@ -844,7 +832,6 @@ test("a reservation keeps its stored estimate, and a released segment reserved a
   }
   const id = accepted.conversion.conversionId;
   await recordReadyWithSegments(grant, id, [1_000, 1_000]);
-  // Both reservations were made before a release that lowered the rate, at 80 ms per character.
   const storage = await worker.getDurableObjectStorage("CONVERSION_GRANTS", { name });
   await storage.exec(
     `UPDATE credit_ledger SET amount = 80000, available_delta = -80000, reserved_delta = 80000
@@ -900,7 +887,6 @@ test("revocation blocks new reservations while existing reservations may finish"
   const id = accepted.conversion.conversionId;
   await recordReadyWithSegments(grant, id, [10]);
   await grant.revoke(CREATED_AT_MS);
-  // Retrying the reserved document passes the reservation step; extending it is refused.
   await expectWorkerRpcRejection(grant.startSynthesis(id, [10]));
   expect(await grant.startSynthesis(id, [10, 10])).toEqual({ result: "revoked" });
   expect(await recordReadyWithSegments(grant, later.conversion.conversionId, [10])).toBe(
@@ -968,7 +954,6 @@ test.each([false, true])(
     const storage = await worker.getDurableObjectStorage("CONVERSION_GRANTS", { name });
     const before = await storage.exec("SELECT * FROM grant");
     await revertDurationLedgerAdoption(storage);
-    // The frozen production schema predates the shared rate-limit table.
     await storage.exec("DROP TABLE rate_events");
     await installProductionSchema(storage, "grant", ["grant", "conversions", "segment_usage"]);
 
@@ -1123,7 +1108,6 @@ test("a failed production reset rolls back old tables and can be retried", async
   await grant.startConversion("https://example.com/old", crypto.randomUUID(), CREATED_AT_MS);
   const storage = await worker.getDurableObjectStorage("CONVERSION_GRANTS", { name });
   await revertDurationLedgerAdoption(storage);
-  // The frozen production schema predates the shared rate-limit table.
   await storage.exec("DROP TABLE rate_events");
   await installProductionSchema(storage, "grant", ["grant", "conversions", "segment_usage"]);
   const before = await storage.exec("SELECT * FROM grant");
@@ -1163,8 +1147,6 @@ test("adopting the duration ledger keeps a deployed grant's balance, segments, a
   const storage = await worker.getDurableObjectStorage("CONVERSION_GRANTS", { name });
   const conversionsBefore = await grant.listConversions();
 
-  // Revert the narration language and stuck-check migrations that follow the adoption too, so
-  // all three run again.
   await storage.exec("ALTER TABLE conversions DROP COLUMN stage_started_at_ms");
   await storage.exec("ALTER TABLE conversions DROP COLUMN stuck_reported_at_ms");
   await storage.exec("ALTER TABLE conversions DROP COLUMN narration_language");
@@ -1186,7 +1168,6 @@ test("adopting the duration ledger keeps a deployed grant's balance, segments, a
     grantMigrationCount,
   );
 
-  // The migrated reservations settle and release through the ledger like new ones.
   expect((await grant.completeAudioSegment(id, 1, 900)).result).toBe("recorded");
   await grant.releaseAudioSegment(id, 3);
   const next = await grant.startConversion(
@@ -1238,7 +1219,6 @@ async function installProductionSchema(
     await storage.exec(statement);
   }
   for (const [table, records] of rows) {
-    // The frozen production schema predates columns that later migrations added.
     const productionColumns = new Set(
       (await storage.exec(`SELECT name FROM pragma_table_info('${table}')`)).map((column) =>
         String(column["name"]),
@@ -1256,10 +1236,6 @@ async function installProductionSchema(
   }
 }
 
-/**
- * Restores the grant layout that preceded the shared duration ledger, keeping the allowance and
- * segment usage that the ledger held.
- */
 async function revertDurationLedgerAdoption(
   storage: Awaited<ReturnType<typeof worker.getDurableObjectStorage>>,
 ) {

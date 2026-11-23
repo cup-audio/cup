@@ -13,11 +13,6 @@ import androidx.lifecycle.Lifecycle;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.WebViewListener;
 
-/**
- * The WebView's renderer process died: Cup records it, recreates its activity so the web app
- * reloads at its start URL, and the restarted web app reports it through {@link
- * WebViewProcessLossPlugin}. Without this, Android ends Cup's whole process with the renderer.
- */
 final class WebViewProcessLoss {
     private static final String PREFERENCES = "cup_webview_process_loss";
     private static final String DID_CRASH = "didCrash";
@@ -26,7 +21,6 @@ final class WebViewProcessLoss {
 
     private WebViewProcessLoss() {}
 
-    /** Recreates {@code activity} whenever its WebView's renderer process is gone. */
     static WebViewListener recreateOnRendererGone(AppCompatActivity activity) {
         return new WebViewListener() {
             @Override
@@ -34,20 +28,16 @@ final class WebViewProcessLoss {
             public boolean onRenderProcessGone(WebView webView, RenderProcessGoneDetail detail) {
                 boolean inForeground = activity.getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.STARTED);
                 record(activity, detail, inForeground);
-                // Android's guidance: a WebView whose renderer is gone must leave the view hierarchy
-                // and never be used again; Capacitor's bridge would otherwise keep calling into it.
                 if (webView.getParent() instanceof ViewGroup) {
                     ((ViewGroup) webView.getParent()).removeView(webView);
                 }
                 webView.destroy();
                 activity.recreate();
-                // Handled, so Android keeps Cup's process alive.
                 return true;
             }
         };
     }
 
-    /** Returns the loss recorded since the last call, as the web app's plugin reads it, and forgets it. */
     @Nullable
     static JSObject take(Context context) {
         SharedPreferences preferences = preferences(context);
@@ -65,7 +55,6 @@ final class WebViewProcessLoss {
 
     @RequiresApi(Build.VERSION_CODES.O)
     private static void record(Context context, RenderProcessGoneDetail detail, boolean inForeground) {
-        // Synchronously: the recreated activity's web app reads it, and so might a later process.
         preferences(context)
             .edit()
             .putBoolean(DID_CRASH, detail.didCrash())

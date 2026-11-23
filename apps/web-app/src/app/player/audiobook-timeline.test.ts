@@ -6,7 +6,6 @@ const TIMELINE = { startMilliseconds: [0, 20_000, 30_000], durationMilliseconds:
 test("the current unit is the last one starting at or before a position", () => {
   expect(findUnitIndexAt(TIMELINE, 0)).toBe(0);
   expect(findUnitIndexAt(TIMELINE, 19_999)).toBe(0);
-  // A boundary belongs to the unit that starts there.
   expect(findUnitIndexAt(TIMELINE, 20_000)).toBe(1);
   expect(findUnitIndexAt(TIMELINE, 29_999)).toBe(1);
   expect(findUnitIndexAt(TIMELINE, 30_000)).toBe(2);

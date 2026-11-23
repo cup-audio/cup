@@ -11,8 +11,6 @@ import {
   SPEECH_CONFIG,
 } from "#src/speech-synthesis-config.ts";
 
-// Spelled out rather than taken from GEMINI_SPEECH_CONFIG, which a later policy replaces while
-// policy 6 manifests must keep their pace.
 const GEMINI_POLICY_6_SPEECH_CONFIG = {
   provider: "google-ai-studio",
   model: "gemini-3.8-flash-lite-tts",

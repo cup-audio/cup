@@ -227,7 +227,6 @@ test("issues access tokens for the lifetime a test sets, also on refresh", async
   }
 });
 
-/** The request supabase-js `signInWithOAuth` sends the browser to, with the S256 challenge. */
 function authorize(redirect: string, challenge: string): Promise<Response> {
   const url = new URL(`${startedAuthProvider().origin}/auth/v1/authorize`);
   url.search = new URLSearchParams({
@@ -250,7 +249,6 @@ function startedAuthProvider() {
   return sharedAuthProvider;
 }
 
-/** What the Android debug build's sign-in fake asks for, with the hashed nonce it was given. */
 async function googleIdToken(
   hashedNonce: string,
   origin = startedAuthProvider().origin,
@@ -268,7 +266,6 @@ async function googleIdToken(
   return body["idToken"];
 }
 
-/** The request supabase-js `signInWithIdToken` sends, with the raw nonce. */
 function exchangeIdToken(
   idToken: string,
   nonce: string,
@@ -281,7 +278,6 @@ function exchangeIdToken(
   });
 }
 
-/** The request supabase-js `signInWithPassword` sends. */
 function exchangePassword(credentials: { email: string; password: string }): Promise<Response> {
   return fetch(`${startedAuthProvider().origin}/auth/v1/token?grant_type=password`, {
     method: "POST",
@@ -304,7 +300,6 @@ function hash(nonce: string): string {
   return crypto.createHash("sha256").update(nonce).digest("hex");
 }
 
-/** The seconds between an access token's `iat` and `exp` claims. */
 function lifetimeOf(accessToken: string): unknown {
   const payload: unknown = JSON.parse(
     Buffer.from(accessToken.split(".")[1] ?? "", "base64url").toString(),
@@ -335,7 +330,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 type Session = { access_token: string; refresh_token: string; expires_in: number };
 
-/** Signs in through the PKCE or the ID token exchange and returns the session. */
 async function signIn(grant: "pkce" | "id_token"): Promise<Session> {
   if (grant === "id_token") {
     return sessionOf(await exchangeIdToken(await googleIdToken(hash("the nonce")), "the nonce"));
@@ -352,7 +346,6 @@ async function signIn(grant: "pkce" | "id_token"): Promise<Session> {
   );
 }
 
-/** The request supabase-js sends to refresh a session, with its API version header. */
 function refresh(refreshToken: string, origin = startedAuthProvider().origin): Promise<Response> {
   return fetch(`${origin}/auth/v1/token?grant_type=refresh_token`, {
     method: "POST",
@@ -379,7 +372,6 @@ async function sessionOf(response: Response): Promise<Session> {
   };
 }
 
-/** Verifies the token's ES256 signature with the key the provider publishes, as the Worker does. */
 async function verifiesAgainstJwks(token: string): Promise<boolean> {
   const response = await fetch(`${startedAuthProvider().origin}/auth/v1/.well-known/jwks.json`);
   const jwks: unknown = await response.json();

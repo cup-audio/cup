@@ -1,37 +1,17 @@
-/*
- * Uploads a release bundle to Google Play's internal testing track in one Play edit, which Play
- * applies only on commit: any failure before the commit abandons the edit and leaves Play
- * unchanged. The Play Developer API sits behind a small publisher interface so tests can fake it;
- * `google-play-publisher.mts` implements it. See the README's "Release builds".
- */
-
 type PlayTrackRelease = {
   name: string;
   versionCodes: readonly string[];
   status: "completed";
 };
 
-/** One call per Play Developer API request of an edit; the edit ID comes from `insertEdit`. */
 export type PlayPublisher = {
-  /** Opens a new edit and returns its ID. */
   insertEdit(): Promise<string>;
-  /**
-   * Uploads the bundle at `bundlePath` into the edit and returns the `versionCode` Play read from
-   * it.
-   */
   uploadBundle(editId: string, bundlePath: string): Promise<{ versionCode: number }>;
-  /** Replaces the internal testing track's releases with `release`. */
   updateInternalTestingTrack(editId: string, release: PlayTrackRelease): Promise<void>;
   commitEdit(editId: string): Promise<void>;
-  /** Abandons the edit, discarding everything it holds. */
   deleteEdit(editId: string): Promise<void>;
 };
 
-/**
- * Uploads the bundle and rolls it out to every tester of the internal testing track as release
- * `releaseName`. Rejects with the failing step's error; Play stays unchanged unless the commit
- * succeeded.
- */
 export async function uploadToInternalTesting({
   publisher,
   bundlePath,
@@ -70,7 +50,6 @@ async function abandonEdit(publisher: PlayPublisher, editId: string): Promise<vo
   try {
     await publisher.deleteEdit(editId);
   } catch (deleteError) {
-    // The step's error is what the operator must see; an uncommitted edit changes nothing in Play and expires on its own.
     console.warn(`Abandoning the Google Play edit ${editId} failed:`, deleteError);
   }
 }

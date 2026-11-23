@@ -7,11 +7,6 @@ type Announce = (message: string) => void;
 
 const StatusAnnouncerContext = React.createContext<Announce | null>(null);
 
-/**
- * Renders the shell's one polite live region, for outcomes that have no place on screen, such as a
- * deletion that left the page it started on. The region exists before any message, because screen
- * readers often skip a region inserted together with its text.
- */
 export function StatusAnnouncerProvider({ children }: { children: React.ReactNode }) {
   const [message, setMessage] = React.useState("");
 

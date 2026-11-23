@@ -20,9 +20,7 @@ import { SKIP_MILLISECONDS } from "#src/app/player/player.js";
 import { toSourceHost } from "#src/app/source-host.js";
 import { composeClassnames } from "#src/app/utils.js";
 
-/** The mini player's play icon; only its pause icon is drawn, at this size. */
 const PLAY_ICON_SIZE = 32;
-/** The drawn gap between the pill and the tab icons below it. */
 const GAP_ABOVE_TAB_ICONS_PIXELS = 18;
 
 const miniPlayerStyles = css`
@@ -39,15 +37,9 @@ const miniPlayerStyles = css`
   margin-inline: auto;
 `;
 
-/**
- * A floating pill above the tab bar of Recents that controls the loaded audiobook: −15 s and
- * play/pause. Pressing its cover or title opens the audiobook's detail view. Shows nothing while no
- * audiobook is loaded, except that a loaded track was found gone.
- */
 export function MiniPlayer(): React.ReactNode {
   const { loaded, unavailable } = usePlayerHostSnapshot();
   if (!loaded) {
-    // The track it played was found gone, so the pill leaves only that notice behind.
     return unavailable ? (
       <section {...interTypefaceScope} aria-label="Player" className={miniPlayerStyles}>
         <PlaybackErrorMessage message={unavailable.message} />
@@ -78,7 +70,6 @@ export function MiniPlayer(): React.ReactNode {
         <Link
           to="/audiobooks/$conversionId"
           params={{ conversionId: loaded.conversionId }}
-          // the mini player is only shown on Recents; `cover-transition.ts` reads the second flag
           state={{ isOpenedFromRecents: true, isOpenedFromMiniPlayer: true }}
           className={composeClassnames(
             pressableOverlay,

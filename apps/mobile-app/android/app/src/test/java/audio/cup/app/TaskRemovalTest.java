@@ -19,7 +19,6 @@ public class TaskRemovalTest {
 
     @Test
     public void aSessionPausedForATransientFocusLossIsKept() {
-        // ExoPlayer still wants to play during a call; only its suppression reason says it is silent.
         assertTrue(TaskRemoval.keepsSession(true, Player.STATE_READY));
     }
 
@@ -32,7 +31,6 @@ public class TaskRemovalTest {
     @Test
     public void anEndedOrFailedSessionEnds() {
         assertFalse(TaskRemoval.keepsSession(true, Player.STATE_ENDED));
-        // A failed load leaves ExoPlayer idle, and the engine pauses it too.
         assertFalse(TaskRemoval.keepsSession(true, Player.STATE_IDLE));
         assertFalse(TaskRemoval.keepsSession(false, Player.STATE_IDLE));
     }

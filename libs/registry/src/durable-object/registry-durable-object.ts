@@ -51,14 +51,12 @@ export type IdentityAccount = {
   phase: "provisioning" | "active" | "deleting_identity";
 };
 
-/** The account's duration usage as last projected into the registry. */
 type AccountUsage = Omit<AccountUsageProjection, "accountId">;
 
 export type ListedAccount = IdentityAccount & {
   usage?: AccountUsage & { availableMilliseconds: number };
 };
 
-// Bounds the account RPCs one alarm makes while backfilling usage projections.
 const USAGE_BACKFILL_BATCH_SIZE = 25;
 const USAGE_BACKFILL_RETRY_MS = 60_000;
 
@@ -69,7 +67,6 @@ const IDENTITY_COLUMNS = {
   phase: identityAccounts.phase,
 };
 
-// Provisioning activates an account before pulling its usage, so only active accounts are owed one.
 const LACKS_USAGE_PROJECTION = and(
   eq(identityAccounts.phase, "active"),
   isNull(identityAccounts.projectionRevision),
@@ -81,7 +78,6 @@ type RegistryEnvironment = Omit<DeletionEnvironment, "ACCOUNTS"> & {
   CONVERSION_IP_LIMIT?: string;
 };
 
-/** Supabase identity verification belongs to the authenticated API, before registry allocation. */
 export class RegistryDurableObject extends DurableObject<RegistryEnvironment> {
   private readonly sqlite: RegistrySqlite;
   private readonly database: DrizzleSqliteDODatabase;
@@ -94,8 +90,6 @@ export class RegistryDurableObject extends DurableObject<RegistryEnvironment> {
 
     void context.blockConcurrencyWhile(async () => {
       await this.sqlite.applyMigrations();
-      // Accounts that existed before usage projections, or whose first pull failed, converge
-      // through the alarm's backfill.
       if (this.hasAccountsWithoutUsage() && (await context.storage.getAlarm()) === null) {
         await context.storage.setAlarm(Temporal.Now.instant().epochMilliseconds);
       }
@@ -169,18 +163,16 @@ export class RegistryDurableObject extends DurableObject<RegistryEnvironment> {
         .run();
     });
     this.database.delete(provisioningJobs).where(eq(provisioningJobs.subject, subject)).run();
-    // Repeat sign-ins also provision; afterwards the account keeps its own projection current.
     if (this.lacksUsageProjection(identity.accountId)) {
       try {
         await this.pullAccountUsage(identity.accountId);
       } catch {
-        /* The alarm's backfill pulls usage for active accounts that lack a projection. */
+        return snapshot;
       }
     }
     return snapshot;
   }
 
-  /** A pass that throws captures the error and lets the platform retry the alarm. */
   override async alarm() {
     await captureAlarmFailure(() => this.reconcilePass());
   }
@@ -231,7 +223,6 @@ export class RegistryDurableObject extends DurableObject<RegistryEnvironment> {
       },
     );
     this.limits.expire(Temporal.Now.instant().epochMilliseconds);
-    // Last, because it calls account objects that may be slow; the work above is time-critical.
     await this.backfillAccountUsage();
     const provisioningNext = requireRow(
       this.database
@@ -343,10 +334,6 @@ export class RegistryDurableObject extends DurableObject<RegistryEnvironment> {
       .get();
   }
 
-  /**
-   * Keeps the newest usage projection an account pushed. Revisions order projections, so a late
-   * delivery of an older one is ignored and a repeated delivery must match what was stored.
-   */
   applyAccountUsageProjection(
     projection: AccountUsageProjection,
   ): "applied" | "replayed" | "stale" {
@@ -386,7 +373,6 @@ export class RegistryDurableObject extends DurableObject<RegistryEnvironment> {
     });
   }
 
-  /** Keyset pagination keeps pages stable while new identities are provisioned between requests. */
   listAccounts(input: { phase?: IdentityAccount["phase"]; limit: number; cursor?: string }): {
     accounts: ListedAccount[];
     nextCursor?: string;
@@ -448,7 +434,6 @@ export class RegistryDurableObject extends DurableObject<RegistryEnvironment> {
     });
   }
 
-  /** Pulls usage from the account and confirms it there, so the account need not push it again. */
   private async pullAccountUsage(accountId: string): Promise<void> {
     const account = this.env.ACCOUNTS.get(this.env.ACCOUNTS.idFromName(accountId));
     const projection = await account.registryUsageProjection();
@@ -470,9 +455,7 @@ export class RegistryDurableObject extends DurableObject<RegistryEnvironment> {
     for (const { accountId } of pending) {
       try {
         await this.pullAccountUsage(accountId);
-      } catch {
-        /* The next alarm retries; one unavailable account must not stall the rest. */
-      }
+      } catch {}
     }
   }
 
@@ -656,7 +639,6 @@ export class RegistryDurableObject extends DurableObject<RegistryEnvironment> {
     this.sqlite.removeAccountConversionOwners(accountId);
   }
 
-  /** Conversion deletion cleanup removes one account conversion's owner; a repeat changes nothing. */
   removeConversionOwner(conversionId: string) {
     z.uuidv4().parse(conversionId);
     this.sqlite.removeAccountConversionOwner(conversionId);

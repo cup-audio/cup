@@ -410,7 +410,6 @@ async function run(
     await action(new OperatorApiClient(url.toString(), accessToken), createOutput(global.json));
   } catch (error) {
     const cliError = toCliError(error);
-    // An API failure carries the request's Sentry trace ID, which finds the request's trace.
     const traceId = cliError.cause instanceof RpcError ? cliError.cause.traceId : undefined;
     if (global.json) {
       const details = { code: cliError.code, message: cliError.message };
@@ -463,7 +462,6 @@ function writeFields(fields: ReadonlyArray<readonly [string, string | number]>):
   }
   process.stdout.write("\n");
 }
-/** The narration language a history entry's ready outcome records, or "none". */
 function describeNarrationLanguage(
   outcome: { status: string; narrationLanguage?: string | undefined } | null,
 ): string {
@@ -479,11 +477,6 @@ type LedgerConversionSummary = {
   spentMilliseconds: number;
   releasedMilliseconds: number;
 };
-/**
- * Groups a page's segment events by conversion. `DurationLedger.insertReservation` in
- * `@cup/duration-ledger` builds a segment event's operation ID as `segment:<conversion
- * ID>:<sequence>:<reservation ID>`.
- */
 function summarizeLedgerConversions(entries: readonly LedgerEntry[]): LedgerConversionSummary[] {
   const summaries = new Map<string, LedgerConversionSummary>();
   for (const entry of entries) {
@@ -537,7 +530,6 @@ function redact(value: string): string {
     .replace(/(authorization|cookie|cf-access-token):?\s*\S+/gi, "$1: [REDACTED]");
 }
 
-/** Keeps CLI errors, reports API refusals with their own code, and hides other failures. */
 function toCliError(error: unknown): CliError {
   if (error instanceof CliError) {
     return error;

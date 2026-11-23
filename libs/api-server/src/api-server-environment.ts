@@ -6,25 +6,14 @@ import type { RegistryDurableObject } from "@cup/registry";
 
 export type ApiServerEnvironment = {
   LOCAL_DEVELOPMENT: string;
-  /** Local development only; read through `localTestAccount`. */
   LOCAL_TEST_ACCOUNT_EMAIL?: string;
   LOCAL_TEST_ACCOUNT_PASSWORD?: string;
   SUPABASE_PUBLISHABLE_KEY: string;
-  /** Empty only in local development without a Google client, which disables Google sign-in. */
   GOOGLE_WEB_CLIENT_ID: string;
   SUPABASE_URL: string;
   SUPABASE_SECRET_KEY: string;
-  // Signs the stateless tokens of signed media URLs; rotating it invalidates every outstanding URL.
   MEDIA_URL_SIGNING_KEY: string;
-  /**
-   * The DSNs the telemetry tunnel forwards to, comma-separated: `cup-app` in production, empty
-   * elsewhere.
-   */
   SENTRY_TUNNEL_DSNS: string;
-  /**
-   * Local development only, read with `LOCAL_DEVELOPMENT=true`: signed media and position URLs
-   * expire this many seconds after they are handed out, so the mobile E2E suite sees them expire.
-   */
   LOCAL_SIGNED_URL_LIFETIME_SECONDS?: string;
   ACCOUNTS: DurableObjectNamespace<AccountDurableObject>;
   REGISTRY: DurableObjectNamespace<RegistryDurableObject>;

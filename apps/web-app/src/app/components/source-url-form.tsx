@@ -12,16 +12,10 @@ import { subscribeToSharedUrl } from "#src/platform/share-intake.js";
 
 type SourceUrlFormProps = {
   initialSourceUrl: string;
-  /**
-   * False while this form may still be replaced or is going away, so a shared URL waits for the
-   * form that stays.
-   */
   shouldReceiveSharedUrl: boolean;
   isPending: boolean;
   retryIn: number;
-  /** The failed start, shown below the form; omit it while something else explains the failure. */
   error: unknown;
-  /** Shown for a failure that carries no message for the listener. */
   errorFallbackMessage: string;
   onSubmit: (value: { sourceUrl: string }) => Promise<void>;
   placeholder: string;
@@ -34,10 +28,6 @@ type SourceUrlFormProps = {
   };
 };
 
-/**
- * The drawn look of the home page's start form and the Add a Track sheet: the field is a wavy rule
- * with no box, and the submit button sits at the end of the row with an arrow after its label.
- */
 export const wavyRuleFormStyles = {
   input: composeClassnames(
     textStyles.paragraph,
@@ -70,12 +60,6 @@ export const wavyRuleFormStyles = {
   `,
 } as const;
 
-/**
- * The source-URL field and submit button of every start form, with today's validation, and below
- * them the rate-limit countdown and the failed start. A URL shared to the app fills the field and
- * submits it, so its conversion starts right away; one shared while a start is pending or
- * rate-limited waits until the form can submit again.
- */
 export function SourceUrlForm({
   initialSourceUrl,
   shouldReceiveSharedUrl,
@@ -103,7 +87,6 @@ export function SourceUrlForm({
     },
   });
 
-  // Taking a share only when it can be submitted keeps the guard in `onSubmit` from dropping it.
   const canTakeSharedUrl = shouldReceiveSharedUrl && !isPending && retryIn === 0;
   React.useEffect(() => {
     if (!canTakeSharedUrl) {

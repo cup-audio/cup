@@ -2,11 +2,9 @@ import type { Page } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
 
-/** The screen's rows of ink, separated from the next ones by an empty row, in design pixels. */
 export type InkBand = { top: number; bottom: number; left: number; right: number };
 
 export type BandComparison = {
-  /** Absent when the other image has more bands than this one. */
   design: InkBand | undefined;
   rendered: InkBand | undefined;
   isWithinTolerance: boolean;
@@ -14,7 +12,6 @@ export type BandComparison = {
 
 export type MeasuredElement = {
   tag: string;
-  /** Its own text, or an input's placeholder. */
   label: string;
   rect: { x: number; y: number; width: number; height: number };
   fontFamily: string;
@@ -29,7 +26,6 @@ export type MeasuredElement = {
 
 export type FidelityReport = {
   bands: BandComparison[];
-  /** Share of the compared pixels that differ noticeably; text edges keep it above zero. */
   differingPixelRatio: number;
   loadedFonts: string[];
   elements: MeasuredElement[];
@@ -37,21 +33,16 @@ export type FidelityReport = {
 
 type FidelityCheckOptions = {
   designImagePath: string;
-  /** Receives `report.json`, `rendered.png` and `overlay.png`. */
   reportDirectory: string;
-  /** Rows the comparison skips, such as a device status bar drawn into the design. */
   ignoreTopPixels?: number;
 };
 
-/** A design tool and a browser rasterize an edge up to this far apart, so closer is no mismatch. */
 const BAND_TOLERANCE_PIXELS = 1;
 
 const PNG_SIGNATURE = "89504e470d0a1a0a";
-/** The width and height of a PNG's first chunk (IHDR) follow the signature and the chunk header. */
 const PNG_WIDTH_OFFSET = 16;
 const PNG_HEIGHT_OFFSET = 20;
 
-/** The viewport to render at, so that one CSS pixel equals one design pixel. */
 export function readDesignImageSize(designImagePath: string): { width: number; height: number } {
   const image = fs.readFileSync(designImagePath);
   if (image.subarray(0, 8).toString("hex") !== PNG_SIGNATURE) {
@@ -63,11 +54,6 @@ export function readDesignImageSize(designImagePath: string): { width: number; h
   };
 }
 
-/**
- * Compares the page with the design's image. The page must render at the image's size, and should
- * at a device scale above 1: 1x text snaps to whole pixels, unlike the design's render, so the page
- * is scaled down to the image's size to compare like with like.
- */
 export async function checkAgainstDesign(
   page: Page,
   { designImagePath, reportDirectory, ignoreTopPixels = 0 }: FidelityCheckOptions,
@@ -86,10 +72,8 @@ export async function checkAgainstDesign(
     renderedImageUrl: toPngDataUrl(renderedImage),
     ignoreTopPixels,
   });
-  // After the screenshot, which waits for the fonts that the page has started loading.
   const { loadedFonts, elements } = await page.evaluate(measureElementsInPage);
 
-  // Without this, comparing no rows at all would report a match.
   if (comparison.designBands.length === 0) {
     throw new Error(`The fidelity check found no ink in the design below row ${ignoreTopPixels}`);
   }
@@ -122,7 +106,6 @@ export async function checkAgainstDesign(
   return report;
 }
 
-/** One line per band and element, for a test run's output. */
 export function formatFidelityReport(report: FidelityReport): string {
   return [
     `Differing pixels: ${(report.differingPixelRatio * 100).toFixed(2)}%`,
@@ -177,7 +160,6 @@ function toPngDataUrl(image: Buffer): string {
   return `data:image/png;base64,${image.toString("base64")}`;
 }
 
-/** Runs in the page, so it can use only its parameters and browser APIs. */
 async function compareImagesInPage({
   designImageUrl,
   renderedImageUrl,
@@ -187,7 +169,6 @@ async function compareImagesInPage({
   renderedImageUrl: string;
   ignoreTopPixels: number;
 }) {
-  /* The higher limit leaves out the antialiased edges of text. */
   const INK_DISTANCE = 60;
   const DIFFERENCE_DISTANCE = 90;
 
@@ -223,13 +204,11 @@ async function compareImagesInPage({
   const designPixels = readPixels(designImage);
   const renderedPixels = readPixels(renderedImage);
 
-  /* Summed over the color channels, against a pixel of the design. */
   const distanceFromDesign = (pixels: Uint8ClampedArray, offset: number, designOffset: number) =>
     Math.abs((pixels[offset] ?? 0) - (designPixels[designOffset] ?? 0)) +
     Math.abs((pixels[offset + 1] ?? 0) - (designPixels[designOffset + 1] ?? 0)) +
     Math.abs((pixels[offset + 2] ?? 0) - (designPixels[designOffset + 2] ?? 0));
 
-  /* A design's corner shows its background; the rendered page is measured against the same color. */
   const backgroundOffset = (width * height - 1) * 4;
   if (designPixels[backgroundOffset + 3] !== 255) {
     throw new Error("The design image's bottom right corner must show the background, opaque");
@@ -271,7 +250,6 @@ async function compareImagesInPage({
     throw new Error("The page offers no 2D canvas");
   }
   const overlay = overlayContext.createImageData(width, height);
-  /* Dark where both images have ink, red for the design alone, blue for the rendered page alone. */
   const paintOverlay = (offset: number, isDesignInk: boolean, isRenderedInk: boolean) => {
     const [red, green, blue] =
       isDesignInk && isRenderedInk
@@ -307,7 +285,6 @@ async function compareImagesInPage({
   };
 }
 
-/** Runs in the page, so it can use only browser APIs. */
 function measureElementsInPage() {
   const elements = [...document.querySelectorAll("body *")].filter((element) => {
     const { width, height } = element.getBoundingClientRect();

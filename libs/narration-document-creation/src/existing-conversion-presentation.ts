@@ -5,7 +5,6 @@ import { escapeHtmlAttribute, escapeHtmlText } from "#src/html-escaping.ts";
 import { resolveLink } from "#src/links.ts";
 import { KEPT_INLINE_TAG_NAMES, serializeUnitAttribute } from "#src/presentation-rules.ts";
 
-/** A unit found in an existing conversion's stored HTML, with the text its elements show. */
 export type PresentedUnit = { id: string; text: string };
 
 const BLOCK_TAG_NAMES = new Set([
@@ -26,8 +25,6 @@ const BLOCK_TAG_NAMES = new Set([
 
 const HEADING_TAG_NAMES = new Set(["h1", "h2", "h3", "h4", "h5", "h6"]);
 
-// Containers that narration document creation drew a heading inside, when the heading came right
-// before the container in the narration source material.
 const HEADING_CONTAINER_TAG_NAMES = new Set(["blockquote", "ol", "ul"]);
 
 const CONTAINER_TAG_NAMES = new Set(["blockquote", "li", "ol", "ul"]);
@@ -36,11 +33,6 @@ type Element = DefaultTreeAdapterMap["element"];
 type ChildNode = DefaultTreeAdapterMap["childNode"];
 type ParentNode = DefaultTreeAdapterMap["parentNode"];
 
-/**
- * Presents the HTML an existing conversion stored in its manifest: every element or `section`
- * carrying a unit ID becomes one or more elements marked with the unit attribute, headings drawn
- * inside a container move before it, and links resolve against the conversion's source URL.
- */
 export function presentStoredNarrationDocument({
   storedHtml,
   baseUrl,
@@ -88,11 +80,9 @@ export function presentStoredNarrationDocument({
     const unitId = storedUnitId ?? inheritedUnitId;
 
     if (storedUnitId !== undefined) {
-      // Registers the unit even when its elements hold no text, so the check sees it.
       addUnitText(storedUnitId, "");
     }
 
-    // A section only grouped the elements of one unit; each of them now carries the unit itself.
     if (node.tagName === "section") {
       return node.childNodes
         .map((childNode) => presentNode(childNode, unitId, unitId !== undefined))
@@ -112,8 +102,6 @@ export function presentStoredNarrationDocument({
       return "<br>";
     }
 
-    // Stored HTML only ever held `em`, `strong` and `code` of these. It follows the same rules as
-    // a new conversion's markup, which flatten any other element to its text.
     if (KEPT_INLINE_TAG_NAMES.has(node.tagName)) {
       return `<${node.tagName}>${presentNodes(node.childNodes, unitId)}</${node.tagName}>`;
     }
@@ -144,12 +132,7 @@ export function presentStoredNarrationDocument({
   return { html: presentNodes(fragment.childNodes, undefined), units };
 }
 
-/**
- * Moves the leading headings of a unit's `section` before the outermost list or blockquote that the
- * section opens, and gives each moved heading the section's unit ID.
- */
 function moveHeadingsOutOfContainers(parentNode: ParentNode): void {
-  // A copy, because moving headings inserts them among the children of an ancestor being visited.
   const childNodes = parentNode.childNodes.slice();
 
   for (const childNode of childNodes) {

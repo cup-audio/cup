@@ -1,6 +1,5 @@
 import { css } from "@linaria/core";
 
-/** {@link https://courses.joshwcomeau.com/css-for-js/02-rendering-logic-2/18-hidden-content} */
 export const visuallyHidden = css`
   position: absolute;
   width: 1px;

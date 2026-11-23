@@ -11,13 +11,10 @@ export default defineConfig({
   timeout: 120_000,
   outputDir: "./playwright-output/test-results",
   reporter: [["html", { open: "never", outputFolder: "./playwright-output/html-report" }]],
-  // HTML baselines stay beside the tests rather than using platform-specific image paths.
   snapshotPathTemplate: "{testDir}/{arg}{ext}",
   webServer: [
     {
       command: "node test-e2e/source-page-server.ts",
-      // The server listens on a port the operating system assigns so concurrent runs cannot collide.
-      // Playwright exports the named capture group to the environment that workers read above.
       wait: { stdout: /Listening on http:\/\/127\.0\.0\.1:(?<CUP_SOURCE_PAGE_SERVER_PORT>\d+)/ },
       gracefulShutdown: { signal: "SIGTERM", timeout: 5_000 },
     },

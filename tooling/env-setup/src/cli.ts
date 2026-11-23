@@ -6,19 +6,9 @@ import util from "node:util";
 const ROOT = path.resolve(import.meta.dirname, "../../..");
 const EVALS_FILE = "libs/narration-source-analysis/.env.evals";
 const FILES = ["apps/cloudflare-worker/.env.local", EVALS_FILE];
-/**
- * Moves of environment files whose library was renamed, so existing checkouts keep working after a
- * pull. Remove an entry once checkouts have had time to run setup.
- */
 const RELOCATIONS = [{ from: "libs/narration-content-selection/.env.evals", to: EVALS_FILE }];
-/**
- * The Android upload key, created once with `android:upload-key:create` in `@cup/mobile-app`. Only
- * `android:release` needs it, so it is optional here: `check` never looks for it. Keep the path in
- * step with `KEYSTORE_PATH` in `apps/mobile-app/scripts/release/upload-key.mts`.
- */
 const UPLOAD_KEYSTORE = "apps/mobile-app/android/upload-keystore.jks";
 const KEYS = ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_KEY"] as const;
-/** Sentry's upload token stays out of every checkout (docs/production-configuration.md#deploy). */
 const SENTRY_AUTH_TOKEN = "SENTRY_AUTH_TOKEN";
 const HELP =
   "Run node tooling/env-setup/src/cli.ts setup --from /absolute/path/to/existing.env, or export both credentials and run node tooling/env-setup/src/cli.ts setup. Then retry pnpm install.";

@@ -7,7 +7,6 @@ import { createWebAppViteConfig, WEB_APP_DIRECTORY } from "@cup/web-app/vite";
 const GALLERY_PATH = "ui-gallery/index.html";
 const SOURCE_MODULE_PATTERN = /^\/src\/(?<modulePath>.+)\.tsx?$/;
 
-/** The server root serves the web app, so point the printed URLs at the gallery page instead. */
 function printGalleryUrls(): Plugin {
   return {
     name: "cup:print-gallery-urls",
@@ -28,12 +27,6 @@ function printGalleryUrls(): Plugin {
   };
 }
 
-/**
- * Component tests import source modules into the page by the path the development server serves
- * them at, such as `import("/src/platform/share-intake.ts")`, to reach the instance the stories
- * use. The build emits every source module as an entry under the same path with a `.js` extension
- * (`createSourceModuleEntries`), and the preview server answers the `.ts` path with it.
- */
 function serveSourceModulesAtTheirPaths(): Plugin {
   return {
     name: "cup:serve-source-modules-at-their-paths",
@@ -50,7 +43,6 @@ function serveSourceModulesAtTheirPaths(): Plugin {
   };
 }
 
-/** Every module of `src` that runs in the browser, keyed by its output path without extension. */
 function createSourceModuleEntries(): Record<string, string> {
   const sourceFiles = fs.globSync("src/**/*.{ts,tsx}", {
     cwd: WEB_APP_DIRECTORY,
@@ -69,7 +61,6 @@ export default mergeConfig(
   defineConfig({
     root: WEB_APP_DIRECTORY,
     build: {
-      // The component tests serve this build (`playwright.config.ts`).
       outDir: "playwright-output/gallery",
       emptyOutDir: true,
       rolldownOptions: {
@@ -81,7 +72,6 @@ export default mergeConfig(
           entryFileNames: (chunk) =>
             chunk.name.startsWith("src/") ? "[name].js" : "app/assets/[name]-[hash].js",
         },
-        // A source module entry keeps every export, which a test may call.
         preserveEntrySignatures: "strict",
       },
     },

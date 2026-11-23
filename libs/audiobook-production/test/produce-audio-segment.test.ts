@@ -14,10 +14,8 @@ import {
 } from "#src/speech-synthesis-config.ts";
 
 const CONVERSION_ID = "018f4d80-5b9e-7a43-9cf4-8e192b37cbd8";
-// 100 MP3 frames of 24 ms, so the provider PCM fills whole frames.
 const PROVIDER_PCM_DURATION_MILLISECONDS = 2_400;
 const MP3_FRAME_DURATION_MILLISECONDS = 24;
-// LAME's encoder delay and its flush add two frames to every encoded segment, stretched or not.
 const ENCODER_OVERHEAD_MILLISECONDS = 2 * MP3_FRAME_DURATION_MILLISECONDS;
 type SpeechSynthesisRun = ReturnType<SpeechSynthesisAi["gateway"]>["run"];
 type SpeechSynthesisRequest = Parameters<SpeechSynthesisRun>[0];
@@ -262,7 +260,6 @@ test("marks invalid requests and unsupported audio formats as permanent", async 
 
 test.each([
   ["de-AT", "de-AT"],
-  // An unspeakable language is left out of the request but is still the narration language.
   ["sv", "sv"],
   [undefined, undefined],
 ] as const)(
@@ -344,7 +341,6 @@ test("a policy 6 segment stores the provider PCM stretched by 1.05 and records p
     narrationChunk: { text: "A briskly narrated paragraph." },
   });
 
-  // 2,400 ms / 1.05 is about 2,286 ms.
   expect(
     Math.abs(segment.durationMilliseconds - (2_286 + ENCODER_OVERHEAD_MILLISECONDS)),
   ).toBeLessThanOrEqual(MP3_FRAME_DURATION_MILLISECONDS);

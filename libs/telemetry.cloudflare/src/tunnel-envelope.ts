@@ -1,40 +1,23 @@
 import { CupError } from "@cup/errors";
 
-/*
- * The telemetry tunnel's envelope rewrite. The envelope format follows Sentry's developer docs as
- * read on 2026-11-16 (https://develop.sentry.dev/sdk/data-model/envelopes/): a JSON header line,
- * then items, each a JSON item header line followed by a payload that is `length` bytes long when
- * the item header declares a length and runs to the next newline otherwise.
- */
-
-/** The item types whose payload is an event with a `user`, which Sentry reads `user.geo` from. */
 const ITEM_TYPES_WITH_USER = new Set(["event", "transaction"]);
 
 const NEWLINE = 10;
 
 type EnvelopeItem = {
-  /** The item header line, without its newline. */
   header: Uint8Array;
   payload: Uint8Array;
 };
 
-/** Thrown for a request body that is no Sentry envelope; the tunnel answers it with a 400. */
 export class InvalidTunnelEnvelopeError extends CupError {
   override name = "InvalidTunnelEnvelopeError";
 }
 
-/** The envelope header's `dsn`, which names the project the envelope is for. */
 export function readEnvelopeDsn(envelope: Uint8Array): string | undefined {
   const header = parseJsonObject(splitEnvelope(envelope).header);
   return typeof header["dsn"] === "string" ? header["dsn"] : undefined;
 }
 
-/**
- * Sets `user.geo` to the listener's country on every `event` and `transaction` item, replacing
- * whatever geo the client sent, and gives each rewritten item the length header of its new payload.
- * Every other item, `span` included, keeps its bytes. Without a country, those items lose
- * `user.geo`.
- */
 export function rewriteTunnelEnvelope(
   envelope: Uint8Array,
   country: string | undefined,
@@ -80,7 +63,6 @@ function splitEnvelope(envelope: Uint8Array): { header: Uint8Array; items: Envel
     const itemHeaderEnd = indexOfNewline(envelope, position);
     const itemHeader = envelope.subarray(position, itemHeaderEnd);
     position = itemHeaderEnd + 1;
-    // A blank line, such as a trailing newline after the last item, carries no item.
     if (itemHeader.length === 0) {
       continue;
     }
@@ -108,7 +90,6 @@ function splitEnvelope(envelope: Uint8Array): { header: Uint8Array; items: Envel
   return { header, items };
 }
 
-/** The position of the next newline, or the envelope's end when no newline follows. */
 function indexOfNewline(envelope: Uint8Array, from: number): number {
   const index = envelope.indexOf(NEWLINE, from);
   return index === -1 ? envelope.length : index;

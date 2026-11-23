@@ -5,7 +5,6 @@ import React from "react";
 
 import { DSButton } from "#src/app/design-system/button.js";
 
-/** Renders the toasts added through the surrounding `Toast.Provider`. */
 export const DSToastViewport: React.FC = () => {
   const { toasts } = Toast.useToastManager();
 

@@ -9,13 +9,6 @@ import {
   waitForSharedConversions,
 } from "#src/share-assertions.ts";
 
-/**
- * Share intake through an explicit `ACTION_SEND` intent, as another app's Sharesheet sends it, one
- * test per app state. The component tests of `share-plugin.android.ts` cover what the web app does
- * with the shared text, such as repeat shares, text without a URL and Cup links. Signed in, each
- * test checks that the share started a conversion of the shared URL exactly and Recents lists it
- * next to the sign-in's track; signed out, that it filled the start form and asked to sign in.
- */
 const app = useMobileApp();
 
 const SHARED_URL = "https://source.example.test/fixture";
@@ -23,9 +16,7 @@ const SHARED_URL = "https://source.example.test/fixture";
 test("a share while Cup is not running starts its conversion", async () => {
   const device = asAndroidAppDevice(app.device);
   await signIn();
-  // Not a plain force-stop: one with Cup in front right after the sign-in can lose the session.
   await device.leaveAndTerminate();
-  // `&`, `+` and the fragment must arrive unchanged through the intent `adb` sends.
   const url = "https://source.example.test/fixture?topic=a+b&page=2#part-2";
 
   const requestCount = app.worker.requests().length;
@@ -58,19 +49,16 @@ test("a share while Cup is running starts a conversion of the URL in the shared 
 
 test("a share while signed out fills the landing page's start form and asks to sign in", async () => {
   const device = asAndroidAppDevice(app.device);
-  // Each test starts signed out, with Cup not running.
 
   await device.share(SHARED_URL, { apiOrigin: app.apiOrigin });
 
   await expectSignInForStartFormUrl(await device.webView(), SHARED_URL);
-  // The web app asks for the auth configuration at startup, here from the test Worker.
   expect(app.worker.requests()).toContainEqual(
     expect.objectContaining({ method: "GET", path: "/api/auth/config" }),
   );
   expect(conversionStartsSince(app.worker, 0)).toEqual([]);
 });
 
-/** Signs in from the landing page and ends on Recents, which lists the sign-in's conversion. */
 async function signIn(): Promise<WebdriverIO.Browser> {
   await app.device.launch({ apiOrigin: app.apiOrigin });
   const webView = await app.device.webView();

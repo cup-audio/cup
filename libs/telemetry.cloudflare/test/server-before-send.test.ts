@@ -17,7 +17,6 @@ class SqliteError extends Error {
   override name = "SqliteError";
 }
 
-/** The exception values Sentry's linked-errors integration builds: innermost first, main last. */
 function exceptionValuesOf(error: Error): Exception[] {
   const chain: Error[] = [];
   for (let current: unknown = error; current instanceof Error; current = current.cause) {
@@ -120,8 +119,6 @@ test("keeps the messages of Cup's own errors and drops those of foreign errors i
       mechanism: { type: "generic", exception_id: 0 },
     },
   ]);
-  // extraErrorDataIntegration copies the cause's own properties, here the SQL parameters; with
-  // the cause dropped, nothing of the error's own data is left.
   expect(sent?.contexts).toEqual({});
 });
 

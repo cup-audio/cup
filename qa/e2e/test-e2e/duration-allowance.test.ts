@@ -26,8 +26,6 @@ test("charges every segment by encoded duration and reuses audio across reloads 
   if (audiobook.status !== "ready" || !audiobook.narrationTrack) {
     throw new Error("Expected a narration track once every segment has audio.");
   }
-  // Every frame lasts a whole number of milliseconds, so the joined track's encoded duration is the
-  // sum of the segments' encoded durations.
   const track = new Uint8Array(await (await page.request.get(audiobook.narrationTrack.url)).body());
   const actual = analyzeMp3(track).durationMilliseconds;
   const before = await readGrant(page, grantId);
@@ -88,7 +86,6 @@ test.describe("in-flight reservations", () => {
     expect(article.status).toBe("synthesizing");
     const unitCount = article.narrationDocument.synchronizationUnits.length;
     expect(unitCount).toBeGreaterThan(1);
-    // Every segment reaches the provider without waiting for another to finish.
     await expect
       .poll(async () => (await readSpeechCalls(workerEnvironment)).length)
       .toBe(unitCount);
@@ -104,7 +101,6 @@ test.describe("in-flight reservations", () => {
       ),
     );
 
-    // A retry joins the synthesis in flight instead of reserving or synthesizing again.
     const retry = await retrySynthesis(page, id);
     expect(retry.status()).toBe(200);
     expect(await retry.json()).toEqual({ result: "started" });
@@ -141,7 +137,6 @@ test.describe("in-flight reservations", () => {
     const article = await waitForPreparedAudiobook(page, first);
     expect(article.status).toBe("synthesizing");
     const reserved = (await readGrant(page, grantId)).duration.reservedMilliseconds;
-    // Leave less than one more document's estimate beside the first conversion's reservation.
     const allowance = reserved + 1_000;
     await setAllowance(workerEnvironment, grantId, allowance);
 
@@ -157,7 +152,6 @@ test.describe("in-flight reservations", () => {
     await fetch(workerEnvironment.origin + "/__qa/release-speech", { method: "POST" });
     const segments = await waitForGeneratedAudio(page, first);
     expect(segments).toHaveLength(article.narrationDocument.synchronizationUnits.length);
-    // Charges follow the encoded audio and stop at the allowance when it runs longer than estimated.
     const spent = Math.min(
       allowance,
       segments.reduce((total, segment) => total + Math.ceil(segment.durationMilliseconds), 0),
@@ -168,7 +162,6 @@ test.describe("in-flight reservations", () => {
       spentMilliseconds: spent,
     });
     expect(await readSpeechCalls(workerEnvironment)).toHaveLength(segments.length);
-    // Preparation stays available without duration.
     await start();
   });
 });

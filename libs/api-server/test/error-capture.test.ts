@@ -8,7 +8,6 @@ vi.mock("cloudflare:workers", () => ({
     readonly mocked = true;
   },
 }));
-// Records the captures; the Worker integration tests check what reaches Sentry.
 vi.mock(import("@sentry/core"), async (importOriginal) => ({
   ...(await importOriginal()),
   captureException: vi.fn<typeof captureException>(),
@@ -25,7 +24,6 @@ beforeEach(() => {
   vi.mocked(captureException).mockClear();
 });
 
-/** The settings every response's headers need, and a grant that answers the exchange. */
 function environment(exchangeCredential: () => Promise<unknown>) {
   return {
     SUPABASE_URL: "https://access-test.supabase.co",
@@ -67,7 +65,6 @@ test("a malformed JSON body answers 400 and captures nothing", async () => {
 });
 
 test("an error thrown before the routes, in the security headers, answers 500 with the trace ID", async () => {
-  // Without `SUPABASE_URL` the content security policy cannot be built.
   const response = await createApiServer().request("https://cup.audio/api/health", {}, {});
 
   expect(response.status).toBe(500);

@@ -527,7 +527,6 @@ function accountInspectionFixture() {
     },
     writers: [],
     conversionDeletions: [
-      // Marked 90 minutes and a few seconds ago, so the age reads 90 minutes despite test latency.
       {
         conversionId: DELETED_CONVERSION_ID,
         deletingSinceMs: Temporal.Now.instant().epochMilliseconds - 90 * 60_000 - 5_000,

@@ -17,13 +17,11 @@ import type { Story } from "#src/ui-gallery/story.js";
 
 const GRANT_ID = "b4ad28a8-bbd7-46af-a17c-59527becd745";
 const memoryHistory = createMemoryHistory({ initialEntries: ["/app/"] });
-// TanStack initializes route objects in place, so this story module must create one router only.
 const router = createAppRouter(memoryHistory);
 
 export const OpenGrant = {
   component: () => <TrialRoute />,
   handlers: [
-    // Native share tests use the production API origin; keep auth initialization local too.
     http.get("*/api/auth/config", () =>
       HttpResponse.json(
         {
@@ -52,11 +50,6 @@ export const OpenGrant = {
   ],
 } satisfies Story;
 
-/**
- * The open grant as the native share tests mount it: a shared URL submits the start form, and the
- * start answers locally with a refusal instead of reaching the production API origin. A test can
- * hold that answer as `"share-start"`.
- */
 export const OpenGrantForShares = {
   ...OpenGrant,
   handlers: [
@@ -81,7 +74,6 @@ export function MalformedCredential(): React.ReactNode {
   return <TrialRoute hash="credential=malformed" />;
 }
 
-/** A well-formed credential that the server refuses. */
 export const InvalidCredential = {
   component: () => <TrialRoute hash={`credential=v1.${"a".repeat(43)}`} />,
   handlers: [

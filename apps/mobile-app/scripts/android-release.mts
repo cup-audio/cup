@@ -1,9 +1,4 @@
 /* oxlint-disable node/no-process-env -- The script hands Gradle the upload key through its environment. */
-/*
- * Turns a clean, pushed commit into a release-signed Android App Bundle for Google Play's internal
- * testing track. See the README's "Release builds". `.mts` because this package is CommonJS for
- * `capacitor.config.ts`.
- */
 import fs from "node:fs";
 import path from "node:path";
 import util from "node:util";
@@ -42,7 +37,6 @@ const BUNDLE = path.join(
   "release",
   "app-release.aab",
 );
-// The merged release manifest Gradle packages, as plain XML; the bundle itself holds it as protobuf.
 const RELEASE_MANIFEST = path.join(
   ANDROID_PROJECT,
   "app",
@@ -62,7 +56,6 @@ const MAPPING_FILE = path.join(
   "release",
   "mapping.txt",
 );
-// Every class here is a debug hook that a release bundle must not contain.
 const DEBUG_SOURCES = path.join(ANDROID_PROJECT, "app", "src", "debug", "java");
 const SETUP_DOCS = `${path.join(MOBILE_APP_ROOT, "README.md")}, section "Release builds"`;
 
@@ -96,19 +89,15 @@ if (failures.length > 0) {
   );
 }
 
-// Exits with every problem when the Android SDK or Java 21 is missing, before the build starts.
 const androidSdkRoot = requireJvmToolchain();
 
-// Reads the credentials before the build, so missing ones fail before Gradle starts rather than after it.
 const publisher = options["skip-upload"] ? undefined : await createPublisher();
 if (publisher !== undefined) {
-  // `symbols:upload` runs `sentry-cli info` again before uploading; this fails before the build instead.
   runCaptured("pnpm", ["--filter", "@cup/source-maps", "exec", "sentry-cli", "info"], {
     failureHint: `Sentry CLI has no working upload token; set it up as for the deploy (docs/production-configuration.md#deploy). Setup is documented in ${SETUP_DOCS}.`,
   });
 }
 
-// Read once, so `versionCode` and `versionName` describe the same instant.
 const version = deriveReleaseVersion(Temporal.Now.instant());
 const releaseName = formatReleaseName(
   version.versionName,
@@ -118,7 +107,6 @@ console.log(`Building ${releaseName}, versionCode ${String(version.versionCode)}
 
 const environment: NodeJS.ProcessEnv = {
   ...process.env,
-  // Gradle reads the SDK from ANDROID_HOME, so no `local.properties` is needed.
   ANDROID_HOME: androidSdkRoot,
 };
 
@@ -129,7 +117,6 @@ runVisible("pnpm", ["exec", "turbo", "run", "turbo:build"], {
 });
 runVisible("pnpm", ["exec", "cap", "sync", "android"], { cwd: MOBILE_APP_ROOT, env: environment });
 
-// A stale bundle or manifest must not pass for this build's if Gradle writes none.
 fs.rmSync(BUNDLE, { force: true });
 fs.rmSync(RELEASE_MANIFEST, { force: true });
 runVisible(
@@ -142,7 +129,6 @@ runVisible(
   ],
   {
     cwd: ANDROID_PROJECT,
-    // The upload key goes in the environment, never in arguments that the process list shows (`android/app/build.gradle`).
     env: {
       ...environment,
       [KEYSTORE_PATH_VARIABLE]: KEYSTORE_PATH,
@@ -191,7 +177,6 @@ if (publisher === undefined) {
   console.log(`Built the release-signed bundle and skipped the uploads. Before uploading it to a store by hand, upload its symbols to Sentry:
   pnpm --filter @cup/mobile-app ${symbolsUploadArgs.join(" ")}`);
 } else {
-  // Sentry gets the symbols first: a failure here stops the release before Play sees it.
   console.log("Uploading the release's R8 mapping file and web source maps to Sentry.");
   runVisible("pnpm", symbolsUploadArgs, { cwd: MOBILE_APP_ROOT, env: process.env });
 
@@ -235,7 +220,6 @@ function readProguardUuidOrFail(releaseBundle: Buffer): string {
   }
 }
 
-/** The debug source set's classes, fully qualified, from its Java and Kotlin file paths. */
 function listDebugClassNames(): string[] {
   return fs
     .readdirSync(DEBUG_SOURCES, { recursive: true, encoding: "utf8" })

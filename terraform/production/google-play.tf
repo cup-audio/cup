@@ -1,9 +1,3 @@
-# Scripted uploads to Google Play. The release command impersonates the uploader service account
-# through the operator's application-default credentials, so no service account key exists. Inviting
-# the account in the Play Console is manual; see docs/production-configuration.md.
-
-# Creating a service account needs the IAM API and minting its tokens needs the IAM Service Account
-# Credentials API; neither was enabled in cup-production on 2026-11-16.
 resource "google_project_service" "production" {
   for_each = toset([
     "androidpublisher.googleapis.com",

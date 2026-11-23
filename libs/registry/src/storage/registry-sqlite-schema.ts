@@ -63,7 +63,6 @@ export const identityAccounts = sqliteTable(
     accountId: text("account_id").notNull().unique(),
     createdAtMs: integer("created_at_ms").notNull(),
     phase: text({ enum: ["provisioning", "active", "deleting_identity"] }).notNull(),
-    // The account's usage projection; all null until the registry first receives one.
     projectionRevision: integer("projection_revision"),
     projectionAllowanceMilliseconds: integer("projection_allowance_milliseconds"),
     projectionReservedMilliseconds: integer("projection_reserved_milliseconds"),

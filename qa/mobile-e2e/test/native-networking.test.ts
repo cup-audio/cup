@@ -3,11 +3,6 @@ import { expect, test } from "vitest";
 import { useMobileApp } from "#src/fixtures.ts";
 import { SOURCE_URL, signInFromLandingPage, waitForRecents } from "#src/journeys.ts";
 
-/**
- * Native networking through `CapacitorHttp`: the app's requests reach the Worker from native code,
- * which sends no Origin header, and the Worker's mutation check accepts them by the custom header
- * and the JSON content type.
- */
 const app = useMobileApp();
 
 test("a conversion started from the Add dialog reaches the Worker through native networking", async () => {
@@ -20,8 +15,6 @@ test("a conversion started from the Add dialog reaches the Worker through native
   const requestCount = app.worker.requests().length;
   await webView.$('nav[aria-label="Tabs"]').$("a*=Add").click();
   const addDialog = webView.$('[role="dialog"]');
-  // The sheet slides in, and WebKit refuses to type into its URL field until it is in place. Its
-  // slide-in animation holds its end state, so it stays listed after it finishes.
   await webView.waitUntil(
     () =>
       webView.execute(() => {
@@ -51,8 +44,6 @@ test("a conversion started from the Add dialog reaches the Worker through native
     "content-type": "application/json",
     "x-create-audiobook-from-url-request": "1",
   });
-  // Every account request since, the mutation and the reloads of Recents, carried the account's
-  // token: one the test's fake auth provider signed for an authenticated account.
   const accountRequests = requests.filter(({ path }) => path.startsWith("/api/account/"));
   expect(accountRequests).toContainEqual(expect.objectContaining({ method: "GET" }));
   for (const { headers } of accountRequests) {
@@ -63,7 +54,6 @@ test("a conversion started from the Add dialog reaches the Worker through native
   }
 });
 
-/** Reads the claims of a `Bearer <JWT>` authorization header; the Worker checked its signature. */
 function bearerTokenClaims(authorization: string | undefined): unknown {
   const payload = /^Bearer [^.\s]+\.([^.\s]+)\.[^.\s]+$/u.exec(authorization ?? "")?.[1];
   if (payload === undefined) {

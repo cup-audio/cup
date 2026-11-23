@@ -112,7 +112,6 @@ describe("listener API transport contracts", () => {
     expect(schema.safeParse(value).success).toBe(false);
   });
 
-  // Installed apps keep running older clients against newer Workers.
   test.each([
     {
       name: "audiobook",
@@ -417,7 +416,6 @@ describe("listener API transport contracts", () => {
       { sequence: 0, status: "generating" },
     ],
     [
-      // Workers before the narration track reported each ready segment's URL and duration.
       {
         sequence: 0,
         status: "ready",

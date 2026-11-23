@@ -12,7 +12,21 @@ const noRestrictedImports = baseConfig.rules?.["no-restricted-imports"];
 
 export const config = defineConfig({
   extends: [baseConfig],
+  jsPlugins: [
+    ...(baseConfig.jsPlugins ?? []),
+    {
+      name: "cup-comments",
+      specifier: new URL("../comment-ratchet/src/oxlint-plugin.ts", import.meta.url).href,
+    },
+  ],
+  overrides: [
+    {
+      files: ["**/src/migrations/*.ts", "**/*.gen.ts"],
+      rules: { "cup-comments/no-comments": "off" },
+    },
+  ],
   rules: {
+    "cup-comments/no-comments": "error",
     "no-restricted-globals": [
       ...(noRestrictedGlobalsRule ?? ["error"]),
       {
@@ -48,10 +62,6 @@ const [restrictedImportsSeverity, ...repoRestrictedImports] =
   );
 
 /**
- * Returns `no-restricted-imports` options with the repository's paths and patterns plus `patterns`.
- * A package config or override that sets `no-restricted-imports` replaces the repository's options
- * instead of merging with them, so the helper adds them back ahead of the given patterns.
- *
  * @param {...RestrictedImportsPattern} patterns
  * @returns {import("oxlint").DummyRule}
  */

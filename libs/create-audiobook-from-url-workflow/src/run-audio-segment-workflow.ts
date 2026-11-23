@@ -22,12 +22,9 @@ import { keepStepErrors, originalStepError } from "#src/keep-step-errors.ts";
 import { phaseStepName } from "#src/phase-step-name.ts";
 import type { AudiobookWorkflowEnvironment } from "#src/workflow-environment.ts";
 
-// The whole narration document is dispatched at once, so a burst can exceed the provider's
-// per-minute limit. Waiting outlasts that window instead of failing the segment; see ADR 0008.
 const RATE_LIMIT_WAIT = "30 seconds";
 const MAX_RATE_LIMIT_WAITS = 4;
 
-/** One stable Workflow identity serializes synthesis and retries for a unit across all players. */
 export async function runAudioSegmentWorkflow({
   env,
   event,
@@ -39,7 +36,6 @@ export async function runAudioSegmentWorkflow({
   step: WorkflowStep;
   ai: SpeechSynthesisAi;
 }) {
-  // The failure capture reports a failed step's own error, so Cup's errors keep their messages.
   const step = keepStepErrors(workflowStep);
   const params = segmentWorkflowParamsSchema.parse(event.payload);
   const { conversionId, sequence } = params;
@@ -68,9 +64,6 @@ export async function runAudioSegmentWorkflow({
     return { audiobook, unit };
   };
 
-  // Each synthesis step counts the run's attempts so far: its own plus those that the steps before
-  // a rate limit wait returned. The release after a final failure reports the count of the step that
-  // ran last; a replay of the run skips step callbacks, so a release after a replay reports none.
   let lastStepAttempts: number | undefined;
   const synthesize = (
     { audiobook, unit }: Awaited<ReturnType<typeof loadPreparedNarration>>,
@@ -91,7 +84,6 @@ export async function runAudioSegmentWorkflow({
       async ({ attempt }) => {
         const attempts = earlierAttempts + attempt;
         lastStepAttempts = attempts;
-        // The owner reserves the whole document or nothing; a lone segment never reserves itself.
         const state = await execution.getAudioSegmentState(sequence);
         if (state !== "reserved" && state !== "settled") {
           throw new NonRetryableError(
@@ -107,7 +99,6 @@ export async function runAudioSegmentWorkflow({
             sequence,
             narrationChunk: { text: unit.narrationText },
             speechConfig: audiobook.speechConfig,
-            // Only the loaded manifest decides the language, so retries keep the stored one.
             narrationLanguage: audiobook.narrationLanguage,
             synthesisAttempt: attempt,
             synthesisResponseMode: attempt === 1 ? "streaming" : "non-streaming",
@@ -129,8 +120,6 @@ export async function runAudioSegmentWorkflow({
       },
     );
 
-  // Loading the narration is inside the `try`, so a segment whose narration cannot be loaded fails
-  // finally too: it is released and captured instead of left reserved for the alarm to restart.
   try {
     const narration = await loadPreparedNarration();
     let earlierAttempts = 0;
@@ -161,8 +150,6 @@ export async function runAudioSegmentWorkflow({
           }),
           { httpMetadata: { contentType: "application/json" } },
         );
-        // Last in the step, so only a step that released the reservation reports the final failure,
-        // and a replay of the run reuses the recorded step instead of capturing again.
         captureException(originalStepError(error), {
           tags: { [TELEMETRY_ATTRIBUTES.CONVERSION_FAILURE_CATEGORY]: SEGMENT_FAILURE_CATEGORY },
         });

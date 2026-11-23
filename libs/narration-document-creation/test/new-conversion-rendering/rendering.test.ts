@@ -136,7 +136,6 @@ test("serves the fallback document and reports the failure when segmentation thr
     },
     loadNarrationSourceMaterial: async () => NARRATION_SOURCE_MATERIAL_HTML,
     originalUrl: ORIGINAL_URL,
-    // A source title without narration text, which segmentation refuses.
     sourceTitle: " ",
   });
 

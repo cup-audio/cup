@@ -2,18 +2,10 @@ import { css } from "@linaria/core";
 
 import { interTypefaceScope } from "#src/app/global-styles.js";
 
-/** Space kept between the link popover and its link, and between the popover and the screen edge. */
 const POPOVER_MARGIN_PIXELS = 8;
 
-/** Closest the arrow's middle comes to the popover's side, so it stays clear of the rounded corner. */
 const POPOVER_ARROW_INSET_PIXELS = 16;
 
-/**
- * Makes the rendered narration document interactive: a tap on a segment's text plays from it, a tap
- * on a link opens the "Open link" popover instead, and each segment gets a "Play from here" button
- * that is visible only while focused. Without `selectUnit` nothing plays, and links still open
- * through the popover. Returns the function that undoes it.
- */
 export function attachNarrationDocumentInteraction({
   narrationDocumentElement,
   unitIds,
@@ -44,7 +36,6 @@ export function attachNarrationDocumentInteraction({
     const link = event.target.closest("a[href]");
     if (link instanceof HTMLAnchorElement && narrationDocumentElement.contains(link)) {
       event.preventDefault();
-      // A click without a pointer position comes from the keyboard.
       linkPopover.open(link, { isFromKeyboard: event.detail === 0 });
       return;
     }
@@ -66,7 +57,6 @@ export function attachNarrationDocumentInteraction({
     if (unitIndex === undefined) {
       return;
     }
-    // The click that ends a text selection is not a request to play.
     const selection = window.getSelection();
     if (selection && !selection.isCollapsed) {
       return;
@@ -85,7 +75,6 @@ export function attachNarrationDocumentInteraction({
   };
 }
 
-/** Adds a segment's button before its text, once per segment, however many elements it spans. */
 function addPlayFromHereButton(
   narrationDocumentElement: HTMLElement,
   unitId: string,
@@ -104,9 +93,6 @@ function addPlayFromHereButton(
   button.dataset["playFromHere"] = String(unitIndex);
   button.setAttribute("aria-label", "Play from here");
 
-  // Inside a heading the button would become part of the heading's name, and an <hgroup> holds
-  // only headings and paragraphs, so a heading's button goes before it, or before its <hgroup>. A
-  // table row holds only cells, so a row's button goes into its first cell.
   if (/^H[1-6]$/.test(firstElement.tagName)) {
     const parent = firstElement.parentElement;
     (parent?.tagName === "HGROUP" ? parent : firstElement).before(button);
@@ -123,11 +109,6 @@ type LinkPopover = {
   dispose: () => void;
 };
 
-/**
- * The popover over the page that opens a link of the narration document. It is a real link, so it
- * opens the way the top bar's "Open original page" does: a new tab, or the system browser in the
- * shells. A transparent backdrop under it takes every other tap, so closing it plays nothing.
- */
 function createLinkPopover(): LinkPopover {
   const backdrop = document.createElement("div");
   backdrop.className = backdropClassName;
@@ -136,7 +117,6 @@ function createLinkPopover(): LinkPopover {
   popover.className = popoverClassName;
   popover.target = "_blank";
   popover.rel = "noopener noreferrer";
-  // Appended to the body, outside the redesigned screen, so it opts out of Space Mono itself.
   for (const [name, value] of Object.entries(interTypefaceScope)) {
     popover.setAttribute(name, value);
   }
@@ -170,12 +150,10 @@ function createLinkPopover(): LinkPopover {
       close({ shouldRefocusLink: true });
     }
   };
-  // Any scroll, of the page or of a scrolling block, moves the link away from the popover.
   const onScroll = () => close({ shouldRefocusLink: false });
 
   backdrop.addEventListener("click", () => close({ shouldRefocusLink: false }));
   popover.addEventListener("click", () => {
-    // A link removed from the page during its click no longer navigates, so it closes afterwards.
     window.setTimeout(() => close({ shouldRefocusLink: false }));
   });
   popover.addEventListener("focusout", (event) => {
@@ -208,10 +186,7 @@ function createLinkPopover(): LinkPopover {
   return { open, dispose: () => close({ shouldRefocusLink: false }) };
 }
 
-/** Below the link, or above it when there is no room below, and always within the screen. */
 function placePopover(popover: HTMLElement, link: HTMLAnchorElement) {
-  // A link that wraps has a box per line: the popover points at its last line, or at its first
-  // when placed above.
   const lineRects = [...link.getClientRects()];
   const firstLineRect = lineRects.at(0) ?? link.getBoundingClientRect();
   const lastLineRect = lineRects.at(-1) ?? firstLineRect;
@@ -233,7 +208,6 @@ function placePopover(popover: HTMLElement, link: HTMLAnchorElement) {
 
   popover.style.top = `${top}px`;
   popover.style.left = `${left}px`;
-  // The arrow points at the middle of the line it is placed against, unless that is past a corner.
   const arrowX = Math.min(
     Math.max(POPOVER_ARROW_INSET_PIXELS, anchorRect.left + anchorRect.width / 2 - left),
     popoverRect.width - POPOVER_ARROW_INSET_PIXELS,
@@ -248,7 +222,6 @@ const playableDocumentClassName = css`
   }
 `;
 
-/* visually hidden until focused, as `visuallyHidden` hides; in the static position, before the text */
 const playFromHereButtonClassName = css`
   position: absolute;
   width: 1px;
@@ -259,7 +232,6 @@ const playFromHereButtonClassName = css`
   border: 0;
   clip-path: inset(50%);
 
-  /* the label is drawn, not written into the page, so copied text and text matches leave it out */
   &::before {
     content: "Play from here";
   }
@@ -283,7 +255,6 @@ const openLinkClassName = css`
   box-shadow: 0 0 0 2px var(--color-ink-8);
 `;
 
-/* above the shell's sticky bars and the mini player, so a tap on them closes the popover too */
 const backdropClassName = css`
   position: fixed;
   inset: 0;
@@ -305,7 +276,6 @@ const popoverClassName = css`
   border-radius: var(--spacing-gutter);
   box-shadow: 0 6px 20px rgb(0 0 0 / 25%);
 
-  /* the arrow, a square turned on its corner, half of it under the box; placePopover sets its x */
   &::before {
     position: absolute;
     left: calc(var(--link-popover-arrow-x) - 6px);

@@ -4,7 +4,6 @@ import { readLoadingStateRecord, recordLoadingStates } from "#src/loading-state-
 
 const PAGE_URL = "http://loading-state-recorder.test/";
 
-/** Serves `script` on a page of its own, so the recorder is tested apart from the app. */
 async function openPageRunning(page: Page, script: string) {
   await page.route(PAGE_URL, (route) =>
     route.fulfill({

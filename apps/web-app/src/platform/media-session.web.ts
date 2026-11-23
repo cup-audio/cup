@@ -1,6 +1,5 @@
 import type { MediaSessionActionHandlers, MediaSessionPort } from "#src/platform/media-session.ts";
 
-/** The actions the player handles; without a queue, there is no previous or next track. */
 const ACTIONS = [
   "play",
   "pause",
@@ -10,7 +9,6 @@ const ACTIONS = [
   "seekforward",
 ] as const satisfies readonly MediaSessionAction[];
 
-/** The media session port over `navigator.mediaSession`, for browsers and iOS's WebView. */
 export const mediaSession: MediaSessionPort = {
   setMetadata({ title, artworkUrl }) {
     const session = readMediaSession();
@@ -30,8 +28,6 @@ export const mediaSession: MediaSessionPort = {
       return;
     }
 
-    // The system moves the position forward only in the playing state, so waiting for data counts
-    // as paused, which keeps the shown position from running ahead of the audio.
     session.playbackState = isWaiting ? "paused" : playbackState;
   },
 
@@ -62,7 +58,6 @@ export const mediaSession: MediaSessionPort = {
 
     session.metadata = null;
     session.playbackState = "none";
-    // Called without a state, it removes the position state.
     session.setPositionState();
     for (const action of ACTIONS) {
       session.setActionHandler(action, null);

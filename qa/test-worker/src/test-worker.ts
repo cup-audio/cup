@@ -8,12 +8,10 @@ import path from "node:path";
 
 import { TEST_ACCOUNT } from "#src/auth-provider.ts";
 
-/** Selects how the test Worker's fakes behave; the Worker entry parses the same values. */
 export type TestWorkerScenario =
   | "success"
   | "tts-failure"
   | "speech-gated"
-  /** Each segment speaks for a minute, for a track that plays long enough to lock the device. */
   | "long-speech"
   | "preparation-failure";
 
@@ -22,84 +20,44 @@ export type CreatedGrant = {
   trialLink: string;
 };
 
-/** A request the test Worker received, as its entry logged it. */
 export type RecordedRequest = {
   readonly method: string;
-  /** The path with its query string. */
   readonly path: string;
-  /** Header names are lowercase. */
   readonly headers: Readonly<Record<string, string>>;
-  /** The body of a POST or PUT request, as text. */
   readonly body?: string;
 };
 
 export type TestWorker = {
   readonly origin: string;
   readonly persistenceDirectory: string;
-  /** Wrangler's output so far, with a line for each start. */
   readonly logs: readonly string[];
-  /** Every request the Worker received so far, oldest first, across restarts. */
   requests(): RecordedRequest[];
-  /** Creates a conversion grant through the operator API, authorized by the fake access check. */
   createGrant(label?: string): Promise<CreatedGrant>;
-  /**
-   * Restarts Wrangler with another scenario, keeping the port and persisted storage. The signed URL
-   * lifetime and the track speed stay unless `options` sets others.
-   */
   restart(scenario: TestWorkerScenario, options?: RestartOptions): Promise<void>;
-  /** Stops Wrangler and removes the persistence directory unless it is retained. */
   stop(options?: { retainPersistenceDirectory?: boolean }): Promise<void>;
 };
 
 type SignedUrlOptions = {
-  /**
-   * Signed media and position URLs expire this many seconds after the Worker hands them out,
-   * instead of at least a day, so a test sees them expire.
-   */
   signedUrlLifetimeSeconds?: number;
 };
 
 type RestartOptions = SignedUrlOptions & {
-  /**
-   * Sends narration tracks at this many bytes per second instead of at loopback speed, so a player
-   * buffers only part of the track and a lost connection fails a request while it plays.
-   */
   trackBytesPerSecond?: number;
 };
 
 type StartTestWorkerOptions = RestartOptions & {
   scenario?: TestWorkerScenario;
-  /** The fake auth provider the Worker verifies tokens against, if the test signs in. */
   authProviderOrigin?: string;
-  /**
-   * Advertises the fake auth provider's test account in the auth configuration, as local
-   * development does, so the sign-in dialog offers "Sign in with test account".
-   */
   offersTestAccount?: boolean;
-  /** Writes Wrangler's output to stderr while it runs. */
   streamLogs?: boolean;
-  /**
-   * The DSNs the telemetry tunnel at `/_/e` forwards to, comma-separated, such as a Sentry stub's
-   * `cup-app` DSN; by default it forwards nothing.
-   */
   sentryTunnelDsns?: string;
-  /**
-   * Serves HTTPS with this PEM key and certificate instead of HTTP. The caller's own requests, such
-   * as the readiness check and grant creation, must trust the certificate, for example through
-   * `NODE_EXTRA_CA_CERTS`.
-   */
   https?: { keyPath: string; certPath: string };
 };
 
-/** Must match the prefix the Worker entry writes in `logRequest`. */
 const REQUEST_LOG_PREFIX = "[test-worker:request] ";
 
 const PACKAGE_ROOT = path.resolve(import.meta.dirname, "..");
 
-/**
- * Starts one Wrangler process serving the test Worker and the built web app, on a port the
- * operating system assigns and with its own persistence directory.
- */
 export async function startTestWorker(options: StartTestWorkerOptions = {}): Promise<TestWorker> {
   const port = await reservePort();
   const inspectorPort = await reservePort();
@@ -160,7 +118,6 @@ export async function startTestWorker(options: StartTestWorkerOptions = {}): Pro
               `LOCAL_TEST_ACCOUNT_PASSWORD:${TEST_ACCOUNT.password}`,
             ]
           : []),
-        // The API server honours it only with `LOCAL_DEVELOPMENT`, which the Worker's config sets.
         ...(signedUrlLifetimeSeconds === undefined
           ? []
           : ["--var", `LOCAL_SIGNED_URL_LIFETIME_SECONDS:${signedUrlLifetimeSeconds}`]),
@@ -288,9 +245,7 @@ async function waitUntilReady(
       if (response.ok) {
         return;
       }
-    } catch {
-      // Wrangler has not bound its local port yet.
-    }
+    } catch {}
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
 

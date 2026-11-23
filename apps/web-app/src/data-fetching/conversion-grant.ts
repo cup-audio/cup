@@ -30,7 +30,6 @@ export function useStartTrialConversionMutation(
     idempotencyKey: string;
   } | null>(null);
   return useMutation({
-    // The start form shows refusals and the rate-limit countdown next to the submitted URL.
     meta: { errorDisplay: "inline" },
     mutationFn: async (sourceUrl: string) => {
       if (pending.current?.grantId !== grantId || pending.current.sourceUrl !== sourceUrl) {
@@ -39,14 +38,12 @@ export function useStartTrialConversionMutation(
       return startTrialConversion(grantId, sourceUrl, pending.current.idempotencyKey);
     },
     onSuccess: async (result) => {
-      // The start reserved duration and added a conversion, which the trial page shows.
       await queryClient.invalidateQueries({ queryKey: QUERY_KEYS.grant(grantId) });
       await onStarted(result.conversion.conversionId);
     },
   });
 }
 
-/** Exchanges a trial link's credential for a grant session, and caches the grant it answers with. */
 export async function exchangeCredential(grantId: string, credential: string): Promise<void> {
   const snapshot = grantSnapshotSchema.parse(
     await requestApi("none", (client) => client.exchangeCredential({ grantId }, { credential })),

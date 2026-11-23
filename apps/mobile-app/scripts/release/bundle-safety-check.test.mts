@@ -17,7 +17,6 @@ const CLEAN_MANIFEST = `<?xml version="1.0" encoding="utf-8"?>
 </manifest>
 `;
 
-/** The debug source set's classes the command passes, as in `android/app/src/debug/java`. */
 const DEBUG_CLASS_NAMES = [
   "audio.cup.app.FakeGoogleSignInPlugin",
   "audio.cup.app.TestApiOrigin",
@@ -142,7 +141,6 @@ test.each(["FakeGoogleSignInPlugin", "TestApiOrigin", "TestApiOriginPlugin", "Te
     });
 
     expect(violations).toHaveLength(1);
-    // The trailing space tells `TestApiOrigin` apart from `TestApiOriginPlugin`.
     expect(violations[0]).toContain(`audio.cup.app.${className} `);
     expect(violations[0]).toContain("base/dex/classes2.dex");
   },
@@ -209,7 +207,6 @@ test.each(["FakeGoogleSignInPlugin", "TestApiOrigin", "TestApiOriginPlugin", "Te
     });
 
     expect(violations).toHaveLength(1);
-    // The trailing space tells `TestApiOrigin` apart from `TestApiOriginPlugin`.
     expect(violations[0]).toContain(`audio.cup.app.${className} `);
     expect(violations[0]).toContain(R8_MAPPING_ENTRY);
   },
@@ -306,7 +303,6 @@ function withApplicationAttribute(attribute: string): string {
   );
 }
 
-/** Stands in for a dex file: its string table holds class descriptors as plain bytes. */
 function dexContaining(classDescriptors: readonly string[]): Buffer {
   return Buffer.concat([
     Buffer.from("dex\n035\0"),

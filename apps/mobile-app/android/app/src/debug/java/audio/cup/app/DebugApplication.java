@@ -9,15 +9,7 @@ import androidx.annotation.Nullable;
 import com.getcapacitor.Bridge;
 import com.getcapacitor.BridgeActivity;
 
-/**
- * Debug builds only. Reads the mobile E2E suite's launch arguments around Capacitor's bridge
- * creation, so the main sources and release builds stay free of test hooks.
- */
 public class DebugApplication extends Application {
-    /**
-     * With the test origin, keeps the real Google sign-in plugin instead of the fake, so a test can
-     * open Google's real add-account screen.
-     */
     static final String REAL_GOOGLE_SIGN_IN_EXTRA = "cupTestRealGoogleSignIn";
 
     @Override
@@ -32,7 +24,6 @@ public class DebugApplication extends Application {
             if (!(activity instanceof BridgeActivity)) {
                 return;
             }
-            // Throws on a malformed argument, which stops the app before it can reach production.
             TestSentryDsn.fromIntent(activity.getIntent());
             if (TestApiOrigin.fromIntent(activity.getIntent()) != null) {
                 ((BridgeActivity) activity).registerPlugin(TestApiOriginPlugin.class);
@@ -51,9 +42,6 @@ public class DebugApplication extends Application {
             if (TestApiOrigin.fromIntent(intent) == null || intent.getBooleanExtra(REAL_GOOGLE_SIGN_IN_EXTRA, false)) {
                 return;
             }
-            // Capacitor registers the plugins it found after those registered before onCreate, so the
-            // fake replaces the real plugin of the same name only once the bridge exists. The web app
-            // calls the plugin by name, so its calls reach the fake from then on.
             Bridge bridge = ((BridgeActivity) activity).getBridge();
             bridge.registerPlugin(FakeGoogleSignInPlugin.class);
         }

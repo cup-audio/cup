@@ -1,9 +1,6 @@
 import Capacitor
 import Foundation
 
-/// The "Send crash reports" switch, on by default. The web app reads it before it starts Sentry and
-/// starts the native SDK only while it is on, so turning it off takes full effect on the next start.
-/// Turning it off also deletes the native SDK's files, such as crash reports waiting to be sent.
 @objc(CrashReportingPlugin)
 public class CrashReportingPlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "CrashReportingPlugin"
@@ -30,7 +27,6 @@ public class CrashReportingPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 }
 
-/// The switch's value in Cup's own defaults, and the native SDK's files it deletes.
 enum CrashReportingSwitch {
     private static let key = "cupCrashReportsEnabled"
 
@@ -39,17 +35,12 @@ enum CrashReportingSwitch {
         set { UserDefaults.standard.set(newValue, forKey: key) }
     }
 
-    /// Deletes the files a native SDK left while the switch is off. The SDK of the process in which
-    /// the listener turned the switch off keeps running, and can write again, until the app stops.
     static func deleteSentryFilesIfDisabled() {
         if !isEnabled {
             deleteSentryFiles()
         }
     }
 
-    /// The Cocoa SDK keeps its files in `Library/Caches`: envelopes and the scope in `io.sentry/`,
-    /// crash reports in `SentryCrash/`, and the log of its crash handler in `async.log`. The
-    /// `INSTALLATION` directory stays: it holds nothing, and `SentryInstallationFile` needs it.
     static func deleteSentryFiles() {
         let fileManager = FileManager.default
         guard let caches = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first else {

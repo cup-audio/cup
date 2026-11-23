@@ -7,10 +7,6 @@ const ENVELOPE_HEADER =
 
 type ParsedItem = { header: object; payload: string };
 
-/**
- * Reads an envelope the way Sentry's ingestion does: a payload is exactly `length` bytes when its
- * item header declares a length, and runs to the next newline otherwise.
- */
 function parseEnvelope(envelope: Uint8Array): { header: string; items: ParsedItem[] } {
   const decoder = new TextDecoder();
   let position = envelope.indexOf(10);

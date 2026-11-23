@@ -1,38 +1,18 @@
-/*
- * Sentry's server SDK (`@sentry/cloudflare`) and its client SDK (`@sentry/capacitor` with
- * `@sentry/react`) move on different majors, each with its own `@sentry/core`. The `sentry-server`
- * and `sentry-client` catalogs in pnpm-workspace.yaml keep the versions apart; this check keeps the
- * packages apart, so the two majors never meet in one package.
- */
-
 export type PackageDependencies = {
   name: string;
-  /** Path relative to the repository root, such as `libs/accounts`. */
   directory: string;
-  /** Every dependency, dev and peer dependency of the package, name to version specifier. */
   dependencies: Record<string, string>;
 };
 
 const SERVER_TELEMETRY_LIBRARY = "@cup/telemetry.cloudflare";
 const SERVER_SDK = "@sentry/cloudflare";
 const CLIENT_SDKS = new Set(["@sentry/browser", "@sentry/capacitor", "@sentry/react"]);
-/**
- * The mobile app runs no Sentry code; it declares `@sentry/capacitor` so that `cap sync` adds the
- * SDK's native plugin to the shells.
- */
 const CLIENT_SDK_PACKAGES = new Set(["@cup/telemetry.browser", "@cup/web-app", "@cup/mobile-app"]);
 const CLIENT_SDK_PACKAGE_LIST = new Intl.ListFormat("en-GB", { type: "conjunction" }).format(
   [...CLIENT_SDK_PACKAGES].map((entry) => `\`${entry}\``),
 );
-/** A build tool that uploads debug files, used next to either family; it is in neither. */
 const SENTRY_CLI = "@sentry/cli";
 
-/**
- * Checks three rules: only the server telemetry library and its dependents depend on the server
- * SDK; only the browser telemetry library and the web app depend on a client SDK; and no package
- * depends on both families. A Sentry package belongs to the family of its SDK, or of its catalog
- * for a shared package such as `@sentry/core`.
- */
 export function findSentrySdkFamilyProblems(packages: PackageDependencies[]): string[] {
   const problems: string[] = [];
 

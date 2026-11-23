@@ -14,7 +14,6 @@ const SOURCE_PAGE_COOKIES_SCHEMA = z.array(
   }),
 );
 
-/** Validates runtime cookie configuration without exposing cookie values in errors. */
 export function parseSourcePageCookies(configuration: string | undefined): SourcePageCookie[] {
   if (configuration === undefined) {
     return [];

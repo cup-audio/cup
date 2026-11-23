@@ -30,13 +30,10 @@ vi.mock("#src/http/account-auth.ts", async (original) => ({
   ...(await original<typeof import("#src/http/account-auth.ts")>()),
   authenticateAccountRequest: mocks.authenticate,
 }));
-// The helper itself is tested against the Sentry stub in @cup/telemetry.cloudflare.
 vi.mock(import("@cup/telemetry.cloudflare"), async (importOriginal) => ({
   ...(await importOriginal()),
   logEvent: vi.fn<typeof logEvent>(),
 }));
-// Records the renders and keeps rendering. The module is named as a string because the typed form
-// would require the mock to keep the render function's type parameter, which a `Mock` drops.
 vi.mock("@cup/narration-document-creation", async (importOriginal) => {
   const original = await importOriginal<typeof import("@cup/narration-document-creation")>();
   return {
@@ -46,7 +43,6 @@ vi.mock("@cup/narration-document-creation", async (importOriginal) => {
     ),
   };
 });
-// Records the captures; the Worker integration tests check what reaches Sentry.
 vi.mock(import("@sentry/core"), async (importOriginal) => ({
   ...(await importOriginal()),
   captureException: vi.fn<typeof captureException>(),
@@ -61,7 +57,6 @@ const OWNERS: Record<ConversionOwner["kind"], ConversionOwner> = {
   account: { kind: "account", accountId },
   trial: { kind: "trial", grantId },
 };
-// Account requests carry a bearer token, trial requests their grant session cookie.
 const OWNER_HEADERS: Record<ConversionOwner["kind"], Record<string, string>> = {
   account: { Authorization: "Bearer token" },
   trial: { Cookie: `__Secure-grant-session-${grantId}=valid-session` },
@@ -93,7 +88,6 @@ function fixture(
   }: {
     narrationDocument?: object;
     title?: string;
-    /** Further objects in the bucket, by key, each holding HTML. */
     storedObjects?: Record<string, string>;
   } = {},
 ) {
@@ -234,8 +228,6 @@ test.for(["account", "trial"] as const)(
   },
 );
 
-// A new conversion stores its narration source material; the attribute stands for markup that
-// presentation never shows, so a response holding it would hold the stored object's content.
 const NARRATION_SOURCE_MATERIAL_HTML =
   '<h2 data-raw-source-material="kept">A section</h2><p>See <a href="/cited">the source</a>.</p>';
 const AUDIOBOOK_SOURCE_MATERIAL_HTML =
@@ -258,9 +250,7 @@ function newShapeFixture(
   }: {
     fetchedUrl?: string;
     segmentationVersion?: 1 | 2;
-    /** The narration source material the manifest references. */
     narrationSourceMaterialHtml?: string;
-    /** The object stored under the referenced key, `null` for none. */
     storedNarrationSourceMaterialHtml?: string | null;
     synchronizationUnits?: typeof NEW_SHAPE_UNITS;
     title?: string;
@@ -317,8 +307,6 @@ test.for(["account", "trial"] as const)(
   },
 );
 
-// The same narration source material, with a heading before a table, as segmentation versions 1
-// and 2 divide it: version 1 makes each cell a unit, version 2 each row.
 const TABLE_SOURCE_MATERIAL_HTML =
   "<h2>Latency</h2><table><tr><th>Region</th><th>Latency</th></tr><tr><td>Europe</td><td>380 ms</td></tr></table>";
 const RENDERED_TABLES_BY_SEGMENTATION_VERSION = {
@@ -379,7 +367,6 @@ test("a new conversion without a fetched URL resolves its links against the subm
 test("a new conversion whose segmentation disagrees with its stored units serves the fallback and reports the first differing unit", async () => {
   const synchronizationUnits = [
     ...NEW_SHAPE_UNITS.slice(0, 2),
-    // Differs only in whitespace, which a new conversion's check doesn't ignore.
     { id: "narration-unit-0003", narrationText: "A section\nSee the source." },
   ];
 
@@ -416,7 +403,6 @@ test.for([
   },
   {
     failure: "segmentation throws",
-    // A title without narration text, which segmentation refuses.
     options: { title: " " },
     rootCause: "Expected the source title to contain narration text",
   },
@@ -487,7 +473,6 @@ test.for(["account", "trial"] as const)(
 test.for(["account", "trial"] as const)(
   "a %s audiobook requested without its narration document neither reads nor renders it and still answers every other field",
   async (ownerKind) => {
-    // Both responses sign their media URLs at the same instant, so they can be compared whole.
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(Temporal.Instant.from("2026-11-20T09:00:00Z").epochMilliseconds);
     const { readKeys, request } = newShapeFixture(OWNERS[ownerKind]);

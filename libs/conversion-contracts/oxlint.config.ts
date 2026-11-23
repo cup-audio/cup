@@ -2,10 +2,6 @@ import { defineConfig } from "oxlint";
 
 import { config as repoConfig, restrictImports } from "@cup/config-oxlint/oxlint-base.js";
 
-/*
- * Keeps the contracts runtime-independent: the Worker, the workflows, and (through the listener
- * contracts) the browser load them.
- */
 export default defineConfig({
   extends: [repoConfig],
   overrides: [

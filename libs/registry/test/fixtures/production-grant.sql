@@ -1,4 +1,3 @@
--- Production schema from c970a6e; retain independently of generated Drizzle schemas.
 CREATE TABLE IF NOT EXISTS _schema_migrations (version INTEGER PRIMARY KEY, applied_at_ms INTEGER NOT NULL);
 --> statement-breakpoint
 CREATE TABLE grant (

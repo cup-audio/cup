@@ -6,26 +6,15 @@ const LOADING_STATE_MARKERS = ["data-loading-state", "data-pending-signal"] as c
 const loadingStateRecordSchema = z.array(
   z.object({
     marker: z.enum(LOADING_STATE_MARKERS),
-    /** `aria-label`, else the trimmed text, so a failure names the loading state it saw. */
     name: z.string(),
-    /** `performance.now()` when the observer saw it; it follows an installed Playwright clock. */
     at: z.number(),
   }),
 );
 
-/** A marked element the page inserted. */
 export type LoadingStateRecord = z.infer<typeof loadingStateRecordSchema>[number];
 
-/** Where the page keeps the record, for `readLoadingStateRecord`. */
 const RECORD_KEY = "cupLoadingStateRecord";
 
-/**
- * Records every element marked as a loading state (`data-loading-state`) or as the navigation's
- * progress bar (`data-pending-signal`) that the page shows, however briefly: the observer sees an
- * element inserted and removed within one task, and marked descendants of an added subtree.
- *
- * Call it before the page navigates or mounts a story; the record starts empty on each document.
- */
 export async function recordLoadingStates(page: Page): Promise<void> {
   await page.addInitScript(
     ({ recordKey, markers }) => {
@@ -34,11 +23,6 @@ export async function recordLoadingStates(page: Page): Promise<void> {
 
       const selector = markers.map((marker) => `[${marker}]`).join(", ");
       new MutationObserver((mutations) => {
-        /*
-         * An element and its ancestors added in one task each show up as added nodes, and by the
-         * time the observer runs every ancestor's subtree contains it, so one batch counts each
-         * element once.
-         */
         const insertedElements = new Set<Element>();
         for (const mutation of mutations) {
           for (const node of mutation.addedNodes) {
@@ -72,7 +56,6 @@ export async function recordLoadingStates(page: Page): Promise<void> {
   );
 }
 
-/** Every loading state recorded so far, in the order the page inserted them. */
 export async function readLoadingStateRecord(page: Page): Promise<LoadingStateRecord[]> {
   const record = await page.evaluate(
     (recordKey): unknown => Reflect.get(window, recordKey),

@@ -2,10 +2,6 @@ import { App } from "@capacitor/app";
 
 import { reportFailure } from "#src/report-failure.js";
 
-/**
- * Calls `listener` with whether the app is in the foreground: once with its current state, then on
- * each change. Returns a function that stops listening.
- */
 export function watchAppState(listener: (isActive: boolean) => void): () => void {
   let isWatching = true;
   let hasReportedChange = false;
@@ -20,7 +16,6 @@ export function watchAppState(listener: (isActive: boolean) => void): () => void
 
   const reportCurrentState = async () => {
     const { isActive } = await App.getState();
-    // A change reported while the state was being read is newer than the state read.
     if (isWatching && !hasReportedChange) {
       listener(isActive);
     }
@@ -35,11 +30,6 @@ export function watchAppState(listener: (isActive: boolean) => void): () => void
   };
 }
 
-/**
- * Prepares Secure Storage for the account session, which is kept under `storageKeys`. Both shells
- * keep the session there, so the platform's keychain or keystore protects it; the iOS adapter sets
- * the Keychain accessibility.
- */
 export async function initializeAuthStorage(storageKeys: readonly string[]) {
   const storage = (await import("@aparajita/capacitor-secure-storage")).SecureStorage;
   return {

@@ -70,7 +70,6 @@ type SubmitButtonProps = {
   disabledWhenPristine?: boolean;
   label: string;
   submittingLabel?: string;
-  /** Follows the label; a submitting button shows its spinner instead. */
   icon?: React.ReactNode;
 };
 
@@ -106,7 +105,6 @@ function SubmitButton({
   );
 }
 
-/** Application form hook preconfigured with the shared field and form components. */
 export const { useAppForm } = createFormHook({
   fieldContext,
   formContext,

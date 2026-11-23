@@ -26,10 +26,6 @@ const conversionBaseSchema = z.object({
   completedAt: z.iso.datetime().optional(),
 });
 
-/**
- * A trial conversion as listener API responses report it. Clients read it from responses, so it
- * drops fields it does not know instead of rejecting them.
- */
 export const grantConversionSnapshotSchema = z.discriminatedUnion("status", [
   conversionBaseSchema.extend({ status: z.literal("pending") }),
   conversionBaseSchema.extend({

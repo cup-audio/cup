@@ -7,7 +7,6 @@ import {
   writeCrashReportsEnabled,
 } from "#src/platform/crash-reporting.js";
 
-/** The shell's "Send crash reports" switch, which lives on the device, not on the server. */
 export const crashReportsQuery = () =>
   queryOptions({
     queryKey: QUERY_KEYS.crashReports(),

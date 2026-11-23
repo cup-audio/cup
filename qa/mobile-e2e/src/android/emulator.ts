@@ -10,56 +10,32 @@ import { SYSTEM_IMAGE_PACKAGE, type AndroidHost } from "#src/android/preflight.t
 import { isErrorWithCode, run, stopChild, waitFor, withLock } from "#src/host.ts";
 
 export type Emulator = {
-  /** The adb serial, `emulator-<console port>`; every adb call names it. */
   readonly serial: string;
-  /** Kills this emulator only; its read-only run leaves the snapshot unchanged. */
   stop(): Promise<void>;
 };
 
-/** A process as `ps` lists it. */
 export type ListedProcess = {
   readonly pid: number;
   readonly ppid: number;
   readonly command: string;
 };
 
-/**
- * The suite's own AVD, shared by every checkout on this Mac: runs only read it, so it lives outside
- * the checkout and Android Studio's AVD folder.
- */
 const AVD_HOME = path.join(os.homedir(), "Library", "Caches", "cup-mobile-e2e", "avd");
-/**
- * Named after its RAM, which its Quick Boot snapshot fixes: a machine with an AVD of another RAM
- * size, such as the earlier 2 GB `cup-mobile-e2e-api36`, creates this one and its snapshot anew.
- */
 const AVD_NAME = "cup-mobile-e2e-api36-ram4g";
-/** How an emulator process of the suite's AVD shows up in `ps`; `startEmulator` passes it. */
 const AVD_ARGUMENT = `-avd ${AVD_NAME} `;
-/** `launchd` adopts the processes whose parent has died. */
 const LAUNCHD_PID = 1;
-/**
- * The guest's RAM in MB; the emulator ignores a unit suffix and falls back to the profile's 2048.
- * The Pixel 8 profile's 2 GB drove the guest into constant zram swapping during the full suite
- * until adbd stopped answering (2026-11-09).
- */
 const RAM_SIZE = "4096";
-/** Written once the Quick Boot snapshot is saved, so an interrupted preparation is redone. */
 const SNAPSHOT_READY_MARKER = path.join(AVD_HOME, `${AVD_NAME}.snapshot-ready`);
 const PREPARATION_LOCK = path.join(AVD_HOME, `${AVD_NAME}.lock`);
 
 const BOOT_TIMEOUT_MS = 180_000;
 
-/**
- * Boots a headless emulator of the suite's AVD from its Quick Boot snapshot in read-only mode, so
- * concurrent runs can share the AVD. The emulator picks its own console port and reports it.
- */
 export async function bootEmulator(host: AndroidHost): Promise<Emulator> {
   await prepareSnapshot(host);
   const { serial, process: emulatorProcess } = await startEmulator(host, ["-read-only"]);
 
   const stop = async (): Promise<void> => {
     if (emulatorProcess.exitCode === null && emulatorProcess.signalCode === null) {
-      // Asks this emulator to quit; never `adb kill-server`, which other runs share.
       await run(host.adb, ["-s", serial, "emu", "kill"]).catch(() => undefined);
       const exited = once(emulatorProcess, "exit");
       const timeout = setTimeout(() => emulatorProcess.kill("SIGKILL"), 15_000);
@@ -70,9 +46,6 @@ export async function bootEmulator(host: AndroidHost): Promise<Emulator> {
 
   try {
     await waitForBoot(host, serial, emulatorProcess);
-    // A second crash within a minute, as the telemetry tests cause, shows "Cup keeps stopping",
-    // and Android keeps the crashed process until someone answers it. Without error dialogs it
-    // ends the process at once, which `waitForProcessExit()` waits for.
     await run(host.adb, [
       "-s",
       serial,
@@ -90,18 +63,11 @@ export async function bootEmulator(host: AndroidHost): Promise<Emulator> {
   return { serial, stop };
 }
 
-/**
- * Picks the processes of the suite's emulators whose run no longer runs, which a run killed before
- * its teardown leaves behind. An emulator's launcher is the run's child, so once the run dies it
- * belongs to `launchd` (process 1); its own children, such as QEMU, go with it. Emulators of runs
- * still going, such as in another checkout, still have their run as parent and are kept.
- */
 export function findOrphanedEmulators(processes: readonly ListedProcess[]): number[] {
   const emulatorProcesses = processes.filter(({ command }) => command.includes(AVD_ARGUMENT));
   const emulatorByPid = new Map(emulatorProcesses.map((listed) => [listed.pid, listed]));
 
   const isOrphaned = (listed: ListedProcess): boolean => {
-    // Walks up past this emulator's own processes to the process that started them.
     let parent = listed.ppid;
     for (let ancestor = emulatorByPid.get(parent); ancestor; ancestor = emulatorByPid.get(parent)) {
       parent = ancestor.ppid;
@@ -111,10 +77,6 @@ export function findOrphanedEmulators(processes: readonly ListedProcess[]): numb
   return emulatorProcesses.filter((listed) => isOrphaned(listed)).map(({ pid }) => pid);
 }
 
-/**
- * Stops the emulators that killed runs left behind. Their read-only runs leave the snapshot
- * unchanged, so a signal is enough; a killed preparation never wrote its marker and is redone.
- */
 export async function stopOrphanedEmulators(): Promise<void> {
   const orphaned = findOrphanedEmulators(await listProcesses());
   if (orphaned.length === 0) {
@@ -125,8 +87,6 @@ export async function stopOrphanedEmulators(): Promise<void> {
     `Stopping emulator processes ${orphaned.join(", ")}, left behind by a run that no longer runs.\n`,
   );
   signalAll(orphaned, "SIGTERM");
-  // Only processes the listing still shows as left-behind emulators get SIGKILL: an ID freed in the
-  // meantime may belong to another process by now.
   const remaining = await waitForOrphansToQuit(orphaned, 15_000);
   if (remaining.length === 0) {
     return;
@@ -138,7 +98,6 @@ export async function stopOrphanedEmulators(): Promise<void> {
   }
 }
 
-/** Waits until none of `pids` is a left-behind emulator any more; returns those still left. */
 async function waitForOrphansToQuit(pids: readonly number[], timeoutMs: number): Promise<number[]> {
   const deadline = performance.now() + timeoutMs;
   for (;;) {
@@ -153,7 +112,6 @@ async function waitForOrphansToQuit(pids: readonly number[], timeoutMs: number):
 }
 
 async function listProcesses(): Promise<ListedProcess[]> {
-  // `-ww` keeps `ps` from cutting long command lines, such as QEMU's, to the terminal width.
   const { stdout } = await run("ps", ["-ww", "-axo", "pid=,ppid=,command="]);
   return stdout
     .split("\n")
@@ -168,7 +126,6 @@ async function listProcesses(): Promise<ListedProcess[]> {
     });
 }
 
-/** Creates the AVD and its Quick Boot snapshot once per Mac; later runs find the marker. */
 async function prepareSnapshot(host: AndroidHost): Promise<void> {
   await fs.mkdir(AVD_HOME, { recursive: true });
   if (await exists(SNAPSHOT_READY_MARKER)) {
@@ -207,7 +164,6 @@ async function prepareSnapshot(host: AndroidHost): Promise<void> {
       const { serial, process: emulatorProcess } = await startEmulator(host, ["-no-snapshot-load"]);
       try {
         await waitForBoot(host, serial, emulatorProcess);
-        // Quick Boot saves the snapshot when a writable emulator quits.
         await run(host.adb, ["-s", serial, "emu", "kill"]);
         await waitFor(
           "the emulator to save its snapshot and quit",
@@ -240,7 +196,6 @@ async function startEmulator(
       "-no-window",
       "-no-audio",
       "-no-boot-anim",
-      // The emulator connects here and writes the console port it picked.
       "-report-console",
       `tcp:${report.port}`,
       ...extraArgs,
@@ -321,7 +276,6 @@ async function waitForBoot(
   );
 }
 
-/** Sets one key of the AVD's `config.ini`, replacing the value `avdmanager` wrote. */
 async function setAvdConfig(key: string, value: string): Promise<void> {
   const configPath = path.join(AVD_HOME, `${AVD_NAME}.avd`, "config.ini");
   const lines = (await fs.readFile(configPath, "utf8"))
@@ -349,7 +303,6 @@ async function exists(filePath: string): Promise<boolean> {
   );
 }
 
-/** Signals each process, skipping those that have quit in the meantime. */
 function signalAll(pids: readonly number[], signal: NodeJS.Signals): void {
   for (const pid of pids) {
     try {

@@ -5,18 +5,11 @@ import process from "node:process";
 export type CommandResult = {
   exitCode: number;
   stdout: string;
-  /** Stdout and stderr interleaved, for error messages. */
   output: string;
 };
 
 const REPOSITORY_ROOT = path.resolve(import.meta.dirname, "../../..");
 
-/**
- * Runs a command from the repository root without a shell. Its output is either `captured`
- * (collected only), `streamed` straight to this process's terminal, or `teed` (streamed and
- * collected). A command that cannot start, such as a missing binary, resolves with exit code 127
- * instead of throwing.
- */
 export function runCommand(
   command: [string, ...string[]],
   {
@@ -58,7 +51,6 @@ export function runCommand(
   });
 }
 
-/** Runs a command whose failure is an error rather than a result, and returns its stdout. */
 export async function runCommandOrThrow(
   command: [string, ...string[]],
   options: { env?: NodeJS.ProcessEnv } = {},

@@ -11,7 +11,6 @@
       "pattern": "cup.audio",
       "custom_domain": true,
     },
-    // The remaining hostnames only redirect to cup.audio; see libs/api-server/src/http/domain-routing.ts.
     {
       "pattern": "www.cup.audio",
       "custom_domain": true,
@@ -35,8 +34,6 @@
     "html_handling": "none",
     "run_worker_first": true,
   },
-  // Sentry receives the Worker's errors, traces and logs (docs/architecture/observability.md), so
-  // Cloudflare's own observability records nothing: no invocation logs, Workers Logs, traces or Issues.
   "observability": {
     "enabled": false,
     "logs": {
@@ -53,9 +50,7 @@
   "limits": {
     "cpu_ms": 300000,
   },
-  // Source maps go to Sentry, not to Cloudflare.
   "upload_source_maps": false,
-  // `CF_VERSION_METADATA.id` is the release of every Sentry event.
   "version_metadata": {
     "binding": "CF_VERSION_METADATA",
   },
@@ -111,16 +106,9 @@
   },
   "vars": {
     "LOCAL_DEVELOPMENT": "false",
-    // Local development only: `pnpm dev:services` overrides these in `.env.local`, and the Worker
-    // ignores them unless LOCAL_DEVELOPMENT is "true" (docs/adr/0012). Local dev loads only
-    // declared keys, so they need these empty defaults.
     "LOCAL_TEST_ACCOUNT_EMAIL": "",
     "LOCAL_TEST_ACCOUNT_PASSWORD": "",
-    // The `cup-worker` DSN (CUP_WORKER_DSN in @cup/telemetry.core), public by design. It must agree
-    // with LOCAL_DEVELOPMENT: `pnpm dev:services` sets it to "" next to LOCAL_DEVELOPMENT=true.
     "SENTRY_DSN": "https://aa6ceda71485efec30877677d4eb919b@o4512441473040384.ingest.de.sentry.io/4512441485623377",
-    // The telemetry tunnel at /_/e forwards only to these DSNs, comma-separated: exactly the `cup-app`
-    // DSN (CUP_APP_DSN in @cup/telemetry.core). `pnpm dev:services` sets it to "".
     "SENTRY_TUNNEL_DSNS": "https://4675dd0e4efd764f8941a9a0482a044d@o4512441473040384.ingest.de.sentry.io/4512441485623376",
     "SIGNUP_IP_LIMIT": "10",
     "CONVERSION_IP_LIMIT": "60",

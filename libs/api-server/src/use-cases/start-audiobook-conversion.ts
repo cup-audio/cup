@@ -25,7 +25,6 @@ export type StartAudiobookConversionDependencies = {
   createWorkflow(conversionId: string, input: TrialWorkflowParams): Promise<void>;
 };
 
-/** Records an accepted conversion and starts its durable workflow when needed. */
 export async function startAudiobookConversion(
   input: StartAudiobookConversionInput,
   dependencies: StartAudiobookConversionDependencies,
@@ -45,10 +44,7 @@ export async function startAudiobookConversion(
       grantId: input.grantId,
     });
     await dependencies.grant.markWorkflowStarted(result.conversion.conversionId);
-  } catch {
-    // The committed pending conversion and its stable ID are the recovery authority.
-    // A reconciliation alarm can safely retry this exact Workflow identity.
-  }
+  } catch {}
 
   return result;
 }

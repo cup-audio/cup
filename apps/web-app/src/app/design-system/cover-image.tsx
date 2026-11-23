@@ -6,21 +6,14 @@ import { composeClassnames } from "#src/app/utils.js";
 import { TRACK_COVER_ATTRIBUTE } from "#src/app/view-transition-names.js";
 
 type DSCoverImageProps = DSCoverImageCustomProps & {
-  /** No URL shows the empty placeholder. */
   src: string | undefined;
   alt: string;
   className?: string;
-  /** Names the cover for a screen change's view transition (`cover-transition.ts`). */
   [TRACK_COVER_ATTRIBUTE]?: string;
 };
 
 type DSCoverImageCustomProps = {
-  /** `circle` crops to a circle, as in the mini player; its size comes from `className`. */
   shape?: "rectangle" | "circle";
-  /**
-   * `card` fits the bottom of a card: square on top, and the card's inner radius below. The cover
-   * has its own corners, because a view transition's snapshot leaves out a container's clip.
-   */
   corners?: "rounded" | "card";
 };
 
@@ -28,11 +21,6 @@ type DSCoverImageDataAttributes = MapPropsToRequiredDataAttributeProps<DSCoverIm
 
 type ShownImage = { src: string; alt: string };
 
-/**
- * A cover cropped to 5:3 (or a circle) on the placeholder color while it loads. When the URL
- * changes, it keeps showing the previous image until the new one has loaded. An image the document
- * has already loaded shows on the first paint, so a remounted cover never flashes the placeholder.
- */
 export function DSCoverImage({
   src,
   alt,
@@ -94,14 +82,12 @@ export function DSCoverImage({
         <img src={shownImage.src} alt={isLoading ? shownImage.alt : alt} />
       )}
       {isLoading && (
-        // Loads invisibly on top of the shown image and replaces it once loaded.
         <img
           key={src}
           src={src}
           alt=""
           data-loading=""
           ref={(image) => {
-            // The list of available images completes a cached image as soon as its src is set.
             if (image?.complete && image.naturalWidth > 0) {
               setShownImage({ src, alt });
             }

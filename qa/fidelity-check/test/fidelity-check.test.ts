@@ -29,7 +29,6 @@ function showBoxes(page: Page, boxes: typeof BOXES) {
   );
 }
 
-/** Stands in for a design tool's render: one image pixel per design pixel. */
 async function renderDesignImage(browser: Browser, testInfo: TestInfo): Promise<string> {
   const context = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 1 });
   const page = await context.newPage();
@@ -63,7 +62,6 @@ test("reports a font that was still loading when the check started", async ({
     });
   });
   await showBoxes(page, BOXES);
-  // Added after `setContent`, which would otherwise wait for the font through the load event.
   await page.addStyleTag({
     content: `@font-face { font-family: DelayedFont; src: url("${FONT_URL}"); } p { font-family: DelayedFont !important; }`,
   });

@@ -22,9 +22,7 @@ export function readPendingAccountChallenge() {
     if (parsed.success && parsed.data.expiresAtMs > Temporal.Now.instant().epochMilliseconds) {
       return parsed.data;
     }
-  } catch {
-    // Invalid or expired confirmation cannot authorize an operation.
-  }
+  } catch {}
   clearAccountChallenge();
   return null;
 }

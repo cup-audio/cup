@@ -1,7 +1,6 @@
 #!/bin/sh
 set -e
 
-# Run from the session's checkout; in a worktree session this differs from the project directory.
 checkout_dir="$(git rev-parse --show-toplevel)"
 cd "${checkout_dir}"
 

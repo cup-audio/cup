@@ -4,10 +4,6 @@ import { analyzeMp3 } from "@cup/audiobook-production";
 
 import { getTrialSessionHeaders } from "#test-e2e/journey.ts";
 
-/**
- * Follows the audiobook's cover image pointer, a signed media URL, and checks what the delivery
- * route serves to it alone. Returns the route's URL without the token.
- */
 export async function validateCoverImage({
   conversionId,
   origin,
@@ -31,12 +27,10 @@ export async function validateCoverImage({
   });
   const signedCoverImageUrl = getCoverImageUrl(audiobook);
 
-  // No session headers: the signed media URL authorizes the request by itself.
   const imageResponse = await request.get(signedCoverImageUrl);
   expect(imageResponse.status()).toBe(200);
   expect(imageResponse.headers()["content-type"]).toBe("image/png");
   const image = await imageResponse.body();
-  // The PNG signature: the stored bytes are the publisher's original, not a re-encoding.
   expect([...image.subarray(0, 8)]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   expect(Number(imageResponse.headers()["content-length"])).toBe(image.byteLength);
 
@@ -67,10 +61,6 @@ function getCoverImageUrl(audiobook: unknown): string {
   return audiobook.coverImage.url;
 }
 
-/**
- * Follows the audiobook's narration track pointer, a signed media URL, and checks that the Worker
- * serves the joined segments as one MP3 whose layout matches the response's start offsets.
- */
 export async function validateNarrationTrack({
   conversionId,
   origin,
@@ -90,14 +80,12 @@ export async function validateNarrationTrack({
     new RegExp(`^${origin}/api/files/audiobooks/${conversionId}/narration-track\\.mp3\\?token=`),
   );
 
-  // No session headers: the signed media URL authorizes the request by itself.
   const trackResponse = await request.get(narrationTrack.url);
   expect(trackResponse.status()).toBe(200);
   expect(trackResponse.headers()["content-type"]).toBe("audio/mpeg");
   expect(trackResponse.headers()["accept-ranges"]).toBe("bytes");
   const track = new Uint8Array(await trackResponse.body());
   expect(Number(trackResponse.headers()["content-length"])).toBe(track.byteLength);
-  // Every frame is 24 ms and 384 bytes, so the joined segments form one valid MP3.
   expect(analyzeMp3(track).durationMilliseconds).toBe(narrationTrack.durationMilliseconds);
   expect(track.byteLength).toBe(narrationTrack.durationMilliseconds * 16);
 
@@ -105,7 +93,6 @@ export async function validateNarrationTrack({
   expect(trackHead.status()).toBe(200);
   expect(Number(trackHead.headers()["content-length"])).toBe(track.byteLength);
 
-  // A range across the join between the first and the second segment.
   const joinOffset = narrationTrack.startMilliseconds[1]! * 16;
   const trackRange = await request.get(narrationTrack.url, {
     headers: { Range: `bytes=${joinOffset - 10}-${joinOffset + 9}` },

@@ -14,7 +14,6 @@ import { migrateRegistry } from "#src/storage/sqlite-migrations.ts";
 
 import { createHoldingAccounts, type AccountMethod, type Hold } from "#test/holding-accounts.ts";
 
-/** Simulates a launch acknowledgement loss followed by exhausted terminal RPC retries. */
 export class AccountDispatchTestDurableObject extends BaseAccountDurableObject {
   constructor(
     context: DurableObjectState,
@@ -61,19 +60,6 @@ export class AccountDispatchTestDurableObject extends BaseAccountDurableObject {
   }
 }
 
-/**
- * Ledger and lifecycle tests settle conversions directly without running preparation. Synthesis
- * dispatch is accepted but never runs, so tests complete or release segments themselves.
- * Preparation dispatch fails until a test accepts it; accepted preparation never runs either.
- * Workflow instances report no status, so the alarm treats them as unreachable, unless a test
- * reports one for an instance or stops them all. They record each termination attempt, which fails
- * once a test asks for it or, as on the platform, once the instance has finished (`complete`,
- * `errored` or `terminated`). An alarm the platform fires is only counted: tests run the alarm with
- * `reconcileForTest()`, so a pass never races the test. The registry passes through, except that
- * removing a conversion owner fails once, and applying a usage projection fails from then on, when
- * a test asks for it. Reconciling an artifact writer, the alarm step that runs first, fails once a
- * test asks for it.
- */
 export class AccountDurableObject extends BaseAccountDurableObject {
   private readonly workflows: WorkflowControl;
   private readonly registryControl: RegistryControl;
@@ -186,7 +172,6 @@ export class AccountDurableObject extends BaseAccountDurableObject {
   disarmForTest() {
     return this.ctx.storage.deleteAlarm();
   }
-  /** Resets the object; the next call constructs it again, as after an eviction. */
   restartForTest() {
     this.ctx.abort("Restarted by the test");
   }
@@ -196,7 +181,6 @@ export class AccountDurableObject extends BaseAccountDurableObject {
   failNextOwnerRemovalForTest() {
     this.registryControl.shouldNextOwnerRemovalFail = true;
   }
-  /** Deletes the conversion and runs its whole cleanup while the next owner bind is in flight. */
   deleteAndCleanUpDuringNextOwnerBindForTest() {
     this.registryControl.beforeNextOwnerBind = async (conversionId) => {
       await this.deleteConversion(conversionId);
@@ -215,11 +199,9 @@ export class AccountDurableObject extends BaseAccountDurableObject {
   failTerminationsForTest() {
     this.workflows.shouldTerminationFail = true;
   }
-  /** The Workflow instance `id` reports `status` from now on. */
   reportWorkflowStatusForTest(id: string, status: string) {
     this.workflows.instanceStatuses.set(id, status);
   }
-  /** Every Workflow instance without a reported status reports `terminated` from now on. */
   stopWorkflowsForTest() {
     this.workflows.stoppedStatus = "terminated";
   }
@@ -235,18 +217,12 @@ export class AccountDurableObject extends BaseAccountDurableObject {
   reconcileForTest() {
     return super.alarm();
   }
-  /** Leaves every conversion as code from before the stage start wrote it, as after a rollback. */
   forgetStageStartsForTest() {
     this.ctx.storage.sql.exec("UPDATE account_conversions SET stage_started_at_ms = NULL");
   }
-  /** Runs one alarm pass whose stuck-conversion check reads `nowMs` as the current time. */
   reconcileAtForTest(nowMs: number) {
     return super.reconcile(nowMs);
   }
-  /**
-   * Runs one alarm pass like `reconcileAtForTest()` and returns the message of the error it threw:
-   * a rejection does not reach the test through the harness.
-   */
   async failingReconcileAtForTest(nowMs: number) {
     try {
       await super.reconcile(nowMs);
@@ -271,7 +247,6 @@ type WorkflowControl = {
   stoppedStatus: string | undefined;
   instanceStatuses: Map<string, string>;
 };
-/** Simulates accounts that predate usage projections, so the alarm's backfill can be observed. */
 export class RegistryDurableObject extends BaseRegistryDurableObject {
   forgetAccountUsageForTest(accountId: string) {
     this.ctx.storage.sql.exec(
@@ -289,13 +264,6 @@ export class RegistryDurableObject extends BaseRegistryDurableObject {
 
 export { ConversionGrantDurableObject } from "@cup/conversion-grants";
 
-/**
- * A grant whose preparation and synthesis dispatch is accepted but never runs, and whose Workflow
- * instances report no status, so the alarm treats them as unreachable and changes nothing. Once a
- * test stops the Workflows, every instance reports `terminated`; releasing a segment fails once a
- * test asks for it. An alarm the platform fires does nothing: tests run the alarm with
- * `reconcileAtForTest()`.
- */
 export class ConversionGrantTestDurableObject extends BaseConversionGrantDurableObject {
   private readonly workflowControl: { areStopped: boolean; shouldSegmentReleaseFail: boolean };
 
@@ -341,18 +309,12 @@ export class ConversionGrantTestDurableObject extends BaseConversionGrantDurable
     }
     return super.releaseAudioSegment(conversionId, sequence, attempts);
   }
-  /** Leaves every conversion as code from before the stage start wrote it, as after a rollback. */
   forgetStageStartsForTest() {
     this.ctx.storage.sql.exec("UPDATE conversions SET stage_started_at_ms = NULL");
   }
-  /** Runs one alarm pass whose stuck-conversion check reads `nowMs` as the current time. */
   reconcileAtForTest(nowMs: number) {
     return super.reconcile(nowMs);
   }
-  /**
-   * Runs one alarm pass like `reconcileAtForTest()` and returns the message of the error it threw:
-   * a rejection does not reach the test through the harness.
-   */
   async failingReconcileAtForTest(nowMs: number) {
     try {
       await super.reconcile(nowMs);
@@ -363,13 +325,11 @@ export class ConversionGrantTestDurableObject extends BaseConversionGrantDurable
   }
 }
 
-/** The account test object wrapped with Sentry as the Worker wraps its Durable Objects. */
 export const SentryAccountDurableObject = Sentry.instrumentDurableObjectWithSentry(
   (env: object) => createWorkerSentryOptions(env, "account-durable-object"),
   AccountDurableObject,
 );
 
-/** The grant test object wrapped with Sentry as the Worker wraps its Durable Objects. */
 export const SentryConversionGrantDurableObject = Sentry.instrumentDurableObjectWithSentry(
   (env: object) => createWorkerSentryOptions(env, "conversion-grant-durable-object"),
   ConversionGrantTestDurableObject,
@@ -415,7 +375,6 @@ export class DeletionTestDurableObject extends DurableObject<{
   );
   private readonly holdingAccounts = createHoldingAccounts(this.env.ACCOUNTS);
   private accountHold: Hold | undefined;
-  /** `accept()` schedules a coordinator alarm; these tests reconcile explicitly instead. */
   override async alarm() {}
   configureProviderForTest(status: number, retryAfter?: string) {
     this.responseStatus = status;
@@ -438,10 +397,6 @@ export class DeletionTestDurableObject extends DurableObject<{
   statusForTest() {
     return this.coordinator.status();
   }
-  /**
-   * Reconciles with real `fetch` against the given Resend origin, such as a Resend stub, and with
-   * account calls through the holding ACCOUNTS double.
-   */
   async reconcileWithProvidersForTest(resendBaseUrl: string, timeoutMs: number) {
     const coordinator = new DeletionCoordinator(
       this.ctx.storage,
@@ -471,10 +426,6 @@ export class DeletionTestDurableObject extends DurableObject<{
   }
 }
 
-/**
- * The deletion coordinator test object wrapped with Sentry as production wraps the registry, so a
- * test that points SENTRY_DSN at a Sentry stub sees what an alarm pass reports.
- */
 export const SentryDeletionTestDurableObject = Sentry.instrumentDurableObjectWithSentry(
   (env) => createWorkerSentryOptions(env, "registry-durable-object"),
   DeletionTestDurableObject,

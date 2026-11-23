@@ -5,7 +5,6 @@ import {
   type GetSynthesisStateDependencies,
 } from "#src/use-cases/get-synthesis-state.ts";
 
-// Estimated at 1,000 and 7,000 milliseconds.
 const NARRATION_TEXT_CHARACTERS_BY_SEGMENT = [5, 100];
 
 const DEPENDENCIES: GetSynthesisStateDependencies = {

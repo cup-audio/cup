@@ -6,9 +6,6 @@ import {
   type RestrictedImportsPattern,
 } from "@cup/config-oxlint/oxlint-base.js";
 
-/*
- * Enforces the import directions between the source folders that AGENTS.md describes.
- */
 const ARTIFACTS_RESTRICTION: RestrictedImportsPattern = {
   group: ["#src/artifacts/**"],
   message:

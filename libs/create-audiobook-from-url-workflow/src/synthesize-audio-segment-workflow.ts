@@ -11,7 +11,6 @@ type SynthesisWorkflowEnvironment = AudiobookWorkflowEnvironment & {
   AI: SpeechSynthesisAi;
 };
 
-/** Synthesizes one narration unit and settles its duration usage. */
 export class SynthesizeAudioSegmentWorkflow extends WorkflowEntrypoint<
   SynthesisWorkflowEnvironment,
   SegmentWorkflowParams

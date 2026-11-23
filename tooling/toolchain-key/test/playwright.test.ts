@@ -20,7 +20,6 @@ test("writes the reason as the image ID, the same on every run, when the Playwri
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "toolchain-key-"));
   directories.push(directory);
   const keyFile = path.join(directory, "nested", "playwright.json");
-  // A Docker daemon that cannot be reached, as when Docker Desktop is not running.
   const env = { ...process.env, DOCKER_HOST: `unix://${path.join(directory, "no-docker.sock")}` };
 
   await execFile(process.execPath, [CLI, "playwright", "--output", keyFile], { env });
@@ -70,10 +69,6 @@ test("builds a missing Playwright Server image, so the first run writes the same
   );
 });
 
-/**
- * A `docker` that knows no image until `docker build` runs and then reports one fixed image ID, as
- * Docker does for an image the machine has not built yet.
- */
 async function writeFakeDocker(binDirectory: string): Promise<void> {
   await fs.mkdir(binDirectory, { recursive: true });
   const docker = path.join(binDirectory, "docker");

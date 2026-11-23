@@ -9,12 +9,10 @@ import {
 } from "#src/app/player/position-saves-machine.ts";
 import { reportFailure } from "#src/report-failure.ts";
 
-/** A conversion whose narration document is prepared, whatever the state of its audio. */
 export type PreparedAudiobook = Extract<
   Audiobook,
   { status: "insufficient-duration" | "synthesizing" | "ready" }
 >;
-/** An audiobook with a narration track: every segment has audio. */
 export type PlayableAudiobook = Extract<Audiobook, { status: "ready" }> & {
   narrationTrack: NarrationTrack;
 };
@@ -22,25 +20,14 @@ export type PlayableAudiobook = Extract<Audiobook, { status: "ready" }> & {
 export type PlaybackSessionRequest = {
   conversionId: string;
   audiobook: PlayableAudiobook;
-  /** The listening position to restore, from the listener's account or this device. */
   position: PlaybackPosition | null;
-  /** The signed-in user the audiobook is loaded for; `null` for anonymous and trial listeners. */
   subject: string | null;
 };
 
 export type PlaybackSessionServices = {
-  /**
-   * Persists a position for the signed-in `subject`, or on this device when `null`. It must refuse
-   * to write when another account is signed in by the time the request is sent.
-   */
   savePosition(position: PlaybackPosition, subject: string | null): Promise<void>;
   now(): number;
-  /** Calls `callback` once after the delay; the returned function cancels it. */
   setRetryTimer(callback: () => void, delayMilliseconds: number): () => void;
-  /**
-   * Calls `callback` whenever the connection may be back: the device went online, or the app
-   * returned to the foreground. The returned function stops it.
-   */
   onReconnect(callback: () => void): () => void;
 };
 
@@ -50,11 +37,6 @@ export function isPlayableAudiobook(audiobook: PreparedAudiobook): audiobook is 
   return audiobook.status === "ready" && audiobook.narrationTrack !== undefined;
 }
 
-/**
- * Why a listening session on the audiobook cannot be created, or `null` when it can: its narration
- * track must list one start offset per synchronization unit. The player host checks this before it
- * replaces the loaded audiobook.
- */
 export function findSessionRefusal(
   conversionId: string,
   { narrationTrack, narrationDocument }: PlayableAudiobook,
@@ -68,10 +50,6 @@ export function findSessionRefusal(
   );
 }
 
-/**
- * Where a listening position lies on the audiobook's narration track. No position, or an unknown
- * unit such as one removed from the narration document, is the start.
- */
 export function toTrackPositionMilliseconds(
   audiobook: PlayableAudiobook,
   position: PlaybackPosition | null,
@@ -90,19 +68,11 @@ export function toTrackPositionMilliseconds(
   return audiobook.narrationTrack.startMilliseconds[unitIndex]! + position.offsetMilliseconds;
 }
 
-/**
- * One subject's listening session on one loaded audiobook.
- *
- * It converts between listening positions, a synchronization unit and an offset in its audio, and
- * positions on the narration track, and it owns the save cadence and order, which the XState
- * machine in `position-saves-machine.ts` models (ADR 0009).
- */
 export class PlaybackSession {
   readonly conversionId: string;
   readonly audiobook: PlayableAudiobook;
   readonly subject: string | null;
   readonly timeline: AudiobookTimeline;
-  /** Where playback starts on the narration track: the restored listening position, or its start. */
   readonly initialPositionMilliseconds: number;
 
   private readonly services: PlaybackSessionServices;
@@ -140,7 +110,6 @@ export class PlaybackSession {
     this.saves.start();
   }
 
-  /** The listening position at a position on the narration track. */
   listeningPositionAt = (positionMilliseconds: number): PlaybackPosition => {
     const unitIndex = findUnitIndexAt(this.timeline, positionMilliseconds);
     const unit = this.audiobook.narrationDocument.synchronizationUnits[unitIndex]!;
@@ -154,12 +123,6 @@ export class PlaybackSession {
     };
   };
 
-  /**
-   * Saves a position on the narration track now. Saves are written in order, and the returned
-   * promise resolves once this one was written or failed; `getSaveFailure` reports failures. A save
-   * that fails for a reason that can pass, such as a lost connection, is saved again later, unless
-   * a newer save comes first.
-   */
   save = (positionMilliseconds: number): Promise<void> =>
     new Promise((settle) => {
       this.saves.send({
@@ -169,11 +132,6 @@ export class PlaybackSession {
       });
     });
 
-  /**
-   * The failure to show the listener, in plain words, or `null`. A failure that a retry may fix
-   * shows only once a retry, after the retry delay or a reconnect, failed too, or saves have failed
-   * for as long as the retry delay; any successful save clears it.
-   */
   getSaveFailure = () => this.saveFailure;
 
   subscribeSaveFailure = (listener: () => void) => {
@@ -183,13 +141,11 @@ export class PlaybackSession {
     };
   };
 
-  /** Stops retrying a failed save, which the session then no longer reports. */
   close = () => {
     this.saves.send({ type: "CLOSE" });
     this.saveFailureListeners.clear();
   };
 
-  /** Saves during playback, at most every `SAVE_INTERVAL_MILLISECONDS`. */
   saveIfDue = (positionMilliseconds: number): Promise<void> => {
     const { lastSavedAt } = this.saves.getSnapshot().context;
     if (this.services.now() - lastSavedAt < SAVE_INTERVAL_MILLISECONDS) {

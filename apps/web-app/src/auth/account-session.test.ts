@@ -143,9 +143,6 @@ test("concurrent session reads share an SDK refresh and cannot restore a signed-
   expect(refreshRequests).toBe(1);
 });
 
-// The tests below drive the lifecycle machine directly, with fakes for Supabase, the platform, the
-// query cache, and playback, to cover results that arrive after the session they belong to ended.
-
 function createSession(subject: string): Session {
   return {
     access_token: `token-${subject}`,
@@ -303,7 +300,6 @@ function startMachine({
       await waitFor(actor, (snapshot) => snapshot.hasTag("initialized"));
       effects.length = 0;
     },
-    /** Plays the app shell reporting that Cup came to the foreground or went to the background. */
     emitAppState: (isActive: boolean) => {
       for (const listener of appStateListeners) {
         listener(isActive);
@@ -328,11 +324,6 @@ function startMachine({
 
 type AccountSessionEvent = EventFromLogic<typeof accountSessionMachine>;
 
-/**
- * Lets fake promises settle and the machine take the transitions they cause. Each await in a fake
- * and each actor completion costs a microtask; the longest chain in these tests needs fewer than
- * ten.
- */
 async function settle() {
   for (let turn = 0; turn < 10; turn += 1) {
     await Promise.resolve();
@@ -431,7 +422,6 @@ test("an account session reported during sign-in signs in without clearing queri
   const signIn = machine.signIn();
   machine.emitAuthChange(createSession("reader"));
   await signIn;
-  // The sign-in actor settles the caller's reply before the machine takes its completion.
   await settle();
 
   expect(machine.effects).toEqual([
@@ -515,7 +505,6 @@ test("sign-out before initialization shows signed-out and stops audio before it 
   expect(machine.effects).toEqual(["stopPlayback", "unloadAudio"]);
 
   await signOut;
-  // The restored session is discarded rather than shown, so it does not stop playback again.
   expect(machine.effects).toEqual([
     "stopPlayback",
     "unloadAudio",
@@ -646,7 +635,6 @@ test("the first sign-in after a sign-out asks for the account chooser until a se
 
   await machine.signOut();
   await machine.signIn();
-  // The provider reports the session once Google returns.
   machine.emitAuthChange(createSession("other"));
   await settle();
   await machine.signIn();
@@ -668,7 +656,6 @@ test("a failed, cancelled or unfinished sign-in after a sign-out keeps asking fo
   await expect(machine.signIn()).rejects.toThrow("The user canceled the sign-in flow.");
   await settle();
   machine.fakes.signInError = null;
-  // On the web, the sign-in returns once the browser leaves for Google, before any session exists.
   await machine.signIn();
   await settle();
   await machine.signIn();

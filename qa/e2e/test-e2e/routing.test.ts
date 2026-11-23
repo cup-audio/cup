@@ -11,8 +11,6 @@ for (const oldOrigin of [
     `carries trial credentials across the redirect from ${oldOrigin} and redeems them`,
     { tag: VISUAL_TAG },
     async ({ browserName, page, workerEnvironment }) => {
-      // The old origin can only be emulated by fulfilling its route with the Worker's 308, so this
-      // runs in Chromium alone. A redirect keeping the URL fragment is specified by the Fetch Standard.
       test.skip(
         browserName === "webkit",
         "Playwright's WebKit cannot fulfill a route with a redirect status",
@@ -28,7 +26,6 @@ for (const oldOrigin of [
         expect(response.headers()["location"]).toBe(
           `https://cup.audio${url.pathname}${url.search}`,
         );
-        // Assert the production destination, then keep the browser on the isolated test Worker.
         await route.fulfill({
           response,
           headers: {
@@ -183,7 +180,6 @@ test(
       await expect(page.getByRole("heading", { name: "Just listen." })).toBeVisible();
     }
 
-    // The scheduled-deletion email links the account recovery page, where the listener signs in.
     await gotoPage(page, `${origin}/app/account-recovery`);
     await expect(page.getByRole("heading", { name: "Restore your account" })).toBeVisible();
     await expect(
@@ -229,7 +225,6 @@ test.describe("with the local test account", () => {
       const { origin, authProvider } = workerEnvironment;
       await gotoPage(page, `${origin}/app/`);
       const historyLength = await page.evaluate(() => window.history.length);
-      // A page load would drop this marker.
       await page.evaluate(() => Object.assign(window, { isSamePage: true }));
       await page.getByRole("link", { name: "Sign in", exact: true }).click();
       await page
@@ -241,7 +236,6 @@ test.describe("with the local test account", () => {
       await expect(page.getByRole("heading", { name: "Recent", exact: true })).toBeVisible();
       expect(authProvider.exchanges()).toBe(1);
       expect(await page.evaluate(() => "isSamePage" in window)).toBe(true);
-      // Recents replaced the signed-out home page's history entry, so Back leaves the app.
       expect(await page.evaluate(() => window.history.length)).toBe(historyLength);
       await page.goBack();
       await expect(page).toHaveURL("about:blank");
@@ -265,12 +259,10 @@ test(
     await expect(page).toHaveURL(`${origin}/app/recent`);
     const recents = page.getByRole("list", { name: "Tracks" }).getByRole("listitem");
     await expect(recents).toHaveCount(1);
-    // The fake auth provider names the account holder "Reader Doe".
     await expect(page.getByRole("link", { name: "Account" })).toHaveText("rd", {
       useInnerText: true,
     });
 
-    // The account dialog keeps its own URL, so a Google sign-in to confirm a change returns to it.
     const accountDialog = page.getByRole("dialog", { name: "Account settings" });
     await page.getByRole("link", { name: "Account" }).click();
     await expect(accountDialog).toBeVisible();
@@ -300,7 +292,6 @@ test(
     await expect(addDialog).toHaveCount(0, { timeout: 60_000 });
     await expect(page).toHaveURL(`${origin}/app/recent`);
     await expect(recents).toHaveCount(2);
-    // Recents lists the newest conversion first, as a card linking to its detail view.
     const newCard = recents.first().getByRole("link");
     const newCardPath = await newCard.getAttribute("href");
     await expect(recents.first().getByText("source.example.test", { exact: true })).toBeVisible();

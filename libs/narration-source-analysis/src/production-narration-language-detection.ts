@@ -35,7 +35,6 @@ export const PRODUCTION_DETECTION_CONFIG = {
   systemPrompt: SYSTEM_PROMPT,
   tool: TOOL,
   completionOptions: {
-    // The effort narration content selection uses; gemini-3.8-flash rejects "minimal" with HTTP 400.
     reasoningEffort: "low",
     maxTokens: 1_024,
     maxRetries: 0,

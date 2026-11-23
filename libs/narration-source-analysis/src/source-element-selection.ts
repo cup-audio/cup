@@ -4,19 +4,15 @@ import type { Tagged } from "type-fest";
 
 import { CupError } from "@cup/errors";
 
-/** Attribute used to assign stable identifiers to source-material elements. */
 export const SOURCE_ELEMENT_ID_ATTRIBUTE = "data-createaudiobookfromurl-element-id";
 
-/** Nonempty element identifiers selected for narration in source-document order. */
 export type SourceElementIds = Tagged<readonly string[], "SourceElementIds">;
 
-/** Source HTML paired with the identifiers assigned to all of its elements. */
 export type AnnotatedSource = {
   html: string;
   elementIds: string[];
 };
 
-/** Assigns stable sequential identifiers to every element in source-material HTML. */
 export async function annotateSourceElements(sourceMaterialHtml: string): Promise<AnnotatedSource> {
   const documentFragment = parseFragment(sourceMaterialHtml);
   let nextElementId = 0;
@@ -44,7 +40,6 @@ export async function annotateSourceElements(sourceMaterialHtml: string): Promis
   return { html: serialize(documentFragment), elementIds };
 }
 
-/** Retains selected subtrees and the ancestors needed to preserve their structure. */
 export async function filterSourceByElementIds({
   annotatedSourceMaterial,
   selectedElementIds,
@@ -76,7 +71,6 @@ function visitElements(
   }
 }
 
-// Reading every ID before mutation also validates the identified source material.
 function collectElementIdsToKeep(
   parentNode: DefaultTreeAdapterMap["parentNode"],
   selectedElementIds: ReadonlySet<string>,
@@ -137,7 +131,6 @@ function removeUnselectedContent(
   });
 }
 
-// parse5 stores template descendants in a separate document fragment.
 function getElementContent(
   element: DefaultTreeAdapterMap["element"],
 ): DefaultTreeAdapterMap["parentNode"] {

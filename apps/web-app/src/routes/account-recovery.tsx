@@ -13,12 +13,6 @@ import { accountQuery, useSignInMutation } from "#src/data-fetching/account.js";
 
 const RECOVERY_PAGE_NAME = "Account recovery";
 
-/**
- * Restores an account whose deletion is scheduled; the scheduled-deletion email links here.
- * Scheduling deletion signs the listener out, so this page signs them in itself, outside Recents
- * and its dialogs, which a signed-out listener cannot reach. Confirming signs in with Google again,
- * which returns here.
- */
 export const Route = createFileRoute("/account-recovery")({
   component: AccountRecoveryPage,
   beforeLoad: async () => {

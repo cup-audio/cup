@@ -5,9 +5,7 @@ import static org.junit.Assert.assertThrows;
 
 import org.junit.Test;
 
-/** Mirrors the web player's cases in `audiobook-timeline.test.ts` and `playback-session.test.ts`. */
 public class ListeningPositionsTest {
-    // Units of 20, 10, 3 and 2 seconds on the narration track.
     private static final ListeningPositions POSITIONS = new ListeningPositions(
         new String[] { "unit-1", "unit-2", "unit-3", "unit-4" },
         new long[] { 0, 20_000, 30_000, 33_000 }
@@ -19,7 +17,6 @@ public class ListeningPositionsTest {
 
         assertEquals(0, ListeningPositions.findUnitIndexAt(starts, 0));
         assertEquals(0, ListeningPositions.findUnitIndexAt(starts, 19_999));
-        // A boundary belongs to the unit that starts there.
         assertEquals(1, ListeningPositions.findUnitIndexAt(starts, 20_000));
         assertEquals(1, ListeningPositions.findUnitIndexAt(starts, 29_999));
         assertEquals(2, ListeningPositions.findUnitIndexAt(starts, 30_000));

@@ -16,14 +16,8 @@ import {
   turnCrashReportsOff,
 } from "#src/telemetry-assertions.ts";
 
-/**
- * The Android shell's telemetry against the test's Sentry stub: the debug build reports only
- * because the suite passes it the stub's DSN. JS events go through the test Worker's telemetry
- * tunnel; the native SDK sends straight to the stub, which `adb reverse` makes reachable.
- */
 const app = useMobileApp({ sentryStub: true });
 
-/** What `SentryCapacitor.crash()` throws on the plugin's thread, which kills Cup. */
 const NATIVE_CRASH_MESSAGE = "TEST - Sentry Client Crash";
 
 test("a shell JS error and a native crash arrive with the account ID, and no installation ID outlives a launch", async () => {
@@ -33,8 +27,6 @@ test("a shell JS error and a native crash arrive with the account ID, and no ins
   await signInFromHomeLink(device, webView);
   const accountId = await readAccountId(app);
 
-  // A JS error once the user rule applied the account ID; it also tells that the native scope has
-  // the user.
   await expectJsErrorThroughTunnel(app, webView, accountId);
 
   const firstCrash = await crashAndRelaunch(device, webView, 1);
@@ -43,12 +35,10 @@ test("a shell JS error and a native crash arrive with the account ID, and no ins
     level: "fatal",
     release: expect.stringMatching(/^audio\.cup\.app@/),
   });
-  // The native SDK with sentry-native never registered its NDK integration.
   expect(sdkIntegrations(firstCrash)).not.toContain("Ndk");
 
   webView = await device.webView();
   const secondCrash = await crashAndRelaunch(device, webView, 2);
-  // The stub still sees the device ID, which the organisation's scrubbing rule removes at ingest.
   const firstDeviceId = firstCrash.contexts?.["device"]?.["id"];
   const secondDeviceId = secondCrash.contexts?.["device"]?.["id"];
   expect(firstDeviceId).toMatch(/^[0-9a-f]{32}$/);
@@ -66,8 +56,6 @@ test("a renderer crash brings Cup back on Recents and reaches the stub through t
   await signInFromHomeLink(device, webView);
   const processId = await device.processId();
 
-  // The debug build's hook loads `chrome://crash` once the script has returned, so the answer
-  // does not wait on the dying page.
   await webView.execute(() => {
     setTimeout(() => {
       const capacitor: RendererCrashGlobal = Reflect.get(window, "Capacitor");
@@ -80,14 +68,12 @@ test("a renderer crash brings Cup back on Recents and reaches the stub through t
   });
   webView = await attachToRecreatedWebView(device);
   await waitForRecents(webView, 0);
-  // The same process: Cup recreated its activity instead of Android ending the app.
   expect(await device.processId()).toBe(processId);
   expect(await device.appState()).toBe("foreground");
 
   expect(rendererGoneEvents()).toHaveLength(1);
   expect(rendererGoneEvents()[0]).toMatchObject({
     level: "error",
-    // A JS event, which reaches the stub only through the telemetry tunnel.
     platform: "javascript",
     tags: { "cup.renderer.cause": "crash", "cup.app.state": "foreground" },
   });
@@ -99,10 +85,6 @@ test("a renderer crash brings Cup back on Recents and reaches the stub through t
   );
 });
 
-/**
- * Attaches to the WebView of the recreated activity. It lives in the same process as the dead one,
- * so Chromedriver keeps its session and stays on the dead page's closed window until it switches.
- */
 async function attachToRecreatedWebView(device: AndroidAppDevice): Promise<WebdriverIO.Browser> {
   const webView = await device.webView();
   await webView.waitUntil(
@@ -120,7 +102,6 @@ async function attachToRecreatedWebView(device: AndroidAppDevice): Promise<Webdr
   return webView;
 }
 
-/** The part of the page's `window.Capacitor` the renderer crash calls: the debug build's hook. */
 type RendererCrashGlobal = { Plugins: { CupTestRendererCrash: { crash(): Promise<void> } } };
 
 function rendererGoneEvents(): SentryErrorEvent[] {
@@ -140,7 +121,6 @@ test("after turning crash reports off and restarting, a native crash sends nothi
   let webView = await device.webView();
   await signInFromHomeLink(device, webView);
   const accountId = await readAccountId(app);
-  // The native SDK, on by default, has created its cache folder.
   await webView.waitUntil(async () => (await sentryPaths(device)).length > 0, {
     timeout: SENTRY_EVENT_TIMEOUT_MS,
     timeoutMsg: "The native Sentry SDK created no files.",
@@ -149,7 +129,6 @@ test("after turning crash reports off and restarting, a native crash sends nothi
   await turnCrashReportsOff(webView);
   await device.relaunch();
   webView = await device.webView();
-  // The relaunch deleted whatever the native SDK of the earlier process wrote after the switch.
   expect(await sentryPaths(device)).toEqual([]);
 
   const eventCountBeforeCrash = app.sentryStub.errorEvents("cup-app").length;
@@ -163,24 +142,16 @@ test("after turning crash reports off and restarting, a native crash sends nothi
   expect(await sentryPaths(device)).toEqual([]);
 });
 
-/** The native SDK's files: its cache folder, `cache/sentry/`, and everything in it. */
 async function sentryPaths(device: AndroidAppDevice): Promise<string[]> {
   return (await device.appDataPaths()).filter((path) => /^\.\/cache\/sentry(\/|$)/.test(path));
 }
 
-/**
- * Crashes Cup natively on the Capacitor plugin thread, launches it again, which sends a crash left
- * on disk at the latest, and returns the `count`th native crash event the stub received.
- */
 async function crashAndRelaunch(
   device: AndroidAppDevice,
   webView: WebdriverIO.Browser,
   count: number,
 ): Promise<SentryErrorEvent> {
-  // The SDK's own test hook throws on the plugin thread, where nothing catches it.
   await crashNatively(webView);
-  // Sentry's crash handler sends the crash, or stores it, before Android ends the process; a launch
-  // that force-stopped Cup sooner would cut that short.
   await device.waitForProcessExit();
   await device.launch({ apiOrigin: app.apiOrigin, testSentryDsn: app.testSentryDsn });
   await app.sentryStub.waitFor(`native crash ${count}`, () => nativeCrashes().length >= count, {

@@ -9,11 +9,6 @@ import {
   signInFromLandingPage,
 } from "#src/journeys.ts";
 
-/**
- * Links that leave Cup open in Safari, not in Cup's WebView: Capacitor hands every navigation away
- * from Cup's origin to iOS. The test Worker's hosts are unreachable from Safari, so the test checks
- * only which app is in front.
- */
 const app = useMobileApp();
 
 test("a narration document link and Open original page open in Safari", async () => {

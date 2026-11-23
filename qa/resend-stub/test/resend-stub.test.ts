@@ -214,7 +214,6 @@ test("a held request with a scripted response gets that response once released, 
 
   expect(response.status).toBe(422);
   expect(stub.emails).toStrictEqual([]);
-  // The key never reached the ledger, so the next request with it sends the email.
   expect((await postEmail(stub, "key-1", EMAIL)).status).toBe(200);
   expect(stub.emails).toHaveLength(1);
 });
@@ -293,7 +292,6 @@ async function postEmail(
   });
 }
 
-/** `fetch` always sends a User-Agent, so this request goes through `node:http`. */
 async function postWithoutUserAgent(
   stub: ResendStub,
   idempotencyKey: string,

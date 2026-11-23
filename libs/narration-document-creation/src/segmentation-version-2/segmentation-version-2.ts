@@ -9,11 +9,6 @@ import {
 } from "#src/segmentation-version-1/unit-text-segmentation.ts";
 import type { NarrationBlock, UnitRange } from "#src/segmentation.ts";
 
-// Segmentation version 2 is frozen: its golden fixtures fail on any change to its units, and a
-// change to them must become a new segmentation version. It starts as a copy of version 1 and
-// reuses version 1's frozen unit text segmentation, so the rules it keeps from version 1 stay
-// those of version 1; it shares nothing with presentation, which may change at any time.
-
 const EXCLUDED_TAG_NAMES = new Set([
   "audio",
   "canvas",
@@ -70,22 +65,18 @@ const TABLE_CELL_TAG_NAMES = new Set(["td", "th"]);
 
 const NARRATION_ELEMENT_SEPARATOR = "\n\n";
 
-// Joins the texts of a table row's cells into the row's narration text.
 const TABLE_CELL_SEPARATOR = ", ";
 
 type SourceElement = DefaultTreeAdapterMap["element"];
 type SourceChildNode = DefaultTreeAdapterMap["childNode"];
 
-// Nodes that segmentation creates itself, such as normalized line breaks, have no source node.
 type SafeText = { type: "text"; value: string; source?: SourceChildNode };
-// An element that is neither kept nor flattened, such as a table, a row or a description list.
 type SafeBoundary = {
   type: "boundary";
   tagName: string;
   children: readonly SafeNode[];
   source: SourceElement;
 };
-// A flattened inline element; units treat its content as if it stood in its parent's place.
 type SafeFlattened = { type: "flattened"; children: readonly SafeNode[]; source: SourceElement };
 type SafeElement = {
   type: "element";
@@ -99,13 +90,6 @@ type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K>
 
 const LINE_BREAK: SafeElement = { type: "element", tagName: "br", children: [] };
 
-/**
- * Divides narration source material into synchronization units with segmentation version 2's rules.
- * They are version 1's, except that a table row is one unit of its cells' texts joined by ", ", a
- * description list group is one unit of its terms and descriptions, `pre` keeps its line breaks and
- * is split at a line break past 2,000 characters, and a heading before a table or description list
- * joins the unit of the table's first row, or its caption, or of the list's first group.
- */
 export function segmentWithVersion2({
   sourceTitle,
   sourceSubtitle,
@@ -155,7 +139,6 @@ export function segmentWithVersion2({
       ({ text }) => text,
     );
 
-    // A block without text keeps the pending headings for the next block.
     if (unitTexts.length === 0) {
       return;
     }
@@ -199,10 +182,6 @@ export function segmentWithVersion2({
     }
   }
 
-  /**
-   * Adds the units of blocks whose narration texts are already known, such as a description list
-   * group, joined like a heading and its paragraph and split by `splitText` when too long.
-   */
   function addTextBlockUnits(
     textBlocks: readonly { block: NarrationBlock; text: string }[],
     splitText: (text: string) => string[],
@@ -335,10 +314,6 @@ export function segmentWithVersion2({
     );
   }
 
-  /**
-   * Adds a table row as one unit of its cells' texts. A row too long for one unit, together with a
-   * heading it joins, falls back to version 1's rules, one unit per cell.
-   */
   function addTableRow(row: SafeBoundary, isPreformatted: boolean): void {
     const cellTexts = row.children
       .filter(
@@ -348,7 +323,6 @@ export function segmentWithVersion2({
       .map((cell) => extractItemText(cell))
       .filter((cellText) => cellText.length > 0);
 
-    // A row without text keeps the pending headings for the next block.
     if (cellTexts.length === 0) {
       return;
     }
@@ -372,10 +346,6 @@ export function segmentWithVersion2({
     );
   }
 
-  /**
-   * Adds one unit per description list group: one or more terms and the descriptions after them. A
-   * `div` that wraps a group ends the groups around it.
-   */
   function addDescriptionList(list: SafeBoundary, isPreformatted: boolean): void {
     let group: { block: NarrationBlock; text: string }[] = [];
     let hasDescription = false;
@@ -430,7 +400,6 @@ export function segmentWithVersion2({
   addSynchronizationUnit(normalizedSourceTitle, { type: "source-title" });
 
   if (normalizedSourceSubtitle !== undefined) {
-    // Added before any body block, so the source subtitle never absorbs a pending heading.
     addSynchronizationUnit(normalizedSourceSubtitle, { type: "source-subtitle" });
   }
 
@@ -462,10 +431,6 @@ function createSynchronizationUnitId(sequence: number): string {
   return `narration-unit-${String(sequence + 1).padStart(4, "0")}`;
 }
 
-/**
- * Splits preformatted narration text past the unit limit at line breaks, and a line longer than the
- * limit as any other narration text.
- */
 function splitAtLineBreaks(text: string): string[] {
   const unitTexts: string[] = [];
   let currentPart = "";
@@ -490,14 +455,9 @@ function splitAtLineBreaks(text: string): string[] {
 
   unitTexts.push(currentPart);
 
-  // A split at the blank line between a heading and the text it joins leaves that line's ends.
   return unitTexts.map((unitText) => unitText.trim()).filter((unitText) => unitText.length > 0);
 }
 
-/**
- * The narration text of a table cell, term or description: its text, with the blocks nested inside
- * it flattened into it, separated by a space.
- */
 function extractItemText(item: SafeBoundary): string {
   return normalizeNarrationText(extractFlattenedText(item.children));
 }
@@ -522,11 +482,6 @@ function extractFlattenedText(nodes: readonly SafeNode[]): string {
     .join("");
 }
 
-/**
- * Replaces each flattened element that holds block content with its children, so that block content
- * ends the surrounding inline run. A flattened element without block content stays whole, so an
- * inline run keeps it as one source node.
- */
 function expandFlattenedBlockContent(nodes: readonly SafeNode[]): SafeNode[] {
   return nodes.flatMap((node) =>
     node.type === "flattened" && hasBlockContent(node.children)
@@ -573,8 +528,6 @@ function sanitizeChildren(
 
   for (const childNode of parentNode.childNodes) {
     if ("value" in childNode) {
-      // Preformatted text keeps its line breaks, which normalization turns into line breaks of the
-      // narration text.
       safeNodes.push({
         type: "text",
         value: childNode.value.replace(
@@ -651,7 +604,6 @@ function normalizeSafeElement(element: SafeElement): SafeElement {
   return { ...element, children: normalizeSafeNodes(element.children) };
 }
 
-// Mirrors the whitespace that the narration document shows, which unit texts are read from.
 function normalizeSafeNodes(nodes: readonly SafeNode[]): SafeNode[] {
   const normalizedNodes: SafeNode[] = [];
   let hasVisibleText = false;
@@ -759,7 +711,6 @@ function appendSafeText(output: SafeNode[], value: string): void {
   }
 }
 
-// Unit texts are read from tag names and text alone, so the markup carries no attributes.
 function serializeSafeNode(node: SafeNode): string {
   if (node.type === "text") {
     return escapeHtmlText(node.value);

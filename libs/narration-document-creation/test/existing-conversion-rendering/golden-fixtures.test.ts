@@ -15,12 +15,7 @@ const EXISTING_CONVERSION_FIXTURE_SCHEMA = z
   })
   .strict();
 
-// Each fixture's stored HTML and units were produced by createNarrationDocument as it was when a
-// historical shape was written, so the existing-conversion path keeps rendering every audiobook
-// prepared before the narration document was rendered on request.
 const FIXTURES_DIRECTORY = path.join(import.meta.dirname, "golden-fixtures");
-// An existing conversion's manifest references no narration source material, so rendering it never
-// loads one.
 const WITHOUT_NARRATION_SOURCE_MATERIAL = {
   sourceTitle: "Title",
   loadNarrationSourceMaterial: async () => {

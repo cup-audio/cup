@@ -21,7 +21,6 @@ export type ConversionReader = {
   getAvailableMilliseconds(): Promise<number>;
 };
 
-/** Internal reads require request authorization before resolving the conversion reader. */
 export function resolveConversionReader(
   env: ApiServerEnvironment,
   conversionId: string,

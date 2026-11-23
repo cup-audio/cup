@@ -6,10 +6,6 @@ import { useSentryStub, type SentryLog, type SentryStub } from "@cup/sentry-stub
 
 import { useWorker } from "#test/use-worker.ts";
 
-/**
- * A well-formed media URL token. With an empty signing key, checking its signature throws, which
- * the Listener API answers with a 500: a misconfiguration every test can provoke.
- */
 const MEDIA_PATH = "/api/files/audiobooks/c1/cover-image";
 const MEDIA_URL = `https://cup.audio${MEDIA_PATH}?token=v1.eyJhIjoxfQ.AAAA`;
 
@@ -17,10 +13,6 @@ function isOperatorMutation(log: SentryLog): boolean {
   return log.attributes["event.name"]?.value === "operator-mutation";
 }
 
-/**
- * Waits for the request's `http.server` span. Sentry sends it in the flush at the end of the
- * invocation, together with any error event the request captured.
- */
 async function waitForRequestSpan(sentry: SentryStub, path: string): Promise<void> {
   await sentry.waitFor(`the http.server span of ${path}`, () =>
     sentry
@@ -77,7 +69,6 @@ test("a 500's body carries the trace ID of the event Sentry receives", async ({
   const response = await worker.fetch(MEDIA_URL);
 
   expect(response.status).toBe(500);
-  // The contract requires a 32-hex trace ID.
   const body = errorResponseSchema.parse(await response.json());
   await sentry.waitFor("an error event", () => sentry.errorEvents("cup-worker").length > 0);
   const [event] = sentry.errorEvents("cup-worker");
@@ -90,8 +81,6 @@ test("a Cup error thrown in a Durable Object RPC that fails a request is capture
 }) => {
   const sentry = await useSentryStub({ onTestFinished });
   const worker = await useWorker({ onTestFinished, sentryDsn: sentry.dsn("cup-worker") });
-  // The grant was never initialized, so validating the session throws a `CupError` in the grant's
-  // Durable Object, whose Sentry wrapper captures it before the RPC call hands it to the server.
   const grantId = crypto.randomUUID();
   const path = `/api/grants/${grantId}`;
 
@@ -127,7 +116,6 @@ test("a malformed JSON body answers 400 and sends no error event", async ({
   const sentry = await useSentryStub({ onTestFinished });
   const worker = await useWorker({ onTestFinished, sentryDsn: sentry.dsn("cup-worker") });
 
-  // Hono's JSON validator throws its own 400 HTTPException, which the API answers as it is.
   const response = await worker.fetch("http://localhost/api/operator/grants", {
     method: "POST",
     headers: { "Cf-Access-Token": LOCAL_OPERATOR_ACCESS_TOKEN, "Content-Type": "application/json" },
@@ -148,8 +136,6 @@ test("GET /api/health answers 200 and sends no trace", async ({ expect, onTestFi
 
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ status: "ok" });
-  // An unsampled request sends nothing to wait for. A traced request made afterwards flushes after
-  // the health check's own flush would have, so its span marks the point to assert at.
   await worker.fetch(`https://cup.audio${MEDIA_PATH}?token=v2.unknown`);
   await waitForRequestSpan(sentry, MEDIA_PATH);
   expect(
@@ -166,7 +152,6 @@ test("an operator mutation's log record carries its error body's trace ID, and n
   const sentry = await useSentryStub({ onTestFinished });
   const worker = await useWorker({ onTestFinished, sentryDsn: sentry.dsn("cup-worker") });
 
-  // A grant without a label fails validation: a 400 whose body carries the request's trace ID.
   const response = await worker.fetch("http://localhost/api/operator/grants", {
     method: "POST",
     headers: { "Cf-Access-Token": LOCAL_OPERATOR_ACCESS_TOKEN, "Content-Type": "application/json" },

@@ -4,25 +4,11 @@ import { SignInCancelledError, UserFacingError } from "#src/errors.js";
 import type { GoogleSignInOptions } from "#src/platform/account-auth.js";
 export { initializeAuthStorage, watchAppState } from "#src/platform/account-auth.native.js";
 
-/**
- * Messages of the plugin's cancellation code that mean the person backed out. Google Play services
- * reports some failures, such as a missing Android OAuth client ("[16] Account reauth failed."),
- * with the same code, so only these messages count as the person's choice.
- */
 const CANCELLED_BY_PERSON_MESSAGES = new Set([
-  // Google Play services' detail when the person leaves its add-account or account-picker screen.
   "[16] Cancelled by user.",
-  // The plugin's own message when Google gives no detail.
   "The user canceled the sign-in flow.",
 ]);
 
-/**
- * Ignores `chooseAccount`: sign-out already ends the device's Google sign-in (`clearNativeSignIn`),
- * so Credential Manager shows its account picker on the next sign-in anyway.
- *
- * Rejects with a `SignInCancelledError` when the person backs out of Google's screens, and with a
- * `UserFacingError` for any other failure of the plugin.
- */
 export async function signInWithGoogle(
   client: { auth: Pick<SupabaseClient["auth"], "signInWithIdToken"> },
   googleClientId: string | undefined,
@@ -64,16 +50,11 @@ export async function signInWithGoogle(
   }
 }
 
-/** Signs out of Google on the device, so the next sign-in can pick another account. */
 export async function clearNativeSignIn(): Promise<void> {
   const { GoogleSignIn } = await import("@capawesome/capacitor-google-sign-in");
   await GoogleSignIn.signOut();
 }
 
-/**
- * `cancellationCode` is the plugin's `ErrorCode.SignInCanceled`, which only its lazily loaded
- * module provides.
- */
 function isCancelledByPerson(error: unknown, cancellationCode: string): boolean {
   return (
     error instanceof Error &&

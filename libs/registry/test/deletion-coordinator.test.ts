@@ -1,9 +1,3 @@
-/*
- * Deletion notices against a Resend stub (`@cup/resend-stub`) on an OS-assigned port, a restore that
- * lands on the coordinator while it awaits the account, pinned with the holding ACCOUNTS double, and
- * the stuck-deletion report against a Sentry stub (`@cup/sentry-stub`).
- */
-
 import nodeUrl from "node:url";
 import { Temporal } from "temporal-polyfill";
 import { afterAll, beforeAll, test, type TestContext } from "vitest";
@@ -21,9 +15,7 @@ type TestEnvironment = {
   DELETION_TEST: DurableObjectNamespace<DeletionTestDurableObject>;
 };
 
-/** The provider timeout for tests that hang or hold a request; the production timeout is 10 s. */
 const SHORT_TIMEOUT_MS = 300;
-/** Generous enough for a loaded machine, for tests whose requests get an answer. */
 const DEFAULT_TIMEOUT_MS = 5_000;
 const RECIPIENT = "listener@example.com";
 const MINUTE_MS = 60_000;
@@ -88,7 +80,6 @@ test("a retry after a lost response replays the key and delivers exactly one ema
   await held.received;
   await reconciling;
   expect(await coordinator.notification()).toMatchObject({ state: "pending", attempts: 1 });
-  // Resend finishes the send after the coordinator's timeout has given up on the response.
   held.release();
   await expect.poll(() => stub.emails).toHaveLength(1);
   await coordinator.makeNotificationDue();
@@ -214,8 +205,6 @@ test("a restore accepted while the coordinator awaits the account fence supersed
   const coordinator = bindings.DELETION_TEST.get(bindings.DELETION_TEST.idFromName(name));
   await coordinator.acceptForTest(attempt);
   const storage = await worker.getDurableObjectStorage("DELETION_TEST", { name });
-  // The recovery period has ended in the coordinator's view, but the account was restored in time
-  // and its restore delivery has not reached the coordinator yet.
   await storage.exec(
     "UPDATE deletion_jobs SET payload_json = json_set(payload_json, '$.nextAttemptMs', 0)",
   );
@@ -240,7 +229,6 @@ test.for([
   { pending: "identity", state: "deleting", identityDone: false, accountDone: true },
 ])(
   "an account deletion still not erased 1 h after its deadline is reported once, pending $pending",
-  // Longer than the stub's wait, so a missing report fails with the wait's description.
   { timeout: 15_000 },
   async ({ pending, ...progress }, { expect, onTestFinished }) => {
     const sentry = await useSentryStub({ onTestFinished });
@@ -249,8 +237,6 @@ test.for([
       sentryDsn: sentry.dsn("cup-worker"),
     });
     const nowMs = Temporal.Now.instant().epochMilliseconds;
-    // Two stuck attempts, so a repeated report is never an immediate repeat of the same event,
-    // which Sentry's Dedupe integration would drop and so hide.
     const stuckFirst = await coordinator.accept(nowMs - 61 * MINUTE_MS, progress);
     const stuckSecond = await coordinator.accept(nowMs - 62 * MINUTE_MS, progress);
     const almostStuck = await coordinator.accept(nowMs - 59 * MINUTE_MS, progress);
@@ -282,7 +268,6 @@ test.for([
       [almostStuck.attemptId]: false,
     });
 
-    // A later pass reports nothing new; the third attempt, once stuck, marks its flush.
     await coordinator.reconcile();
     await coordinator.moveDeadline(almostStuck.attemptId, nowMs - 61 * MINUTE_MS);
     await coordinator.reconcile();
@@ -296,11 +281,6 @@ test.for([
   },
 );
 
-/**
- * A deletion coordinator wrapped with Sentry as production wraps the registry, sending to
- * `sentryDsn`, in a Worker of its own that closes when the test finishes. Its attempts never come
- * due for cleanup, so its passes run only the checks over every unfinished attempt.
- */
 async function sentryCoordinator({
   onTestFinished,
   sentryDsn,
@@ -322,7 +302,6 @@ async function sentryCoordinator({
   );
   const storage = await sentryWorker.getDurableObjectStorage("SENTRY_DELETION_TEST", { name });
   return {
-    /** Accepts an attempt with the given deadline and cleanup progress. */
     async accept(
       deadlineMs: number,
       progress: { state: string; identityDone: boolean; accountDone: boolean },
@@ -365,7 +344,6 @@ async function sentryCoordinator({
   };
 }
 
-/** A coordinator holding one scheduled attempt whose scheduling notice is due. */
 async function scheduledCoordinator() {
   const name = crypto.randomUUID();
   const object = bindings.DELETION_TEST.get(bindings.DELETION_TEST.idFromName(name));
@@ -410,7 +388,6 @@ async function scheduledCoordinator() {
   };
 }
 
-/** A real account whose deletion was scheduled and then restored, before the coordinator knew. */
 async function restoredAccountAttempt(): Promise<DeletionAttempt> {
   const accountId = crypto.randomUUID();
   const account = bindings.ACCOUNTS.get(bindings.ACCOUNTS.idFromName(accountId));
@@ -419,7 +396,6 @@ async function restoredAccountAttempt(): Promise<DeletionAttempt> {
     subject: crypto.randomUUID(),
     createdAtMs: Temporal.Now.instant().epochMilliseconds,
   });
-  // The account is initialized directly, so each registry delivery rejects after the state change.
   const schedule = await account.deletionChallenge();
   await expectRejection(
     account.scheduleDeletion({
@@ -441,10 +417,6 @@ async function restoredAccountAttempt(): Promise<DeletionAttempt> {
   return { ...scheduled, state: "scheduled" };
 }
 
-/**
- * The one "exactly once" assertion: the stub sent exactly one email, for this notification key, and
- * every request with the key carried the same body, so each retry was a replay of the first.
- */
 function expectExactlyOneEmail(expect: TestContext["expect"], stub: ResendStub, key: string) {
   expect(stub.emails.map(({ idempotencyKey }) => idempotencyKey)).toStrictEqual([key]);
   const bodies = stub.requests
@@ -453,7 +425,6 @@ function expectExactlyOneEmail(expect: TestContext["expect"], stub: ResendStub, 
   expect(new Set(bodies).size).toBe(1);
 }
 
-/** Wrangler hides the original rejection behind its RPC transport; state checks verify the effect. */
 async function expectRejection(operation: Promise<unknown>): Promise<void> {
   try {
     await operation;

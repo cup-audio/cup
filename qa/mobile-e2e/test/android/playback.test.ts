@@ -9,53 +9,27 @@ import {
 import { useMobileApp } from "#src/fixtures.ts";
 import { signInFromLandingPage, waitForLandingPage, waitForRecents } from "#src/journeys.ts";
 
-/**
- * Native playback in the Android app: the plugin's ExoPlayer plays the narration track in a
- * `mediaPlayback` foreground service, the system's media controls act on it without the page, and
- * the page's player follows the state the plugin reports. Each test signs in, which converts the
- * test Worker's fixture into a new audiobook, and checks what Android sees with `adb`. Loopback is
- * exempt from Android's background network cut, so the locked listen shows the unfrozen process
- * that keeps network access, not the network access itself.
- */
 const app = useMobileApp();
 
 const APP_PACKAGE = "audio.cup.app";
 const PLAYER = 'footer[aria-label="Player"]';
 const SKIP_MILLISECONDS = 15_000;
-/** How often the plugin saves the listening position while it plays, as the web player does. */
 const SAVE_INTERVAL_MILLISECONDS = 5_000;
-/**
- * How long to wait for a save: one failed write and the plugin's retry 15 s later, since wrangler's
- * local dev proxy can drop a request under load ("Network connection lost", 2026-11-17).
- */
 const SAVE_WAIT_MILLISECONDS = 20_000;
-/** How far ExoPlayer's position may move after a seek in the MP3 track, a few frames of 26 ms. */
 const MP3_SEEK_TOLERANCE_MILLISECONDS = 100;
-/** How far the page's position, which follows ExoPlayer's reports, may lag behind or run ahead. */
 const POSITION_TOLERANCE_MILLISECONDS = 2_500;
 const LOCKED_LISTEN_MILLISECONDS = 120_000;
-/** The longest time between two saves the locked listen accepts, on a Mac under load. */
 const LOCKED_SAVE_INTERVAL_LIMIT_MILLISECONDS = 7_000;
-/** How often the locked listen checks Cup's process and service. */
 const LOCKED_CHECK_INTERVAL_MILLISECONDS = 20_000;
-/**
- * The test Worker's shortened signed URL lifetime, long enough for the time between the page's last
- * fetch of the audiobook and Play.
- */
 const SHORT_URL_LIFETIME_SECONDS = 30;
-/** Twice the narration track's 128 kbit/s, so ExoPlayer keeps loading while it plays. */
 const TRACK_BYTES_PER_SECOND = 32_000;
-/** The page's message for a failed load. */
 const MEDIA_ERROR_MESSAGE = "Audio could not be played. Press Play to try again.";
-/** Media3's shortened foreground grace after a pause, instead of 10 minutes. */
 const FOREGROUND_GRACE_SECONDS = 10;
 
 test("the first Play starts a foreground media session that shows the audiobook and its position", async () => {
   const device = asAndroidAppDevice(app.device);
   const { webView, title, durationMilliseconds, conversionId } = await openNewAudiobook(device);
 
-  // Skipping before the first Play loads the audiobook into the plugin, which prepares nothing but
-  // saves the position.
   await webView.$(`${PLAYER} button[aria-label="Forward 15 seconds"]`).click();
   await expect.poll(() => readPosition(webView)).toBe(SKIP_MILLISECONDS);
   await waitForSaveAfter(conversionId, 0);
@@ -70,20 +44,15 @@ test("the first Play starts a foreground media session that shows the audiobook 
   expect(await cupMediaPlaybackService(device)).toMatch(
     /\bisForeground=true\b.*\btypes=0x00000002\b/u,
   );
-  // The notification carries the cover image, which the session loads from its signed URL after
-  // it first posts the notification.
   await expect
     .poll(() => cupMediaNotification(device), { timeout: 10_000 })
     .toMatch(/\bandroid\.largeIcon=Icon \(Icon\(typ=BITMAP/u);
-  // Under the title the notification names Cup, since System UI shows a missing artist as "null".
   expect(await cupMediaNotification(device)).toMatch(/\bandroid\.text=String \(Cup\)/u);
 
-  // ExoPlayer plays on, also under the emulator's `-no-audio`, from where the skip left it.
   await expect
     .poll(() => readPosition(webView), { timeout: 15_000 })
     .toBeGreaterThan(SKIP_MILLISECONDS + 3_000);
 
-  // System UI reads the whole duration and the position from the session.
   const progress = await device.readMediaControlsProgress();
   const pagePosition = await readPosition(device.webView());
   const [shownPositionSeconds, shownDurationSeconds] = parseProgress(progress);
@@ -126,16 +95,11 @@ test("media keys and the notification's buttons and seek bar act on the player w
   await device.tapMediaControl("Back 15 seconds");
   webView = await device.webView();
   await expectPositionNear(webView, pausedAt);
-  // ExoPlayer skips from its own position, so back where it paused. The pause save is no exact
-  // reference: ExoPlayer reports the pause before its playback thread stops the audio, and under
-  // load its position then moves on by a few hundred milliseconds without an event. So the back
-  // skip lands at or after the pause save, and a second forward skip lands where the first did.
   const backSave = await waitForSaveAfter(conversionId, saveCount);
   expect(unitIds).toContain(backSave.synchronizationUnitId);
   const unitOrder =
     unitIds.indexOf(backSave.synchronizationUnitId) -
     unitIds.indexOf(pauseSave.synchronizationUnitId);
-  // In another unit, only the units' order counts.
   const millisecondsAfterPauseSave =
     unitOrder === 0
       ? backSave.offsetMilliseconds - pauseSave.offsetMilliseconds
@@ -158,27 +122,20 @@ test("media keys and the notification's buttons and seek bar act on the player w
   saveCount = positionSaves(conversionId).length;
   await device.dragMediaControlsSeekBar(0.75);
   webView = await device.webView();
-  // A drag lands only roughly where it aims: System UI's bar has margins.
   await expect
     .poll(() => readPosition(webView), { timeout: 10_000 })
     .toBeGreaterThan(durationMilliseconds * 0.5);
   expect(
     compareSaves(unitIds, await waitForSaveAfter(conversionId, saveCount), pauseSave),
   ).toBeGreaterThan(0);
-  // None of the controls started playback.
   await waitForPlayButton(webView, "Play");
 });
 
 test("Close in the notification ends a playing session, which saves the position, and the page keeps it", async () => {
   const device = asAndroidAppDevice(app.device);
-  // A track of several minutes, so it still plays when Close arrives. Opening the notification shade
-  // and finding Close can take over 10 s on a Mac under load; the default 19 s track ended before
-  // that, and the engine returned it to the start, so the page kept 0.
   await app.worker.restart("long-speech");
   const { webView, conversionId, durationMilliseconds } = await openNewAudiobook(device);
   expect(durationMilliseconds).toBeGreaterThan(120_000);
-  // Play on an audiobook the plugin has not loaded sends `load` before `play`; the button turns to
-  // Pause at once and stays there, without the load's paused state flipping it back.
   await recordPlayButtonLabels(webView);
   await webView.$(`${PLAYER} button[aria-label="Play"]`).click();
   await waitForCupMediaSession(device, "PLAYING");
@@ -190,7 +147,6 @@ test("Close in the notification ends a playing session, which saves the position
   await waitForSessionToEnd(device, 15_000);
   await waitForSaveAfter(conversionId, saveCount);
 
-  // The page keeps the audiobook where it stopped, and Play loads it into a new session.
   const page = await device.webView();
   await waitForPlayButton(page, "Play");
   const keptAt = await readPosition(page);
@@ -204,7 +160,6 @@ test(
   { timeout: LOCKED_LISTEN_MILLISECONDS + 240_000 },
   async () => {
     const device = asAndroidAppDevice(app.device);
-    // A track of several minutes, so it plays through the whole locked listen.
     await app.worker.restart("long-speech");
     const opened = await openNewAudiobook(device);
     const { conversionId } = opened;
@@ -217,7 +172,6 @@ test(
 
     await device.background();
     await device.turnScreenOff();
-    // Every later test needs the screen on, so a failure here must not leave it off.
     try {
       const savesBefore = positionSaves(conversionId).length;
       const lockedAt = performance.now();
@@ -227,14 +181,10 @@ test(
         elapsed += LOCKED_CHECK_INTERVAL_MILLISECONDS
       ) {
         await timers.setTimeout(LOCKED_CHECK_INTERVAL_MILLISECONDS);
-        // The foreground service keeps Android's cached apps freezer away from Cup.
         expect(await device.isFrozen()).toBe(false);
         expect(await cupMediaPlaybackService(device)).toMatch(/\bisForeground=true\b/u);
       }
       expect(await cupMediaSession(device)).toMatch(/\bstate=PlaybackState \{state=PLAYING\(3\)/u);
-      // The plugin saves at the save interval while the page is suspended; it checks twice a second
-      // whether a save is due, so the saves come every 5 to 5.5 s on an idle Mac. Under load, such as the
-      // deploy gate's parallel iOS suite, they came every 5.7 to 6.3 s (2026-11-17).
       const lockedSaves = positionSaves(conversionId).length - savesBefore;
       const lockedMilliseconds = performance.now() - lockedAt;
       expect(lockedSaves).toBeGreaterThanOrEqual(
@@ -248,7 +198,6 @@ test(
     }
     await device.bringToForeground();
     webView = await device.webView();
-    // Becoming visible, the page asks the plugin for ExoPlayer's position.
     await expect
       .poll(() => readPosition(webView), { timeout: 10_000 })
       .toBeGreaterThan(startPosition + LOCKED_LISTEN_MILLISECONDS - 10_000);
@@ -273,7 +222,6 @@ test("a call and transient audio focus requests pause the player and resume it, 
   await device.probeAudioFocus("abandon");
   await waitForPlayButton(webView, "Pause");
 
-  // With speech, ExoPlayer pauses for a duck request instead of lowering its volume.
   await device.probeAudioFocus("duck");
   await waitForPlayButton(webView, "Play");
   await device.probeAudioFocus("abandon");
@@ -312,7 +260,6 @@ test("expired URLs end a paused session, and the next Play renews them and plays
 
 test("a track URL the server refuses ends the playing session, and the next Play renews it and plays", async () => {
   const device = asAndroidAppDevice(app.device);
-  // Only the server's URLs expire early; the plugin keeps its 24 hours, so the refusal ends it.
   await app.worker.restart("long-speech", { signedUrlLifetimeSeconds: SHORT_URL_LIFETIME_SECONDS });
   const opened = await openNewAudiobook(device);
   const { conversionId } = opened;
@@ -321,9 +268,7 @@ test("a track URL the server refuses ends the playing session, and the next Play
   await waitForCupMediaSession(device, "PLAYING");
 
   await timers.setTimeout((SHORT_URL_LIFETIME_SECONDS + 5) * 1_000);
-  // A seek past the buffer requests the track again, with the expired URL.
   const fourthUnitId = (await readUnitIds(webView))[3]!;
-  // The unit's first element, its heading, holds no link.
   const [fourthUnitHeading] = await webView.$$(`[data-synchronization-unit="${fourthUnitId}"]`);
   await fourthUnitHeading!.click();
   await waitForSessionToEnd(device, 30_000);
@@ -345,7 +290,6 @@ test("a lost connection pauses the player with an error, and Play from the notif
   await waitForCupMediaSession(device, "PLAYING");
   await expect.poll(() => readPosition(webView), { timeout: 15_000 }).toBeGreaterThan(2_000);
 
-  // The media session prepares the failed player itself, without the page.
   let failedAt = await loseConnectionUntilPlaybackFails(device, webView);
   await device.tapMediaControl("Play");
   webView = await device.webView();
@@ -370,7 +314,6 @@ test("a playing session survives a swipe from recents and keeps saving, reopenin
 
   const savesBeforeSwipe = positionSaves(conversionId).length;
   await device.removeFromRecents();
-  // Without an activity or a page, the plugin saves on.
   await expect
     .poll(() => positionSaves(conversionId).length, {
       timeout: 3 * SAVE_INTERVAL_MILLISECONDS,
@@ -380,10 +323,8 @@ test("a playing session survives a swipe from recents and keeps saving, reopenin
   expect(await cupMediaSession(device)).toMatch(/\bstate=PlaybackState \{state=PLAYING\(3\)/u);
   expect(await cupMediaPlaybackService(device)).toMatch(/\bisForeground=true\b/u);
 
-  // A new activity and page in the process the service kept, which asks the plugin what plays.
   await device.reopen();
   webView = await device.webView();
-  // Recents' mini player or the audiobook's sheet, whichever page Cup opens on.
   await webView
     .$('[aria-label="Player"] button[aria-label="Pause"]')
     .waitForExist({ timeout: 30_000, timeoutMsg: "The page did not take the session over." });
@@ -412,7 +353,6 @@ test("a session a call pauses survives a swipe from recents and plays on after t
   await webView.$(`${PLAYER} button[aria-label="Play"]`).click();
   await waitForCupMediaSession(device, "PLAYING");
 
-  // ExoPlayer still wants to play during the call; only the listener's pause ends a swiped session.
   await device.emulatorConsole("gsm", "call", "5551234");
   try {
     await waitForCupMediaSession(device, "PAUSED");
@@ -420,7 +360,6 @@ test("a session a call pauses survives a swipe from recents and plays on after t
     await timers.setTimeout(5_000);
     expect(await cupMediaPlaybackService(device)).toBeDefined();
   } finally {
-    // A call left ringing would pause every later test's player.
     await device.emulatorConsole("gsm", "cancel", "5551234");
   }
   await waitForCupMediaSession(device, "PLAYING");
@@ -437,17 +376,12 @@ test("signing out saves the position one last time through the position URL and 
 
   const signingOut = await startSigningOut(device, webView);
   webView = signingOut.webView;
-  // "Delete account…" signed in afresh, which pauses the player as every sign-in does, on the web
-  // too: `signInAgain()` sends `SIGN_IN`, whose `stopPlayback` dispatches `cup:stop-playback`, which
-  // `host.pause` handles. The paused session runs on until the sign-out closes it.
   expect(await cupMediaPlaybackService(device)).toBeDefined();
   const savesBeforeSignOut = positionSaves(conversionId).length;
   await signingOut.scheduleDeletion.click();
   await waitForLandingPage(webView);
 
   await waitForSessionToEnd(device, 15_000);
-  // The listener's session is gone by now; the position URL authorizes the save on its own. The
-  // Worker refuses it, since a scheduled deletion blocks the account, but the save was sent.
   await waitForSaveAfter(conversionId, savesBeforeSignOut);
 });
 
@@ -466,12 +400,10 @@ test(
     await waitForCupMediaSession(device, "PLAYING");
     await expect.poll(() => readPosition(webView), { timeout: 15_000 }).toBeGreaterThan(3_000);
 
-    // Without a connection, the pause's save fails, and so does the native stop's final one.
     const workerPort = Number(new URL(app.apiOrigin).port);
     let savesBeforeSignOut: number;
     await device.unexposeHostPort(workerPort);
     try {
-      // Restarting the Worker ends the connections the plugin and ExoPlayer hold.
       await app.worker.restart("long-speech");
       savesBeforeSignOut = positionSaves(conversionId).length;
       await device.pressMediaKey("KEYCODE_MEDIA_PAUSE");
@@ -484,14 +416,12 @@ test(
       await device.exposeHostPort(workerPort);
     }
     await timers.setTimeout(5_000);
-    // The ended session retries nothing on its own.
     expect(positionSaves(conversionId)).toHaveLength(savesBeforeSignOut);
 
     await device.bringToForeground();
     const signingOut = await startSigningOut(device, await device.webView());
     await signingOut.scheduleDeletion.click();
     await waitForLandingPage(signingOut.webView);
-    // The Worker refuses it, since a scheduled deletion blocks the account, but the save was sent.
     await waitForSaveAfter(conversionId, savesBeforeSignOut);
   },
 );
@@ -514,12 +444,10 @@ test(
     await waitForCupMediaSession(device, "PAUSED");
     expect(await cupMediaNotification(device)).toContain(`pkg=${APP_PACKAGE} `);
 
-    // Media3 brings the service back to the foreground before ExoPlayer plays.
     await device.tapMediaControl("Play");
     await waitForCupMediaSession(device, "PLAYING");
     expect(await cupMediaPlaybackService(device)).toMatch(/\bisForeground=true\b/u);
 
-    // During a call ExoPlayer still wants to play, so the service stays in the foreground.
     await device.emulatorConsole("gsm", "call", "5551234");
     await waitForCupMediaSession(device, "PAUSED");
     await timers.setTimeout((FOREGROUND_GRACE_SECONDS + 5) * 1_000);
@@ -537,7 +465,6 @@ test(
     await device.hideMediaControls();
     await waitForSessionToEnd(device, 15_000);
 
-    // The page keeps the audiobook where it stopped, and Play loads it into a new session.
     await device.bringToForeground();
     webView = await device.webView();
     await waitForPlayButton(webView, "Play");
@@ -548,7 +475,6 @@ test(
   },
 );
 
-/** Signs in, which opens the new audiobook's page, and waits until it can play. */
 async function openNewAudiobook(
   device: AndroidAppDevice,
   launchArguments: Omit<AndroidLaunchArguments, "apiOrigin"> = {},
@@ -569,10 +495,6 @@ async function openNewAudiobook(
   return { webView, title, durationMilliseconds, conversionId };
 }
 
-/**
- * Opens the account's deletion from the audiobook's page, up to its enabled "Schedule deletion"
- * button. Scheduling the account's deletion is how a listener signs out; it signs in afresh first.
- */
 async function startSigningOut(device: AndroidAppDevice, webView: WebdriverIO.Browser) {
   await webView.$('a[aria-label="Back"]').click();
   await waitForRecents(webView, 1);
@@ -585,10 +507,6 @@ async function startSigningOut(device: AndroidAppDevice, webView: WebdriverIO.Br
   return { webView: signedInWebView, scheduleDeletion };
 }
 
-/**
- * How often the Worker answered a request for the audiobook, which renews its signed URLs. A
- * renewal omits the narration document the page holds, so the path is compared without its query.
- */
 function audiobookFetches(conversionId: string): number {
   return app.worker
     .requests()
@@ -599,13 +517,8 @@ function audiobookFetches(conversionId: string): number {
     ).length;
 }
 
-/** A listening position as the position route stores it. */
 type PositionSave = { synchronizationUnitId: string; offsetMilliseconds: number };
 
-/**
- * The listening positions the Worker received for the audiobook, oldest first. Every one came
- * through the signed position URL, without a bearer token: the page saves nothing on Android.
- */
 function positionSaves(conversionId: string): PositionSave[] {
   const route = `/api/audiobooks/${conversionId}/position`;
   return app.worker
@@ -637,10 +550,6 @@ function parsePositionSave(body: string | undefined): PositionSave {
   };
 }
 
-/**
- * Waits until the Worker received a save after the first `saveCount`, then for the saves to settle,
- * and returns the last one.
- */
 async function waitForSaveAfter(conversionId: string, saveCount: number): Promise<PositionSave> {
   await expect
     .poll(() => positionSaves(conversionId).length, {
@@ -648,16 +557,11 @@ async function waitForSaveAfter(conversionId: string, saveCount: number): Promis
       message: "The Worker received no listening-position save.",
     })
     .toBeGreaterThan(saveCount);
-  // A save during playback may have been on its way before the one the action sent.
   await timers.setTimeout(1_500);
   const saves = positionSaves(conversionId);
   return saves[saves.length - 1]!;
 }
 
-/**
- * The audiobook's synchronization units in document order, once each however many elements carry
- * them.
- */
 async function readUnitIds(webView: WebdriverIO.Browser): Promise<string[]> {
   return webView.execute(() => [
     ...new Set(
@@ -669,7 +573,6 @@ async function readUnitIds(webView: WebdriverIO.Browser): Promise<string[]> {
   ]);
 }
 
-/** Orders two saves by where they are in the audiobook: negative, zero or positive. */
 function compareSaves(unitIds: readonly string[], left: PositionSave, right: PositionSave) {
   const unitOrder =
     unitIds.indexOf(left.synchronizationUnitId) - unitIds.indexOf(right.synchronizationUnitId);
@@ -678,7 +581,6 @@ function compareSaves(unitIds: readonly string[], left: PositionSave, right: Pos
   return unitOrder === 0 ? left.offsetMilliseconds - right.offsetMilliseconds : unitOrder;
 }
 
-/** Waits until Cup's service, its notification and its media session are gone. */
 async function waitForSessionToEnd(device: AndroidAppDevice, timeoutMilliseconds: number) {
   await expect
     .poll(() => cupMediaPlaybackService(device), {
@@ -690,7 +592,6 @@ async function waitForSessionToEnd(device: AndroidAppDevice, timeoutMilliseconds
   expect(await device.dumpsys("notification", "--noredact")).not.toContain(`pkg=${APP_PACKAGE} `);
 }
 
-/** Waits until the service has left the foreground, after the shortened grace. */
 async function waitForServiceToLeaveTheForeground(device: AndroidAppDevice) {
   await expect
     .poll(async () => (await cupMediaPlaybackService(device)) ?? "", {
@@ -701,10 +602,6 @@ async function waitForServiceToLeaveTheForeground(device: AndroidAppDevice) {
   expect(await cupMediaPlaybackService(device)).toBeDefined();
 }
 
-/**
- * Cuts the connection to the test Worker while the player plays, waits until the page reports the
- * failure, and returns the position where it stopped; the Worker is reachable again afterwards.
- */
 async function loseConnectionUntilPlaybackFails(
   device: AndroidAppDevice,
   webView: WebdriverIO.Browser,
@@ -713,16 +610,12 @@ async function loseConnectionUntilPlaybackFails(
   const cutAt = await readPosition(webView);
   await device.unexposeHostPort(workerPort);
   try {
-    // `adb reverse --remove` refuses new connections only; restarting the Worker ends the ones
-    // ExoPlayer holds, the track's response and idle keep-alive connections alike.
     await app.worker.restart("long-speech");
     await expect
       .poll(() => readPageText(webView), { timeout: 60_000 })
       .toContain(MEDIA_ERROR_MESSAGE);
     await waitForPlayButton(webView, "Play");
-    // Media3 reports the failed player to the system as an error, whose notification offers Play.
     expect(await cupMediaSession(device)).toMatch(/\bstate=PlaybackState \{state=ERROR\(7\)/u);
-    // The cut response is a failed load, not the end of the track, which would start over.
     const failedAt = await readPosition(webView);
     expect(failedAt).toBeGreaterThan(cutAt);
     return failedAt;
@@ -731,7 +624,6 @@ async function loseConnectionUntilPlaybackFails(
   }
 }
 
-/** Waits until the player plays on from `position`, with the error gone. */
 async function expectToPlayOnFrom(
   device: AndroidAppDevice,
   webView: WebdriverIO.Browser,
@@ -746,7 +638,6 @@ async function expectToPlayOnFrom(
   expect(await readPosition(webView)).toBeLessThan(position + 30_000);
 }
 
-/** The position the player sheet's scrubber shows. */
 async function readPosition(
   webView: WebdriverIO.Browser | Promise<WebdriverIO.Browser>,
 ): Promise<number> {
@@ -770,7 +661,6 @@ async function expectPositionNear(webView: WebdriverIO.Browser, positionMillisec
     .toBeLessThan(POSITION_TOLERANCE_MILLISECONDS);
 }
 
-/** System UI describes its progress bar as, for example, `9 seconds of 19 seconds`. */
 function parseProgress(progress: string): [positionSeconds: number, durationSeconds: number] {
   const match = /^(?:(\d+) minutes? )?(\d+) seconds? of (?:(\d+) minutes? )?(\d+) seconds?$/u.exec(
     progress,
@@ -785,11 +675,6 @@ function parseProgress(progress: string): [positionSeconds: number, durationSeco
   ];
 }
 
-/**
- * Records every label the player's Play/Pause button shows from now on, starting with the current
- * one; `readPlayButtonLabels` returns them. A flicker lasts a few milliseconds, which polling
- * misses.
- */
 async function recordPlayButtonLabels(webView: WebdriverIO.Browser) {
   await webView.execute((player) => {
     const labels: string[] = [];
@@ -799,7 +684,6 @@ async function recordPlayButtonLabels(webView: WebdriverIO.Browser) {
         ?.getAttribute("aria-label");
       if (label && labels.at(-1) !== label) {
         labels.push(label);
-        // A data attribute carries the labels to `readPlayButtonLabels` as plain text.
         document.documentElement.dataset["cupPlayButtonLabels"] = labels.join(" ");
       }
     };
@@ -824,20 +708,17 @@ async function readPlayButtonLabels(webView: WebdriverIO.Browser): Promise<strin
   return labels.split(" ").filter((label) => label !== "");
 }
 
-/** Waits until the player's button reads `label`, as the plugin reports playing or not. */
 async function waitForPlayButton(webView: WebdriverIO.Browser, label: "Play" | "Pause") {
   await webView
     .$(`${PLAYER} button[aria-label="${label}"]`)
     .waitForExist({ timeout: 15_000, timeoutMsg: `The player's button did not turn to ${label}.` });
 }
 
-/** Cup's entry in `dumpsys media_session`, or `undefined` while Cup has none. */
 async function cupMediaSession(device: AndroidAppDevice): Promise<string | undefined> {
   const sessions = (await device.dumpsys("media_session")).split(/\n(?= {4}\S)/u);
   return sessions.find((session) => session.includes(`package=${APP_PACKAGE}\n`));
 }
 
-/** Waits until Cup's media session is in `state`, and returns its entry. */
 async function waitForCupMediaSession(
   device: AndroidAppDevice,
   state: "PLAYING" | "PAUSED",
@@ -855,7 +736,6 @@ async function waitForCupMediaSession(
   return entry ?? "";
 }
 
-/** The record of Cup's media playback service in `dumpsys activity services`, while it runs. */
 async function cupMediaPlaybackService(device: AndroidAppDevice): Promise<string | undefined> {
   const services = await device.dumpsys("activity", "services", APP_PACKAGE);
   return services
@@ -866,7 +746,6 @@ async function cupMediaPlaybackService(device: AndroidAppDevice): Promise<string
     );
 }
 
-/** Cup's media notification in `dumpsys notification`, with its extras. */
 async function cupMediaNotification(device: AndroidAppDevice): Promise<string> {
   const notifications = await device.dumpsys("notification", "--noredact");
   const records = notifications.split(/\n(?= {4}NotificationRecord\()/u);

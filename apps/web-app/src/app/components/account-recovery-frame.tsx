@@ -6,7 +6,6 @@ import { textStyles } from "#src/app/design-system/text-styles.js";
 import { interTypefaceScope } from "#src/app/global-styles.js";
 import { composeClassnames } from "#src/app/utils.js";
 
-/** The account recovery page around its content, or the loading state or error in its place. */
 export function AccountRecoveryFrame({
   children,
 }: {

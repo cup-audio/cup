@@ -180,7 +180,6 @@ test("a shell gives the Cocoa SDK native tracing of view controllers and frames 
     attachScreenshot: false,
     attachViewHierarchy: false,
   });
-  // App-hang tracking stays at Cocoa's defaults.
   expect(options).not.toHaveProperty("enableAppHangTracking");
   expect(options).not.toHaveProperty("appHangTimeoutInterval");
 });
@@ -196,7 +195,6 @@ test("the browser passes no Cocoa options", () => {
   expect(options).not.toHaveProperty("cocoaOptions");
 });
 
-/** Whether Sentry's event filters drop an error event of this type and message under the options. */
 function isIgnored(type: string, value: string): boolean {
   const options = createClientSentryOptions({
     pageOrigin: "https://cup.audio",
@@ -205,7 +203,6 @@ function isIgnored(type: string, value: string): boolean {
     router: ROUTER,
   });
   const event: ErrorEvent = { type: undefined, exception: { values: [{ type, value }] } };
-  // A client that sends nothing, only to hand the options to Sentry's event filters.
   const client = new BrowserClient({
     ...(options?.ignoreErrors === undefined ? {} : { ignoreErrors: options.ignoreErrors }),
     integrations: [],

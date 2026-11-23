@@ -7,7 +7,6 @@ import { createOperatorOpenApiDocument } from "#src/hono-app.ts";
 
 const HTTP_METHODS = ["get", "head", "post", "put", "patch", "delete"] as const;
 
-/** The parts of an OpenAPI document the structural tests read. */
 const openApiDocumentSchema = z.object({
   paths: z.record(
     z.string(),
@@ -29,7 +28,6 @@ const openApiDocumentSchema = z.object({
   ),
 });
 
-/** Every operation of the document, named like `POST /api/operator/grants`. */
 function listOperations() {
   const document = openApiDocumentSchema.parse(createOperatorOpenApiDocument());
   return Object.entries(document.paths).flatMap(([path, pathItem]) =>
@@ -44,7 +42,6 @@ function listOperations() {
 
 describe("operator API OpenAPI document", () => {
   test("matches the committed snapshot", async () => {
-    // Update the snapshot with `pnpm --filter '@cup/operator-api.routes' test -u`.
     await expect(
       `${JSON.stringify(createOperatorOpenApiDocument(), undefined, 2)}\n`,
     ).toMatchFileSnapshot("./__snapshots__/openapi.json");
@@ -85,12 +82,7 @@ describe("operator API OpenAPI document", () => {
   });
 
   test("every operation with request schemas declares the 400 response that the validation hook returns", () => {
-    // `defaultHook` answers a request that fails its route's schemas with `400 invalid-input`.
-    // Routes registered with their own hook answer validation failures differently.
-    const operationsWithCustomHooks = new Set([
-      // An invalid account ID answers `404 account-unavailable`, like an unknown account.
-      "GET /api/operator/accounts/{accountId}",
-    ]);
+    const operationsWithCustomHooks = new Set(["GET /api/operator/accounts/{accountId}"]);
     const operationsWithout400 = listOperations().flatMap(({ name, operation }) =>
       (operation.requestBody !== undefined || operation.parameters !== undefined) &&
       operation.responses["400"] === undefined &&

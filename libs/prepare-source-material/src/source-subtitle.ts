@@ -12,8 +12,6 @@ import {
   type HtmlParentNode,
 } from "#src/html-tree.ts";
 
-// A `class`, `itemprop` or `data-*` word that marks a source subtitle candidate or its wrapper.
-// Each word is proven by a recorded source page; add a word only with a fixture that needs it.
 const SOURCE_SUBTITLE_WORDS = new Set<string>([
   "subtitle",
   "subheadline",
@@ -21,11 +19,8 @@ const SOURCE_SUBTITLE_WORDS = new Set<string>([
   "desc",
   "description",
 ]);
-// Date and byline blocks between the visible headline and the source subtitle are skipped, never candidates.
 const DATE_OR_BYLINE_CLASS_WORDS = new Set<string>(["author", "byline", "date"]);
 const AUTHOR_LINK_SEPARATOR_WORDS = new Set<string>(["and", "und"]);
-// Month and weekday names and their abbreviations in English and German, clock words, and English
-// ordinal suffixes; a block whose words are all among them, beside digits, is a date.
 const DATE_WORDS = new Set<string>(
   [
     "january february march april may june july august september october november december",
@@ -42,11 +37,6 @@ const META_DESCRIPTION_PROPERTIES = new Set<string>([
   "twitter:description",
 ]);
 
-/**
- * Takes the first prose block, skipping date and byline blocks, as the only source subtitle
- * candidate. Precision beats recall: a candidate without an accepting signal means no source
- * subtitle, and no further block is tried.
- */
 export function findSourceSubtitleElement(
   parentNode: HtmlParentNode,
   title: string,
@@ -58,7 +48,6 @@ export function findSourceSubtitleElement(
       NARRATION_TEXT_ELEMENT_TAG_NAMES.has(element.tagName) &&
       normalizeWhitespace(extractNodeText(element)).length > 0 &&
       !isDateOrBylineBlock(element),
-    // A skipped date or byline block is skipped whole.
     { shouldDescend: (element) => !NARRATION_TEXT_ELEMENT_TAG_NAMES.has(element.tagName) },
   );
 
@@ -77,10 +66,6 @@ export function findSourceSubtitleElement(
   return isAccepted ? candidate : undefined;
 }
 
-/**
- * Reads the descriptions a page declares: Open Graph, page and Twitter card descriptions, the
- * `description` of each JSON-LD entity, and microdata `itemprop="description"` values.
- */
 export function extractMetadataDescriptions(documentHtml: string): string[] {
   const documentFragment = parseFragment(documentHtml);
   const metaDescriptions = collectMetadata(documentFragment).flatMap(({ property, content }) =>
@@ -131,10 +116,6 @@ function isDateOrBylineBlock(element: HtmlElement): boolean {
   );
 }
 
-/**
- * Whether the block holds nothing but `<time>` elements and separators. A standfirst can mention a
- * date in an inline `<time>` and stays a candidate.
- */
 function isTimeOnlyBlock(element: HtmlElement): boolean {
   return (
     findFirstElement(element, isTimeElement) !== undefined &&
@@ -156,7 +137,6 @@ function isDateOnlyText(text: string): boolean {
   );
 }
 
-/** Whether the block's words are author link texts joined only by separators such as "and". */
 function isAuthorLinkBlock(element: HtmlElement): boolean {
   const textOutsideAuthorLinks = extractNodeText(element, isAuthorLink);
   const separatorWords = textOutsideAuthorLinks.match(/\p{L}+/gu) ?? [];
@@ -191,7 +171,6 @@ function hasSourceSubtitleAttributeWord(element: HtmlElement): boolean {
   );
 }
 
-/** Splits an attribute value such as `ArticleSubtitle hero__sub-headline` into lowercase words. */
 function splitAttributeWords(attributeValue: string): string[] {
   return attributeValue
     .split(/[^\p{L}\p{N}]+/u)
@@ -200,14 +179,12 @@ function splitAttributeWords(attributeValue: string): string[] {
     .map((word) => word.toLowerCase());
 }
 
-/** Reads the `description` of each top-level and `@graph` entity; nested entities describe others. */
 function extractJsonLinkedDataDescriptions(json: string): string[] {
   let linkedData: unknown;
 
   try {
     linkedData = JSON.parse(json);
   } catch {
-    // Publisher markup is untrusted; malformed JSON-LD declares nothing.
     return [];
   }
 

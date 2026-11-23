@@ -6,8 +6,6 @@ import { expect, gotoPage, test } from "#test-e2e/fixtures.ts";
 const GRANT_ID = "b4ad28a8-bbd7-46af-a17c-59527becd745";
 const CREDENTIAL = `v1.${"a".repeat(43)}`;
 
-// The web app component tests cover the other trial, conversion and track states against their
-// stories; this screenshot shows the open Trial in the production build.
 test(
   "shows the open trial URL input screen",
   { tag: VISUAL_TAG },

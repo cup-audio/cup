@@ -36,7 +36,6 @@ const speechProviderToSynthesizeMap = {
   [provider in SpeechConfig["provider"]]: SpeechSynthesizer;
 };
 
-/** Storage operations required to persist one audio segment. */
 type AudioSegmentBucket = {
   head(key: string): Promise<StoredAudioSegment | null>;
   put(
@@ -50,10 +49,8 @@ type AudioSegmentBucket = {
   ): Promise<StoredAudioSegment | null>;
 };
 
-/** Supplies synthesis, storage, ownership, and sequence data for one narration segment. */
 export type ProduceOptions = {
   speechConfig?: SpeechConfig;
-  /** The manifest's canonical BCP 47 narration language, absent when the conversion has none. */
   narrationLanguage?: string | undefined;
   artifactPrefix?: string;
   ai: SpeechSynthesisAi;
@@ -65,7 +62,6 @@ export type ProduceOptions = {
   synthesisResponseMode?: NarrationSynthesisResponseMode;
 };
 
-/** Synthesizes and stores one segment, reusing an identical existing object when possible. */
 export async function produceAudioSegment({
   artifactPrefix,
   ai,
@@ -111,8 +107,6 @@ export async function produceAudioSegment({
     synthesisResponseMode,
   });
   const speedFactor = getSpeedFactor(speechConfig);
-  // The stretch runs before encoding, so the stored audio and every duration measured from it,
-  // such as generated audio duration and synchronization unit offsets, carry the speech policy's narration pace.
   const pcmAtPolicyPace =
     speedFactor === 1
       ? providerAudio

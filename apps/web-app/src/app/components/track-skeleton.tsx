@@ -1,10 +1,6 @@
 import { css } from "@linaria/core";
 import React from "react";
 
-/**
- * Shown while the audiobook loads, and in the same shape while its conversion is still preparing.
- * Only loading is a loading state: a conversion being prepared is the content the server sent.
- */
 export function TrackSkeleton({
   label,
   isLoadingState,

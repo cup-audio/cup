@@ -1,4 +1,3 @@
-/** Calculates the standard CRC-32 used by MP3 metadata and ZIP entries. */
 export function calculateCrc32(bytes: Uint8Array): number {
   let crc32 = 0xffff_ffff;
 

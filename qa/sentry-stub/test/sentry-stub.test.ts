@@ -3,7 +3,6 @@ import { expect, test } from "vitest";
 
 import { useSentryStub } from "#src/sentry-stub.ts";
 
-/** Posts an envelope the way Sentry's SDKs do: to the DSN's project, keyed by its public key. */
 async function postEnvelope(dsn: string, body: string): Promise<Response> {
   const { username, origin, pathname } = new URL(dsn);
   return fetch(`${origin}/api${pathname}/envelope/?sentry_version=7&sentry_key=${username}`, {
@@ -24,7 +23,6 @@ test("records an envelope with its project, headers and items, by length or by n
   });
   const body = [
     JSON.stringify({ event_id: "a".repeat(32), dsn: stub.dsn("cup-worker") }),
-    // A declared length counts bytes, not characters.
     JSON.stringify({ type: "event", length: Buffer.byteLength(event) }),
     event,
     JSON.stringify({ type: "client_report" }),

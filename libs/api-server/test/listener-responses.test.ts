@@ -22,9 +22,6 @@ import { toPreparationPhase } from "#src/http/listener-responses.ts";
 
 import { toStrictSchema } from "#test/strict-schema.ts";
 
-// Fake Durable Object results that handlers pass on carry `internalRevision`, a field no listener
-// contract declares, as a stand-in for internal fields that the owning packages may add later.
-
 vi.mock("cloudflare:workers", () => ({
   DurableObject: class {
     readonly mocked = true;

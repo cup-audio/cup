@@ -7,19 +7,11 @@ import process from "node:process";
 import { parseEnv } from "node:util";
 import { $ } from "zx";
 
-/** The local-only account that replaces Google sign-in during development; see ADR 0012. */
 const TEST_ACCOUNT_EMAIL = "test@cup.test";
-/**
- * Google sign-ins carry the name in `user_metadata`; the web app shows its initials ("ta") in the
- * avatar.
- */
 const TEST_ACCOUNT_USER_METADATA = { name: "Test Account" };
-/** Fixed and short so it is easy to type on a phone; Supabase requires at least six characters. */
 const TEST_ACCOUNT_PASSWORD = "testtest";
-/** The web app's Vite port and the local Supabase API port from `supabase/config.toml`. */
 const WEB_APP_PORT = 5173;
 const SUPABASE_PORT = 55321;
-/** The Homebrew CLI can lag behind the macOS app's daemon, so prefer the CLI the app ships. */
 const MACOS_TAILSCALE_CLI = "/Applications/Tailscale.app/Contents/MacOS/Tailscale";
 
 const program = new Command()
@@ -68,7 +60,6 @@ async function run(command: { action: "start"; tailnet: boolean } | { action: "s
     }
   }
 
-  // Google sign-in is optional locally: without a client, only the test account signs in.
   const clientId =
     process.env["SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID"] ??
     terraformEnv["TF_VAR_google_web_client_id"] ??
@@ -79,7 +70,6 @@ async function run(command: { action: "start"; tailnet: boolean } | { action: "s
     "";
   const isGoogleConfigured = clientId !== "" && clientSecret !== "";
 
-  /** Every Supabase CLI command parses `supabase/config.toml`, which reads these variables. */
   function supabaseEnvironment(origins: { webApp: string; supabase: string }) {
     return {
       ...process.env,
@@ -114,7 +104,6 @@ async function run(command: { action: "start"; tailnet: boolean } | { action: "s
   }
 
   const backupPath = path.join(root, "supabase/.local/worker.env.local");
-  /** Present while `start --tailnet` serves the ports, so `stop` turns off only what it started. */
   const tailnetStatePath = path.join(root, "supabase/.local/tailnet-host");
 
   if (command.action === "stop") {
@@ -172,7 +161,6 @@ async function run(command: { action: "start"; tailnet: boolean } | { action: "s
       JSON.parse(await supabase(["status", "-o", "json"], environment, true)),
     );
 
-    // `supabase start` leaves a running stack as it is, including the URLs it was started with.
     const issuer = await readIssuer(status.API_URL);
     if (issuer !== environment.CUP_LOCAL_JWT_ISSUER) {
       throw new Error(
@@ -192,19 +180,14 @@ async function run(command: { action: "start"; tailnet: boolean } | { action: "s
 
     const values = {
       ...workerEnv,
-      // Tokens carry the issuer Supabase was started with; the Worker verifies against this URL.
       SUPABASE_URL: tailnetHost ? origins.supabase : status.API_URL,
       SUPABASE_PUBLISHABLE_KEY: status.ANON_KEY,
       SUPABASE_SECRET_KEY: status.SERVICE_ROLE_KEY,
       GOOGLE_WEB_CLIENT_ID: isGoogleConfigured ? clientId : "",
-      // Kept across restarts so that signed media URLs issued earlier stay valid.
       MEDIA_URL_SIGNING_KEY:
         workerEnv["MEDIA_URL_SIGNING_KEY"] ?? randomBytes(32).toString("base64url"),
       LOCAL_DEVELOPMENT: "true",
-      // Local development never sends to Sentry: with a DSN next to LOCAL_DEVELOPMENT=true, every
-      // Worker invocation throws (@cup/telemetry.cloudflare).
       SENTRY_DSN: "",
-      // The telemetry tunnel forwards nothing either.
       SENTRY_TUNNEL_DSNS: "",
       LOCAL_TEST_ACCOUNT_EMAIL: TEST_ACCOUNT_EMAIL,
       LOCAL_TEST_ACCOUNT_PASSWORD: TEST_ACCOUNT_PASSWORD,
@@ -303,10 +286,6 @@ async function readIssuer(apiUrl: string) {
     : undefined;
 }
 
-/**
- * Creates the test account, or resets its password and name when it already exists, possibly with
- * another password or without a name.
- */
 async function ensureTestAccount(apiUrl: string, secretKey: string, password: string) {
   const headers = {
     apikey: secretKey,

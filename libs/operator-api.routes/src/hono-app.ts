@@ -242,8 +242,6 @@ const deleteConversionRoute = createRoute({
   path: "/api/operator/conversions/{conversionId}",
   request: {
     params: conversionParamsSchema,
-    // Empty like the other bodyless operator mutations, because every operator mutation must carry
-    // `Content-Type: application/json` (the `/api/operator/*` middleware in `@cup/api-server`).
     body: { required: true, content: { "application/json": { schema: z.object({}).strict() } } },
   },
   responses: {
@@ -253,7 +251,6 @@ const deleteConversionRoute = createRoute({
         "Conversion deleted, or its deletion is already under way; cleanup continues in the background.",
     },
     400: errorResponse("Invalid request."),
-    // `account-unavailable` for an account being deleted, as account inspection answers.
     404: errorResponse("Conversion not found, or its account is being deleted."),
     409: errorResponse("Conversion not owned by an account."),
     500: errorResponse("Operational error."),
@@ -289,7 +286,6 @@ export type OperatorApiHandlers<Bindings extends object> = {
   migrateGrants: OperatorApiRouteHandler<typeof migrateGrantsRoute, Bindings>;
 };
 
-/** Creates the typed HTTP interface used by operators. */
 export function createOperatorApi<Bindings extends object>(
   handlers: OperatorApiHandlers<Bindings>,
 ) {
@@ -327,7 +323,6 @@ const unavailable = (): never => {
   throw new Error("Contract application cannot handle requests.");
 };
 
-/** Creates a handler-less application used only by local OpenAPI generation. */
 function createOperatorContractApp() {
   return createOperatorApi({
     listAccounts: unavailable,
@@ -350,7 +345,6 @@ type OpenApiDocument = ReturnType<
   ReturnType<typeof createOperatorContractApp>["getOpenAPIDocument"]
 >;
 
-/** Generates the operator API's OpenAPI document, which the snapshot test compares. */
 export function createOperatorOpenApiDocument(): OpenApiDocument {
   return createOperatorContractApp().getOpenAPIDocument({
     openapi: "3.0.0",

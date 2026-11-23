@@ -8,7 +8,6 @@ import { findPackageExportProblems, type WorkspaceProject } from "#src/package-e
 import { listWorkspaceProjects } from "#test/workspace-projects.ts";
 
 const manifestSchema = z.object({
-  // A conditional target without `default` fails here; extend ExportsField when a package needs one.
   exports: z
     .union([
       z.string(),
