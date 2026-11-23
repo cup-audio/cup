@@ -302,6 +302,20 @@ export class AndroidAppDevice implements AppDevice {
     );
   }
 
+  async startFromUrl(url: string): Promise<void> {
+    await this.adb([
+      "shell",
+      "am",
+      "start",
+      "-W",
+      "-a",
+      "android.intent.action.VIEW",
+      "-d",
+      url,
+      APP_PACKAGE,
+    ]);
+  }
+
   async waitForNativeText(text: string): Promise<void> {
     await this.driver.switchContext("NATIVE_APP");
     await this.nativeText(text).waitForDisplayed({ timeout: 30_000 });

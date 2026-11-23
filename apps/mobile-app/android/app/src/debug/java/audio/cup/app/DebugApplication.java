@@ -25,7 +25,7 @@ public class DebugApplication extends Application {
                 return;
             }
             TestSentryDsn.fromIntent(activity.getIntent());
-            if (TestApiOrigin.fromIntent(activity.getIntent()) != null) {
+            if (TestApiOrigin.of(activity, activity.getIntent()) != null) {
                 ((BridgeActivity) activity).registerPlugin(TestApiOriginPlugin.class);
                 ((BridgeActivity) activity).registerPlugin(TestRendererCrashPlugin.class);
                 ((BridgeActivity) activity).registerPlugin(FocusProbePlugin.class);
@@ -39,7 +39,7 @@ public class DebugApplication extends Application {
                 return;
             }
             Intent intent = activity.getIntent();
-            if (TestApiOrigin.fromIntent(intent) == null || intent.getBooleanExtra(REAL_GOOGLE_SIGN_IN_EXTRA, false)) {
+            if (TestApiOrigin.of(activity, intent) == null || intent.getBooleanExtra(REAL_GOOGLE_SIGN_IN_EXTRA, false)) {
                 return;
             }
             Bridge bridge = ((BridgeActivity) activity).getBridge();

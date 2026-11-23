@@ -76,6 +76,31 @@ test("an Apple sign-in finishes and starts the submitted request when Android ki
   expect(conversionStartsSince(app.worker, 0)).toEqual([SOURCE_URL]);
 });
 
+test("a sign-in callback that starts Cup without launch arguments after a test launch still reaches the test Worker", async () => {
+  const device = asAndroidAppDevice(app.device);
+  await device.launch({ apiOrigin: app.apiOrigin });
+  await waitForLandingPage(await device.webView());
+  await device.terminate();
+  const requestCount = app.worker.requests().length;
+
+  await device.startFromUrl(`${AUTH_CALLBACK_URL}?code=a-code-no-sign-in-issued`);
+
+  await expect
+    .poll(
+      () =>
+        app.worker
+          .requests()
+          .slice(requestCount)
+          .some((request) => request.method === "GET" && request.path === "/api/auth/config"),
+      { timeout: 30_000, interval: 500 },
+    )
+    .toBe(true);
+  await expect
+    .poll(() => device.focusedPackage(), { timeout: 30_000, interval: 500 })
+    .toBe(APP_PACKAGE);
+  expect(app.authProvider.exchanges()).toBe(0);
+});
+
 test("confirms an Apple-linked deletion with Apple's refresh token from a fresh sign-in, which the Worker validates and revokes before scheduling", async () => {
   const device = asAndroidAppDevice(app.device);
   await device.launch({ apiOrigin: app.apiOrigin });

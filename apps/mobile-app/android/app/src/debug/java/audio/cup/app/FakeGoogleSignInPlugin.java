@@ -29,7 +29,7 @@ public class FakeGoogleSignInPlugin extends Plugin {
 
     @Override
     public void load() {
-        apiOrigin = TestApiOrigin.fromIntent(getActivity().getIntent());
+        apiOrigin = TestApiOrigin.of(getActivity(), getActivity().getIntent());
     }
 
     @PluginMethod

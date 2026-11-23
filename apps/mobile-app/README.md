@@ -52,7 +52,7 @@ The debug build reads the backend origin from the intent extra `cupTestApiOrigin
 adb shell am start -n audio.cup.app/.MainActivity --es cupTestApiOrigin http://localhost:8787
 ```
 
-The value must be exactly `http://localhost:<port>`; any other value stops the app at launch with an `IllegalArgumentException` naming the argument, so a broken test setup never reaches production. Without the extra, a debug build uses `https://cup.audio` as before. Use `adb reverse tcp:<port> tcp:<port>` to make a port on your Mac reachable at `localhost` on the device.
+The value must be exactly `http://localhost:<port>`; any other value stops the app at launch with an `IllegalArgumentException` naming the argument, so a broken test setup never reaches production. The debug build stores the origin in its own SharedPreferences and uses the stored origin whenever a later start carries no extra, such as Chrome's sign-in callback starting Cup after Android discarded its task, so a test run never falls back to production; the mobile E2E suite clears the app's data before each test. Without the extra and without a stored origin, a debug build uses `https://cup.audio` as before; after a test launch on your device, `adb shell pm clear audio.cup.app` returns it there. Use `adb reverse tcp:<port> tcp:<port>` to make a port on your Mac reachable at `localhost` on the device.
 
 Only the debug source set (`android/app/src/debug`) handles the argument: before Capacitor loads the page, it sets the global `window.cupTestApiOrigin` that the web app's `apiOrigin()` reads, and lets the `https://localhost` page load `http://localhost` media. The same source set allows plain HTTP to `localhost` and nowhere else. The argument needs Android 10 (API 29) or later, where activity pre-creation callbacks exist. Release builds contain none of this.
 
@@ -192,7 +192,7 @@ The debug build reads the backend origin from the process arguments `-cupTestApi
 xcrun simctl launch <simulator> audio.cup.app -cupTestApiOrigin http://localhost:8787
 ```
 
-In Xcode, add the arguments under the App scheme's Run action, Arguments Passed On Launch. The arguments set the defaults key `cupTestApiOrigin` for one launch, and the build reads that key. A launch without arguments, such as one a shared URL starts, reads the key from the app's own defaults, which the E2E suite writes before such a launch and a reinstall erases:
+In Xcode, add the arguments under the App scheme's Run action, Arguments Passed On Launch. The arguments set the defaults key `cupTestApiOrigin` for one launch, and the build reads that key. A launch without arguments, such as one a shared URL starts, reads the key from the app's own defaults, which the E2E suite writes before such a launch and a reinstall erases. The build also copies an origin it was launched with into its own defaults, as the Android debug build stores it, so a later start without arguments, such as a URL opening Cup, keeps the test origin:
 
 ```sh
 xcrun simctl spawn <simulator> defaults write audio.cup.app cupTestApiOrigin http://localhost:8787

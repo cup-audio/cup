@@ -148,6 +148,7 @@ enum TestApiOrigin {
         guard let value = stored as? String, isLocalhostOrigin(value) else {
             fatalError("The \(key) default must be exactly http://localhost:<port>, got \"\(stored)\".")
         }
+        defaults.set(value, forKey: key)
         return value
     }
 
