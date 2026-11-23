@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
+import type { AppleProviderCredential } from "@cup/listener-api.routes";
+
 import { SignInCancelledError, UserFacingError } from "#src/errors.js";
 import type { AppleSignInOptions, GoogleSignInOptions } from "#src/platform/account-auth.js";
 import { watchAppState } from "#src/platform/account-auth.native.js";
@@ -8,12 +10,12 @@ import { AUTH_CALLBACK_URL, webAuthentication } from "#src/platform/web-authenti
 import { reportFailure } from "#src/report-failure.js";
 
 export { initializeAuthStorage, watchAppState } from "#src/platform/account-auth.native.js";
-export { appleCredentialOf } from "#src/platform/account-auth.web.js";
 
 const CANCELLATION_GRACE_PERIOD_MILLISECONDS = 3_000;
 const APPLE_SIGN_IN_FAILED = "Apple sign-in could not be completed. Try again.";
 
 let completedAppleSignIn = false;
+let heldAppleCredential: AppleProviderCredential | undefined;
 
 type ExchangingClient = { auth: Pick<SupabaseClient["auth"], "exchangeCodeForSession"> };
 
@@ -147,7 +149,13 @@ async function exchangeCallback(client: ExchangingClient, callbackUrl: string): 
   if (exchange.error) {
     throw exchange.error;
   }
+  const refreshToken = exchange.data.session.provider_refresh_token;
+  heldAppleCredential = refreshToken ? { provider: "apple", refreshToken } : undefined;
   completedAppleSignIn = true;
+}
+
+export function appleCredentialOf(): AppleProviderCredential | undefined {
+  return heldAppleCredential;
 }
 
 export function takeCompletedAppleSignIn(): boolean {

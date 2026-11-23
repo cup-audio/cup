@@ -8,6 +8,7 @@ import { reportFailure } from "#src/report-failure.js";
 const APPLE_SIGN_IN_MARKER_STORAGE_KEY = "cup_apple_sign_in_pending";
 
 let completedAppleSignIn = false;
+let heldAppleCredential: { subject: string; credential: AppleProviderCredential } | undefined;
 
 export async function initializeAuthStorage(
   storageKeys: readonly string[],
@@ -57,10 +58,31 @@ export async function signInWithApple(client: Pick<SupabaseClient, "auth">) {
   }
 }
 
-export function appleCredentialOf(session: Session): AppleProviderCredential | undefined {
-  return session.provider_refresh_token
-    ? { provider: "apple", refreshToken: session.provider_refresh_token }
-    : undefined;
+export function watchAppleCredential(client: {
+  auth: Pick<SupabaseClient["auth"], "onAuthStateChange">;
+}): void {
+  client.auth.onAuthStateChange((_event, session) => holdAppleCredential(session));
+}
+
+function holdAppleCredential(session: Session | null) {
+  if (session === null) {
+    heldAppleCredential = undefined;
+    return;
+  }
+  if (session.provider_refresh_token) {
+    heldAppleCredential = {
+      subject: session.user.id,
+      credential: { provider: "apple", refreshToken: session.provider_refresh_token },
+    };
+    return;
+  }
+  if (heldAppleCredential?.subject !== session.user.id) {
+    heldAppleCredential = undefined;
+  }
+}
+
+export function appleCredentialOf(): AppleProviderCredential | undefined {
+  return heldAppleCredential?.credential;
 }
 
 export function takeCompletedAppleSignIn(): boolean {

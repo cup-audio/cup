@@ -11,6 +11,7 @@ import type { Story } from "#src/ui-gallery/story.js";
 const SUBJECT = "880ce5b5-6542-40fd-8f2d-380f3066e98a";
 const ACCOUNT_ID = "70fcf2d9-63c5-48be-b897-d3670f24ed43";
 const CHALLENGE_ID = "a3fcb5d8-9162-4c1a-b804-3be130c5e92a";
+const OTHER_SUBJECT = "4b7f3c9e-2d1a-4e8b-9f60-0c5d7a1e3b42";
 
 export function accountStory({
   path,
@@ -19,6 +20,7 @@ export function accountStory({
   confirmation,
   acceptedMethods = ["google"],
   confirmationSignInMethod = acceptedMethods[0],
+  isChallengeForAnotherAccount = false,
   setupFailure = false,
   userMetadata = { name: "Verena Handler-Kunze" },
   isSignedOut = false,
@@ -32,6 +34,7 @@ export function accountStory({
   confirmation?: "delete" | "restore";
   acceptedMethods?: SignInMethod[];
   confirmationSignInMethod?: SignInMethod | null;
+  isChallengeForAnotherAccount?: boolean;
   setupFailure?: boolean | "once";
   userMetadata?: Record<string, unknown>;
   isSignedOut?: boolean;
@@ -60,6 +63,7 @@ export function accountStory({
               action: confirmation,
               acceptedMethods,
               signInMethod: confirmationSignInMethod ?? null,
+              subject: isChallengeForAnotherAccount ? OTHER_SUBJECT : SUBJECT,
             },
           );
         }
@@ -143,6 +147,7 @@ function storeAccountStorySession(
         action: "delete" | "restore";
         acceptedMethods: SignInMethod[];
         signInMethod: SignInMethod | null;
+        subject: string;
       }
     | undefined,
 ) {
@@ -166,7 +171,7 @@ function storeAccountStorySession(
       ACCOUNT_CONFIRMATION_STORAGE_KEY,
       JSON.stringify({
         challengeId: CHALLENGE_ID,
-        subject: SUBJECT,
+        subject: confirmation.subject,
         issuedAtMs: 0,
         expiresAtMs: 4102444800000,
         acceptedMethods: confirmation.acceptedMethods,

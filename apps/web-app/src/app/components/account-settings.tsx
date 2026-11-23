@@ -6,7 +6,10 @@ import { Temporal } from "temporal-polyfill";
 import { SignInButtons } from "#src/app/components/sign-in-dialog.js";
 import { DSButton } from "#src/app/design-system/button.js";
 import type { SignInMethod } from "#src/auth/account-session.js";
-import { useAccountConfirmation } from "#src/data-fetching/account-confirmation.js";
+import {
+  confirmationMismatchCopy,
+  useAccountConfirmation,
+} from "#src/data-fetching/account-confirmation.js";
 import { accountQuery } from "#src/data-fetching/account.js";
 
 const SIGN_IN_METHOD_ORDER: readonly SignInMethod[] = ["apple", "google", "test-account"];
@@ -153,6 +156,14 @@ function ConfirmAccountChange({
           <DSButton disabled={isPending || !isForThisAccount} onClick={onConfirm}>
             {action === "delete" ? "Schedule deletion" : "Confirm recovery"}
           </DSButton>
+          {!isForThisAccount && (
+            <p role="alert">
+              {confirmationMismatchCopy(
+                { acceptedMethods, signInMethod },
+                "Use the same Google account that requested confirmation.",
+              )}
+            </p>
+          )}
         </>
       )}
       <DSButton disabled={isPending} onClick={onCancel}>

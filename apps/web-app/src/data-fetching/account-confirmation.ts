@@ -27,10 +27,19 @@ import { summarizeError, UserFacingError } from "#src/errors.js";
 import { appleCredentialOf } from "#src/platform/account-auth.js";
 
 const ACCOUNT_CONFIRMATION_MUTATION_KEY = ["account-confirmation"];
+const APPLE_CONFIRMATION_FAILED =
+  "Apple couldn't confirm the deletion. Your account is still active, and nothing will be deleted. Try again.";
+const APPLE_ACCOUNT_MISMATCH = "Use the Apple Account linked to this Cup account.";
+const APPLE_SUPPORT = "Can't sign in with Apple? Email support@cup.audio.";
 const APPLE_REFUSALS: Partial<Record<string, string>> = {
-  [ERROR_CODE.APPLE_CONFIRMATION_FAILED]:
-    "Apple couldn't confirm the deletion. Your account is still active, and nothing will be deleted. Try again.",
-  [ERROR_CODE.APPLE_ACCOUNT_MISMATCH]: "Use the Apple Account linked to this Cup account.",
+  [ERROR_CODE.APPLE_CONFIRMATION_FAILED]: APPLE_CONFIRMATION_FAILED,
+  [ERROR_CODE.APPLE_ACCOUNT_MISMATCH]: APPLE_ACCOUNT_MISMATCH,
+  [ERROR_CODE.FRESH_AUTH_REQUIRED]: `${APPLE_CONFIRMATION_FAILED} ${APPLE_SUPPORT}`,
+};
+
+type ConfirmationMethods = {
+  acceptedMethods: readonly SignInMethod[];
+  signInMethod?: SignInMethod | undefined;
 };
 
 type ConfirmationCommand =
@@ -46,7 +55,9 @@ export function useAccountConfirmation(subject: string) {
     setChallenge(next);
     await new Promise<void>((resolve) => window.setTimeout(resolve, 1_100));
     if (!isSignedInAs(subject)) {
-      throw new UserFacingError({ title: "Use the same Google account." });
+      throw new UserFacingError({
+        title: confirmationMismatchCopy(next, "Use the same Google account."),
+      });
     }
     await signInAgain(method);
   };
@@ -66,7 +77,10 @@ export function useAccountConfirmation(subject: string) {
         );
         if (issued.subject !== subject || !isSignedInAs(subject)) {
           throw new UserFacingError({
-            title: "Use the same Google account that requested confirmation.",
+            title: confirmationMismatchCopy(
+              issued,
+              "Use the same Google account that requested confirmation.",
+            ),
           });
         }
         const next = { ...issued, action: command.action };
@@ -82,7 +96,10 @@ export function useAccountConfirmation(subject: string) {
       const pending = readPendingAccountChallenge();
       if (!pending || pending.subject !== subject) {
         throw new UserFacingError({
-          title: "Use the same Google account that requested confirmation.",
+          title: confirmationMismatchCopy(
+            pending,
+            "Use the same Google account that requested confirmation.",
+          ),
         });
       }
       if (command.type === "sign-in") {
@@ -92,12 +109,17 @@ export function useAccountConfirmation(subject: string) {
 
       const session = await getFreshAccountSession();
       if (session?.user.id !== subject) {
-        throw new UserFacingError({ title: "Use the same Google account." });
+        throw new UserFacingError({
+          title: confirmationMismatchCopy(pending, "Use the same Google account."),
+        });
       }
       try {
         await sendConfirmation(subject, pending, session);
       } catch (error) {
-        const refusal = error instanceof RpcError ? APPLE_REFUSALS[error.code] : undefined;
+        const refusal =
+          error instanceof RpcError && isAppleConfirmation(pending)
+            ? APPLE_REFUSALS[error.code]
+            : undefined;
         if (refusal === undefined) {
           throw error;
         }
@@ -143,7 +165,7 @@ export function useAccountConfirmation(subject: string) {
 }
 
 async function sendConfirmation(subject: string, pending: AccountChallenge, session: Session) {
-  const appleCredential = pending.signInMethod === "apple" ? appleCredentialOf(session) : undefined;
+  const appleCredential = pending.signInMethod === "apple" ? appleCredentialOf() : undefined;
   if (appleCredential) {
     if (pending.action === "delete") {
       claimAppleSignIn(appleCredential);
@@ -171,11 +193,30 @@ function credentialOf(
   session: Session,
 ): ProviderCredential | undefined {
   if (method === "apple") {
-    return appleCredentialOf(session);
+    return appleCredentialOf();
   }
   return session.provider_token
     ? { provider: "google", accessToken: session.provider_token }
     : undefined;
+}
+
+export function confirmationMismatchCopy(
+  challenge: ConfirmationMethods | null,
+  googleCopy: string,
+): string {
+  return isAppleConfirmation(challenge) ? APPLE_ACCOUNT_MISMATCH : googleCopy;
+}
+
+function isAppleConfirmation(challenge: ConfirmationMethods | null): boolean {
+  if (challenge === null) {
+    return false;
+  }
+  return (
+    challenge.signInMethod === "apple" ||
+    (challenge.signInMethod === undefined &&
+      challenge.acceptedMethods.length === 1 &&
+      challenge.acceptedMethods[0] === "apple")
+  );
 }
 
 export function useIsAccountConfirmationPending(): boolean {

@@ -125,6 +125,39 @@ test("a callback code without a pending Apple sign-in is no completed Apple sign
   expect(completedSignIn).toBe(false);
 });
 
+test("holds the refresh token of the session Apple's web flow returned, also after Supabase refreshes that session", async ({
+  page,
+}) => {
+  await page.goto("");
+  const heldCredentials = await page.evaluate(async () => {
+    const modulePath = "/src/platform/account-auth.web.ts";
+    const { watchAppleCredential, appleCredentialOf } = await import(modulePath);
+    let emit: ((event: string, session: unknown) => void) | undefined;
+    watchAppleCredential({
+      auth: {
+        onAuthStateChange: (callback: (event: string, session: unknown) => void) => {
+          emit = callback;
+          return { data: { subscription: { unsubscribe: () => undefined } } };
+        },
+      },
+    });
+    const held = [appleCredentialOf()];
+    emit?.("SIGNED_IN", {
+      user: { id: "the-listener" },
+      provider_refresh_token: "the-apple-refresh-token",
+    });
+    held.push(appleCredentialOf());
+    emit?.("TOKEN_REFRESHED", { user: { id: "the-listener" } });
+    held.push(appleCredentialOf());
+    emit?.("SIGNED_IN", { user: { id: "another-listener" } });
+    held.push(appleCredentialOf());
+    return held;
+  });
+
+  const credential = { provider: "apple", refreshToken: "the-apple-refresh-token" };
+  expect(heldCredentials).toEqual([undefined, credential, credential, undefined]);
+});
+
 async function returnFromApple(page: Page, callbackParams: Record<string, string>) {
   await page.goto("");
   return page.evaluate(async (params) => {

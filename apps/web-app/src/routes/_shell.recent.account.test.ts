@@ -218,3 +218,32 @@ for (const failure of [
     ).toBeNull();
   });
 }
+
+test("an Apple confirmation that signed in to another Cup account asks for the Apple Account linked to this one", async ({
+  mount,
+  page,
+}) => {
+  await mount("routes/_shell.recent.account/ConfirmAppleDeletionSignedInToAnotherAccount");
+  const dialog = page.getByRole("dialog", { name: "Account settings" });
+
+  await expect(dialog.getByRole("alert")).toHaveText(
+    "Use the Apple Account linked to this Cup account.",
+  );
+  await expect(dialog.getByRole("button", { name: "Schedule deletion" })).toBeDisabled();
+  await expect(dialog.getByText(/Google/)).toHaveCount(0);
+});
+
+test("an Apple deletion the server refuses for a missing Apple credential shows Apple's failure and the support address", async ({
+  mount,
+  page,
+}) => {
+  await mount("routes/_shell.recent.account/ConfirmAppleDeletionWithoutAppleCredential");
+  const dialog = page.getByRole("dialog", { name: "Account settings" });
+
+  await dialog.getByRole("button", { name: "Schedule deletion" }).click();
+
+  await expect(dialog.getByRole("alert")).toHaveText(
+    "Apple couldn't confirm the deletion. Your account is still active, and nothing will be deleted. Try again. Can't sign in with Apple? Email support@cup.audio.",
+  );
+  await expect(dialog.getByRole("button", { name: "Delete account…" })).toBeEnabled();
+});

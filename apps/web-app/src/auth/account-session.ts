@@ -28,6 +28,7 @@ import {
   signInWithApple,
   signInWithGoogle,
   clearNativeSignIn,
+  watchAppleCredential,
   watchAppState,
 } from "#src/platform/account-auth.js";
 import { STOP_PLAYBACK_EVENT_NAME } from "#src/playback-events.js";
@@ -159,6 +160,7 @@ async function loadConnection(): Promise<AccountAuthConnection> {
     },
   });
   Sentry.addIntegration(clientSupabaseIntegration(client));
+  watchAppleCredential(client);
   await completePendingSignIn(client);
   const { storage } = platformStorage;
   const { testAccount } = config;

@@ -70,3 +70,28 @@ export const ConfirmAppleDeletionWithOtherAppleAccount = accountStory({
     ),
   ],
 });
+export const ConfirmAppleDeletionSignedInToAnotherAccount = accountStory({
+  path: "/recent/account",
+  confirmation: "delete",
+  acceptedMethods: ["apple"],
+  isChallengeForAnotherAccount: true,
+});
+export const ConfirmAppleDeletionWithoutAppleCredential = accountStory({
+  path: "/recent/account",
+  confirmation: "delete",
+  acceptedMethods: ["apple"],
+  handlers: [
+    http.post("/api/account/deletion", () =>
+      HttpResponse.json(
+        {
+          error: {
+            code: "fresh-auth-required",
+            message: "Confirm deletion with a fresh Apple sign-in.",
+            traceId: "0123456789abcdef0123456789abcdef",
+          },
+        },
+        { status: 400 },
+      ),
+    ),
+  ],
+});

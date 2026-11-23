@@ -46,6 +46,7 @@ export const appleCredentialOf =
       : platform === "web"
         ? web.appleCredentialOf
         : () => undefined;
+export const watchAppleCredential = platform === "web" ? web.watchAppleCredential : () => {};
 export const watchAppState =
   platform === "android"
     ? android.watchAppState

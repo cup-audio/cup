@@ -51,7 +51,7 @@ function keyOf(credential: AppleProviderCredential): string {
 }
 
 async function revokeIfScheduledForDeletion(session: Session) {
-  const credential = appleCredentialOf(session);
+  const credential = appleCredentialOf();
   if (!credential) {
     return;
   }

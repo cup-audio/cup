@@ -210,7 +210,10 @@ async function startAppleSignIn(page: Page, { fresh = false } = {}): Promise<voi
         },
         exchangeCodeForSession: async (code: string) => {
           record.exchangedCodes.push(code);
-          return { data: {}, error: null };
+          return {
+            data: { session: { provider_refresh_token: `apple-refresh-token-for-${code}` } },
+            error: null,
+          };
         },
       },
     };
@@ -431,7 +434,10 @@ test("a callback Android delivered while Cup was not running is exchanged on sta
             code,
             pendingConversion: window.sessionStorage.getItem("cup_pending_conversion"),
           });
-          return { data: {}, error: null };
+          return {
+            data: { session: { provider_refresh_token: "the-delivered-refresh-token" } },
+            error: null,
+          };
         },
       },
     };
@@ -445,9 +451,13 @@ test("a callback Android delivered while Cup was not running is exchanged on sta
     { code: "the-delivered-code", pendingConversion: "the submitted request" },
   ]);
   expect(await takeCompletedAppleSignIn(page)).toEqual([true, false]);
+  expect(await heldAppleCredential(page)).toEqual({
+    provider: "apple",
+    refreshToken: "the-delivered-refresh-token",
+  });
 });
 
-test("a completed Apple sign-in is reported once, with Apple's refresh token as its credential", async ({
+test("a completed Apple sign-in is reported once, holding the refresh token its code exchange returned", async ({
   page,
 }) => {
   await startAppleSignIn(page);
@@ -459,16 +469,10 @@ test("a completed Apple sign-in is reported once, with Apple's refresh token as 
     .toEqual({ status: "resolved" });
 
   expect(await takeCompletedAppleSignIn(page)).toEqual([true, false]);
-  expect(
-    await page.evaluate(async () => {
-      const modulePath = "/src/platform/account-auth.android.ts";
-      const { appleCredentialOf } = await import(modulePath);
-      return [
-        appleCredentialOf({ provider_refresh_token: "the-apple-refresh-token" }),
-        appleCredentialOf({}),
-      ];
-    }),
-  ).toEqual([{ provider: "apple", refreshToken: "the-apple-refresh-token" }, undefined]);
+  expect(await heldAppleCredential(page)).toEqual({
+    provider: "apple",
+    refreshToken: "apple-refresh-token-for-the-code",
+  });
 });
 
 test("a cancelled Apple sign-in is not reported as completed", async ({ page }) => {
@@ -480,7 +484,16 @@ test("a cancelled Apple sign-in is not reported as completed", async ({ page }) 
     .toBe("rejected");
 
   expect(await takeCompletedAppleSignIn(page)).toEqual([false, false]);
+  expect(await heldAppleCredential(page)).toBeUndefined();
 });
+
+function heldAppleCredential(page: Page): Promise<unknown> {
+  return page.evaluate(async () => {
+    const modulePath = "/src/platform/account-auth.android.ts";
+    const module = await import(modulePath);
+    return module.appleCredentialOf();
+  });
+}
 
 function takeCompletedAppleSignIn(page: Page): Promise<boolean[]> {
   return page.evaluate(async () => {
