@@ -19,6 +19,10 @@ import {
 } from "#src/data-fetching/account-confirmation-storage.js";
 import { invalidateAccountQueries, invalidateAccountSnapshot } from "#src/data-fetching/account.js";
 import { ERROR_CODE, requestApi, RpcError } from "#src/data-fetching/api-request.js";
+import {
+  claimAppleSignIn,
+  revokeAppleSignIn,
+} from "#src/data-fetching/apple-sign-in-revocation.js";
 import { summarizeError, UserFacingError } from "#src/errors.js";
 
 const ACCOUNT_CONFIRMATION_MUTATION_KEY = ["account-confirmation"];
@@ -138,6 +142,15 @@ export function useAccountConfirmation(subject: string) {
 }
 
 async function sendConfirmation(subject: string, pending: AccountChallenge, session: Session) {
+  const appleRefreshToken =
+    pending.signInMethod === "apple" ? session.provider_refresh_token : undefined;
+  if (appleRefreshToken) {
+    if (pending.action === "delete") {
+      claimAppleSignIn(appleRefreshToken);
+    } else {
+      await revokeAppleSignIn(subject, appleRefreshToken);
+    }
+  }
   const providerCredential =
     pending.action === "restore" && pending.signInMethod === "apple"
       ? undefined

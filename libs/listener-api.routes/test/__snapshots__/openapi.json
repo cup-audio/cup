@@ -1880,6 +1880,501 @@
         }
       }
     },
+    "/api/account/apple-sign-in-revocation": {
+      "post": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            },
+            "required": true,
+            "name": "x-create-audiobook-from-url-request",
+            "in": "header"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "providerCredential": {
+                    "type": "object",
+                    "properties": {
+                      "provider": {
+                        "type": "string",
+                        "enum": [
+                          "apple"
+                        ]
+                      },
+                      "refreshToken": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 8192
+                      }
+                    },
+                    "required": [
+                      "provider",
+                      "refreshToken"
+                    ]
+                  }
+                },
+                "required": [
+                  "providerCredential"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Handled. The Apple sign-in was revoked if the account is scheduled for deletion and the Apple Account matches; otherwise nothing happened."
+          },
+          "400": {
+            "description": "Invalid request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "account-blocked",
+                            "account-session-required",
+                            "account-setup-pending",
+                            "account-start-conflict",
+                            "apple-account-mismatch",
+                            "apple-confirmation-failed",
+                            "audiobook-not-found",
+                            "confirmation-unavailable",
+                            "cover-image-not-found",
+                            "credits-unavailable",
+                            "dependency-unavailable",
+                            "fresh-auth-required",
+                            "grant-exhausted",
+                            "grant-expired",
+                            "grant-revoked",
+                            "grant-session-invalid",
+                            "grant-session-required",
+                            "grant-temporarily-full",
+                            "idempotency-conflict",
+                            "ingress-unavailable",
+                            "invalid-credential",
+                            "invalid-input",
+                            "media-url-invalid",
+                            "method-not-allowed",
+                            "narration-track-not-found",
+                            "not-found",
+                            "operational-error",
+                            "origin-blocked",
+                            "origin-forbidden",
+                            "position-url-invalid",
+                            "range-not-satisfiable",
+                            "rate-limited",
+                            "request-too-large",
+                            "start-rate-limited",
+                            "unsupported-media-type"
+                          ]
+                        },
+                        "message": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "traceId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{32}$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "traceId"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign in required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "account-blocked",
+                            "account-session-required",
+                            "account-setup-pending",
+                            "account-start-conflict",
+                            "apple-account-mismatch",
+                            "apple-confirmation-failed",
+                            "audiobook-not-found",
+                            "confirmation-unavailable",
+                            "cover-image-not-found",
+                            "credits-unavailable",
+                            "dependency-unavailable",
+                            "fresh-auth-required",
+                            "grant-exhausted",
+                            "grant-expired",
+                            "grant-revoked",
+                            "grant-session-invalid",
+                            "grant-session-required",
+                            "grant-temporarily-full",
+                            "idempotency-conflict",
+                            "ingress-unavailable",
+                            "invalid-credential",
+                            "invalid-input",
+                            "media-url-invalid",
+                            "method-not-allowed",
+                            "narration-track-not-found",
+                            "not-found",
+                            "operational-error",
+                            "origin-blocked",
+                            "origin-forbidden",
+                            "position-url-invalid",
+                            "range-not-satisfiable",
+                            "rate-limited",
+                            "request-too-large",
+                            "start-rate-limited",
+                            "unsupported-media-type"
+                          ]
+                        },
+                        "message": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "traceId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{32}$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "traceId"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access blocked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "account-blocked",
+                            "account-session-required",
+                            "account-setup-pending",
+                            "account-start-conflict",
+                            "apple-account-mismatch",
+                            "apple-confirmation-failed",
+                            "audiobook-not-found",
+                            "confirmation-unavailable",
+                            "cover-image-not-found",
+                            "credits-unavailable",
+                            "dependency-unavailable",
+                            "fresh-auth-required",
+                            "grant-exhausted",
+                            "grant-expired",
+                            "grant-revoked",
+                            "grant-session-invalid",
+                            "grant-session-required",
+                            "grant-temporarily-full",
+                            "idempotency-conflict",
+                            "ingress-unavailable",
+                            "invalid-credential",
+                            "invalid-input",
+                            "media-url-invalid",
+                            "method-not-allowed",
+                            "narration-track-not-found",
+                            "not-found",
+                            "operational-error",
+                            "origin-blocked",
+                            "origin-forbidden",
+                            "position-url-invalid",
+                            "range-not-satisfiable",
+                            "rate-limited",
+                            "request-too-large",
+                            "start-rate-limited",
+                            "unsupported-media-type"
+                          ]
+                        },
+                        "message": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "traceId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{32}$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "traceId"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "account-blocked",
+                            "account-session-required",
+                            "account-setup-pending",
+                            "account-start-conflict",
+                            "apple-account-mismatch",
+                            "apple-confirmation-failed",
+                            "audiobook-not-found",
+                            "confirmation-unavailable",
+                            "cover-image-not-found",
+                            "credits-unavailable",
+                            "dependency-unavailable",
+                            "fresh-auth-required",
+                            "grant-exhausted",
+                            "grant-expired",
+                            "grant-revoked",
+                            "grant-session-invalid",
+                            "grant-session-required",
+                            "grant-temporarily-full",
+                            "idempotency-conflict",
+                            "ingress-unavailable",
+                            "invalid-credential",
+                            "invalid-input",
+                            "media-url-invalid",
+                            "method-not-allowed",
+                            "narration-track-not-found",
+                            "not-found",
+                            "operational-error",
+                            "origin-blocked",
+                            "origin-forbidden",
+                            "position-url-invalid",
+                            "range-not-satisfiable",
+                            "rate-limited",
+                            "request-too-large",
+                            "start-rate-limited",
+                            "unsupported-media-type"
+                          ]
+                        },
+                        "message": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "traceId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{32}$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "traceId"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Operational error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "account-blocked",
+                            "account-session-required",
+                            "account-setup-pending",
+                            "account-start-conflict",
+                            "apple-account-mismatch",
+                            "apple-confirmation-failed",
+                            "audiobook-not-found",
+                            "confirmation-unavailable",
+                            "cover-image-not-found",
+                            "credits-unavailable",
+                            "dependency-unavailable",
+                            "fresh-auth-required",
+                            "grant-exhausted",
+                            "grant-expired",
+                            "grant-revoked",
+                            "grant-session-invalid",
+                            "grant-session-required",
+                            "grant-temporarily-full",
+                            "idempotency-conflict",
+                            "ingress-unavailable",
+                            "invalid-credential",
+                            "invalid-input",
+                            "media-url-invalid",
+                            "method-not-allowed",
+                            "narration-track-not-found",
+                            "not-found",
+                            "operational-error",
+                            "origin-blocked",
+                            "origin-forbidden",
+                            "position-url-invalid",
+                            "range-not-satisfiable",
+                            "rate-limited",
+                            "request-too-large",
+                            "start-rate-limited",
+                            "unsupported-media-type"
+                          ]
+                        },
+                        "message": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "traceId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{32}$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "traceId"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Account setup unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "account-blocked",
+                            "account-session-required",
+                            "account-setup-pending",
+                            "account-start-conflict",
+                            "apple-account-mismatch",
+                            "apple-confirmation-failed",
+                            "audiobook-not-found",
+                            "confirmation-unavailable",
+                            "cover-image-not-found",
+                            "credits-unavailable",
+                            "dependency-unavailable",
+                            "fresh-auth-required",
+                            "grant-exhausted",
+                            "grant-expired",
+                            "grant-revoked",
+                            "grant-session-invalid",
+                            "grant-session-required",
+                            "grant-temporarily-full",
+                            "idempotency-conflict",
+                            "ingress-unavailable",
+                            "invalid-credential",
+                            "invalid-input",
+                            "media-url-invalid",
+                            "method-not-allowed",
+                            "narration-track-not-found",
+                            "not-found",
+                            "operational-error",
+                            "origin-blocked",
+                            "origin-forbidden",
+                            "position-url-invalid",
+                            "range-not-satisfiable",
+                            "rate-limited",
+                            "request-too-large",
+                            "start-rate-limited",
+                            "unsupported-media-type"
+                          ]
+                        },
+                        "message": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "traceId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{32}$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "traceId"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "responses": {

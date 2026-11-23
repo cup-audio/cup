@@ -4,6 +4,7 @@ import {
   accountConfirmationSchema,
   accountHistorySchema,
   accountSnapshotSchema,
+  appleSignInRevocationSchema,
   audiobookQuerySchema,
   audiobookResponseSchema,
   audiobookSchema,
@@ -108,6 +109,11 @@ describe("listener API transport contracts", () => {
       },
     },
     {
+      name: "Apple sign-in revocation",
+      schema: appleSignInRevocationSchema,
+      request: { providerCredential: { provider: "apple", refreshToken: "apple-refresh-token" } },
+    },
+    {
       name: "playback position",
       schema: playbackPositionSchema,
       request: { synchronizationUnitId: "one", offsetMilliseconds: 0 },
@@ -129,6 +135,12 @@ describe("listener API transport contracts", () => {
     [
       accountConfirmationSchema,
       { challengeId: UUID, providerCredential: { provider: "github", accessToken: "token" } },
+    ],
+    [appleSignInRevocationSchema, {}],
+    [appleSignInRevocationSchema, { providerCredential: { provider: "apple" } }],
+    [
+      appleSignInRevocationSchema,
+      { providerCredential: { provider: "google", accessToken: "token" } },
     ],
     [
       deletionChallengeSchema,

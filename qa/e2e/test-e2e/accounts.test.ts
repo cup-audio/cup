@@ -647,7 +647,60 @@ test("an Apple-linked account scheduled for deletion is recovered with Apple, an
       .appleRequests()
       .filter(({ path }) => path === "/auth/revoke")
       .map(({ path }) => path),
-  ).toStrictEqual(["/auth/revoke", "/auth/revoke"]);
+  ).toStrictEqual(["/auth/revoke", "/auth/revoke", "/auth/revoke", "/auth/revoke"]);
+});
+
+test("Apple sign-ins during the seven days are revoked at Apple, the one that confirms recovery too", async ({
+  page,
+  workerEnvironment,
+}) => {
+  test.setTimeout(60_000);
+  const { origin, authProvider } = workerEnvironment;
+  const revokedTokens = () =>
+    authProvider
+      .appleRequests()
+      .filter(({ path }) => path === "/auth/revoke")
+      .map(({ token }) => token);
+  await signInFromLink(page, origin, "Apple");
+  await page.goto(`${origin}/app/recent/account`);
+  await page.getByRole("button", { name: "Delete account…", exact: true }).click();
+  await page
+    .getByRole("region", { name: "Confirm account change" })
+    .getByRole("button", { name: "Continue with Apple", exact: true })
+    .click();
+  await scheduleDeletion(page);
+  await expect(page).toHaveURL(`${origin}/app/`);
+  expect(revokedTokens()).toHaveLength(1);
+
+  await page.goto(`${origin}/app/account-recovery`);
+  await page.getByRole("button", { name: "Continue with Apple", exact: true }).click();
+  await expect.poll(revokedTokens).toHaveLength(2);
+  expect((await readAccount(page, origin)).state).toBe("deletion_scheduled");
+
+  await page.getByRole("button", { name: "Restore account…", exact: true }).click();
+  await page
+    .getByRole("region", { name: "Confirm account change" })
+    .getByRole("button", { name: "Continue with Apple", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Confirm recovery", exact: true }).click();
+  await expect(
+    page.getByText(
+      "Your account is restored. Your existing minutes and conversions are available again.",
+    ),
+  ).toBeVisible();
+
+  expect((await readAccount(page, origin)).state).toBe("active");
+  const tokens = revokedTokens();
+  expect(new Set(tokens).size).toBe(3);
+  expect(
+    authProvider
+      .appleRequests()
+      .filter(({ token }) => token === tokens[2])
+      .map(({ path, clientId }) => ({ path, clientId })),
+  ).toStrictEqual([
+    { path: "/auth/token", clientId: "audio.cup.app.web" },
+    { path: "/auth/revoke", clientId: "audio.cup.app.web" },
+  ]);
 });
 
 async function signInFromLink(page: Page, origin: string, method: "Apple" | "Google") {

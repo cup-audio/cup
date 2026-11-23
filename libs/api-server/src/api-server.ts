@@ -253,6 +253,26 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
     }
     return context.json(toAccountSnapshotResponse(result.account), 200);
   },
+  async revokeAppleSignIn(context) {
+    const auth = await authenticateAccountRequest(context.req.raw, context.env);
+    if (auth.result !== "authenticated") {
+      return accountAuthError(auth.result, context.get("traceId"));
+    }
+    const { providerCredential } = context.req.valid("json");
+    if (
+      (auth.snapshot.state === "deletion_scheduled" || auth.snapshot.state === "deleting") &&
+      auth.identity.providers.includes("apple")
+    ) {
+      await revokeVerifiedAppleRefreshToken(
+        context.env,
+        auth.identity.subject,
+        providerCredential.refreshToken,
+      ).catch((error: unknown) => {
+        captureException(error);
+      });
+    }
+    return context.body(null, 204);
+  },
   health(context) {
     return context.json({ status: "ok" as const }, 200);
   },
@@ -1534,6 +1554,7 @@ export function createApiServer(dependencies: ApiServerDependencies = production
 
   app.use("/api/account/deletion", validateAccountLifecycleRequest);
   app.use("/api/account/deletion/*", validateAccountLifecycleRequest);
+  app.use("/api/account/apple-sign-in-revocation", validateAccountLifecycleRequest);
 
   return app
     .route("/", createListenerApi(listenerApiHandlers))

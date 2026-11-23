@@ -6,6 +6,7 @@ import { AppStyles } from "#src/app/app-styles.js";
 import { ErrorScreen } from "#src/app/components/error-message.js";
 import { createAppRouter, GlobalProviders } from "#src/app/global-providers.js";
 import { ensureAuthInitialized, sessionSnapshot } from "#src/auth/account-session.js";
+import { watchAppleSignInsDuringDeletion } from "#src/data-fetching/apple-sign-in-revocation.js";
 import { initializeAndroidBackButton } from "#src/platform/back-button.android.js";
 import { initializeIosIncomingUrls } from "#src/platform/incoming-urls.ios.js";
 import { initializeAndroidShare } from "#src/platform/share-plugin.android.js";
@@ -23,6 +24,8 @@ const router = createAppRouter();
 await initializeTelemetry(router).catch((error: unknown) => {
   reportError(error);
 });
+
+watchAppleSignInsDuringDeletion();
 
 await initializeAndroidBackButton(router.history);
 

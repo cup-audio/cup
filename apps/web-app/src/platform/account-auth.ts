@@ -21,6 +21,8 @@ export const signInWithGoogle =
       : web.signInWithGoogle;
 export const signInWithApple =
   platform === "ios" ? ios.signInWithApple : platform === "web" ? web.signInWithApple : undefined;
+export const takeCompletedAppleSignIn =
+  platform === "web" ? web.takeCompletedAppleSignIn : () => false;
 export const watchAppState =
   platform === "android"
     ? android.watchAppState
