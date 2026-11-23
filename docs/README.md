@@ -35,7 +35,7 @@ Start with the [glossary](GLOSSARY.md) for Cup's vocabulary and the [system over
 | [Test Worker](../qa/test-worker/README.md)                                           | The test-only Worker with deterministic fakes, its Wrangler harness, the fake auth provider, and the E2E cost boundary |
 | [Recorded source pages](../libs/prepare-source-material/test-e2e/fixtures/README.md) | Replay source-page fixtures in source-material E2E tests                                                               |
 | [Narration evals](../libs/narration-source-analysis/test/evals/README.md)            | Run the paid narration content selection and narration language detection evals                                        |
-| [Production configuration](production-configuration.md)                              | Supply Worker secrets, provider settings and Google Play setup, and deploy                                             |
+| [Production configuration](production-configuration.md)                              | Supply Worker secrets, provider settings, Google Play setup and the Apple client secret rotation, and deploy           |
 | [Mobile development](../apps/mobile-app/README.md)                                   | Build native shells, configure platform links and sharing, and see which checks stay manual                            |
 | [Account migrations](../libs/accounts/README.md#database-migrations)                 | Change account Drizzle schemas and validate account storage                                                            |
 | [Grant migrations](../libs/conversion-grants/README.md)                              | Change trial Drizzle schemas and validate grant storage                                                                |
@@ -50,6 +50,7 @@ Start with the [glossary](GLOSSARY.md) for Cup's vocabulary and the [system over
 | [Validation gates](../tooling/validation-gates/README.md)                            | How the gate runner composes gates, runs them and prints the summary; the gates themselves are in AGENTS.md            |
 | [Toolchain key](../tooling/toolchain-key/README.md)                                  | Write the host toolchain versions an E2E suite runs on, for its cached Turbo task to hash                              |
 | [Brand assets](../tooling/brand-assets/README.md)                                    | Maintain generated application branding                                                                                |
+| [Apple client secret](../tooling/apple-client-secret/README.md)                      | Sign Supabase's Apple client secret and check the rotation workflow's Supabase access token expiry                     |
 | [Source maps](../tooling/source-maps/README.md)                                      | Inject Sentry debug IDs into a build and move its source maps out of what is served                                    |
 | [Workspace checks](../qa/workspace-checks/README.md)                                 | Tests for invariants across all packages, such as the package export check                                             |
 | [Loading state recorder](../qa/loading-state-recorder/README.md)                     | Fail a Playwright test on a loading flash, however briefly it shows                                                    |
