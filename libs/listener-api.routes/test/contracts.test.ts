@@ -9,6 +9,7 @@ import {
   audiobookSchema,
   audioSegmentSchema,
   conversionParamsSchema,
+  deletionChallengeSchema,
   errorResponseSchema,
   exchangeCredentialRequestSchema,
   grantConversionsSchema,
@@ -91,6 +92,14 @@ describe("listener API transport contracts", () => {
       request: { challengeId: UUID },
     },
     {
+      name: "account confirmation with a Google credential",
+      schema: accountConfirmationSchema,
+      request: {
+        challengeId: UUID,
+        providerCredential: { provider: "google", accessToken: "google-token" },
+      },
+    },
+    {
       name: "playback position",
       schema: playbackPositionSchema,
       request: { synchronizationUnitId: "one", offsetMilliseconds: 0 },
@@ -107,6 +116,15 @@ describe("listener API transport contracts", () => {
     [exchangeCredentialRequestSchema, { extra: true }],
     [startConversionRequestSchema, { extra: true }],
     [accountConfirmationSchema, { providerToken: "token" }],
+    [accountConfirmationSchema, { challengeId: UUID, providerCredential: { provider: "google" } }],
+    [
+      accountConfirmationSchema,
+      { challengeId: UUID, providerCredential: { provider: "github", accessToken: "token" } },
+    ],
+    [
+      deletionChallengeSchema,
+      { challengeId: UUID, subject: UUID, issuedAtMs: 1, expiresAtMs: 2, acceptedMethods: [] },
+    ],
     [playbackPositionSchema, { synchronizationUnitId: "one" }],
   ])("still requires declared request fields", (schema, value) => {
     expect(schema.safeParse(value).success).toBe(false);
@@ -252,6 +270,25 @@ describe("listener API transport contracts", () => {
           },
         ],
         nextCursor: null,
+      },
+    },
+    {
+      name: "deletion challenge",
+      schema: deletionChallengeSchema,
+      response: {
+        challengeId: UUID,
+        subject: UUID,
+        issuedAtMs: 1,
+        expiresAtMs: 2,
+        acceptedMethods: ["google"],
+        newField: true,
+      },
+      expected: {
+        challengeId: UUID,
+        subject: UUID,
+        issuedAtMs: 1,
+        expiresAtMs: 2,
+        acceptedMethods: ["google"],
       },
     },
     {

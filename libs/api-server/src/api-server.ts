@@ -75,6 +75,7 @@ import {
   verifySignedPositionUrl,
 } from "#src/http/signed-media-url.ts";
 import { applyWebAppCspNonce } from "#src/http/web-app-csp.ts";
+import { acceptedConfirmationMethods } from "#src/use-cases/accepted-confirmation-methods.ts";
 import { createConversionGrant } from "#src/use-cases/create-conversion-grant.ts";
 import { getSynthesisState } from "#src/use-cases/get-synthesis-state.ts";
 import { startAudiobookConversion } from "#src/use-cases/start-audiobook-conversion.ts";
@@ -124,7 +125,13 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
     if (auth.result !== "authenticated") {
       return accountAuthError(auth.result, context.get("traceId"));
     }
-    return context.json(toDeletionChallengeResponse(await auth.account.deletionChallenge()), 200);
+    return context.json(
+      toDeletionChallengeResponse(
+        await auth.account.deletionChallenge(),
+        acceptedConfirmationMethods(auth.identity.providers, auth.snapshot.state),
+      ),
+      200,
+    );
   },
   async scheduleDeletion(context) {
     const auth = await authenticateAccountRequest(context.req.raw, context.env);
@@ -154,11 +161,14 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
       );
     }
     const { attempt } = result;
-    if (input.providerToken && auth.identity.provider === "google") {
+    if (
+      input.providerCredential?.provider === "google" &&
+      auth.identity.providers.includes("google")
+    ) {
       const revoked = await revokeVerifiedGoogleToken(
         context.env,
         auth.identity.subject,
-        input.providerToken,
+        input.providerCredential.accessToken,
       ).catch(() => false);
       if (attempt) {
         await context.env.REGISTRY.get(

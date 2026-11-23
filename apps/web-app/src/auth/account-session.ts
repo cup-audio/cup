@@ -127,10 +127,8 @@ export async function signIn(method: SignInMethod) {
   );
 }
 
-export async function signInAgain() {
+export async function signInAgain(method: SignInMethod) {
   await ensureAuthInitialized();
-  const method: SignInMethod =
-    sessionSnapshot()?.user.app_metadata.provider === "email" ? "test-account" : "google";
   return request<void>((reply) =>
     accountSessionActor.send({ type: "SIGN_IN", request: { method, fresh: true }, reply }),
   );

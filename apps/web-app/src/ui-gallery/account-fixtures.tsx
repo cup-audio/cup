@@ -148,6 +148,7 @@ function storeAccountStorySession(
         subject: SUBJECT,
         issuedAtMs: 0,
         expiresAtMs: 4102444800000,
+        acceptedMethods: ["google"],
         action: confirmation,
       }),
     );

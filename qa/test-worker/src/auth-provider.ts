@@ -85,7 +85,10 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
       email: method === "password" ? TEST_ACCOUNT.email : "reader@example.test",
       iat: now,
       exp: now + accessTokenLifetimeSeconds,
-      app_metadata: { provider: method === "password" ? "email" : "google" },
+      app_metadata: {
+        provider: method === "password" ? "email" : "google",
+        providers: [method === "password" ? "email" : "google"],
+      },
       amr: [{ method, timestamp: authenticatedAt }],
     });
   };
@@ -119,7 +122,7 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
         id: account.id,
         email: account.email,
         aud: "authenticated",
-        app_metadata: { provider: account.provider },
+        app_metadata: { provider: account.provider, providers: [account.provider] },
         user_metadata: account.metadata,
         identities: [
           { provider: account.provider, identity_data: { sub: account.identitySubject } },

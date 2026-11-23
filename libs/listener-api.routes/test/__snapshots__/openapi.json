@@ -57,13 +57,25 @@
                     },
                     "expiresAtMs": {
                       "type": "number"
+                    },
+                    "acceptedMethods": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "google",
+                          "test-account"
+                        ]
+                      },
+                      "minItems": 1
                     }
                   },
                   "required": [
                     "challengeId",
                     "subject",
                     "issuedAtMs",
-                    "expiresAtMs"
+                    "expiresAtMs",
+                    "acceptedMethods"
                   ]
                 }
               }
@@ -595,10 +607,29 @@
                     "type": "string",
                     "format": "uuid"
                   },
-                  "providerToken": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 8192
+                  "providerCredential": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "provider": {
+                            "type": "string",
+                            "enum": [
+                              "google"
+                            ]
+                          },
+                          "accessToken": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 8192
+                          }
+                        },
+                        "required": [
+                          "provider",
+                          "accessToken"
+                        ]
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -1159,10 +1190,29 @@
                     "type": "string",
                     "format": "uuid"
                   },
-                  "providerToken": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 8192
+                  "providerCredential": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "provider": {
+                            "type": "string",
+                            "enum": [
+                              "google"
+                            ]
+                          },
+                          "accessToken": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 8192
+                          }
+                        },
+                        "required": [
+                          "provider",
+                          "accessToken"
+                        ]
+                      }
+                    ]
                   }
                 },
                 "required": [

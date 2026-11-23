@@ -229,9 +229,17 @@ export const errorResponseSchema = z.object({
 });
 export type ErrorResponse = z.infer<typeof errorResponseSchema>;
 
+export const signInMethodSchema = z.enum(["google", "test-account"]);
+export type SignInMethod = z.infer<typeof signInMethodSchema>;
+
+export const providerCredentialSchema = z.discriminatedUnion("provider", [
+  z.object({ provider: z.literal("google"), accessToken: z.string().min(1).max(8192) }),
+]);
+export type ProviderCredential = z.infer<typeof providerCredentialSchema>;
+
 export const accountConfirmationSchema = z.object({
   challengeId: z.uuidv4(),
-  providerToken: z.string().min(1).max(8192).optional(),
+  providerCredential: providerCredentialSchema.optional(),
 });
 export type AccountConfirmationRequest = z.infer<typeof accountConfirmationSchema>;
 
@@ -271,6 +279,7 @@ export const deletionChallengeSchema = z.object({
   subject: z.uuid(),
   issuedAtMs: z.number(),
   expiresAtMs: z.number(),
+  acceptedMethods: z.array(signInMethodSchema).min(1),
 });
 export type DeletionChallenge = z.infer<typeof deletionChallengeSchema>;
 export const scheduleDeletionResponseSchema = z.object({

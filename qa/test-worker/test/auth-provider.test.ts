@@ -79,6 +79,17 @@ test.each(["pkce", "id_token"] as const)(
   },
 );
 
+test.each(["pkce", "id_token"] as const)(
+  "a %s session lists Google among the linked providers, as Supabase does",
+  async (grant) => {
+    const session = await signIn(grant);
+
+    expect(claimsOf(session.access_token)).toMatchObject({
+      app_metadata: { provider: "google", providers: ["google"] },
+    });
+  },
+);
+
 test("signs in the local test account with its password, as an email-provider session", async () => {
   const response = await exchangePassword(TEST_ACCOUNT);
 
@@ -87,13 +98,13 @@ test("signs in the local test account with its password, as an email-provider se
   expect(await verifiesAgainstJwks(session.access_token)).toBe(true);
   expect(claimsOf(session.access_token)).toMatchObject({
     email: TEST_ACCOUNT.email,
-    app_metadata: { provider: "email" },
+    app_metadata: { provider: "email", providers: ["email"] },
     amr: [{ method: "password" }],
   });
   const refreshed = await sessionOf(await refresh(session.refresh_token));
   expect(claimsOf(refreshed.access_token)).toMatchObject({
     sub: claimsOf(session.access_token)["sub"],
-    app_metadata: { provider: "email" },
+    app_metadata: { provider: "email", providers: ["email"] },
   });
 });
 
