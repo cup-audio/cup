@@ -187,6 +187,35 @@ account.command("deletions").action(async (_options, command) =>
     output(result, () => process.stdout.write(`${JSON.stringify(result, null, 2)}\n`));
   }),
 );
+account
+  .command("delete-lost-apple-account")
+  .description(
+    "schedule deletion for a listener who lost their Apple Account, without revoking at Apple",
+  )
+  .argument("<account-id>")
+  .requiredOption("--email <address>", "the address the account holds, confirmed with support")
+  .requiredOption("--yes", "confirm scheduling the deletion")
+  .action(async (accountId, options, command) =>
+    run(command, async (client, output) => {
+      const result = await parseOkResponse(
+        client.scheduleLostAppleAccountDeletion(
+          { accountId: parseUuid(accountId) },
+          { email: options.email },
+        ),
+      );
+      output(result, () =>
+        writeFields([
+          ["Account ID", result.accountId],
+          ["Attempt ID", result.attemptId],
+          [
+            "Recovery deadline",
+            Temporal.Instant.fromEpochMilliseconds(result.recoveryDeadlineMs).toString(),
+          ],
+          ["Apple revocation", result.appleRevocation],
+        ]),
+      );
+    }),
+  );
 const conversion = program.command("conversion").description("Manage account conversions");
 conversion
   .command("delete")

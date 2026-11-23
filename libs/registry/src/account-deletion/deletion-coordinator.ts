@@ -328,6 +328,8 @@ export class DeletionCoordinator {
           accountDone: job.accountDone,
           failures: job.failures,
           overdue: isStuck(job, Temporal.Now.instant().epochMilliseconds),
+          googleRevocation: job.googleRevocation,
+          appleRevocation: job.appleRevocation,
         };
       });
   }

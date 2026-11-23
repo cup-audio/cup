@@ -308,6 +308,56 @@ test("the Apple revocation recorded at scheduling stays on the deletion job and 
   ]);
 });
 
+test("an operator-scheduled deletion records not-revoked, lists both revocations, sends the usual notice, and refuses a second scheduling", async ({
+  expect,
+  onTestFinished,
+}) => {
+  const stub = await useResendStub({ onTestFinished });
+  const accountId = crypto.randomUUID();
+  const account = bindings.ACCOUNTS.get(bindings.ACCOUNTS.idFromName(accountId));
+  await account.initialize({
+    accountId,
+    subject: crypto.randomUUID(),
+    createdAtMs: Temporal.Now.instant().epochMilliseconds,
+  });
+
+  await expectRejection(account.scheduleOperatorDeletion(RECIPIENT));
+
+  expect((await account.inspect()).state).toBe("deletion_scheduled");
+  await expect(account.scheduleOperatorDeletion(RECIPIENT)).resolves.toEqual({
+    result: "conflict",
+  });
+  const accountStorage = await worker.getDurableObjectStorage("ACCOUNTS", { name: accountId });
+  const [row] = await accountStorage.exec("SELECT payload_json FROM deletion_attempts");
+  if (typeof row?.["payload_json"] !== "string") {
+    throw new Error("The account was not scheduled for deletion");
+  }
+  const attempt: DeletionAttempt = JSON.parse(row["payload_json"]);
+  expect(attempt).toMatchObject({ accountId, email: RECIPIENT, appleRevocation: "not-revoked" });
+  const coordinator = bindings.DELETION_TEST.get(
+    bindings.DELETION_TEST.idFromName(crypto.randomUUID()),
+  );
+  await coordinator.acceptForTest({ ...attempt, state: "scheduled" });
+
+  expect(await coordinator.statusForTest()).toStrictEqual([
+    expect.objectContaining({
+      attemptId: attempt.attemptId,
+      googleRevocation: "unavailable",
+      appleRevocation: "not-revoked",
+    }),
+  ]);
+  await coordinator.reconcileWithProvidersForTest(stub.url, DEFAULT_TIMEOUT_MS);
+  expect(stub.emails).toStrictEqual([
+    expect.objectContaining({
+      idempotencyKey: `${attempt.attemptId}:scheduled`,
+      email: expect.objectContaining({
+        to: [RECIPIENT],
+        subject: "Your Cup account deletion is scheduled",
+      }),
+    }),
+  ]);
+});
+
 async function sentryCoordinator({
   onTestFinished,
   sentryDsn,

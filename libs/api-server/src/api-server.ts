@@ -33,6 +33,7 @@ import {
   type InspectAccountResponse,
   type ListAccountDeletionsResponse,
   type OperatorApiHandlers,
+  type ScheduleLostAppleAccountDeletionResponse,
 } from "@cup/operator-api.routes";
 import type { RegistryDurableObject } from "@cup/registry";
 import {
@@ -47,6 +48,7 @@ import { resolveConversionDispatch } from "#src/adapters/conversion-dispatch.ts"
 import { resolveConversionReader } from "#src/adapters/conversion-reader.ts";
 import { revokeVerifiedGoogleToken } from "#src/adapters/google-token-revocation.ts";
 import { createNarrationSourceMaterialReader } from "#src/adapters/narration-source-material-reader.ts";
+import { readSupabaseUser } from "#src/adapters/supabase-user.ts";
 import type { ApiServerEnvironment } from "#src/api-server-environment.ts";
 import { authenticateAccountRequest, localTestAccount } from "#src/http/account-auth.ts";
 import { APPLICATION_ORIGIN, routeApplicationDomain } from "#src/http/domain-routing.ts";
@@ -957,6 +959,50 @@ const operatorApiHandlers: OperatorApiHandlers<ApiServerEnvironment> = {
         attempts: await accountRegistry.inspectDeletions(),
         receipts: await accountRegistry.deletionReceipts(),
       } satisfies ListAccountDeletionsResponse,
+      200,
+    );
+  },
+  async scheduleLostAppleAccountDeletion(context) {
+    const { accountId } = context.req.valid("param");
+    const { email } = context.req.valid("json");
+    const identity = await getRegistryStub(context.env).findAccount(accountId);
+    if (identity === undefined) {
+      return jsonError(context.get("traceId"), "account-not-found", "Account not found.", 404);
+    }
+    const user = await readSupabaseUser(context.env, identity.subject);
+    if (!user.providers.includes("apple")) {
+      return jsonError(
+        context.get("traceId"),
+        "account-not-apple-linked",
+        "The account has no Apple identity; its owner confirms deletion in the app.",
+        409,
+      );
+    }
+    if (user.email !== email) {
+      return jsonError(
+        context.get("traceId"),
+        "email-mismatch",
+        "The email address is not the one the account holds.",
+        409,
+      );
+    }
+    const account = context.env.ACCOUNTS.get(context.env.ACCOUNTS.idFromName(accountId));
+    const result = await account.scheduleOperatorDeletion(user.email);
+    if (result.result === "conflict") {
+      return jsonError(
+        context.get("traceId"),
+        "account-not-active",
+        "The account is already scheduled for deletion or being deleted.",
+        409,
+      );
+    }
+    return context.json(
+      {
+        accountId,
+        attemptId: result.attempt.attemptId,
+        recoveryDeadlineMs: result.attempt.deadlineMs,
+        appleRevocation: "not-revoked",
+      } satisfies ScheduleLostAppleAccountDeletionResponse,
       200,
     );
   },

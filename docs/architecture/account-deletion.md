@@ -38,7 +38,13 @@ A failed validation or revocation answers the retryable `apple-confirmation-fail
 
 For a Google-only account, nothing changes: after scheduling, the API attempts Google token revocation when the client supplies a Google credential for an identity linked to Google, verifies that the token belongs to the same identity, and records the outcome. Revocation failure does not undo scheduling; a failure to record the outcome is reported as an operational error, not a rejected confirmation.
 
-The deletion job and its receipt record `appleRevocation`, set at scheduling: `unavailable` without an Apple identity, `revoked` after the self-service path above, and `not-revoked` for a deletion the operator schedules for a listener who lost their Apple Account, which the spec plans ([#519](https://github.com/cup-audio/cup/issues/519)). The registry's [`deletion-coordinator.test.ts`](../../libs/registry/test/deletion-coordinator.test.ts) covers both records.
+The deletion job and its receipt record `appleRevocation`, set at scheduling: `unavailable` without an Apple identity, `revoked` after the self-service path above, and `not-revoked` for a deletion the operator schedules for a [lost Apple Account](#lost-apple-account). The [operator listing](../../apps/operator/README.md#list-account-deletions) shows it next to `googleRevocation` for each unfinished attempt. The registry's [`deletion-coordinator.test.ts`](../../libs/registry/test/deletion-coordinator.test.ts) covers both records.
+
+### Lost Apple Account
+
+A listener who can no longer sign in with Apple can't confirm deletion and asks `support@cup.audio`. Support asks them to write from, or reply to support at, the email address the account holds, and the operator schedules the deletion only for a matching address; if a Hide My Email relay address no longer forwards, ownership can't be proven and the account stays. The [operator runbook](../../apps/operator/README.md#delete-the-account-of-a-listener-who-lost-their-apple-account) records the steps.
+
+The operator route goes through Cloudflare Access like every operator route. The Worker refuses an unknown account, an account whose Supabase identity has no Apple identity, an address other than the identity's own, and an account that is not active. Otherwise the account schedules the deletion without a challenge, with the same recovery period and scheduled-deletion notice as self-service, revokes nothing at Apple, and records `appleRevocation: not-revoked`. [`lost-apple-account-deletion.test.ts`](../../libs/api-server/test/lost-apple-account-deletion.test.ts) covers the refusals and that Apple is never called, and the registry's `deletion-coordinator.test.ts` the record, the listing and the notice.
 
 ### Apple sign-ins during the seven days
 

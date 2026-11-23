@@ -21,7 +21,7 @@ App Store Review Guideline 5.1.1(v) requires that deleting an account created wi
 
 ## Consequences
 
-- A listener who can no longer sign in with Apple cannot delete the account themselves; the operator-assisted path covers them without revocation.
+- A listener who can no longer sign in with Apple cannot delete the account themselves; the operator-assisted path covers them without revocation; the operator CLI's lost-Apple-Account action implements it (cup-audio/cup#528).
 - The deletion depends on Apple being reachable at the moment of confirmation; an outage shows "Apple couldn't confirm the deletion" and the listener retries with a new challenge and a new sign-in.
 - Two assumptions stay unverified until production QA: that revoking the Services ID's token ends Cup's authorization across the app group, and that every native re-authorization returns a fresh code. If one fails, TN3194's store-at-sign-in flow reopens this decision.
 - The Worker holds a third copy of the `.p8` key next to the operator's password manager and the GitHub environment of [ADR 0118](0118-rotate-supabases-apple-client-secret-from-a-scheduled-github-actions-workflow.md).

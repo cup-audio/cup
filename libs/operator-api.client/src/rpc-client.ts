@@ -7,6 +7,7 @@ import type {
   InspectAccountLedgerQuery,
   ListAccountsQuery,
   ListGrantsQuery,
+  ScheduleLostAppleAccountDeletionRequest,
 } from "@cup/operator-api.routes";
 
 import { createHonoClient, type HonoClient } from "#src/hono-client.ts";
@@ -91,6 +92,15 @@ export class OperatorApiClient {
       { param: params, json: input },
       this.#options(),
     );
+  }
+
+  async scheduleLostAppleAccountDeletion(
+    params: AccountParams,
+    input: ScheduleLostAppleAccountDeletionRequest,
+  ) {
+    return this.#honoClient.api.operator.accounts[":accountId"][
+      "lost-apple-account-deletion"
+    ].$post({ param: params, json: input }, this.#options());
   }
 
   async deleteConversion(params: ConversionParams) {
