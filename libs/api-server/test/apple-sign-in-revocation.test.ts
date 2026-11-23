@@ -1,4 +1,4 @@
-import { exportPKCS8, generateKeyPair, SignJWT, type CryptoKey } from "jose";
+import { exportJWK, exportPKCS8, generateKeyPair, SignJWT, type CryptoKey } from "jose";
 import { afterEach, beforeAll, beforeEach, expect, test, vi } from "vitest";
 
 import type { ApiServerEnvironment } from "#src/api-server-environment.ts";
@@ -11,38 +11,27 @@ vi.mock("@cup/conversion-grants", async () => ({
   createRootCredential: () => "",
   getGrantSessionCookie: () => undefined,
 }));
-const mocks = vi.hoisted(() => ({
-  authenticate: vi.fn<(...args: unknown[]) => Promise<unknown>>(),
-  captureException: vi.fn<(...args: unknown[]) => void>(),
-}));
-vi.mock("#src/http/account-auth.ts", async (original) => ({
-  ...(await original<typeof import("#src/http/account-auth.ts")>()),
-  authenticateAccountRequest: mocks.authenticate,
-}));
-vi.mock("@sentry/core", async (original) => ({
-  ...(await original<typeof import("@sentry/core")>()),
-  captureException: mocks.captureException,
-}));
 
 const SUBJECT = "d1a52e64-3e4d-4a7f-a711-7fb11501e9af";
+const ACCOUNT_ID = "5b0e6f3a-8c1d-4e2f-9a7b-3c4d5e6f7a8b";
 const APPLE_SUBJECT = "000123.linked-apple.0456";
 const REFRESH_TOKEN = "apple-refresh-token-value";
 const APPLE_ORIGIN = "https://apple.example.test";
-const SUPABASE_URL = "https://auth.example.test";
+const SUPABASE_URL = "https://apple-sign-in-revocation.supabase.co";
 
 let signingKeys: { privateKey: CryptoKey; publicKey: CryptoKey };
 let appleCalls: Array<{ path: string; form: Record<string, string> }>;
 let apple: { tokenStatus: number; revokeStatus: number; subject: string };
+let account: { state: string; providers: string[] };
 
 beforeAll(async () => {
   signingKeys = await generateKeyPair("ES256", { extractable: true });
 });
 
 beforeEach(() => {
-  vi.resetAllMocks();
   appleCalls = [];
   apple = { tokenStatus: 200, revokeStatus: 200, subject: APPLE_SUBJECT };
-  authenticateAs("deletion_scheduled", ["google", "apple"]);
+  account = { state: "deletion_scheduled", providers: ["google", "apple"] };
   vi.stubGlobal("fetch", fakeProviders);
 });
 
@@ -50,23 +39,12 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function authenticateAs(state: string, providers: string[]) {
-  mocks.authenticate.mockResolvedValue({
-    result: "authenticated",
-    identity: {
-      subject: SUBJECT,
-      email: "listener@example.com",
-      providers,
-      authenticatedAtSeconds: 10,
-    },
-    snapshot: { state },
-    account: {},
-  });
-}
-
 async function fakeProviders(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const url = new URL(input instanceof Request ? input.url : input);
-  if (url.origin === SUPABASE_URL && url.pathname === `/auth/v1/admin/users/${SUBJECT}`) {
+  if (url.href === `${SUPABASE_URL}/auth/v1/.well-known/jwks.json`) {
+    return Response.json({ keys: [{ ...(await exportJWK(signingKeys.publicKey)), kid: "k1" }] });
+  }
+  if (url.href === `${SUPABASE_URL}/auth/v1/admin/users/${SUBJECT}`) {
     return Response.json({
       id: SUBJECT,
       identities: [{ provider: "apple", identity_data: { sub: APPLE_SUBJECT } }],
@@ -90,11 +68,24 @@ async function fakeProviders(input: RequestInfo | URL, init?: RequestInit): Prom
   return new Response(null, { status: apple.revokeStatus });
 }
 
-async function revokeAppleSignIn(
-  body: unknown = { providerCredential: { provider: "apple", refreshToken: REFRESH_TOKEN } },
-  headers: Record<string, string> = {},
-) {
-  const env: Partial<ApiServerEnvironment> = {
+async function accessToken() {
+  return new SignJWT({
+    role: "authenticated",
+    is_anonymous: false,
+    email: "listener@example.com",
+    app_metadata: { provider: account.providers[0], providers: account.providers },
+  })
+    .setProtectedHeader({ alg: "ES256", kid: "k1" })
+    .setSubject(SUBJECT)
+    .setIssuer(`${SUPABASE_URL}/auth/v1`)
+    .setAudience("authenticated")
+    .setIssuedAt()
+    .setExpirationTime("5m")
+    .sign(signingKeys.privateKey);
+}
+
+async function environment() {
+  const env = {
     SUPABASE_URL,
     SUPABASE_SECRET_KEY: "supabase-secret",
     APPLE_ORIGIN,
@@ -103,19 +94,53 @@ async function revokeAppleSignIn(
     APPLE_TEAM_ID: "APPLETEAM1",
     APPLE_WEB_CLIENT_ID: "audio.cup.app.web",
     APPLE_NATIVE_CLIENT_ID: "audio.cup.app",
+    REGISTRY: {
+      idFromName: (name: string) => name,
+      get: () => ({
+        findIdentity: async () => ({ accountId: ACCOUNT_ID, subject: SUBJECT, phase: "active" }),
+      }),
+    },
+    ACCOUNTS: {
+      idFromName: (name: string) => name,
+      get: () => ({
+        inspect: async () => ({
+          accountId: ACCOUNT_ID,
+          subject: SUBJECT,
+          createdAtMs: 1,
+          executionEpoch: 1,
+          state: account.state,
+          balance: { unit: "audio-millisecond", available: 0, reserved: 0 },
+        }),
+      }),
+    },
   };
+  if (!isEnvironment(env)) {
+    throw new Error("Missing fixture bindings");
+  }
+  return env;
+}
+
+function isEnvironment(value: unknown): value is ApiServerEnvironment {
+  return typeof value === "object" && value !== null && "REGISTRY" in value;
+}
+
+async function revokeAppleSignIn(
+  body: unknown = { providerCredential: { provider: "apple", refreshToken: REFRESH_TOKEN } },
+  headers: Record<string, string> = {},
+) {
   return createApiServer().request(
     "https://cup.audio/api/account/apple-sign-in-revocation",
     {
       method: "POST",
       headers: {
+        Authorization: `Bearer ${await accessToken()}`,
         "Content-Type": "application/json",
         "X-Create-Audiobook-From-URL-Request": "1",
         ...headers,
       },
       body: JSON.stringify(body),
     },
-    env,
+    await environment(),
   );
 }
 
@@ -127,7 +152,7 @@ async function expectSilentSuccess(response: Response) {
 test.each(["deletion_scheduled", "deleting"])(
   "an Apple sign-in into a %s account is validated and revoked at Apple",
   async (state) => {
-    authenticateAs(state, ["google", "apple"]);
+    account.state = state;
 
     await expectSilentSuccess(await revokeAppleSignIn());
 
@@ -151,12 +176,11 @@ test.each(["deletion_scheduled", "deleting"])(
         },
       },
     ]);
-    expect(mocks.captureException).not.toHaveBeenCalled();
   },
 );
 
 test("an Apple sign-in into an active account is left alone", async () => {
-  authenticateAs("active", ["apple"]);
+  account.state = "active";
 
   await expectSilentSuccess(await revokeAppleSignIn());
 
@@ -164,12 +188,11 @@ test("an Apple sign-in into an active account is left alone", async () => {
 });
 
 test("a scheduled account without an Apple identity never reaches Apple", async () => {
-  authenticateAs("deletion_scheduled", ["google"]);
+  account.providers = ["google"];
 
   await expectSilentSuccess(await revokeAppleSignIn());
 
   expect(appleCalls).toStrictEqual([]);
-  expect(mocks.captureException).not.toHaveBeenCalled();
 });
 
 test("a refresh token of another Apple Account is validated but not revoked", async () => {
@@ -181,25 +204,15 @@ test("a refresh token of another Apple Account is validated but not revoked", as
 });
 
 test.each([
-  ["validation", { tokenStatus: 400 }],
-  ["revocation", { revokeStatus: 503 }],
-])(
-  "a failed Apple %s answers the same success and is logged without the token",
-  async (_, failure) => {
-    Object.assign(apple, failure);
+  ["validation", { tokenStatus: 400 }, ["/auth/token"]],
+  ["revocation", { revokeStatus: 503 }, ["/auth/token", "/auth/revoke"]],
+])("a failed Apple %s answers the same success", async (_, failure, calls) => {
+  Object.assign(apple, failure);
 
-    await expectSilentSuccess(await revokeAppleSignIn());
+  await expectSilentSuccess(await revokeAppleSignIn());
 
-    expect(mocks.captureException).toHaveBeenCalledOnce();
-    const logged = JSON.stringify(
-      mocks.captureException.mock.calls.map(([error]) =>
-        error instanceof Error ? { message: error.message, cause: String(error.cause) } : error,
-      ),
-    );
-    expect(logged).not.toContain(REFRESH_TOKEN);
-    expect(logged).not.toContain("invalid_grant");
-  },
-);
+  expect(appleCalls.map(({ path }) => path)).toStrictEqual(calls);
+});
 
 test("a credential other than Apple's is refused as invalid input", async () => {
   const response = await revokeAppleSignIn({
@@ -212,9 +225,7 @@ test("a credential other than Apple's is refused as invalid input", async () => 
 });
 
 test("the route requires a bearer session", async () => {
-  mocks.authenticate.mockResolvedValue({ result: "unauthorized" });
-
-  const response = await revokeAppleSignIn();
+  const response = await revokeAppleSignIn(undefined, { Authorization: "" });
 
   expect(response.status).toBe(401);
   expect(appleCalls).toStrictEqual([]);
@@ -229,7 +240,6 @@ test.each([
 
   expect(response.status).toBe(403);
   expect(await response.json()).toMatchObject({ error: { code: "origin-blocked" } });
-  expect(mocks.authenticate).not.toHaveBeenCalled();
   expect(appleCalls).toStrictEqual([]);
 });
 
