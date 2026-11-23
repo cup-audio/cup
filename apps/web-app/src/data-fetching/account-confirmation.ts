@@ -24,6 +24,7 @@ import {
   revokeAppleSignIn,
 } from "#src/data-fetching/apple-sign-in-revocation.js";
 import { summarizeError, UserFacingError } from "#src/errors.js";
+import { appleCredentialOf } from "#src/platform/account-auth.js";
 
 const ACCOUNT_CONFIRMATION_MUTATION_KEY = ["account-confirmation"];
 const APPLE_REFUSALS: Partial<Record<string, string>> = {
@@ -142,13 +143,12 @@ export function useAccountConfirmation(subject: string) {
 }
 
 async function sendConfirmation(subject: string, pending: AccountChallenge, session: Session) {
-  const appleRefreshToken =
-    pending.signInMethod === "apple" ? session.provider_refresh_token : undefined;
-  if (appleRefreshToken) {
+  const appleCredential = pending.signInMethod === "apple" ? appleCredentialOf(session) : undefined;
+  if (appleCredential) {
     if (pending.action === "delete") {
-      claimAppleSignIn(appleRefreshToken);
+      claimAppleSignIn(appleCredential);
     } else {
-      await revokeAppleSignIn(subject, appleRefreshToken);
+      await revokeAppleSignIn(subject, appleCredential);
     }
   }
   const providerCredential =
@@ -171,9 +171,7 @@ function credentialOf(
   session: Session,
 ): ProviderCredential | undefined {
   if (method === "apple") {
-    return session.provider_refresh_token
-      ? { provider: "apple", refreshToken: session.provider_refresh_token }
-      : undefined;
+    return appleCredentialOf(session);
   }
   return session.provider_token
     ? { provider: "google", accessToken: session.provider_token }

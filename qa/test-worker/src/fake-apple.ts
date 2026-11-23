@@ -5,7 +5,9 @@ import { Temporal } from "temporal-polyfill";
 import { APPLE_SIGN_IN_KEY } from "#src/apple-sign-in-key.ts";
 
 const APPLE_AUDIENCE = "https://appleid.apple.com";
-const APPLE_CLIENT_IDS = new Set(["audio.cup.app.web", "audio.cup.app"]);
+const APPLE_NATIVE_CLIENT_ID = "audio.cup.app";
+const APPLE_CLIENT_IDS = new Set(["audio.cup.app.web", APPLE_NATIVE_CLIENT_ID]);
+const AUTHORIZATION_CODE_LIFETIME_MS = 5 * 60 * 1000;
 
 export type AppleEndpoint = "/auth/token" | "/auth/revoke";
 
@@ -24,6 +26,10 @@ type FakeAppleOptions = {
 
 export function createFakeApple({ signIdToken }: FakeAppleOptions) {
   const refreshTokens = new Map<string, { subject: string; isRevoked: boolean }>();
+  const authorizationCodes = new Map<
+    string,
+    { subject: () => string; expiresAtMs: number; isUsed: boolean }
+  >();
   const requests: AppleRequest[] = [];
   let failure: AppleEndpoint | undefined;
   let tokenSubject: string | undefined;
@@ -39,60 +45,106 @@ export function createFakeApple({ signIdToken }: FakeAppleOptions) {
       response.writeHead(400).end(JSON.stringify({ error: "invalid_client" }));
       return;
     }
-    const token = (path === "/auth/token" ? form.get("refresh_token") : form.get("token")) ?? "";
+    const grantType = form.get("grant_type");
+    const token =
+      (path === "/auth/revoke"
+        ? form.get("token")
+        : grantType === "authorization_code"
+          ? form.get("code")
+          : form.get("refresh_token")) ?? "";
     requests.push({
       path,
       clientId,
       ...(path === "/auth/token"
-        ? { grantType: form.get("grant_type") ?? "" }
+        ? { grantType: grantType ?? "" }
         : { tokenTypeHint: form.get("token_type_hint") ?? "" }),
       token,
       atMs: Temporal.Now.instant().epochMilliseconds,
     });
-    const issued = refreshTokens.get(token);
     if (path === "/auth/revoke") {
-      if (failure === path) {
-        response.writeHead(503).end(JSON.stringify({ error: "temporarily_unavailable" }));
-        return;
-      }
-      if (issued) {
-        issued.isRevoked = true;
-      }
-      response.writeHead(200).end();
+      revoke(token, response);
       return;
     }
-    if (
-      failure === path ||
-      form.get("grant_type") !== "refresh_token" ||
-      issued === undefined ||
-      issued.isRevoked
-    ) {
+    if (failure === path) {
       response.writeHead(400).end(JSON.stringify({ error: "invalid_grant" }));
       return;
     }
+    const tokens =
+      grantType === "authorization_code"
+        ? exchangeAuthorizationCode(clientId, token)
+        : grantType === "refresh_token"
+          ? validateRefreshToken(clientId, token)
+          : undefined;
+    if (tokens === undefined) {
+      response.writeHead(400).end(JSON.stringify({ error: "invalid_grant" }));
+      return;
+    }
+    response.end(JSON.stringify({ ...accessTokenFields(), ...tokens }));
+  };
+  const revoke = (token: string, response: http.ServerResponse) => {
+    if (failure === "/auth/revoke") {
+      response.writeHead(503).end(JSON.stringify({ error: "temporarily_unavailable" }));
+      return;
+    }
+    const issued = refreshTokens.get(token);
+    if (issued) {
+      issued.isRevoked = true;
+    }
+    response.writeHead(200).end();
+  };
+  const exchangeAuthorizationCode = (clientId: string, token: string) => {
+    const code = authorizationCodes.get(token);
+    if (
+      clientId !== APPLE_NATIVE_CLIENT_ID ||
+      code === undefined ||
+      code.isUsed ||
+      Temporal.Now.instant().epochMilliseconds >= code.expiresAtMs
+    ) {
+      return undefined;
+    }
+    code.isUsed = true;
+    const subject = code.subject();
+    return { refresh_token: issueRefreshToken(subject), id_token: idTokenFor(clientId, subject) };
+  };
+  const validateRefreshToken = (clientId: string, token: string) => {
+    const issued = refreshTokens.get(token);
+    if (issued === undefined || issued.isRevoked) {
+      return undefined;
+    }
+    return { id_token: idTokenFor(clientId, issued.subject) };
+  };
+  const idTokenFor = (clientId: string, subject: string) => {
     const now = Math.floor(Temporal.Now.instant().epochMilliseconds / 1000);
-    response.end(
-      JSON.stringify({
-        access_token: `qa-apple-access-${crypto.randomUUID()}`,
-        token_type: "Bearer",
-        expires_in: 3600,
-        id_token: signIdToken({
-          iss: APPLE_AUDIENCE,
-          aud: clientId,
-          sub: tokenSubject ?? issued.subject,
-          iat: now,
-          exp: now + 600,
-        }),
-      }),
-    );
+    return signIdToken({
+      iss: APPLE_AUDIENCE,
+      aud: clientId,
+      sub: tokenSubject ?? subject,
+      iat: now,
+      exp: now + 600,
+    });
+  };
+  const issueRefreshToken = (subject: string) => {
+    const token = `qa-apple-${crypto.randomUUID()}`;
+    refreshTokens.set(token, { subject, isRevoked: false });
+    return token;
   };
 
   return {
     handle,
-    issueRefreshToken(subject: string) {
-      const token = `qa-apple-${crypto.randomUUID()}`;
-      refreshTokens.set(token, { subject, isRevoked: false });
-      return token;
+    issueRefreshToken,
+    issueAuthorizationCode(subject: () => string) {
+      const code = `qa-apple-code-${crypto.randomUUID()}`;
+      authorizationCodes.set(code, {
+        subject,
+        expiresAtMs: Temporal.Now.instant().epochMilliseconds + AUTHORIZATION_CODE_LIFETIME_MS,
+        isUsed: false,
+      });
+      return code;
+    },
+    expireAuthorizationCodes() {
+      for (const code of authorizationCodes.values()) {
+        code.expiresAtMs = 0;
+      }
     },
     requests: () => requests.map((request) => ({ ...request })),
     setFailure(endpoint: AppleEndpoint | undefined) {
@@ -101,6 +153,14 @@ export function createFakeApple({ signIdToken }: FakeAppleOptions) {
     setTokenSubject(subject: string | undefined) {
       tokenSubject = subject;
     },
+  };
+}
+
+function accessTokenFields() {
+  return {
+    access_token: `qa-apple-access-${crypto.randomUUID()}`,
+    token_type: "Bearer",
+    expires_in: 3600,
   };
 }
 

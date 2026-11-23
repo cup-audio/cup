@@ -235,13 +235,14 @@ export type ErrorResponse = z.infer<typeof errorResponseSchema>;
 export const signInMethodSchema = z.enum(["google", "apple", "test-account"]);
 export type SignInMethod = z.infer<typeof signInMethodSchema>;
 
-const appleProviderCredentialSchema = z.object({
-  provider: z.literal("apple"),
-  refreshToken: z.string().min(1).max(8192),
-});
-export const providerCredentialSchema = z.discriminatedUnion("provider", [
+const appleProviderCredentialSchema = z.union([
+  z.object({ provider: z.literal("apple"), refreshToken: z.string().min(1).max(8192) }),
+  z.object({ provider: z.literal("apple"), authorizationCode: z.string().min(1).max(8192) }),
+]);
+export type AppleProviderCredential = z.infer<typeof appleProviderCredentialSchema>;
+export const providerCredentialSchema = z.union([
   z.object({ provider: z.literal("google"), accessToken: z.string().min(1).max(8192) }),
-  appleProviderCredentialSchema,
+  ...appleProviderCredentialSchema.options,
 ]);
 export type ProviderCredential = z.infer<typeof providerCredentialSchema>;
 

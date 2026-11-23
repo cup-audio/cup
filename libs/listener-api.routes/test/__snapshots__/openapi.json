@@ -623,7 +623,7 @@
                     "format": "uuid"
                   },
                   "providerCredential": {
-                    "oneOf": [
+                    "anyOf": [
                       {
                         "type": "object",
                         "properties": {
@@ -662,6 +662,26 @@
                         "required": [
                           "provider",
                           "refreshToken"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "provider": {
+                            "type": "string",
+                            "enum": [
+                              "apple"
+                            ]
+                          },
+                          "authorizationCode": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 8192
+                          }
+                        },
+                        "required": [
+                          "provider",
+                          "authorizationCode"
                         ]
                       }
                     ]
@@ -1240,7 +1260,7 @@
                     "format": "uuid"
                   },
                   "providerCredential": {
-                    "oneOf": [
+                    "anyOf": [
                       {
                         "type": "object",
                         "properties": {
@@ -1279,6 +1299,26 @@
                         "required": [
                           "provider",
                           "refreshToken"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "provider": {
+                            "type": "string",
+                            "enum": [
+                              "apple"
+                            ]
+                          },
+                          "authorizationCode": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 8192
+                          }
+                        },
+                        "required": [
+                          "provider",
+                          "authorizationCode"
                         ]
                       }
                     ]
@@ -1903,23 +1943,47 @@
                 "type": "object",
                 "properties": {
                   "providerCredential": {
-                    "type": "object",
-                    "properties": {
-                      "provider": {
-                        "type": "string",
-                        "enum": [
-                          "apple"
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "provider": {
+                            "type": "string",
+                            "enum": [
+                              "apple"
+                            ]
+                          },
+                          "refreshToken": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 8192
+                          }
+                        },
+                        "required": [
+                          "provider",
+                          "refreshToken"
                         ]
                       },
-                      "refreshToken": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 8192
+                      {
+                        "type": "object",
+                        "properties": {
+                          "provider": {
+                            "type": "string",
+                            "enum": [
+                              "apple"
+                            ]
+                          },
+                          "authorizationCode": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 8192
+                          }
+                        },
+                        "required": [
+                          "provider",
+                          "authorizationCode"
+                        ]
                       }
-                    },
-                    "required": [
-                      "provider",
-                      "refreshToken"
                     ]
                   }
                 },

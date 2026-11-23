@@ -1,4 +1,6 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Session, SupabaseClient } from "@supabase/supabase-js";
+
+import type { AppleProviderCredential } from "@cup/listener-api.routes";
 
 import type { GoogleSignInOptions } from "#src/platform/account-auth.js";
 import { reportFailure } from "#src/report-failure.js";
@@ -53,6 +55,12 @@ export async function signInWithApple(client: Pick<SupabaseClient, "auth">) {
     window.sessionStorage.removeItem(APPLE_SIGN_IN_MARKER_STORAGE_KEY);
     throw result.error;
   }
+}
+
+export function appleCredentialOf(session: Session): AppleProviderCredential | undefined {
+  return session.provider_refresh_token
+    ? { provider: "apple", refreshToken: session.provider_refresh_token }
+    : undefined;
 }
 
 export function takeCompletedAppleSignIn(): boolean {

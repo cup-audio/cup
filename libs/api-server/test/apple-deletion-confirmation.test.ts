@@ -29,6 +29,8 @@ const SUBJECT = "d1a52e64-3e4d-4a7f-a711-7fb11501e9af";
 const CHALLENGE_ID = "6f1c0f0e-3f7a-4d8e-9b6a-2c1d0e9f8a7b";
 const APPLE_SUBJECT = "000123.linked-apple.0456";
 const REFRESH_TOKEN = "apple-refresh-token-value";
+const AUTHORIZATION_CODE = "apple-authorization-code-value";
+const EXCHANGED_REFRESH_TOKEN = "apple-refresh-token-from-code";
 const APPLE_ORIGIN = "https://apple.example.test";
 const SUPABASE_URL = "https://auth.example.test";
 
@@ -101,15 +103,17 @@ async function fakeProviders(input: RequestInfo | URL, init?: RequestInit): Prom
     if (apple.tokenStatus !== 200) {
       return Response.json({ error: "invalid_grant" }, { status: apple.tokenStatus });
     }
+    const isCodeExchange = form["grant_type"] === "authorization_code";
     return Response.json({
       access_token: "apple-access-token",
       token_type: "Bearer",
       expires_in: 3600,
+      ...(isCodeExchange ? { refresh_token: EXCHANGED_REFRESH_TOKEN } : {}),
       id_token: await new SignJWT({})
         .setProtectedHeader({ alg: "ES256" })
         .setIssuer("https://appleid.apple.com")
         .setSubject(apple.subject)
-        .setAudience("audio.cup.app.web")
+        .setAudience(isCodeExchange ? "audio.cup.app" : "audio.cup.app.web")
         .sign(signingKeys.privateKey),
     });
   }
@@ -194,6 +198,90 @@ test("an Apple-linked deletion validates the refresh token, revokes it, and only
     email: "listener@example.com",
     appleRevocation: "revoked",
   });
+});
+
+const nativeAppleCredential = { provider: "apple", authorizationCode: AUTHORIZATION_CODE };
+
+test("a native Apple deletion exchanges the authorization code as the app, revokes the refresh token, and only then schedules", async () => {
+  const response = await scheduleDeletion({
+    challengeId: CHALLENGE_ID,
+    providerCredential: nativeAppleCredential,
+  });
+
+  expect(response.status).toBe(200);
+  expect(order).toStrictEqual(["/auth/token", "/auth/revoke", "schedule"]);
+  const nowSeconds = Math.floor(Temporal.Now.instant().epochMilliseconds / 1000);
+  const clientSecret = {
+    header: { alg: "ES256", kid: "APPLEKEYID" },
+    claims: {
+      iss: "APPLETEAM1",
+      aud: "https://appleid.apple.com",
+      sub: "audio.cup.app",
+      iat: expect.toBeOneOf([nowSeconds, nowSeconds - 1]),
+      exp: expect.toSatisfy((exp: number) => exp > nowSeconds && exp <= nowSeconds + 300),
+    },
+  };
+  expect(appleCalls).toStrictEqual([
+    {
+      path: "/auth/token",
+      form: {
+        client_id: "audio.cup.app",
+        client_secret: expect.any(String),
+        grant_type: "authorization_code",
+        code: AUTHORIZATION_CODE,
+      },
+      clientSecret,
+    },
+    {
+      path: "/auth/revoke",
+      form: {
+        client_id: "audio.cup.app",
+        client_secret: expect.any(String),
+        token: EXCHANGED_REFRESH_TOKEN,
+        token_type_hint: "refresh_token",
+      },
+      clientSecret,
+    },
+  ]);
+  expect(account.scheduleDeletion).toHaveBeenCalledWith(
+    expect.objectContaining({ appleRevocation: "revoked" }),
+  );
+});
+
+test("an authorization code of another Apple Account is refused without revoking or scheduling", async () => {
+  apple.subject = "000999.other-apple.0789";
+
+  const response = await scheduleDeletion({
+    challengeId: CHALLENGE_ID,
+    providerCredential: nativeAppleCredential,
+  });
+
+  expect(response.status).toBe(409);
+  expect(await response.json()).toMatchObject({ error: { code: "apple-account-mismatch" } });
+  expect(order).toStrictEqual(["/auth/token"]);
+  expect(account.scheduleDeletion).not.toHaveBeenCalled();
+});
+
+test("an expired or reused authorization code answers Apple's retryable failure, schedules nothing, and logs no code", async () => {
+  apple.tokenStatus = 400;
+
+  const response = await scheduleDeletion({
+    challengeId: CHALLENGE_ID,
+    providerCredential: nativeAppleCredential,
+  });
+
+  expect(response.status).toBe(503);
+  expect(await response.json()).toMatchObject({ error: { code: "apple-confirmation-failed" } });
+  expect(order).toStrictEqual(["/auth/token"]);
+  expect(account.scheduleDeletion).not.toHaveBeenCalled();
+  expect(mocks.captureException).toHaveBeenCalledOnce();
+  const logged = JSON.stringify(
+    mocks.captureException.mock.calls.map(([error]) =>
+      error instanceof Error ? { message: error.message, cause: String(error.cause) } : error,
+    ),
+  );
+  expect(logged).not.toContain(AUTHORIZATION_CODE);
+  expect(logged).not.toContain("invalid_grant");
 });
 
 test.each([

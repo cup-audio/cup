@@ -16,6 +16,8 @@ const SUBJECT = "d1a52e64-3e4d-4a7f-a711-7fb11501e9af";
 const ACCOUNT_ID = "5b0e6f3a-8c1d-4e2f-9a7b-3c4d5e6f7a8b";
 const APPLE_SUBJECT = "000123.linked-apple.0456";
 const REFRESH_TOKEN = "apple-refresh-token-value";
+const AUTHORIZATION_CODE = "apple-authorization-code-value";
+const EXCHANGED_REFRESH_TOKEN = "apple-refresh-token-from-code";
 const APPLE_ORIGIN = "https://apple.example.test";
 const SUPABASE_URL = "https://apple-sign-in-revocation.supabase.co";
 
@@ -59,6 +61,9 @@ async function fakeProviders(input: RequestInfo | URL, init?: RequestInit): Prom
       return Response.json({ error: "invalid_grant" }, { status: apple.tokenStatus });
     }
     return Response.json({
+      ...(init.body.get("grant_type") === "authorization_code"
+        ? { refresh_token: EXCHANGED_REFRESH_TOKEN }
+        : {}),
       id_token: await new SignJWT({})
         .setProtectedHeader({ alg: "ES256" })
         .setSubject(apple.subject)
@@ -178,6 +183,35 @@ test.each(["deletion_scheduled", "deleting"])(
     ]);
   },
 );
+
+test("a native Apple sign-in into a scheduled account exchanges its authorization code as the app and revokes the refresh token", async () => {
+  await expectSilentSuccess(
+    await revokeAppleSignIn({
+      providerCredential: { provider: "apple", authorizationCode: AUTHORIZATION_CODE },
+    }),
+  );
+
+  expect(appleCalls).toStrictEqual([
+    {
+      path: "/auth/token",
+      form: {
+        client_id: "audio.cup.app",
+        client_secret: expect.any(String),
+        grant_type: "authorization_code",
+        code: AUTHORIZATION_CODE,
+      },
+    },
+    {
+      path: "/auth/revoke",
+      form: {
+        client_id: "audio.cup.app",
+        client_secret: expect.any(String),
+        token: EXCHANGED_REFRESH_TOKEN,
+        token_type_hint: "refresh_token",
+      },
+    },
+  ]);
+});
 
 test("an Apple sign-in into an active account is left alone", async () => {
   account.state = "active";

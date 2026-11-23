@@ -109,9 +109,24 @@ describe("listener API transport contracts", () => {
       },
     },
     {
+      name: "account confirmation with an Apple authorization code",
+      schema: accountConfirmationSchema,
+      request: {
+        challengeId: UUID,
+        providerCredential: { provider: "apple", authorizationCode: "apple-authorization-code" },
+      },
+    },
+    {
       name: "Apple sign-in revocation",
       schema: appleSignInRevocationSchema,
       request: { providerCredential: { provider: "apple", refreshToken: "apple-refresh-token" } },
+    },
+    {
+      name: "Apple sign-in revocation with an authorization code",
+      schema: appleSignInRevocationSchema,
+      request: {
+        providerCredential: { provider: "apple", authorizationCode: "apple-authorization-code" },
+      },
     },
     {
       name: "playback position",
@@ -138,6 +153,10 @@ describe("listener API transport contracts", () => {
     ],
     [appleSignInRevocationSchema, {}],
     [appleSignInRevocationSchema, { providerCredential: { provider: "apple" } }],
+    [
+      appleSignInRevocationSchema,
+      { providerCredential: { provider: "apple", authorizationCode: "" } },
+    ],
     [
       appleSignInRevocationSchema,
       { providerCredential: { provider: "google", accessToken: "token" } },

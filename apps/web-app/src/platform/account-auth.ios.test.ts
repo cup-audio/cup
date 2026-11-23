@@ -122,6 +122,8 @@ test("reports the provider's error and exchanges nothing when the callback has n
 type AppleSignInRecord = {
   outcome: "resolved" | "rejected";
   credential?: unknown;
+  completedSignIns?: unknown;
+  heldCredential?: unknown;
   name?: string;
   message?: string;
   sheetNonce?: unknown;
@@ -158,9 +160,11 @@ async function signInWithApple(
   await page.goto("");
   return page.evaluate(async (supabaseError) => {
     const modulePath = "/src/platform/account-auth.ios.ts";
-    const module: { signInWithApple: (client: unknown) => Promise<unknown> } = await import(
-      modulePath
-    );
+    const module: {
+      signInWithApple: (client: unknown) => Promise<unknown>;
+      takeCompletedAppleSignIn: () => boolean;
+      appleCredentialOf: () => unknown;
+    } = await import(modulePath);
     const record: AppleSignInRecord = { outcome: "resolved" };
     const client = {
       auth: {
@@ -184,6 +188,11 @@ async function signInWithApple(
       record.message = error instanceof Error ? error.message : String(error);
     }
     record.sheetNonce = Reflect.get(window, "sheetNonce");
+    record.completedSignIns = [
+      module.takeCompletedAppleSignIn(),
+      module.takeCompletedAppleSignIn(),
+    ];
+    record.heldCredential = module.appleCredentialOf();
     return record;
   }, exchangeError ?? null);
 }
@@ -208,6 +217,34 @@ test("signs in with Apple's native sheet, exchanging its identity token and the 
     provider: "apple",
     authorizationCode: "the-authorization-code",
   });
+});
+
+test("after a native Apple sign-in, tells once that it completed and holds the sheet's authorization code for the deletion confirmation or revocation", async ({
+  page,
+}) => {
+  const record = await signInWithApple(page, {
+    identityToken: "the-identity-token",
+    authorizationCode: "the-authorization-code",
+  });
+
+  expect(record.completedSignIns).toEqual([true, false]);
+  expect(record.heldCredential).toEqual({
+    provider: "apple",
+    authorizationCode: "the-authorization-code",
+  });
+});
+
+test("a native Apple sign-in that Supabase refuses completes no Apple sign-in and holds no code", async ({
+  page,
+}) => {
+  const record = await signInWithApple(
+    page,
+    { identityToken: "the-identity-token", authorizationCode: "the-code" },
+    "Nonces mismatch",
+  );
+
+  expect(record.completedSignIns).toEqual([false, false]);
+  expect(record.heldCredential).toBeUndefined();
 });
 
 test("asks Apple's sheet with a new nonce on every sign-in", async ({ page }) => {

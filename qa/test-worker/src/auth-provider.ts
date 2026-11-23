@@ -228,18 +228,22 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
       throw new Error("Invalid QA Apple credential request");
     }
     const now = nowSeconds();
+    const email = appleEmail;
     response.end(
       JSON.stringify({
         identityToken: sign({
           iss: APPLE_ISSUER,
           aud: APPLE_NATIVE_CLIENT_ID,
           sub: APPLE_SUBJECT,
-          email: appleEmail,
+          email,
           nonce: body.nonce,
           iat: now,
           exp: now + 300,
         }),
-        authorizationCode: `qa-apple-code-${crypto.randomUUID()}`,
+        authorizationCode: apple.issueAuthorizationCode(() => {
+          const user = users.find((candidate) => candidate.email === email);
+          return user === undefined ? APPLE_SUBJECT : identitySubjectOf(user, "apple");
+        }),
       }),
     );
   };
@@ -480,6 +484,9 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
     appleRequests: () => apple.requests(),
     setAppleFailure: (endpoint: AppleEndpoint | undefined) => {
       apple.setFailure(endpoint);
+    },
+    expireAppleAuthorizationCodes: () => {
+      apple.expireAuthorizationCodes();
     },
     setAppleTokenSubject: (subject: string | undefined) => {
       apple.setTokenSubject(subject);

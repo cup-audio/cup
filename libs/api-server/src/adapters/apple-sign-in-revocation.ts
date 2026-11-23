@@ -2,6 +2,7 @@ import { decodeJwt, importPKCS8, SignJWT } from "jose";
 import { z } from "zod";
 
 import { CupError } from "@cup/errors";
+import type { AppleProviderCredential } from "@cup/listener-api.routes";
 
 import type { ApiServerEnvironment } from "#src/api-server-environment.ts";
 
@@ -11,21 +12,19 @@ const REQUEST_TIMEOUT_MS = 5_000;
 
 export type AppleSignInRevocation = "revoked" | "mismatch";
 
-export async function revokeVerifiedAppleRefreshToken(
+export async function revokeVerifiedAppleCredential(
   env: ApiServerEnvironment,
   subject: string,
-  refreshToken: string,
+  credential: AppleProviderCredential,
 ): Promise<AppleSignInRevocation> {
   const linkedAppleSubject = await appleIdentitySubject(env, subject);
-  const clientId = env.APPLE_WEB_CLIENT_ID;
+  const clientId =
+    "authorizationCode" in credential ? env.APPLE_NATIVE_CLIENT_ID : env.APPLE_WEB_CLIENT_ID;
   const clientSecret = await signClientSecret(env, clientId);
-  const validated = await postToApple(env, "/auth/token", "validation", {
-    client_id: clientId,
-    client_secret: clientSecret,
-    grant_type: "refresh_token",
-    refresh_token: refreshToken,
-  });
-  const { id_token: idToken } = z.object({ id_token: z.string() }).parse(await validated.json());
+  const { refreshToken, idToken } =
+    "authorizationCode" in credential
+      ? await exchangeAuthorizationCode(env, clientId, clientSecret, credential.authorizationCode)
+      : await validateRefreshToken(env, clientId, clientSecret, credential.refreshToken);
   if (decodeJwt(idToken).sub !== linkedAppleSubject) {
     return "mismatch";
   }
@@ -37,6 +36,40 @@ export async function revokeVerifiedAppleRefreshToken(
   });
   await revoked.body?.cancel();
   return "revoked";
+}
+
+async function exchangeAuthorizationCode(
+  env: ApiServerEnvironment,
+  clientId: string,
+  clientSecret: string,
+  authorizationCode: string,
+) {
+  const exchanged = await postToApple(env, "/auth/token", "authorization code exchange", {
+    client_id: clientId,
+    client_secret: clientSecret,
+    grant_type: "authorization_code",
+    code: authorizationCode,
+  });
+  const tokens = z
+    .object({ refresh_token: z.string(), id_token: z.string() })
+    .parse(await exchanged.json());
+  return { refreshToken: tokens.refresh_token, idToken: tokens.id_token };
+}
+
+async function validateRefreshToken(
+  env: ApiServerEnvironment,
+  clientId: string,
+  clientSecret: string,
+  refreshToken: string,
+) {
+  const validated = await postToApple(env, "/auth/token", "refresh token validation", {
+    client_id: clientId,
+    client_secret: clientSecret,
+    grant_type: "refresh_token",
+    refresh_token: refreshToken,
+  });
+  const { id_token: idToken } = z.object({ id_token: z.string() }).parse(await validated.json());
+  return { refreshToken, idToken };
 }
 
 async function appleIdentitySubject(env: ApiServerEnvironment, subject: string) {
@@ -80,7 +113,7 @@ async function signClientSecret(env: ApiServerEnvironment, clientId: string) {
 async function postToApple(
   env: ApiServerEnvironment,
   path: "/auth/token" | "/auth/revoke",
-  step: "validation" | "revocation",
+  step: "authorization code exchange" | "refresh token validation" | "revocation",
   form: Record<string, string>,
 ) {
   const response = await fetch(new URL(path, env.APPLE_ORIGIN), {
@@ -91,7 +124,7 @@ async function postToApple(
   });
   if (!response.ok) {
     await response.body?.cancel();
-    throw new CupError(`Apple answered the refresh token ${step} with ${response.status}`);
+    throw new CupError(`Apple answered the ${step} with ${response.status}`);
   }
   return response;
 }

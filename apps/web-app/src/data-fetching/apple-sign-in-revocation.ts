@@ -1,10 +1,12 @@
 import type { Session } from "@supabase/supabase-js";
 
+import type { AppleProviderCredential } from "@cup/listener-api.routes";
+
 import { sessionSnapshot, subscribeAuthState } from "#src/auth/account-session.js";
 import { accountQuery } from "#src/data-fetching/account.js";
 import { requestApi, RpcError } from "#src/data-fetching/api-request.js";
 import { queryClient } from "#src/data-fetching/query-client.js";
-import { takeCompletedAppleSignIn } from "#src/platform/account-auth.js";
+import { appleCredentialOf, takeCompletedAppleSignIn } from "#src/platform/account-auth.js";
 import { reportFailure } from "#src/report-failure.js";
 
 const revocations = new Map<string, Promise<void>>();
@@ -21,27 +23,36 @@ function checkCompletedAppleSignIn() {
   }
 }
 
-export function claimAppleSignIn(refreshToken: string) {
-  if (!revocations.has(refreshToken)) {
-    revocations.set(refreshToken, Promise.resolve());
+export function claimAppleSignIn(credential: AppleProviderCredential) {
+  const key = keyOf(credential);
+  if (!revocations.has(key)) {
+    revocations.set(key, Promise.resolve());
   }
 }
 
-export function revokeAppleSignIn(subject: string, refreshToken: string): Promise<void> {
-  const known = revocations.get(refreshToken);
+export function revokeAppleSignIn(
+  subject: string,
+  credential: AppleProviderCredential,
+): Promise<void> {
+  const key = keyOf(credential);
+  const known = revocations.get(key);
   if (known !== undefined) {
     return known;
   }
   const revocation = requestApi({ subject }, (client) =>
-    client.revokeAppleSignIn({ providerCredential: { provider: "apple", refreshToken } }),
+    client.revokeAppleSignIn({ providerCredential: credential }),
   ).then(() => undefined, reportFailure("Revoking an Apple sign-in during deletion failed"));
-  revocations.set(refreshToken, revocation);
+  revocations.set(key, revocation);
   return revocation;
 }
 
+function keyOf(credential: AppleProviderCredential): string {
+  return "authorizationCode" in credential ? credential.authorizationCode : credential.refreshToken;
+}
+
 async function revokeIfScheduledForDeletion(session: Session) {
-  const refreshToken = session.provider_refresh_token;
-  if (!refreshToken) {
+  const credential = appleCredentialOf(session);
+  if (!credential) {
     return;
   }
   const subject = session.user.id;
@@ -52,6 +63,6 @@ async function revokeIfScheduledForDeletion(session: Session) {
     return undefined;
   });
   if (account?.state === "deletion_scheduled" || account?.state === "deleting") {
-    await revokeAppleSignIn(subject, refreshToken);
+    await revokeAppleSignIn(subject, credential);
   }
 }

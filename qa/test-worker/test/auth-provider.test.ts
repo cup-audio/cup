@@ -385,6 +385,103 @@ test("stands in for Apple: validates a web sign-in's refresh token with the link
   }
 });
 
+test("stands in for Apple: exchanges a native sign-in's authorization code once, as the app, for a refresh token it can revoke", async () => {
+  const authProvider = await startAuthProvider();
+  try {
+    const { origin } = authProvider;
+    const credential = await appleCredential(hash("the nonce"), origin);
+    const session = await sessionOf(
+      await exchangeIdToken(credential.identityToken, "the nonce", origin, "apple"),
+    );
+    const user = await adminUser(origin, String(claimsOf(session.access_token)["sub"]));
+    const exchangeCode = () =>
+      postToApple(
+        origin,
+        "/auth/token",
+        { grant_type: "authorization_code", code: credential.authorizationCode },
+        undefined,
+        "audio.cup.app",
+      );
+
+    const exchanged = await exchangeCode();
+    expect(exchanged.status).toBe(200);
+    const tokens: unknown = await exchanged.json();
+    if (!isRecord(tokens) || typeof tokens["refresh_token"] !== "string") {
+      throw new Error("Apple returned no refresh token.");
+    }
+    expect(claimsOf(String(tokens["id_token"]))).toMatchObject({
+      aud: "audio.cup.app",
+      sub: appleSubjectOf(user),
+    });
+    const revoked = await postToApple(
+      origin,
+      "/auth/revoke",
+      { token: tokens["refresh_token"], token_type_hint: "refresh_token" },
+      undefined,
+      "audio.cup.app",
+    );
+    expect(revoked.status).toBe(200);
+    const reused = await exchangeCode();
+    expect(reused.status).toBe(400);
+    expect(await reused.json()).toStrictEqual({ error: "invalid_grant" });
+
+    expect(authProvider.appleRequests()).toStrictEqual([
+      {
+        path: "/auth/token",
+        clientId: "audio.cup.app",
+        grantType: "authorization_code",
+        token: credential.authorizationCode,
+        atMs: expect.any(Number),
+      },
+      {
+        path: "/auth/revoke",
+        clientId: "audio.cup.app",
+        tokenTypeHint: "refresh_token",
+        token: tokens["refresh_token"],
+        atMs: expect.any(Number),
+      },
+      {
+        path: "/auth/token",
+        clientId: "audio.cup.app",
+        grantType: "authorization_code",
+        token: credential.authorizationCode,
+        atMs: expect.any(Number),
+      },
+    ]);
+  } finally {
+    await authProvider.close();
+  }
+});
+
+test("refuses a native authorization code that a test expired or that another client exchanges", async () => {
+  const authProvider = await startAuthProvider();
+  try {
+    const { origin } = authProvider;
+    const expired = await appleCredential(hash("the nonce"), origin);
+    authProvider.expireAppleAuthorizationCodes();
+    const fresh = await appleCredential(hash("the nonce"), origin);
+
+    const asApp = (code: string) =>
+      postToApple(
+        origin,
+        "/auth/token",
+        { grant_type: "authorization_code", code },
+        undefined,
+        "audio.cup.app",
+      );
+    const asWeb = await postToApple(origin, "/auth/token", {
+      grant_type: "authorization_code",
+      code: fresh.authorizationCode,
+    });
+
+    expect((await asApp(expired.authorizationCode)).status).toBe(400);
+    expect(asWeb.status).toBe(400);
+    expect((await asApp(fresh.authorizationCode)).status).toBe(200);
+  } finally {
+    await authProvider.close();
+  }
+});
+
 test("refuses Apple requests whose client secret the test Worker's key did not sign", async () => {
   const authProvider = await startAuthProvider();
   try {
@@ -515,8 +612,8 @@ function postToApple(
   path: "/auth/token" | "/auth/revoke",
   form: Record<string, string>,
   key: crypto.KeyObject = crypto.createPrivateKey(APPLE_SIGN_IN_KEY.privateKey),
+  clientId = "audio.cup.app.web",
 ): Promise<Response> {
-  const clientId = "audio.cup.app.web";
   const now = Math.floor(Temporal.Now.instant().epochMilliseconds / 1000);
   const message = `${encode({ alg: "ES256", kid: APPLE_SIGN_IN_KEY.keyId })}.${encode({
     iss: APPLE_SIGN_IN_KEY.teamId,

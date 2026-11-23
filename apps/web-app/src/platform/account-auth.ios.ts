@@ -1,6 +1,8 @@
 import { registerPlugin } from "@capacitor/core";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import type { AppleProviderCredential } from "@cup/listener-api.routes";
+
 import { SignInCancelledError, UserFacingError } from "#src/errors.js";
 import type { GoogleSignInOptions } from "#src/platform/account-auth.js";
 import {
@@ -55,6 +57,9 @@ type AppleSignInPlugin = {
 
 const appleSignIn = registerPlugin<AppleSignInPlugin>("AppleSignIn");
 
+let latestAppleCredential: AppleProviderCredential | undefined;
+let completedAppleSignIn = false;
+
 export async function signInWithApple(client: {
   auth: Pick<SupabaseClient["auth"], "signInWithIdToken">;
 }) {
@@ -71,15 +76,30 @@ export async function signInWithApple(client: {
       cause: error,
     });
   }
+  const credential = { provider: "apple" as const, authorizationCode: sheet.authorizationCode };
+  latestAppleCredential = credential;
+  completedAppleSignIn = true;
   const exchange = await client.auth.signInWithIdToken({
     provider: "apple",
     token: sheet.identityToken,
     nonce,
   });
   if (exchange.error) {
+    latestAppleCredential = undefined;
+    completedAppleSignIn = false;
     throw exchange.error;
   }
-  return { provider: "apple" as const, authorizationCode: sheet.authorizationCode };
+  return credential;
+}
+
+export function takeCompletedAppleSignIn(): boolean {
+  const completed = completedAppleSignIn;
+  completedAppleSignIn = false;
+  return completed;
+}
+
+export function appleCredentialOf(): AppleProviderCredential | undefined {
+  return latestAppleCredential;
 }
 
 export async function clearNativeSignIn(): Promise<void> {}

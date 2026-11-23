@@ -43,7 +43,7 @@ import {
 } from "@cup/telemetry.cloudflare";
 import { TELEMETRY_TUNNEL_PATH } from "@cup/telemetry.core";
 
-import { revokeVerifiedAppleRefreshToken } from "#src/adapters/apple-sign-in-revocation.ts";
+import { revokeVerifiedAppleCredential } from "#src/adapters/apple-sign-in-revocation.ts";
 import { resolveConversionDispatch } from "#src/adapters/conversion-dispatch.ts";
 import { resolveConversionReader } from "#src/adapters/conversion-reader.ts";
 import { revokeVerifiedGoogleToken } from "#src/adapters/google-token-revocation.ts";
@@ -160,10 +160,10 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
           400,
         );
       }
-      const revocation = await revokeVerifiedAppleRefreshToken(
+      const revocation = await revokeVerifiedAppleCredential(
         context.env,
         auth.identity.subject,
-        input.providerCredential.refreshToken,
+        input.providerCredential,
       ).catch((error: unknown) => {
         captureException(error);
         return "failed" as const;
@@ -265,10 +265,10 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
       (auth.snapshot.state === "deletion_scheduled" || auth.snapshot.state === "deleting") &&
       auth.identity.providers.includes("apple")
     ) {
-      await revokeVerifiedAppleRefreshToken(
+      await revokeVerifiedAppleCredential(
         context.env,
         auth.identity.subject,
-        providerCredential.refreshToken,
+        providerCredential,
       ).catch((error: unknown) => {
         captureException(error);
       });
