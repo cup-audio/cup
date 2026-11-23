@@ -19,7 +19,14 @@ export const signInWithGoogle =
     : platform === "ios"
       ? ios.signInWithGoogle
       : web.signInWithGoogle;
-export const signInWithApple = platform === "web" ? web.signInWithApple : undefined;
+export const signInWithApple =
+  platform === "android"
+    ? android.signInWithApple
+    : platform === "web"
+      ? web.signInWithApple
+      : undefined;
+export const completePendingSignIn =
+  platform === "android" ? android.completePendingSignIn : async () => {};
 export const watchAppState =
   platform === "android"
     ? android.watchAppState

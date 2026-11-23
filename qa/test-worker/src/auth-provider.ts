@@ -64,6 +64,7 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
   };
   const users: User[] = [testAccountUser];
   let appleEmail = READER_EMAIL;
+  let holdsAuthorizations = false;
   const refreshTokens = new Map<string, SignIn & { rotation?: Rotation }>();
   const authorizationRequests: Array<Record<string, string>> = [];
   let origin = "";
@@ -185,6 +186,14 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
       provider,
     });
     redirect.searchParams.set("code", code);
+    if (holdsAuthorizations) {
+      response
+        .writeHead(200, { "Content-Type": "text/html; charset=utf-8" })
+        .end(
+          `<!doctype html><meta name="viewport" content="width=device-width"><title>QA sign-in</title><a id="continue" href="${redirect.href.replaceAll("&", "&amp;")}">Continue</a>`,
+        );
+      return;
+    }
     response.writeHead(302, { Location: redirect.href }).end();
   };
   const issueGoogleIdToken = async (
@@ -416,6 +425,9 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
     otherToken: () => tokenFor({ id: OTHER_SUBJECT, email: READER_EMAIL, providers: ["google"] }),
     setAppleEmail: (email: string) => {
       appleEmail = email;
+    },
+    holdAuthorizations: () => {
+      holdsAuthorizations = true;
     },
     authorizationRequests: () => authorizationRequests.map((query) => ({ ...query })),
     exchanges: () => exchanges,

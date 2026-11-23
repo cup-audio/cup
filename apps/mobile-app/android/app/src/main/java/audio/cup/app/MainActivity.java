@@ -17,6 +17,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(CrashReportingPlugin.class);
         registerPlugin(WebViewProcessLossPlugin.class);
         registerPlugin(MediaPlaybackPlugin.class);
+        registerPlugin(WebAuthenticationPlugin.class);
         super.onCreate(savedInstanceState);
         if (getBridge() != null) {
             getBridge().addWebViewListener(WebViewProcessLoss.recreateOnRendererGone(this));

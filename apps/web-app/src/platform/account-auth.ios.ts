@@ -1,9 +1,9 @@
-import { registerPlugin } from "@capacitor/core";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { GoogleSignInOptions } from "#src/platform/account-auth.js";
 import { initializeAuthStorage as initializeSecureAuthStorage } from "#src/platform/account-auth.native.js";
 import { googleAuthorizationParams } from "#src/platform/account-auth.web.js";
+import { AUTH_CALLBACK_URL, webAuthentication } from "#src/platform/web-authentication.js";
 
 export { watchAppState } from "#src/platform/account-auth.native.js";
 
@@ -14,14 +14,6 @@ export async function initializeAuthStorage(storageKeys: readonly string[]) {
   return authStorage;
 }
 
-const IOS_AUTH_CALLBACK_URL = "audio.cup.app://auth/callback";
-
-type WebAuthenticationPlugin = {
-  authenticate(options: { url: string }): Promise<{ url: string }>;
-};
-
-const webAuthentication = registerPlugin<WebAuthenticationPlugin>("WebAuthentication");
-
 export async function signInWithGoogle(
   client: SupabaseClient,
   _googleClientId: string | undefined,
@@ -30,7 +22,7 @@ export async function signInWithGoogle(
   const authorization = await client.auth.signInWithOAuth({
     provider: "google",
     options: {
-      redirectTo: IOS_AUTH_CALLBACK_URL,
+      redirectTo: AUTH_CALLBACK_URL,
       skipBrowserRedirect: true,
       queryParams: googleAuthorizationParams(options),
     },

@@ -182,6 +182,11 @@ export class AndroidAppDevice implements AppDevice {
 
   async leaveAndTerminate(): Promise<void> {
     await this.background();
+    await this.waitForStoppedActivity();
+    await this.terminate();
+  }
+
+  private async waitForStoppedActivity(): Promise<void> {
     await waitFor(
       "Cup's activity to stop",
       async () => {
@@ -197,7 +202,6 @@ export class AndroidAppDevice implements AppDevice {
       },
       10_000,
     );
-    await this.terminate();
   }
 
   async clearAppData(): Promise<void> {
@@ -275,6 +279,37 @@ export class AndroidAppDevice implements AppDevice {
       `android=new UiSelector().packageName("${appPackage}").className("android.widget.Button")`,
     );
     return buttons.length > 0;
+  }
+
+  async killInBackground(): Promise<void> {
+    await this.waitForStoppedActivity();
+    await this.adb(["shell", "am", "kill", APP_PACKAGE]);
+    await this.waitForProcessExit();
+  }
+
+  async pressBackUntilFocused(appPackage: string): Promise<void> {
+    await waitFor(
+      `${appPackage} in front after Back`,
+      async () => {
+        if ((await this.focusedPackage()) === appPackage) {
+          return true;
+        }
+        await this.pressBack();
+        await new Promise((resolve) => setTimeout(resolve, 2_000));
+        return undefined;
+      },
+      30_000,
+    );
+  }
+
+  async waitForNativeText(text: string): Promise<void> {
+    await this.driver.switchContext("NATIVE_APP");
+    await this.nativeText(text).waitForDisplayed({ timeout: 30_000 });
+  }
+
+  async tapNativeText(text: string): Promise<void> {
+    await this.waitForNativeText(text);
+    await this.nativeText(text).click();
   }
 
   async pressBack(): Promise<void> {
@@ -473,6 +508,10 @@ export class AndroidAppDevice implements AppDevice {
     } finally {
       await this.pressBack();
     }
+  }
+
+  private nativeText(text: string): ReturnType<WebdriverIO.Browser["$"]> {
+    return this.driver.$(`android=new UiSelector().text("${text}")`);
   }
 
   private async findWebViewContext(): Promise<string | undefined> {

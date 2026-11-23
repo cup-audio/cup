@@ -23,6 +23,7 @@ import {
 } from "#src/auth/account-session-storage.js";
 import { queryClient } from "#src/data-fetching/query-client.js";
 import {
+  completePendingSignIn,
   initializeAuthStorage,
   signInWithApple,
   signInWithGoogle,
@@ -158,6 +159,7 @@ async function loadConnection(): Promise<AccountAuthConnection> {
     },
   });
   Sentry.addIntegration(clientSupabaseIntegration(client));
+  await completePendingSignIn(client);
   const { storage } = platformStorage;
   const { testAccount } = config;
   const signInMethods: SignInMethod[] = [];

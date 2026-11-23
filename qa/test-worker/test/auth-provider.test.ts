@@ -192,6 +192,31 @@ test("lets a browser read the API version of an error response", async () => {
   expect(response.headers.get("access-control-expose-headers")).toContain("X-Supabase-Api-Version");
 });
 
+test("in hold mode, an authorization shows a page whose Continue link carries the redirect with the code", async () => {
+  const authProvider = await startAuthProvider();
+  try {
+    authProvider.holdAuthorizations();
+
+    const response = await authorize("audio.cup.app://auth/callback", hashForPkce("verifier"), {
+      provider: "apple",
+      origin: authProvider.origin,
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("text/html; charset=utf-8");
+    const continueLink = /<a id="continue" href="([^"]+)">Continue<\/a>/u.exec(
+      await response.text(),
+    );
+    const location = new URL((continueLink?.[1] ?? "").replaceAll("&amp;", "&"));
+    expect(`${location.protocol}//${location.host}${location.pathname}`).toBe(
+      "audio.cup.app://auth/callback",
+    );
+    expect(location.searchParams.get("code")).toMatch(/\S/u);
+  } finally {
+    await authProvider.close();
+  }
+});
+
 test("records the query parameters of every authorization request, in order", async () => {
   const authProvider = await startAuthProvider();
   try {
