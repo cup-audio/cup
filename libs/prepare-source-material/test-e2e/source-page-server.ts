@@ -5,6 +5,7 @@ import cloudflare from "#test-e2e/fixtures/cloudflare.json" with { type: "json" 
 import derStandard from "#test-e2e/fixtures/derstandard.json" with { type: "json" };
 import gatesNotes from "#test-e2e/fixtures/gates-notes.json" with { type: "json" };
 import openAiDevelopers from "#test-e2e/fixtures/openai-developers.json" with { type: "json" };
+import simonWillison from "#test-e2e/fixtures/simon-willison.json" with { type: "json" };
 import washingtonPost from "#test-e2e/fixtures/washington-post.json" with { type: "json" };
 import wikipedia from "#test-e2e/fixtures/wikipedia.json" with { type: "json" };
 
@@ -16,6 +17,7 @@ const recordings = new Map(
     ...derStandard,
     ...openAiDevelopers,
     ...washingtonPost,
+    ...simonWillison,
     ...wikipedia,
   ].map((recording) => [recording.url, recording]),
 );

@@ -52,7 +52,7 @@ const IRRELEVANT_ELEMENT_TAG_NAMES = new Set<string>([
   "style",
   "svg",
 ]);
-export const VISIBLE_HEADLINE_ATTRIBUTE = "data-cup-visible-headline";
+export const VISIBLE_HEADING_ATTRIBUTE = "data-cup-visible-heading";
 export const SCREEN_READER_ONLY_CONTENT_ATTRIBUTE = "data-cup-screen-reader-only";
 const BETTER_SOURCE_MATERIAL_TEXT_FACTOR = 1.1;
 const SOURCE_PAGE_JAVASCRIPT_MODES = [false, true] as const;
@@ -64,6 +64,8 @@ const OPEN_GRAPH_IMAGE_URL_PROPERTIES = [
   "og:image:url",
 ] as const;
 const TWITTER_IMAGE_URL_PROPERTIES = ["twitter:image", "twitter:image:src"] as const;
+const METADATA_TITLE_PROPERTIES = ["og:title", "twitter:title"] as const;
+const DOCUMENT_TITLE_SEPARATOR_PATTERN = /(\s[|·•»–—-]\s)/u;
 const RENDERED_SOURCE_PAGE_READY_TIMEOUT_MS = 30_000;
 const RENDERED_SOURCE_PAGE_READINESS = {
   minimumBlockCount: 2,
@@ -148,6 +150,8 @@ export type LoadSourcePageOptions = {
 export type LoadedSourcePage = {
   bodyHtml: string;
   documentTitle: string;
+  metadataTitle?: string;
+  siteName?: string;
   metadataDescriptions?: readonly string[];
   coverImage?: CoverImageDeclaration;
   declaredLanguage?: DeclaredLanguage;
@@ -213,14 +217,15 @@ export function prepareLoadedSourcePage(sourcePage: LoadedSourcePage): SourceMat
   const documentFragment = parseFragment(sourcePage.bodyHtml);
 
   removeScreenReaderOnlyContent(documentFragment);
+  removeSiteHeadings(documentFragment, sourcePage);
 
   const visibleHeadline = findFirstElement(
     documentFragment,
-    (element) => getAttribute(element, VISIBLE_HEADLINE_ATTRIBUTE) !== undefined,
+    (element) => getAttribute(element, VISIBLE_HEADING_ATTRIBUTE) !== undefined,
   );
-  const title = normalizeWhitespace(
-    visibleHeadline ? extractNodeText(visibleHeadline) : sourcePage.documentTitle,
-  );
+  const title = visibleHeadline
+    ? normalizeWhitespace(extractNodeText(visibleHeadline))
+    : selectMetadataTitle(sourcePage);
 
   if (title.length === 0) {
     throw new CupError("Expected the source page to have a title");
@@ -229,7 +234,7 @@ export function prepareLoadedSourcePage(sourcePage: LoadedSourcePage): SourceMat
   if (visibleHeadline) {
     cutBeforeAndIncluding(visibleHeadline);
   }
-  removeAttribute(documentFragment, VISIBLE_HEADLINE_ATTRIBUTE);
+  removeAttribute(documentFragment, VISIBLE_HEADING_ATTRIBUTE);
   removeIrrelevantAndEmptyElements(documentFragment);
 
   const subtitleElement = visibleHeadline
@@ -254,11 +259,121 @@ export function prepareLoadedSourcePage(sourcePage: LoadedSourcePage): SourceMat
   };
 }
 
+function removeSiteHeadings(parentNode: HtmlParentNode, sourcePage: LoadedSourcePage): void {
+  const siteHeadings = findAllElements(
+    parentNode,
+    (element) => element.tagName === "h1" && isSiteHeading(element, sourcePage),
+  );
+
+  for (const siteHeading of siteHeadings) {
+    removeElement(siteHeading);
+  }
+}
+
+function isSiteHeading(
+  heading: HtmlElement,
+  { fetchedUrl, siteName }: Pick<LoadedSourcePage, "fetchedUrl" | "siteName">,
+): boolean {
+  const headingText = toComparableText(extractNodeText(heading));
+
+  if (headingText.length === 0) {
+    return false;
+  }
+
+  if (siteName !== undefined && headingText === toComparableText(siteName)) {
+    return true;
+  }
+
+  if (new URL(fetchedUrl).pathname === "/") {
+    return false;
+  }
+
+  const enclosingLink = findAncestorElement(heading, (element) => element.tagName === "a");
+  const links = [
+    ...(enclosingLink ? [enclosingLink] : []),
+    ...findAllElements(heading, (element) => element.tagName === "a"),
+  ];
+
+  return links.some(
+    (link) =>
+      isFrontPageLink(link, fetchedUrl) && toComparableText(extractNodeText(link)) === headingText,
+  );
+}
+
+function isFrontPageLink(element: HtmlElement, fetchedUrl: string): boolean {
+  const href = getAttribute(element, "href");
+
+  if (element.tagName !== "a" || href === undefined || !URL.canParse(href, fetchedUrl)) {
+    return false;
+  }
+
+  const url = new URL(href, fetchedUrl);
+
+  return url.origin === new URL(fetchedUrl).origin && url.pathname === "/";
+}
+
+function findAncestorElement(
+  element: HtmlElement,
+  isMatch: (ancestor: HtmlElement) => boolean,
+): HtmlElement | undefined {
+  let ancestor = element.parentNode;
+
+  while (ancestor && "tagName" in ancestor) {
+    if (isMatch(ancestor)) {
+      return ancestor;
+    }
+
+    ancestor = ancestor.parentNode;
+  }
+
+  return undefined;
+}
+
+function selectMetadataTitle({
+  documentTitle,
+  metadataTitle,
+  siteName,
+}: Pick<LoadedSourcePage, "documentTitle" | "metadataTitle" | "siteName">): string {
+  const comparableSiteName = siteName === undefined ? undefined : toComparableText(siteName);
+  const candidates = [metadataTitle, removeSiteNameFromDocumentTitle(documentTitle, siteName)]
+    .map((candidate) => normalizeWhitespace(candidate ?? ""))
+    .filter(
+      (candidate) => candidate.length > 0 && toComparableText(candidate) !== comparableSiteName,
+    );
+
+  return candidates[0] ?? normalizeWhitespace(documentTitle);
+}
+
+function removeSiteNameFromDocumentTitle(documentTitle: string, siteName?: string): string {
+  if (siteName === undefined) {
+    return documentTitle;
+  }
+
+  const comparableSiteName = toComparableText(siteName);
+  const parts = normalizeWhitespace(documentTitle).split(DOCUMENT_TITLE_SEPARATOR_PATTERN);
+  const isSiteNamePart = (part: string | undefined) =>
+    part !== undefined && toComparableText(part) === comparableSiteName;
+
+  if (parts.length >= 3 && isSiteNamePart(parts.at(-1))) {
+    parts.splice(-2);
+  }
+
+  if (parts.length >= 3 && isSiteNamePart(parts[0])) {
+    parts.splice(0, 2);
+  }
+
+  return parts.join("");
+}
+
+function toComparableText(text: string): string {
+  return normalizeWhitespace(text).replace(/[‘’]/gu, "'").toLowerCase();
+}
+
 function removeElement(element: HtmlElement): void {
   const { parentNode } = element;
 
   if (!parentNode) {
-    throw new CupError("Expected the source subtitle element to have a parent node");
+    throw new CupError("Expected the removed element to have a parent node");
   }
 
   parentNode.childNodes.splice(parentNode.childNodes.indexOf(element), 1);
@@ -331,18 +446,25 @@ export async function loadPublicSourcePage({
     }
 
     const headHtml = await page.locator("head").innerHTML();
+    const headMetadata = collectMetadata(parseFragment(headHtml));
+    const metadataTitle = METADATA_TITLE_PROPERTIES.map((property) =>
+      findMetadataContent(headMetadata, property),
+    ).find((content) => content !== undefined);
+    const siteName = findMetadataContent(headMetadata, "og:site_name");
     const coverImage = extractCoverImageDeclaration(headHtml, url);
     const declaredLanguage = extractDeclaredLanguage(
       await page.locator("html").getAttribute("lang"),
       headHtml,
     );
-    await page.evaluate(markVisibleHeadline, VISIBLE_HEADLINE_ATTRIBUTE);
+    await page.evaluate(markVisibleHeadings, VISIBLE_HEADING_ATTRIBUTE);
     await page.evaluate(markScreenReaderOnlyContent, SCREEN_READER_ONLY_CONTENT_ATTRIBUTE);
     const bodyHtml = await page.locator("body").innerHTML();
 
     return {
       bodyHtml,
       documentTitle: await page.title(),
+      ...(metadataTitle === undefined ? {} : { metadataTitle }),
+      ...(siteName === undefined ? {} : { siteName }),
       metadataDescriptions: extractMetadataDescriptions(`${headHtml}${bodyHtml}`),
       ...(coverImage === undefined ? {} : { coverImage }),
       ...(declaredLanguage === undefined ? {} : { declaredLanguage }),
@@ -354,8 +476,8 @@ export async function loadPublicSourcePage({
   }
 }
 
-function markVisibleHeadline(attributeName: string): void {
-  const visibleHeadline = Array.from(document.querySelectorAll("h1")).find((heading) => {
+function markVisibleHeadings(attributeName: string): void {
+  const visibleHeadlines = Array.from(document.querySelectorAll("h1")).filter((heading) => {
     const boundingRectangle = heading.getBoundingClientRect();
 
     return (
@@ -366,7 +488,9 @@ function markVisibleHeadline(attributeName: string): void {
     );
   });
 
-  visibleHeadline?.setAttribute(attributeName, "");
+  for (const visibleHeadline of visibleHeadlines) {
+    visibleHeadline.setAttribute(attributeName, "");
+  }
 }
 
 function markScreenReaderOnlyContent(attributeName: string): void {

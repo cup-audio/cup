@@ -32,15 +32,21 @@ _Avoid_: final URL, redirect URL, page URL
 
 ## source title
 
-The headline the source page gives the source content, taken from its visible headline when it has one.
+The headline the source page gives the source content, taken from its visible headline when it has one, and otherwise from the page metadata or the document title, without the site name.
 
 _Avoid_: page title, bare "headline" for the source title
 
 ## visible headline
 
-The first top-level heading of a source page that renders visibly, unlike a hidden or screen-reader-only heading such as a consent wall's. Its text is the source title, and audiobook source material begins after it. A source page may have none.
+The first top-level heading of a source page that renders visibly, unlike a hidden or screen-reader-only heading such as a consent wall's, and that is not a [site heading](#site-heading). Its text is the source title, and audiobook source material begins after it. A source page may have none.
 
 _Avoid_: headline alone, first heading
+
+## site heading
+
+A top-level heading that names the site rather than the source content, such as a blog's masthead. It is never the visible headline and is left out of audiobook source material.
+
+_Avoid_: masthead, site title
 
 ## screen-reader-only content
 

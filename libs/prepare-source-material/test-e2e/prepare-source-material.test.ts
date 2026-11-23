@@ -140,6 +140,15 @@ const SOURCE_PAGES: readonly SourcePageFixture[] = [
     unrecordedRequests: [/^https:\/\/en\.wikipedia\.org\/wiki\/Special:CentralAutoLogin\//u],
     url: "https://en.wikipedia.org/wiki/Kitesurfing",
   },
+  {
+    coverImage: { url: "https://static.simonwillison.net/static/2026/sandbox-proxy.png" },
+    declaredLanguage: { htmlLang: "en-gb" },
+    snapshotFilename: "simon-willison.html",
+    stabilizeSourceMaterial: (html: string) => html,
+    title: "External sandboxes for coding agents",
+    textBeforeHeadline: [],
+    url: "https://simonwillison.net/2026/Nov/17/external-sandboxes-for-coding-agents/",
+  },
 ];
 
 for (const {
@@ -386,6 +395,7 @@ function createFixtureBrowser(
     "developers.openai.com",
     "www.washingtonpost.com",
     "en.wikipedia.org",
+    "simonwillison.net",
   ]);
   const recordedResourceTypes = new Set(["document", "script", "stylesheet", "xhr", "fetch"]);
 

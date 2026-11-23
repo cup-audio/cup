@@ -4,6 +4,8 @@ status: accepted
 
 # Load source pages and cover images through the browser, and trust only what they prove
 
+[CUP-103](https://linear.app/cup-audio/issue/CUP-103/give-tracks-a-title-when-the-article-has-no-title-heading) refines the visible headline (2026-11-23): the browser marks every `<h1>` that renders visibly, and source preparation skips [site headings](../GLOSSARY.md#site-heading), such as a blog's masthead, before taking the first as the visible headline. Without one, the source title comes from the page metadata title before the document title, with the site name removed ([source preparation](../architecture/conversion.md)).
+
 Source preparation loads publisher pages that Cup does not control, in a static and a rendered load, and reads their metadata, their source subtitle and their declared cover image. Cover images arrived in [cup-audio/cup#5](https://github.com/cup-audio/cup/pull/5), source subtitle detection in [cup-audio/cup#130](https://github.com/cup-audio/cup/pull/130) ([ADR 0014](0014-cut-source-material-at-the-visible-headline-and-carry-the-source-subtitle-in-the-narration-document.md)), screen-reader-only content handling in [cup-audio/cup#506](https://github.com/cup-audio/cup/pull/506), and source-page cookies in commit `0e40961b`. These decisions were recorded from code comments on 2026-11-23.
 
 ## Decision
