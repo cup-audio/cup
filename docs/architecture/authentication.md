@@ -66,6 +66,16 @@ Cup asks Google for its account chooser (`prompt=select_account`) only on the fi
 
 Sign-in takes no step Cup could leave out: one Cup tap ("Continue with Google"), then what Google or the OS requires. On the web that is 2 taps (the button, then the account), or 1 when Google skips the chooser; on Android 2 (the button, then the account in Google's sheet); on iOS 3 (the button, iOS's alert about the auth provider's site, then the account) until [CUP-63](https://linear.app/cup-audio/issue/CUP-63) decides on native sign-in there. These are targets, derived from code and provider documentation in the [sign-in steps research](../research/sign-in-steps-and-session-persistence.md): real Google on devices is checked by hand in [CUP-44](https://linear.app/cup-audio/issue/CUP-44/test-the-android-and-ios-apps-native-functionality-on-physical-devices).
 
+### Provider events
+
+Cup registers for none of Apple's server-to-server notifications and reacts to no Apple event, just as it reacts to nothing Google reports about an account ([#511](https://github.com/cup-audio/cup/issues/511)). Apple recommends the notifications but doesn't require them, and handling them would take a public Worker route, verification against Apple's key set, a lookup from Apple's `sub` to the Supabase user and a way to end a user's sessions by ID, which Supabase's admin API lacks, while none of the events changes what Cup must do:
+
+- `consent-revoked`: sessions stay valid, as when someone removes Cup's access in their Google Account. The next Apple sign-in asks for consent again and returns the same `sub`, so it lands in the same account.
+- `account-deleted`: nothing happens on its own, because erasing on this event would delete data the person never confirmed deleting, and the account may also be linked to Google. A listener who lost their Apple Account follows the [support path](account-deletion.md#lost-apple-account) to an operator-scheduled deletion.
+- `email-disabled` and `email-enabled`: the account deletion notices are Cup's only email. A notice the relay rejects ends in the existing `account-deletion-notice-undelivered` warning ([notifications](account-deletion.md#notifications-and-retained-evidence)), and Cup records no email state.
+
+The decision is easy to reverse by adding the route later, so it has no ADR.
+
 ### Local test account
 
 Local development offers one more sign-in, so that the web app can be tested, also from a phone, without a Google OAuth client ([ADR 0012](../adr/0012-offer-a-local-test-account-instead-of-google-in-development.md)). [`pnpm dev:services`](../local-development.md) creates an email and password identity in the local Supabase stack. Only while `LOCAL_DEVELOPMENT` is `"true"`, the Worker advertises its credentials in the public auth configuration and accepts its tokens; it refuses every other identity that is neither Google nor Apple. The web client signs in with the password and shows the option only when the configuration offers it, and omits Google or Apple when the configuration names no client for it. Provisioning, ownership, and lifecycle checks treat the test account like any other account.
