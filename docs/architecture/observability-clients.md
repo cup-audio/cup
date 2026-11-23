@@ -6,7 +6,7 @@ The web app reports to Sentry's `cup-app` project, in the browser and inside the
 
 In the browser on `https://cup.audio`, the web app reports through `@sentry/capacitor` with `@sentry/react`, always through the [telemetry tunnel](#telemetry-tunnel). [`initializeTelemetry`](../../apps/web-app/src/telemetry.ts) starts it with the options of [`@cup/telemetry.browser`](../../libs/telemetry.browser/README.md), whose code lists what is ignored and what stays off; the [web app page](web-app.md#telemetry) describes where it hooks into the app.
 
-- **Errors**: uncaught errors and rejections, render errors, and the failures the web app captures where nothing awaits them. A failed request, a Listener API 5xx included, is only a breadcrumb, since the Worker captured the server failure and the trace ID joins both.
+- **Errors**: uncaught errors and rejections, render errors, and the failures the web app captures where nothing awaits them. These include a failed Apple sign-in on the web, where Supabase's callback returns an error instead of a code, because an expired Apple client secret shows up there first ([authentication](authentication.md#sign-in-and-account-provisioning)). A failed request, a Listener API 5xx included, is only a breadcrumb, since the Worker captured the server failure and the trace ID joins both.
 - **Traces** of every page load and navigation, named after the route. Requests to the API origin carry Sentry's trace headers and join the Worker's trace; no other host receives them.
 - **Sessions**, one per route, and **logs**, of which the web app writes none yet.
 - **The user**: the opaque account ID once signed in, and `signed-out` otherwise, never unset, because an unset user lets a native SDK fill in its installation ID.

@@ -215,6 +215,12 @@ test("production's telemetry tunnel forwards only to the cup-app project, and th
   expect(readTestConfig().vars?.["SENTRY_TUNNEL_DSNS"]).toBe("");
 });
 
+test("production advertises Apple sign-in with the Services ID as Apple's web client", ({
+  expect,
+}) => {
+  expect(readProductionConfig().vars?.["APPLE_WEB_CLIENT_ID"]).toBe("audio.cup.app.web");
+});
+
 function collectSqliteClassNames(migrations: DurableObjectMigration[]): Set<string> {
   const classNames = new Set<string>();
   for (const migration of migrations) {

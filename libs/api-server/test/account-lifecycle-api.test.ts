@@ -212,6 +212,8 @@ test.each([
   ["deletion_scheduled", ["google"], ["google"]],
   ["active", ["test-account"], ["test-account"]],
   ["deletion_scheduled", ["test-account"], ["test-account"]],
+  ["active", ["apple"], ["apple"]],
+  ["deletion_scheduled", ["google", "apple"], ["google", "apple"]],
 ])(
   "the challenge for a %s account linked to %j accepts %j",
   async (state, providers, acceptedMethods) => {

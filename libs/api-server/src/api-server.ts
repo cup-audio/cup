@@ -228,6 +228,9 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
         ...(context.env.GOOGLE_WEB_CLIENT_ID
           ? { googleWebClientId: context.env.GOOGLE_WEB_CLIENT_ID }
           : {}),
+        ...(context.env.APPLE_WEB_CLIENT_ID
+          ? { appleWebClientId: context.env.APPLE_WEB_CLIENT_ID }
+          : {}),
         ...(testAccount ? { testAccount } : {}),
       },
       200,

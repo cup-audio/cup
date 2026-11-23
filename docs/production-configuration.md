@@ -1,6 +1,6 @@
 # Production configuration
 
-Use this guide to supply the production Worker's configuration and the provider settings that Terraform does not manage, to find those it does, and to deploy. The [authentication](architecture/authentication.md) and [account deletion](architecture/account-deletion.md) pages explain the behavior this configuration enables. The [Terraform guide](../terraform/README.md) covers infrastructure state, the Supabase project, Supabase's Google provider, the Resend domain's settings and DNS records, and the Cloudflare R2 bucket, DNS records, operator Access application and AI Gateway, the Google Play uploader service account, and [Sentry](../terraform/README.md#sentry)'s projects, keys, inbound filters, spike protection, privacy settings, alerts and monitors. Sentry's personal notification settings are the one Sentry setting set by hand ([personal notifications](../terraform/README.md#personal-notifications)). Apple sign-in and native iOS account support are deferred.
+Use this guide to supply the production Worker's configuration and the provider settings that Terraform does not manage, to find those it does, and to deploy. The [authentication](architecture/authentication.md) and [account deletion](architecture/account-deletion.md) pages explain the behavior this configuration enables. The [Terraform guide](../terraform/README.md) covers infrastructure state, the Supabase project, Supabase's Google and Apple providers, the Resend domain's settings and DNS records, and the Cloudflare R2 bucket, DNS records, operator Access application and AI Gateway, the Google Play uploader service account, and [Sentry](../terraform/README.md#sentry)'s projects, keys, inbound filters, spike protection, privacy settings, alerts and monitors. Sentry's personal notification settings are the one Sentry setting set by hand ([personal notifications](../terraform/README.md#personal-notifications)). Sign in with Apple is being built ([spec #519](https://github.com/cup-audio/cup/issues/519)): the web flow and Supabase's Apple provider exist in this checkout, while native iOS and Android Apple sign-in, the Apple revocation on account deletion and the client secret rotation are planned.
 
 ## Worker configuration
 
@@ -16,11 +16,13 @@ The [Worker configuration](../apps/cloudflare-worker/wrangler.jsonc) declares pl
 | `SOURCE_PAGE_COOKIES_JSON` | Cookies sent when visiting source pages                                                                                                                                                                                                                                           |
 | `MEDIA_URL_SIGNING_KEY`    | Signs [signed media URLs](architecture/authentication.md#signed-media-url) and [signed position URLs](architecture/authentication.md#signed-position-url); a random value of at least 32 bytes, such as `openssl rand -base64 32`. Rotating it invalidates every outstanding URL. |
 
+`APPLE_WEB_CLIENT_ID` is a plain variable holding Apple's Services ID `audio.cup.app.web`; when it is set, the public auth configuration advertises Apple sign-in and the web app offers "Continue with Apple". Local development leaves it empty.
+
 The Worker's Resend key is sending-only; Terraform uses a separate management key.
 
 ## Identity providers
 
-Use Supabase project `evwjipxgacwotgbmqtla` exclusively. Terraform configures its Google provider, JWT lifetime, and redirect settings in the [Supabase configuration](../terraform/production/supabase.tf); see the [Google sign-in configuration](../terraform/README.md#google-sign-in-configuration). Configure ES256 JWT signing, which Terraform does not manage. Keep Google client secrets in Supabase and Terraform.
+Use Supabase project `evwjipxgacwotgbmqtla` exclusively. Terraform configures its Google and Apple providers, JWT lifetime, and redirect settings in the [Supabase configuration](../terraform/production/supabase.tf); see the [Google sign-in configuration](../terraform/README.md#google-sign-in-configuration) and the [Apple sign-in configuration](../terraform/README.md#apple-sign-in-configuration). Configure ES256 JWT signing, which Terraform does not manage. Keep Google client secrets in Supabase and Terraform.
 
 ### Google Auth Platform branding
 

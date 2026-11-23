@@ -1,8 +1,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { GoogleSignInOptions } from "#src/platform/account-auth.js";
+import { reportFailure } from "#src/report-failure.js";
 
-export async function initializeAuthStorage(storageKeys: readonly string[]) {
+const APPLE_SIGN_IN_MARKER_STORAGE_KEY = "cup_apple_sign_in_pending";
+
+export async function initializeAuthStorage(
+  storageKeys: readonly string[],
+  report: typeof reportFailure = reportFailure,
+) {
+  reportFailedAppleSignIn(report);
   const storage = window.localStorage;
   return {
     storage,
@@ -29,6 +36,39 @@ export async function signInWithGoogle(
   if (result.error) {
     throw result.error;
   }
+}
+
+export async function signInWithApple(client: Pick<SupabaseClient, "auth">) {
+  window.sessionStorage.setItem(APPLE_SIGN_IN_MARKER_STORAGE_KEY, "true");
+  const result = await client.auth.signInWithOAuth({
+    provider: "apple",
+    options: {
+      redirectTo: `${window.location.origin}${window.location.pathname}`,
+      scopes: "email",
+    },
+  });
+  if (result.error) {
+    window.sessionStorage.removeItem(APPLE_SIGN_IN_MARKER_STORAGE_KEY);
+    throw result.error;
+  }
+}
+
+function reportFailedAppleSignIn(report: typeof reportFailure) {
+  if (window.sessionStorage.getItem(APPLE_SIGN_IN_MARKER_STORAGE_KEY) === null) {
+    return;
+  }
+  window.sessionStorage.removeItem(APPLE_SIGN_IN_MARKER_STORAGE_KEY);
+  const query = new URLSearchParams(window.location.search);
+  const fragment = new URLSearchParams(window.location.hash.slice(1));
+  const error = query.get("error") ?? fragment.get("error");
+  if (error === null) {
+    return;
+  }
+  const errorCode = query.get("error_code") ?? fragment.get("error_code");
+  const description = query.get("error_description") ?? fragment.get("error_description");
+  report("Apple sign-in on the web failed")(
+    new Error(`${error}${errorCode === null ? "" : ` (${errorCode})`}: ${description ?? ""}`),
+  );
 }
 
 export function googleAuthorizationParams({

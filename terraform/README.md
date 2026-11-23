@@ -134,6 +134,12 @@ The Android OAuth client must be registered for package `audio.cup.app`.
 On 2026-10-26, after the allow-list apply, the operator signed in with Google on <https://cup.audio/app> and was returned to the starting page. Native Android sign-in remains unverified.
 The Supabase provider preserves masked OAuth secrets in state, so a no-change plan does not prove the secret works or detect an out-of-band secret change.
 
+## Apple sign-in configuration
+
+Terraform enables Supabase's Apple provider in the [Supabase configuration](production/supabase.tf) ([spec #519](https://github.com/cup-audio/cup/issues/519)). Its client ID is the Services ID `audio.cup.app.web`, whose return URL in the Apple Developer account is the Supabase callback shown above; it must come first, because Supabase's web OAuth flow uses only the first client ID. The additional client ID `audio.cup.app`, the App ID, is the audience of the identity tokens that native iOS sign-in will exchange. The web flow asks Apple for the email scope only and no name. Apple returns to the same callback and Supabase to the redirect allow-list above, so Apple needs no new allow-list entry.
+
+The configuration deliberately leaves out `external_apple_secret`, the client secret Supabase signs Apple's token requests with. The Supabase provider diffs only the auth keys a configuration writes, so the key belongs to the planned rotation root module alone, which re-signs the secret before it expires after at most six months ([#529](https://github.com/cup-audio/cup/issues/529)). Until that module exists, the operator sets the secret by hand. Automatic linking by verified email stays as hosted Supabase does it, and manual linking (`security_manual_linking_enabled`) stays off, so an Apple sign-in with a Google user's email lands in that user. As of this change, the Apple provider is configured but not applied.
+
 ## Sentry
 
 The [Sentry root](sentry/main.tf) manages Cup's Sentry production setup through the provider `jianyuan/sentry` 0.16.0 against `https://de.sentry.io/api/`, the API of Sentry's Germany region. It declares:

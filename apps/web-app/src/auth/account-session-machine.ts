@@ -22,7 +22,7 @@ export type AccountAuthClient = {
   >;
 };
 
-export type SignInMethod = "google" | "test-account";
+export type SignInMethod = "apple" | "google" | "test-account";
 export type SignInRequest = { method: SignInMethod; fresh: boolean };
 
 type AccountChooserMarker = {

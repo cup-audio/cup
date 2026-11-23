@@ -215,6 +215,25 @@ test(
   },
 );
 
+test("an Apple sign-in from the sign-in link lands on Recents", async ({
+  page,
+  workerEnvironment,
+}) => {
+  const { origin, authProvider } = workerEnvironment;
+  await gotoPage(page, `${origin}/app/`);
+
+  await page.getByRole("link", { name: "Sign in", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "Sign in", exact: true })
+    .getByRole("button", { name: "Continue with Apple", exact: true })
+    .click();
+
+  await expect(page).toHaveURL(`${origin}/app/recent`);
+  await expect(page.getByRole("heading", { name: "Recent", exact: true })).toBeVisible();
+  expect(authProvider.exchanges()).toBe(1);
+  expect(authProvider.authorizationRequests().at(-1)).toMatchObject({ provider: "apple" });
+});
+
 test.describe("with the local test account", () => {
   test.use({ offersTestAccount: true });
 

@@ -10,6 +10,7 @@ export type ApiServerEnvironment = {
   LOCAL_TEST_ACCOUNT_PASSWORD?: string;
   SUPABASE_PUBLISHABLE_KEY: string;
   GOOGLE_WEB_CLIENT_ID: string;
+  APPLE_WEB_CLIENT_ID: string;
   SUPABASE_URL: string;
   SUPABASE_SECRET_KEY: string;
   MEDIA_URL_SIGNING_KEY: string;

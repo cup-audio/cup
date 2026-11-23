@@ -24,6 +24,7 @@ import {
 import { queryClient } from "#src/data-fetching/query-client.js";
 import {
   initializeAuthStorage,
+  signInWithApple,
   signInWithGoogle,
   clearNativeSignIn,
   watchAppState,
@@ -160,6 +161,9 @@ async function loadConnection(): Promise<AccountAuthConnection> {
   const { storage } = platformStorage;
   const { testAccount } = config;
   const signInMethods: SignInMethod[] = [];
+  if (config.appleWebClientId && signInWithApple) {
+    signInMethods.push("apple");
+  }
   if (config.googleWebClientId) {
     signInMethods.push("google");
   }
@@ -170,6 +174,13 @@ async function loadConnection(): Promise<AccountAuthConnection> {
     client,
     signInMethods,
     signIn: async ({ method, fresh, chooseAccount }) => {
+      if (method === "apple") {
+        if (!signInWithApple) {
+          throw new Error("Sign-in is temporarily unavailable.");
+        }
+        await signInWithApple(client);
+        return;
+      }
       if (method === "google") {
         await signInWithGoogle(client, config.googleWebClientId, { fresh, chooseAccount });
         return;

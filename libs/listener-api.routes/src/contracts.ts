@@ -52,6 +52,7 @@ export const authConfigResponseSchema = z.object({
   supabaseUrl: z.string(),
   publishableKey: z.string().min(1),
   googleWebClientId: z.string().min(1).optional(),
+  appleWebClientId: z.string().min(1).optional(),
   testAccount: z.object({ email: z.string().min(1), password: z.string().min(1) }).optional(),
 });
 
@@ -229,7 +230,7 @@ export const errorResponseSchema = z.object({
 });
 export type ErrorResponse = z.infer<typeof errorResponseSchema>;
 
-export const signInMethodSchema = z.enum(["google", "test-account"]);
+export const signInMethodSchema = z.enum(["google", "apple", "test-account"]);
 export type SignInMethod = z.infer<typeof signInMethodSchema>;
 
 export const providerCredentialSchema = z.discriminatedUnion("provider", [

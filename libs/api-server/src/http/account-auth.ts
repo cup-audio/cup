@@ -10,6 +10,8 @@ import { authenticateAccount as authenticateVerifiedAccount } from "#src/use-cas
 
 const keySets = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
 
+const OAUTH_PROVIDERS = ["google", "apple"] as const;
+
 export type LocalTestAccount = { email: string; password: string };
 
 export function localTestAccount(env: ApiServerEnvironment): LocalTestAccount | undefined {
@@ -100,11 +102,13 @@ function admittedProviders(
   ) {
     return ["test-account"];
   }
-  return "providers" in metadata &&
-    Array.isArray(metadata.providers) &&
-    metadata.providers.includes("google")
-    ? ["google"]
-    : [];
+  if (!("providers" in metadata) || !Array.isArray(metadata.providers)) {
+    return [];
+  }
+  return metadata.providers.filter(
+    (provider): provider is (typeof OAUTH_PROVIDERS)[number] =>
+      typeof provider === "string" && OAUTH_PROVIDERS.some((admitted) => admitted === provider),
+  );
 }
 
 export async function authenticateAccountRequest(request: Request, env: ApiServerEnvironment) {

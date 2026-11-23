@@ -81,6 +81,7 @@ export function accountStory({
           supabaseUrl: window.location.origin + "/__story",
           publishableKey: "story-key",
           googleWebClientId: "story-client",
+          appleWebClientId: "audio.cup.app.web",
         }),
       ),
       http.get("/api/account", () => {

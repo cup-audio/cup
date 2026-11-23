@@ -59,6 +59,7 @@
     "CONVERSION_IP_LIMIT": "60",
     "CONVERSION_OWNER_LIMIT": "10",
     "SUPABASE_URL": "http://127.0.0.1:9",
+    "APPLE_WEB_CLIENT_ID": "audio.cup.app.web",
     "RESEND_BASE_URL": "http://127.0.0.1:9",
     "CLOUDFLARE_ACCOUNT_ID": "test-cloudflare-account",
     "OPERATOR_ACCESS_ISSUER": "http://127.0.0.1:9",

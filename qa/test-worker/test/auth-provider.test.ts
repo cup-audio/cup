@@ -213,6 +213,66 @@ test("records the query parameters of every authorization request, in order", as
   }
 });
 
+test("an Apple sign-in creates a user that lists Apple as its provider and returns Apple's refresh token", async () => {
+  const authProvider = await startAuthProvider();
+  try {
+    const session = await signInWithProvider("apple", authProvider.origin);
+
+    expect(claimsOf(session.access_token)).toMatchObject({
+      email: "reader@example.test",
+      app_metadata: { provider: "apple", providers: ["apple"] },
+      amr: [{ method: "oauth" }],
+    });
+    expect(session.provider_refresh_token).toEqual(expect.any(String));
+  } finally {
+    await authProvider.close();
+  }
+});
+
+test("an Apple sign-in with a Google user's email lands in that user and links both providers, as Supabase does", async () => {
+  const authProvider = await startAuthProvider();
+  try {
+    const google = await signInWithProvider("google", authProvider.origin);
+    const apple = await signInWithProvider("apple", authProvider.origin);
+
+    expect(google.provider_refresh_token).toBeUndefined();
+    expect(claimsOf(apple.access_token)).toMatchObject({
+      sub: claimsOf(google.access_token)["sub"],
+      app_metadata: { provider: "google", providers: ["google", "apple"] },
+    });
+    const refreshed = await sessionOf(await refresh(google.refresh_token, authProvider.origin));
+    expect(claimsOf(refreshed.access_token)).toMatchObject({
+      app_metadata: { providers: ["google", "apple"] },
+    });
+  } finally {
+    await authProvider.close();
+  }
+});
+
+test("an Apple sign-in through Hide My Email is a user of its own that the admin API knows", async () => {
+  const authProvider = await startAuthProvider();
+  try {
+    const google = await signInWithProvider("google", authProvider.origin);
+    authProvider.setAppleEmail("qa-relay@privaterelay.appleid.com");
+
+    const apple = await signInWithProvider("apple", authProvider.origin);
+
+    const claims = claimsOf(apple.access_token);
+    expect(claims).toMatchObject({
+      email: "qa-relay@privaterelay.appleid.com",
+      app_metadata: { provider: "apple", providers: ["apple"] },
+    });
+    expect(claims["sub"]).not.toBe(claimsOf(google.access_token)["sub"]);
+    const user = await fetch(
+      `${authProvider.origin}/auth/v1/admin/users/${String(claims["sub"])}`,
+      { headers: { Authorization: "Bearer qa-admin" } },
+    );
+    expect(user.status).toBe(200);
+  } finally {
+    await authProvider.close();
+  }
+});
+
 test("issues access tokens for 300 seconds by default", async () => {
   const session = await signIn("pkce");
 
@@ -238,10 +298,14 @@ test("issues access tokens for the lifetime a test sets, also on refresh", async
   }
 });
 
-function authorize(redirect: string, challenge: string): Promise<Response> {
-  const url = new URL(`${startedAuthProvider().origin}/auth/v1/authorize`);
+function authorize(
+  redirect: string,
+  challenge: string,
+  { provider = "google", origin = startedAuthProvider().origin } = {},
+): Promise<Response> {
+  const url = new URL(`${origin}/auth/v1/authorize`);
   url.search = new URLSearchParams({
-    provider: "google",
+    provider,
     redirect_to: redirect,
     code_challenge: challenge,
     code_challenge_method: "s256",
@@ -339,17 +403,29 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-type Session = { access_token: string; refresh_token: string; expires_in: number };
+type Session = {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+  provider_refresh_token?: string;
+};
 
 async function signIn(grant: "pkce" | "id_token"): Promise<Session> {
   if (grant === "id_token") {
     return sessionOf(await exchangeIdToken(await googleIdToken(hash("the nonce")), "the nonce"));
   }
+  return signInWithProvider("google", startedAuthProvider().origin);
+}
+
+async function signInWithProvider(provider: "google" | "apple", origin: string): Promise<Session> {
   const verifier = "the code verifier";
-  const authorization = await authorize("http://127.0.0.1:5173/app/", hashForPkce(verifier));
+  const authorization = await authorize("http://127.0.0.1:5173/app/", hashForPkce(verifier), {
+    provider,
+    origin,
+  });
   const code = new URL(authorization.headers.get("location") ?? "").searchParams.get("code");
   return sessionOf(
-    await fetch(`${startedAuthProvider().origin}/auth/v1/token?grant_type=pkce`, {
+    await fetch(`${origin}/auth/v1/token?grant_type=pkce`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ auth_code: code, code_verifier: verifier }),
@@ -380,6 +456,9 @@ async function sessionOf(response: Response): Promise<Session> {
     access_token: body["access_token"],
     refresh_token: body["refresh_token"],
     expires_in: body["expires_in"],
+    ...(typeof body["provider_refresh_token"] === "string"
+      ? { provider_refresh_token: body["provider_refresh_token"] }
+      : {}),
   };
 }
 

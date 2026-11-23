@@ -6,7 +6,7 @@ export function acceptedConfirmationMethods(
   accountState: AccountSnapshot["state"],
 ): SignInMethod[] {
   if (accountState === "active") {
-    return providers.includes("test-account") ? ["test-account"] : ["google"];
+    return providers.includes("google") ? ["google"] : [...providers];
   }
   return [...providers];
 }

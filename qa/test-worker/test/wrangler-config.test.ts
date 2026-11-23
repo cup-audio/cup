@@ -17,3 +17,10 @@ test("the test Worker runs as local development and sends nothing to Sentry", ()
   expect(vars["SENTRY_DSN"]).toBe("");
   expect(vars["SENTRY_TUNNEL_DSNS"]).toBe("");
 });
+
+test("the test Worker advertises Apple sign-in next to Google", () => {
+  const vars = readVars();
+
+  expect(vars["APPLE_WEB_CLIENT_ID"]).toBe("audio.cup.app.web");
+  expect(vars["GOOGLE_WEB_CLIENT_ID"]).toBe("qa-google-client");
+});

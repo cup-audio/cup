@@ -38,13 +38,16 @@ resource "supabase_project" "production" {
 resource "supabase_settings" "production" {
   project_ref = supabase_project.production.id
   auth = jsonencode({
-    site_url                         = "https://cup.audio/app"
-    uri_allow_list                   = "https://cup.audio/app,https://cup.audio/app/**,audio.cup.app://auth/callback"
-    jwt_exp                          = 300
-    external_google_enabled          = true
-    external_google_client_id        = var.google_web_client_id
-    external_google_secret           = var.google_web_client_secret
-    external_google_skip_nonce_check = false
+    site_url                             = "https://cup.audio/app"
+    uri_allow_list                       = "https://cup.audio/app,https://cup.audio/app/**,audio.cup.app://auth/callback"
+    jwt_exp                              = 300
+    external_google_enabled              = true
+    external_google_client_id            = var.google_web_client_id
+    external_google_secret               = var.google_web_client_secret
+    external_google_skip_nonce_check     = false
+    external_apple_enabled               = true
+    external_apple_client_id             = "audio.cup.app.web"
+    external_apple_additional_client_ids = "audio.cup.app"
   })
 }
 

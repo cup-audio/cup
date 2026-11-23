@@ -112,6 +112,68 @@ test(
   },
 );
 
+test("a new listener creates an account with Apple, and the submitted request resumes after the sign-in", async ({
+  page,
+  workerEnvironment,
+}) => {
+  test.setTimeout(60_000);
+  const { origin, authProvider } = workerEnvironment;
+  await page.goto(`${origin}/app/`);
+  await page.getByRole("textbox", { name: "URL", exact: true }).fill(SOURCE_URL);
+  await page.getByRole("button", { name: "Listen" }).click();
+  await page
+    .getByRole("dialog", { name: "Sign in", exact: true })
+    .getByRole("button", { name: "Continue with Apple", exact: true })
+    .click();
+
+  await expect(page).toHaveURL(/\/app\/audiobooks\//, { timeout: 60_000 });
+  await waitForAudiobook(page);
+  expect(authProvider.exchanges()).toBe(1);
+  expect(authProvider.authorizationRequests().at(-1)).toMatchObject({
+    provider: "apple",
+    scopes: "email",
+  });
+  expect(claimsOf(await readAccessToken(page))).toMatchObject({
+    app_metadata: { providers: ["apple"] },
+  });
+  expect((await readAccount(page, origin)).balance.available).toBeLessThan(30 * 60 * 1_000);
+});
+
+test("an Apple sign-in with a Google user's email opens that account, and a Hide My Email sign-in opens its own", async ({
+  page,
+  workerEnvironment,
+}) => {
+  const { origin, authProvider } = workerEnvironment;
+  const signInFromLink = async (method: "Apple" | "Google") => {
+    await page.evaluate(() => localStorage.removeItem("cup_supabase_session"));
+    await page.goto(`${origin}/app/`);
+    await page.getByRole("link", { name: "Sign in", exact: true }).click();
+    await page
+      .getByRole("dialog", { name: "Sign in", exact: true })
+      .getByRole("button", { name: `Continue with ${method}`, exact: true })
+      .click();
+    await expect(page).toHaveURL(`${origin}/app/recent`);
+    return {
+      accountId: (await readAccount(page, origin)).accountId,
+      claims: claimsOf(await readAccessToken(page)),
+    };
+  };
+  await page.goto(`${origin}/app/`);
+
+  const google = await signInFromLink("Google");
+  const apple = await signInFromLink("Apple");
+  authProvider.setAppleEmail("qa-relay@privaterelay.appleid.com");
+  const hideMyEmail = await signInFromLink("Apple");
+
+  expect(apple.accountId).toBe(google.accountId);
+  expect(apple.claims).toMatchObject({ app_metadata: { providers: ["google", "apple"] } });
+  expect(hideMyEmail.accountId).not.toBe(google.accountId);
+  expect(hideMyEmail.claims).toMatchObject({
+    email: "qa-relay@privaterelay.appleid.com",
+    app_metadata: { providers: ["apple"] },
+  });
+});
+
 test("signup keeps trial conversions separate from the new account and its Recents", async ({
   page,
   request: isolatedRequest,
@@ -473,6 +535,10 @@ async function scheduleDeletion(page: Page) {
     )
     .toBe(true);
   await confirm.click();
+}
+
+function claimsOf(accessToken: string): unknown {
+  return JSON.parse(Buffer.from(accessToken.split(".")[1] ?? "", "base64url").toString());
 }
 
 async function readAccount(page: Page, origin: string) {

@@ -73,7 +73,31 @@ test("admits an identity whose linked providers include Google, whichever identi
   expect(identity.providers).toEqual(["google"]);
 });
 
-test("rejects identities of providers other than Google outside local development", async () => {
+test("admits an Apple-first identity and counts its OAuth sign-in as fresh authentication", async () => {
+  const { token, jwks } = await fixture();
+  const identity = await verifyAccountToken(
+    await token({
+      app_metadata: { provider: "apple", providers: ["apple"] },
+      amr: [{ method: "oauth", timestamp: 1_700_000_000 }],
+    }),
+    { supabaseUrl: url },
+    jwks,
+  );
+  expect(identity.providers).toEqual(["apple"]);
+  expect(identity.authenticatedAtSeconds).toBe(1_700_000_000);
+});
+
+test("carries both providers of an identity linked to Google and Apple", async () => {
+  const { token, jwks } = await fixture();
+  const identity = await verifyAccountToken(
+    await token({ app_metadata: { provider: "google", providers: ["google", "apple"] } }),
+    { supabaseUrl: url },
+    jwks,
+  );
+  expect(identity.providers).toEqual(["google", "apple"]);
+});
+
+test("rejects identities of providers other than Google or Apple outside local development", async () => {
   const { token, jwks } = await fixture();
   for (const claims of [
     {},

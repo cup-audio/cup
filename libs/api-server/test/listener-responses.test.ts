@@ -245,6 +245,7 @@ const env = {
   SUPABASE_URL: "https://access-test.supabase.co",
   SUPABASE_PUBLISHABLE_KEY: "publishable-key",
   GOOGLE_WEB_CLIENT_ID: "google-client",
+  APPLE_WEB_CLIENT_ID: "apple-web-client",
   MEDIA_URL_SIGNING_KEY: "test-media-url-signing-key",
   ACCOUNTS: { idFromName: (name: string) => name, get: () => account },
   CONVERSION_GRANTS: { idFromName: (name: string) => name, get: () => grant },
@@ -327,6 +328,7 @@ test("the auth configuration declares only the public sign-in settings", async (
     supabaseUrl: "https://access-test.supabase.co",
     publishableKey: "publishable-key",
     googleWebClientId: "google-client",
+    appleWebClientId: "apple-web-client",
   });
 });
 
@@ -350,12 +352,38 @@ test("the auth configuration advertises the test account only in local developme
       authConfigResponseSchema,
     );
   expect(await config({ LOCAL_DEVELOPMENT: "false" })).not.toHaveProperty("testAccount");
-  expect(await config({ LOCAL_DEVELOPMENT: "true", GOOGLE_WEB_CLIENT_ID: "" })).toEqual({
+  expect(
+    await config({ LOCAL_DEVELOPMENT: "true", GOOGLE_WEB_CLIENT_ID: "", APPLE_WEB_CLIENT_ID: "" }),
+  ).toEqual({
     supabaseUrl: "https://access-test.supabase.co",
     publishableKey: "publishable-key",
     testAccount: { email: "test@cup.local", password: "local-password" },
   });
 });
+
+test.each([
+  ["audio.cup.app.web", { appleWebClientId: "audio.cup.app.web" }],
+  ["", {}],
+])(
+  "the auth configuration with the Apple web client %j advertises Apple sign-in as %j",
+  async (appleWebClientId, advertised) => {
+    const config = await parseStrictly(
+      await createApiServer().request(
+        `${origin}/api/auth/config`,
+        {},
+        { ...env, APPLE_WEB_CLIENT_ID: appleWebClientId },
+      ),
+      200,
+      authConfigResponseSchema,
+    );
+    expect(config).toEqual({
+      supabaseUrl: "https://access-test.supabase.co",
+      publishableKey: "publishable-key",
+      googleWebClientId: "google-client",
+      ...advertised,
+    });
+  },
+);
 
 test("the account snapshot carries only declared fields", async () => {
   expect(await parseStrictly(await request("/api/account"), 200, accountSnapshotSchema)).toEqual(
