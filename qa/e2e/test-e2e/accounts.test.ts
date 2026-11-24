@@ -131,7 +131,7 @@ test("a new listener creates an account with Apple, and the submitted request re
   expect(authProvider.exchanges()).toBe(1);
   expect(authProvider.authorizationRequests().at(-1)).toMatchObject({
     provider: "apple",
-    scopes: "email",
+    scopes: "email name",
   });
   expect(claimsOf(await readAccessToken(page))).toMatchObject({
     app_metadata: { providers: ["apple"] },

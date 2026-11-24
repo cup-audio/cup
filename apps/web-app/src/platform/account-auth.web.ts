@@ -49,7 +49,7 @@ export async function signInWithApple(client: Pick<SupabaseClient, "auth">) {
     provider: "apple",
     options: {
       redirectTo: `${window.location.origin}${window.location.pathname}`,
-      scopes: "email",
+      scopes: "email name",
     },
   });
   if (result.error) {

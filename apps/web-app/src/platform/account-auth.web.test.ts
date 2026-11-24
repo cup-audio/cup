@@ -51,7 +51,7 @@ test("asks Google for the account chooser and a new authentication on a fresh si
   });
 });
 
-test("an Apple sign-in asks Supabase for Apple's OAuth flow with the email scope and no name", async ({
+test("an Apple sign-in asks Supabase for Apple's OAuth flow with the email and name scopes", async ({
   page,
 }) => {
   await page.goto("");
@@ -73,7 +73,7 @@ test("an Apple sign-in asks Supabase for Apple's OAuth flow with the email scope
 
   expect(oauthCredentials).toEqual({
     provider: "apple",
-    options: { redirectTo: expect.stringMatching(/^http/), scopes: "email" },
+    options: { redirectTo: expect.stringMatching(/^http/), scopes: "email name" },
   });
 });
 

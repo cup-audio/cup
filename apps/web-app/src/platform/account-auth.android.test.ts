@@ -269,7 +269,7 @@ test("Apple sign-in runs Supabase's Apple OAuth in a browser tab and exchanges t
       oauthOptions: {
         redirectTo: "audio.cup.app://auth/callback",
         skipBrowserRedirect: true,
-        scopes: "email",
+        scopes: "email name",
       },
       authenticatedUrl: "https://auth.example.test/auth/v1/authorize?provider=apple",
       authenticatedSessionStorage: "{}",

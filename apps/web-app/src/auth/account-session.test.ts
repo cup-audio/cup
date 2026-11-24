@@ -178,7 +178,7 @@ test("offers Apple before Google when the auth configuration advertises it, and 
   const url = await authorization;
   expect(Object.fromEntries(url.searchParams)).toMatchObject({
     provider: "apple",
-    scopes: "email",
+    scopes: "email name",
   });
   expect(url.searchParams.has("prompt")).toBe(false);
 });

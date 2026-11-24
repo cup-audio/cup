@@ -26,7 +26,11 @@ test("an Apple sign-in that redirects at once signs in and starts the submitted 
 
   await waitForStartedConversion(device);
   expect(app.authProvider.authorizationRequests()).toEqual([
-    expect.objectContaining({ provider: "apple", redirect_to: AUTH_CALLBACK_URL, scopes: "email" }),
+    expect.objectContaining({
+      provider: "apple",
+      redirect_to: AUTH_CALLBACK_URL,
+      scopes: "email name",
+    }),
   ]);
   expect(conversionStartsSince(app.worker, 0)).toEqual([SOURCE_URL]);
 });

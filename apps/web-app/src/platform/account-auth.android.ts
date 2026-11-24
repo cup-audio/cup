@@ -25,7 +25,7 @@ export async function signInWithApple(
 ) {
   const authorization = await client.auth.signInWithOAuth({
     provider: "apple",
-    options: { redirectTo: AUTH_CALLBACK_URL, skipBrowserRedirect: true, scopes: "email" },
+    options: { redirectTo: AUTH_CALLBACK_URL, skipBrowserRedirect: true, scopes: "email name" },
   });
   if (authorization.error) {
     throw authorization.error;
