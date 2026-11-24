@@ -52,7 +52,10 @@ public class FakeAppleSignInPlugin: CAPPlugin, CAPBridgedPlugin {
               let authorizationCode = credential["authorizationCode"] as? String else {
             throw FakeAppleSignInError.missingCredential
         }
-        return ["identityToken": identityToken, "authorizationCode": authorizationCode]
+        var result = ["identityToken": identityToken, "authorizationCode": authorizationCode]
+        result["givenName"] = credential["givenName"] as? String
+        result["familyName"] = credential["familyName"] as? String
+        return result
     }
 
     private static func requestJson(_ url: URL, body: [String: String]?) async throws -> [String: Any] {

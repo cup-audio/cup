@@ -14,6 +14,8 @@ const GOOGLE_SUBJECT = "qa-google";
 const APPLE_SUBJECT = "000123.qa-apple.0456";
 const APPLE_ISSUER = "https://appleid.apple.com";
 const APPLE_NATIVE_CLIENT_ID = "audio.cup.app";
+const APPLE_GIVEN_NAME = "Ada";
+const APPLE_FAMILY_NAME = "Lovelace";
 const READER_EMAIL = "reader@example.test";
 const IOS_AUTH_CALLBACK_URL = "audio.cup.app://auth/callback";
 const SUPABASE_API_VERSION = "2024-01-01";
@@ -146,6 +148,17 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
     }
     return user;
   };
+  const userJsonOf = (user: User) => ({
+    id: user.id,
+    email: user.email,
+    aud: "authenticated",
+    app_metadata: { provider: user.providers[0], providers: [...user.providers] },
+    user_metadata: { ...user.metadata },
+    identities: user.providers.map((provider) => ({
+      provider,
+      identity_data: { sub: identitySubjectOf(user, provider) },
+    })),
+  });
   const sessionFor = (
     { userId, authenticatedAt, method }: SignIn,
     providerTokens: { provider_refresh_token?: string } = {},
@@ -160,17 +173,7 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
       refresh_token: refreshToken,
       expires_in: accessTokenLifetimeSeconds,
       ...providerTokens,
-      user: {
-        id: user.id,
-        email: user.email,
-        aud: "authenticated",
-        app_metadata: { provider: user.providers[0], providers: [...user.providers] },
-        user_metadata: user.metadata,
-        identities: user.providers.map((provider) => ({
-          provider,
-          identity_data: { sub: identitySubjectOf(user, provider) },
-        })),
-      },
+      user: userJsonOf(user),
     });
   };
   const authorize = (url: URL, response: http.ServerResponse) => {
@@ -253,8 +256,29 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
           const user = users.find((candidate) => candidate.email === email);
           return user === undefined ? APPLE_SUBJECT : identitySubjectOf(user, "apple");
         }),
+        givenName: APPLE_GIVEN_NAME,
+        familyName: APPLE_FAMILY_NAME,
       }),
     );
+  };
+  const updateUser = async (request: http.IncomingMessage, response: http.ServerResponse) => {
+    const token = /^Bearer (\S+)$/.exec(request.headers.authorization ?? "")?.[1];
+    const subject = token === undefined ? undefined : verify(token)?.["sub"];
+    if (typeof subject !== "string") {
+      throw new Error("A user update needs an access token the QA provider issued");
+    }
+    const body = await readJson(request);
+    const data = body && typeof body === "object" && "data" in body ? body.data : undefined;
+    if (
+      !data ||
+      typeof data !== "object" ||
+      !Object.values(data).every((value) => typeof value === "string")
+    ) {
+      throw new Error("Invalid QA user update: data must map keys to strings");
+    }
+    const user = requireUser(subject);
+    Object.assign(user.metadata, data);
+    response.end(JSON.stringify(userJsonOf(user)));
   };
   const exchange = async (
     url: URL,
@@ -400,6 +424,27 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
       sessionFor({ userId: user.id, authenticatedAt: nowSeconds(), method: "id_token" }),
     );
   };
+  const answerAdminUser = (url: URL, response: http.ServerResponse): boolean => {
+    const id = url.pathname.split("/").at(-1);
+    const user = users.find((candidate) => candidate.id === id);
+    if (user) {
+      response.end(
+        JSON.stringify({
+          id,
+          identities: user.providers.map((provider) => ({
+            provider,
+            identity_data: { sub: identitySubjectOf(user, provider) },
+          })),
+        }),
+      );
+      return true;
+    }
+    if (id === SUBJECT || id === OTHER_SUBJECT) {
+      response.end(JSON.stringify({ id, identities: [] }));
+      return true;
+    }
+    return false;
+  };
   const handler: http.RequestListener = (request, response) => {
     response.setHeader("Access-Control-Allow-Origin", "*");
     response.setHeader(
@@ -441,32 +486,20 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
         await apple.handle(url.pathname, request, response);
         return;
       }
+      if (url.pathname === "/auth/v1/user" && request.method === "PUT") {
+        await updateUser(request, response);
+        return;
+      }
       if (url.pathname === "/auth/v1/logout") {
         response.writeHead(204).end();
         return;
       }
       if (
         url.pathname.startsWith("/auth/v1/admin/users/") &&
-        request.headers.authorization === "Bearer qa-admin"
+        request.headers.authorization === "Bearer qa-admin" &&
+        answerAdminUser(url, response)
       ) {
-        const id = url.pathname.split("/").at(-1);
-        const user = users.find((candidate) => candidate.id === id);
-        if (user) {
-          response.end(
-            JSON.stringify({
-              id,
-              identities: user.providers.map((provider) => ({
-                provider,
-                identity_data: { sub: identitySubjectOf(user, provider) },
-              })),
-            }),
-          );
-          return;
-        }
-        if (id === SUBJECT || id === OTHER_SUBJECT) {
-          response.end(JSON.stringify({ id, identities: [] }));
-          return;
-        }
+        return;
       }
       response.writeHead(404).end(JSON.stringify({ message: "Unknown QA identity route" }));
     };

@@ -11,7 +11,7 @@ import {
 
 const app = useMobileApp();
 
-test("signs in with Apple through the native sheet's fake and opens the new audiobook with an Apple session", async () => {
+test("signs in with Apple through the native sheet's fake, opens the new audiobook with an Apple session, and shows the name the sheet returned as the avatar's initials", async () => {
   const device = asIosAppDevice(app.device);
   await device.launch({ apiOrigin: app.apiOrigin });
   const webView = await device.webView();
@@ -30,6 +30,13 @@ test("signs in with Apple through the native sheet's fake and opens the new audi
     app_metadata: { providers: ["apple"] },
     amr: [{ method: "id_token" }],
   });
+
+  await webView.$('a[aria-label="Back"]').click();
+  await waitForRecents(webView, 1);
+  const initials = webView.$('a[aria-label="Account"] span');
+  await expect
+    .poll(() => initials.getProperty("textContent"), { timeout: 10_000, interval: 250 })
+    .toBe("AL");
 });
 
 test("closing Apple's sheet leaves the sign-in dialog open without an error", async () => {

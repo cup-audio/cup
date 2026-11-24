@@ -369,6 +369,58 @@ test("a native Apple sign-in issues its identity token for the email a test sets
   }
 });
 
+test("a native Apple credential carries the given and family name Apple's sheet returns on a first authorization", async () => {
+  const response = await fetch(`${startedAuthProvider().origin}/qa/apple-credential`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ nonce: hash("the nonce") }),
+  });
+
+  expect(await response.json()).toMatchObject({ givenName: "Ada", familyName: "Lovelace" });
+});
+
+test("a user update merges its data into the user's metadata, which the next refreshed session carries", async () => {
+  const authProvider = await startAuthProvider();
+  try {
+    const { origin } = authProvider;
+    const apple = await appleCredential(hash("the nonce"), origin);
+    const session = await sessionOf(
+      await exchangeIdToken(apple.identityToken, "the nonce", origin, "apple"),
+    );
+
+    const update = await fetch(`${origin}/auth/v1/user`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ data: { name: "Ada Lovelace", full_name: "Ada Lovelace" } }),
+    });
+
+    expect(update.status).toBe(200);
+    expect(await update.json()).toMatchObject({
+      id: claimsOf(session.access_token)["sub"],
+      user_metadata: { name: "Ada Lovelace", full_name: "Ada Lovelace" },
+    });
+    const refreshed = await refresh(session.refresh_token, origin);
+    expect(await refreshed.json()).toMatchObject({
+      user: { user_metadata: { name: "Ada Lovelace", full_name: "Ada Lovelace" } },
+    });
+  } finally {
+    await authProvider.close();
+  }
+});
+
+test("refuses a user update without a token it issued", async () => {
+  const response = await fetch(`${startedAuthProvider().origin}/auth/v1/user`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer not-a-token" },
+    body: JSON.stringify({ data: { name: "Mallory" } }),
+  });
+
+  expect(response.status).toBe(400);
+});
+
 test("rejects a native Apple sign-in whose raw nonce does not hash to the identity token's", async () => {
   const { identityToken } = await appleCredential(hash("the nonce"));
 

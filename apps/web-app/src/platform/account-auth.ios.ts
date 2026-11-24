@@ -4,13 +4,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AppleProviderCredential } from "@cup/listener-api.routes";
 
 import { SignInCancelledError, UserFacingError } from "#src/errors.js";
-import type { GoogleSignInOptions } from "#src/platform/account-auth.js";
+import type { AppleSignInOptions, GoogleSignInOptions } from "#src/platform/account-auth.js";
 import {
   createNonce,
   initializeAuthStorage as initializeSecureAuthStorage,
 } from "#src/platform/account-auth.native.js";
 import { googleAuthorizationParams } from "#src/platform/account-auth.web.js";
 import { AUTH_CALLBACK_URL, webAuthentication } from "#src/platform/web-authentication.js";
+import { reportFailure } from "#src/report-failure.js";
 
 export { watchAppState } from "#src/platform/account-auth.native.js";
 
@@ -45,7 +46,12 @@ export async function signInWithGoogle(
 }
 
 type AppleSignInPlugin = {
-  signIn(options: { nonce: string }): Promise<{ identityToken: string; authorizationCode: string }>;
+  signIn(options: { nonce: string }): Promise<{
+    identityToken: string;
+    authorizationCode: string;
+    givenName?: string;
+    familyName?: string;
+  }>;
 };
 
 const appleSignIn = registerPlugin<AppleSignInPlugin>("AppleSignIn");
@@ -53,9 +59,11 @@ const appleSignIn = registerPlugin<AppleSignInPlugin>("AppleSignIn");
 let latestAppleCredential: AppleProviderCredential | undefined;
 let completedAppleSignIn = false;
 
-export async function signInWithApple(client: {
-  auth: Pick<SupabaseClient["auth"], "signInWithIdToken">;
-}) {
+export async function signInWithApple(
+  client: { auth: Pick<SupabaseClient["auth"], "signInWithIdToken" | "updateUser"> },
+  _options?: AppleSignInOptions,
+  report: typeof reportFailure = reportFailure,
+) {
   const { nonce, hashedNonce } = await createNonce();
   let sheet;
   try {
@@ -82,6 +90,13 @@ export async function signInWithApple(client: {
     completedAppleSignIn = false;
     throw exchange.error;
   }
+
+  const fullName = `${sheet.givenName ?? ""} ${sheet.familyName ?? ""}`.trim();
+  if (fullName !== "") {
+    await storeAppleName(client, fullName).catch(
+      report("Failed to store the name Apple returned on the account"),
+    );
+  }
   return credential;
 }
 
@@ -96,6 +111,16 @@ export function appleCredentialOf(): AppleProviderCredential | undefined {
 }
 
 export async function clearNativeSignIn(): Promise<void> {}
+
+async function storeAppleName(
+  client: { auth: Pick<SupabaseClient["auth"], "updateUser"> },
+  fullName: string,
+): Promise<void> {
+  const update = await client.auth.updateUser({ data: { name: fullName, full_name: fullName } });
+  if (update.error) {
+    throw update.error;
+  }
+}
 
 function authorizationCode(callbackUrl: string): string {
   const callback = new URL(callbackUrl);

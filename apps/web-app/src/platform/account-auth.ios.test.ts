@@ -128,16 +128,20 @@ type AppleSignInRecord = {
   message?: string;
   sheetNonce?: unknown;
   exchange?: { provider: string; token: string; nonce: string };
+  userUpdates: unknown[];
+  reports: unknown[];
 };
 
 type AppleSheetAnswer =
-  | { identityToken: string; authorizationCode: string }
+  | { identityToken: string; authorizationCode: string; givenName?: string; familyName?: string }
   | { failure: { code: string; message: string } };
+
+type SupabaseAnswers = { exchangeError?: string; userUpdateError?: string };
 
 async function signInWithApple(
   page: Page,
   sheetAnswer: AppleSheetAnswer,
-  exchangeError?: string,
+  supabaseAnswers: SupabaseAnswers = {},
 ): Promise<AppleSignInRecord> {
   await page.addInitScript((answer: AppleSheetAnswer) => {
     Object.assign(window, {
@@ -158,14 +162,21 @@ async function signInWithApple(
     });
   }, sheetAnswer);
   await page.goto("");
-  return page.evaluate(async (supabaseError) => {
+  return page.evaluate(async ({ exchangeError, userUpdateError }) => {
     const modulePath = "/src/platform/account-auth.ios.ts";
     const module: {
-      signInWithApple: (client: unknown) => Promise<unknown>;
+      signInWithApple: (
+        client: unknown,
+        options: { fresh: boolean },
+        report: (message: string) => (error: unknown) => void,
+      ) => Promise<unknown>;
       takeCompletedAppleSignIn: () => boolean;
       appleCredentialOf: () => unknown;
     } = await import(modulePath);
-    const record: AppleSignInRecord = { outcome: "resolved" };
+    const record: AppleSignInRecord = { outcome: "resolved", userUpdates: [], reports: [] };
+    const report = (message: string) => (error: unknown) => {
+      record.reports.push([message, error instanceof Error ? error.message : error]);
+    };
     const client = {
       auth: {
         signInWithIdToken: async (credentials: {
@@ -174,14 +185,20 @@ async function signInWithApple(
           nonce: string;
         }) => {
           record.exchange = credentials;
-          return supabaseError === null
+          return exchangeError === undefined
             ? { data: {}, error: null }
-            : { data: {}, error: new Error(supabaseError) };
+            : { data: {}, error: new Error(exchangeError) };
+        },
+        updateUser: async (attributes: unknown) => {
+          record.userUpdates.push(attributes);
+          return userUpdateError === undefined
+            ? { data: { user: {} }, error: null }
+            : { data: { user: null }, error: new Error(userUpdateError) };
         },
       },
     };
     try {
-      record.credential = await module.signInWithApple(client);
+      record.credential = await module.signInWithApple(client, { fresh: false }, report);
     } catch (error) {
       record.outcome = "rejected";
       record.name = error instanceof Error ? error.name : typeof error;
@@ -194,7 +211,7 @@ async function signInWithApple(
     ];
     record.heldCredential = module.appleCredentialOf();
     return record;
-  }, exchangeError ?? null);
+  }, supabaseAnswers);
 }
 
 test("signs in with Apple's native sheet, exchanging its identity token and the raw nonce whose SHA-256 the sheet got", async ({
@@ -240,11 +257,75 @@ test("a native Apple sign-in that Supabase refuses completes no Apple sign-in an
   const record = await signInWithApple(
     page,
     { identityToken: "the-identity-token", authorizationCode: "the-code" },
-    "Nonces mismatch",
+    { exchangeError: "Nonces mismatch" },
   );
 
   expect(record.completedSignIns).toEqual([false, false]);
   expect(record.heldCredential).toBeUndefined();
+});
+
+test("stores the name Apple's sheet returned on the Supabase user, joined and trimmed as Supabase's Apple provider does", async ({
+  page,
+}) => {
+  const record = await signInWithApple(page, {
+    identityToken: "the-identity-token",
+    authorizationCode: "the-authorization-code",
+    givenName: " Ada",
+    familyName: "Lovelace ",
+  });
+
+  expect(record.outcome).toBe("resolved");
+  expect(record.userUpdates).toEqual([
+    { data: { name: "Ada Lovelace", full_name: "Ada Lovelace" } },
+  ]);
+  expect(record.reports).toEqual([]);
+});
+
+for (const [description, name] of [
+  ["no name, as on every authorization after the first", {}],
+  ["a blank name", { givenName: " ", familyName: "" }],
+] as const) {
+  test(`leaves the Supabase user's name alone when Apple's sheet returns ${description}`, async ({
+    page,
+  }) => {
+    const record = await signInWithApple(page, {
+      identityToken: "the-identity-token",
+      authorizationCode: "the-authorization-code",
+      ...name,
+    });
+
+    expect(record.outcome).toBe("resolved");
+    expect(record.userUpdates).toEqual([]);
+  });
+}
+
+test("a name Supabase fails to store still signs in, holds Apple's code, and reports the failure", async ({
+  page,
+}) => {
+  const record = await signInWithApple(
+    page,
+    {
+      identityToken: "the-identity-token",
+      authorizationCode: "the-authorization-code",
+      givenName: "Ada",
+      familyName: "Lovelace",
+    },
+    { userUpdateError: "Network request failed" },
+  );
+
+  expect(record.outcome).toBe("resolved");
+  expect(record.credential).toEqual({
+    provider: "apple",
+    authorizationCode: "the-authorization-code",
+  });
+  expect(record.completedSignIns).toEqual([true, false]);
+  expect(record.heldCredential).toEqual({
+    provider: "apple",
+    authorizationCode: "the-authorization-code",
+  });
+  expect(record.reports).toEqual([
+    ["Failed to store the name Apple returned on the account", "Network request failed"],
+  ]);
 });
 
 test("asks Apple's sheet with a new nonce on every sign-in", async ({ page }) => {
@@ -291,7 +372,7 @@ test("rejects with Supabase's error when it refuses the identity token", async (
   const record = await signInWithApple(
     page,
     { identityToken: "the-identity-token", authorizationCode: "the-code" },
-    "Nonces mismatch",
+    { exchangeError: "Nonces mismatch" },
   );
 
   expect(record).toMatchObject({ outcome: "rejected", message: "Nonces mismatch" });

@@ -25,7 +25,7 @@ public class AppleSignInPlugin: CAPPlugin, CAPBridgedPlugin,
                 return
             }
             let request = ASAuthorizationAppleIDProvider().createRequest()
-            request.requestedScopes = [.email]
+            request.requestedScopes = [.email, .fullName]
             request.nonce = nonce
             let controller = ASAuthorizationController(authorizationRequests: [request])
             controller.delegate = self
@@ -50,7 +50,10 @@ public class AppleSignInPlugin: CAPPlugin, CAPBridgedPlugin,
             call.reject("Sign in with Apple returned no identity token or authorization code.", "FAILED")
             return
         }
-        call.resolve(["identityToken": identityToken, "authorizationCode": authorizationCode])
+        var result: [String: String] = ["identityToken": identityToken, "authorizationCode": authorizationCode]
+        result["givenName"] = credential.fullName?.givenName
+        result["familyName"] = credential.fullName?.familyName
+        call.resolve(result)
     }
 
     public func authorizationController(
