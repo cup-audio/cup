@@ -1,7 +1,11 @@
 import { captureException } from "@sentry/core";
 
 import type { AccountSnapshot } from "@cup/accounts";
-import type { AppleProviderCredential, ProviderCredential } from "@cup/listener-api.routes";
+import type {
+  AppleProviderCredential,
+  ProviderCredential,
+  SignInMethod,
+} from "@cup/listener-api.routes";
 
 import type { AppleSignInRevocation } from "#src/adapters/apple-sign-in-revocation.ts";
 import { isAppleLinked } from "#src/use-cases/confirmation-provider.ts";
@@ -18,7 +22,7 @@ export type RevokeAppleCredential = (
 ) => Promise<AppleSignInRevocation>;
 
 export async function confirmDeletionWithApple(
-  providers: readonly string[],
+  providers: readonly SignInMethod[],
   credential: ProviderCredential | undefined,
   revoke: RevokeAppleCredential,
 ): Promise<AppleDeletionConfirmation> {
@@ -32,7 +36,7 @@ export async function confirmDeletionWithApple(
 }
 
 export async function revokeAppleSignInDuringDeletion(
-  providers: readonly string[],
+  providers: readonly SignInMethod[],
   accountState: AccountSnapshot["state"],
   credential: AppleProviderCredential,
   revoke: RevokeAppleCredential,

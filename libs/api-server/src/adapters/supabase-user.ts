@@ -1,18 +1,22 @@
 import { z } from "zod";
 
 import { CupError } from "@cup/errors";
+import type { SignInMethod } from "@cup/listener-api.routes";
 
+import { REQUEST_TIMEOUT_MS } from "#src/adapters/request-timeout.ts";
 import type { ApiServerEnvironment } from "#src/api-server-environment.ts";
 
-const REQUEST_TIMEOUT_MS = 5_000;
+export type OAuthProvider = Extract<SignInMethod, "google" | "apple">;
 
 export type SupabaseIdentity = { provider: string; subject: string | undefined };
 
 export type SupabaseUser = {
   email: string | undefined;
   identities: SupabaseIdentity[];
-  providers: string[];
+  providers: OAuthProvider[];
 };
+
+const OAUTH_PROVIDERS: readonly OAuthProvider[] = ["google", "apple"];
 
 export async function readSupabaseUser(
   env: ApiServerEnvironment,
@@ -51,6 +55,10 @@ export async function readSupabaseUser(
   return {
     email: user.email === undefined || user.email === "" ? undefined : user.email.toLowerCase(),
     identities,
-    providers: identities.map(({ provider }) => provider),
+    providers: identities.map(({ provider }) => provider).filter(isOAuthProvider),
   };
+}
+
+export function isOAuthProvider(provider: unknown): provider is OAuthProvider {
+  return OAUTH_PROVIDERS.some((admitted) => admitted === provider);
 }

@@ -4,13 +4,12 @@ import type { JWTPayload, JWTVerifyGetKey } from "jose";
 
 import type { SignInMethod } from "@cup/listener-api.routes";
 
+import { isOAuthProvider } from "#src/adapters/supabase-user.ts";
 import type { ApiServerEnvironment } from "#src/api-server-environment.ts";
 import { ingressIdentity } from "#src/http/ingress-identity.ts";
 import { authenticateAccount as authenticateVerifiedAccount } from "#src/use-cases/authenticate-account.ts";
 
 const keySets = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
-
-const OAUTH_PROVIDERS = ["google", "apple"] as const;
 
 export type LocalTestAccount = { email: string; password: string };
 
@@ -105,10 +104,7 @@ function admittedProviders(
   if (!("providers" in metadata) || !Array.isArray(metadata.providers)) {
     return [];
   }
-  return metadata.providers.filter(
-    (provider): provider is (typeof OAUTH_PROVIDERS)[number] =>
-      typeof provider === "string" && OAUTH_PROVIDERS.some((admitted) => admitted === provider),
-  );
+  return metadata.providers.filter(isOAuthProvider);
 }
 
 export async function authenticateAccountRequest(request: Request, env: ApiServerEnvironment) {

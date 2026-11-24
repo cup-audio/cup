@@ -156,6 +156,15 @@ test("refuses an account without an Apple identity, which confirms deletion itse
   expect(account.scheduleOperatorDeletion).not.toHaveBeenCalled();
 });
 
+test("ignores an identity of a provider Cup doesn't offer", async () => {
+  supabaseUser.identities = [{ provider: "github" }, { provider: "apple" }];
+
+  const response = await scheduleLostAppleAccountDeletion(ACCOUNT_ID, ACCOUNT_EMAIL);
+
+  expect(response.status).toBe(200);
+  expect(account.scheduleOperatorDeletion).toHaveBeenCalledExactlyOnceWith(ACCOUNT_EMAIL);
+});
+
 test("stays behind operator authentication", async () => {
   const response = await scheduleLostAppleAccountDeletion(ACCOUNT_ID, ACCOUNT_EMAIL, {
     authorized: false,
