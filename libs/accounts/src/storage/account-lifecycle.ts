@@ -23,7 +23,7 @@ export type DeletionAttempt = {
   appleRevocation: AppleRevocation;
 };
 
-export type AppleRevocation = "unavailable" | "revoked" | "not-revoked";
+export type AppleRevocation = z.infer<typeof appleRevocationSchema>;
 
 type StoredDeletionAttemptState = (typeof deletionAttempts.$inferSelect)["state"];
 
@@ -244,6 +244,8 @@ export class AccountLifecycle {
   }
 }
 
+const appleRevocationSchema = z.enum(["unavailable", "revoked", "not-revoked"]);
+
 export const deletionAttemptSchema = z.object({
   attemptId: z.uuidv4(),
   subject: z.uuid(),
@@ -252,5 +254,5 @@ export const deletionAttemptSchema = z.object({
   scheduledAtMs: z.number().int(),
   deadlineMs: z.number().int(),
   state: z.enum(["scheduled", "restored", "deleting", "erased"]),
-  appleRevocation: z.enum(["unavailable", "revoked", "not-revoked"]).default("unavailable"),
+  appleRevocation: appleRevocationSchema.default("unavailable"),
 });
