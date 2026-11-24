@@ -2,14 +2,14 @@ import { decodeJwt, importPKCS8, SignJWT } from "jose";
 import { z } from "zod";
 
 import { CupError } from "@cup/errors";
-import type { AppleProviderCredential } from "@cup/listener-api.routes";
+import { isAppleAuthorizationCode, type AppleProviderCredential } from "@cup/listener-api.routes";
 
+import { REQUEST_TIMEOUT_MS } from "#src/adapters/request-timeout.ts";
 import { readSupabaseUser } from "#src/adapters/supabase-user.ts";
 import type { ApiServerEnvironment } from "#src/api-server-environment.ts";
 
 const APPLE_AUDIENCE = "https://appleid.apple.com";
 const CLIENT_SECRET_LIFETIME_SECONDS = 300;
-const REQUEST_TIMEOUT_MS = 5_000;
 
 export type AppleSignInRevocation = "revoked" | "mismatch";
 
@@ -19,13 +19,12 @@ export async function revokeVerifiedAppleCredential(
   credential: AppleProviderCredential,
 ): Promise<AppleSignInRevocation> {
   const linkedAppleSubject = await appleIdentitySubject(env, subject);
-  const clientId =
-    "authorizationCode" in credential ? env.APPLE_NATIVE_CLIENT_ID : env.APPLE_WEB_CLIENT_ID;
+  const isAuthorizationCode = isAppleAuthorizationCode(credential);
+  const clientId = isAuthorizationCode ? env.APPLE_NATIVE_CLIENT_ID : env.APPLE_WEB_CLIENT_ID;
   const clientSecret = await signClientSecret(env, clientId);
-  const { refreshToken, idToken } =
-    "authorizationCode" in credential
-      ? await exchangeAuthorizationCode(env, clientId, clientSecret, credential.authorizationCode)
-      : await validateRefreshToken(env, clientId, clientSecret, credential.refreshToken);
+  const { refreshToken, idToken } = isAuthorizationCode
+    ? await exchangeAuthorizationCode(env, clientId, clientSecret, credential.authorizationCode)
+    : await validateRefreshToken(env, clientId, clientSecret, credential.refreshToken);
   if (decodeJwt(idToken).sub !== linkedAppleSubject) {
     return "mismatch";
   }

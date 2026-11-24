@@ -1,6 +1,6 @@
 import type { Session } from "@supabase/supabase-js";
 
-import type { AppleProviderCredential } from "@cup/listener-api.routes";
+import { isAppleAuthorizationCode, type AppleProviderCredential } from "@cup/listener-api.routes";
 
 import { sessionSnapshot, subscribeAuthState } from "#src/auth/account-session.js";
 import { accountQuery } from "#src/data-fetching/account.js";
@@ -47,7 +47,9 @@ export function revokeAppleSignIn(
 }
 
 function keyOf(credential: AppleProviderCredential): string {
-  return "authorizationCode" in credential ? credential.authorizationCode : credential.refreshToken;
+  return isAppleAuthorizationCode(credential)
+    ? credential.authorizationCode
+    : credential.refreshToken;
 }
 
 async function revokeIfScheduledForDeletion(session: Session) {

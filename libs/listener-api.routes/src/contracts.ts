@@ -240,6 +240,11 @@ const appleProviderCredentialSchema = z.union([
   z.object({ provider: z.literal("apple"), authorizationCode: z.string().min(1).max(8192) }),
 ]);
 export type AppleProviderCredential = z.infer<typeof appleProviderCredentialSchema>;
+export function isAppleAuthorizationCode(
+  credential: AppleProviderCredential,
+): credential is Extract<AppleProviderCredential, { authorizationCode: string }> {
+  return "authorizationCode" in credential;
+}
 export const providerCredentialSchema = z.union([
   z.object({ provider: z.literal("google"), accessToken: z.string().min(1).max(8192) }),
   ...appleProviderCredentialSchema.options,

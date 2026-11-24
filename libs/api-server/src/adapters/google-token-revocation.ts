@@ -1,9 +1,8 @@
 import { z } from "zod";
 
+import { REQUEST_TIMEOUT_MS } from "#src/adapters/request-timeout.ts";
 import { readSupabaseUser } from "#src/adapters/supabase-user.ts";
 import type { ApiServerEnvironment } from "#src/api-server-environment.ts";
-
-const REQUEST_TIMEOUT_MS = 5_000;
 
 export async function revokeVerifiedGoogleToken(
   env: ApiServerEnvironment,

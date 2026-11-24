@@ -16,6 +16,7 @@ import {
   grantConversionsSchema,
   grantParamsSchema,
   grantSnapshotSchema,
+  isAppleAuthorizationCode,
   signedMediaUrlQuerySchema,
   playbackPositionSchema,
   retryConversionResponseSchema,
@@ -539,5 +540,10 @@ describe("listener API transport contracts", () => {
         },
       ]).success,
     ).toBe(true);
+  });
+
+  test("tells an Apple authorization code apart from an Apple refresh token", () => {
+    expect(isAppleAuthorizationCode({ provider: "apple", authorizationCode: "code" })).toBe(true);
+    expect(isAppleAuthorizationCode({ provider: "apple", refreshToken: "token" })).toBe(false);
   });
 });
