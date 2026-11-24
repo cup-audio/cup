@@ -165,11 +165,9 @@ async function signInWithApple(
   return page.evaluate(async ({ exchangeError, userUpdateError }) => {
     const modulePath = "/src/platform/account-auth.ios.ts";
     const module: {
-      signInWithApple: (
-        client: unknown,
-        options: { fresh: boolean },
+      createSignInWithApple: (
         report: (message: string) => (error: unknown) => void,
-      ) => Promise<unknown>;
+      ) => (client: unknown) => Promise<unknown>;
       takeCompletedAppleSignIn: () => boolean;
       appleCredentialOf: () => unknown;
     } = await import(modulePath);
@@ -198,7 +196,7 @@ async function signInWithApple(
       },
     };
     try {
-      record.credential = await module.signInWithApple(client, { fresh: false }, report);
+      record.credential = await module.createSignInWithApple(report)(client);
     } catch (error) {
       record.outcome = "rejected";
       record.name = error instanceof Error ? error.name : typeof error;

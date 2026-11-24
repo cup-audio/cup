@@ -154,10 +154,7 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
     aud: "authenticated",
     app_metadata: { provider: user.providers[0], providers: [...user.providers] },
     user_metadata: { ...user.metadata },
-    identities: user.providers.map((provider) => ({
-      provider,
-      identity_data: { sub: identitySubjectOf(user, provider) },
-    })),
+    identities: identitiesOf(user),
   });
   const sessionFor = (
     { userId, authenticatedAt, method }: SignIn,
@@ -431,10 +428,7 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
       response.end(
         JSON.stringify({
           id,
-          identities: user.providers.map((provider) => ({
-            provider,
-            identity_data: { sub: identitySubjectOf(user, provider) },
-          })),
+          identities: identitiesOf(user),
         }),
       );
       return true;
@@ -557,6 +551,13 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
       await Promise.all(servers.map(close));
     },
   };
+}
+
+function identitiesOf(user: User) {
+  return user.providers.map((provider) => ({
+    provider,
+    identity_data: { sub: identitySubjectOf(user, provider) },
+  }));
 }
 
 function identitySubjectOf(user: User, provider: User["providers"][number]): string {

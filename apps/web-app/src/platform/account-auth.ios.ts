@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AppleProviderCredential } from "@cup/listener-api.routes";
 
 import { SignInCancelledError, UserFacingError } from "#src/errors.js";
-import type { AppleSignInOptions, GoogleSignInOptions } from "#src/platform/account-auth.js";
+import type { GoogleSignInOptions } from "#src/platform/account-auth.js";
 import {
   createNonce,
   initializeAuthStorage as initializeSecureAuthStorage,
@@ -59,11 +59,17 @@ const appleSignIn = registerPlugin<AppleSignInPlugin>("AppleSignIn");
 let latestAppleCredential: AppleProviderCredential | undefined;
 let completedAppleSignIn = false;
 
-export async function signInWithApple(
-  client: { auth: Pick<SupabaseClient["auth"], "signInWithIdToken" | "updateUser"> },
-  _options?: AppleSignInOptions,
-  report: typeof reportFailure = reportFailure,
-) {
+type AppleSigningInClient = {
+  auth: Pick<SupabaseClient["auth"], "signInWithIdToken" | "updateUser">;
+};
+
+export const signInWithApple = createSignInWithApple(reportFailure);
+
+export function createSignInWithApple(report: typeof reportFailure) {
+  return (client: AppleSigningInClient) => signInWithNativeApple(client, report);
+}
+
+async function signInWithNativeApple(client: AppleSigningInClient, report: typeof reportFailure) {
   const { nonce, hashedNonce } = await createNonce();
   let sheet;
   try {
