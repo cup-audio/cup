@@ -287,7 +287,9 @@ test("a fresh Apple sign-in, as the deletion confirmation asks for, opens an eph
   expect((await appleSignInRecord(page)).authenticatedEphemeral).toBe(true);
 });
 
-test("cancelling the Auth Tab ends Apple sign-in as a cancellation", async ({ page }) => {
+test("a browser tab the plugin cancels, as when a new sign-in replaces it, ends Apple sign-in as a cancellation", async ({
+  page,
+}) => {
   await startAppleSignIn(page);
 
   await finishAuthentication(page, { code: "CANCELED", message: "Sign-in was cancelled." });
@@ -398,7 +400,7 @@ test("Apple sign-in hands the browser tab the session storage to keep while Cup 
   );
 });
 
-test("an Auth Tab result Android redelivers after Cup already asked for a pending callback at startup is still exchanged", async ({
+test("a callback Android delivers after Cup already asked for a pending callback at startup is still exchanged", async ({
   page,
 }) => {
   await page.addInitScript(() => {
@@ -407,7 +409,7 @@ test("an Auth Tab result Android redelivers after Cup already asked for a pendin
     Object.assign(window, {
       androidBridge: {},
       exchangedCodes: [],
-      redeliverAuthTabResult: (url: string) => {
+      deliverLateCallback: (url: string) => {
         pendingUrl = url;
         for (const listener of listeners) {
           listener({});
@@ -466,7 +468,7 @@ test("an Auth Tab result Android redelivers after Cup already asked for a pendin
   );
 
   await page.evaluate(() => {
-    Reflect.get(window, "redeliverAuthTabResult")("audio.cup.app://auth/callback?code=late-code");
+    Reflect.get(window, "deliverLateCallback")("audio.cup.app://auth/callback?code=late-code");
   });
 
   await expect

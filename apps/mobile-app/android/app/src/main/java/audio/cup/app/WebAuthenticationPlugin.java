@@ -5,15 +5,12 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.net.Uri;
-import androidx.activity.result.ActivityResult;
-import androidx.browser.auth.AuthTabIntent;
 import androidx.browser.customtabs.CustomTabsClient;
 import androidx.browser.customtabs.CustomTabsIntent;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
-import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
 @CapacitorPlugin(name = "WebAuthentication")
@@ -66,32 +63,6 @@ public class WebAuthenticationPlugin extends Plugin {
         call.resolve(result);
     }
 
-    @ActivityCallback
-    private void authTabResult(PluginCall call, ActivityResult result) {
-        AuthTabIntent.AuthResult authResult = new AuthTabIntent.AuthenticateUserResultContract()
-            .parseResult(result.getResultCode(), result.getData());
-        boolean isWaiting = call != null && !PluginCall.CALLBACK_ID_DANGLING.equals(call.getCallbackId());
-        if (authResult.resultCode == AuthTabIntent.RESULT_OK && authResult.resultUri != null) {
-            String callbackUrl = authResult.resultUri.toString();
-            if (isWaiting) {
-                keepSessionStorage(null);
-                call.resolve(callbackResult(callbackUrl));
-            } else {
-                keepPendingCallback(callbackUrl);
-            }
-            return;
-        }
-        if (!isWaiting) {
-            return;
-        }
-        keepSessionStorage(null);
-        if (authResult.resultCode == AuthTabIntent.RESULT_CANCELED) {
-            call.reject("Sign-in was cancelled.", "CANCELED");
-        } else {
-            call.reject("Sign-in failed with Auth Tab result " + authResult.resultCode + ".", "FAILED");
-        }
-    }
-
     private void open(PluginCall call, Uri url, boolean ephemeral) {
         if (customTabCall != null) {
             customTabCall.reject("Sign-in was cancelled.", "CANCELED");
@@ -99,14 +70,6 @@ public class WebAuthenticationPlugin extends Plugin {
         }
         String browser = CustomTabsClient.getPackageName(getContext(), null);
         try {
-            if (browser != null && CustomTabsClient.isAuthTabSupported(getContext(), browser)) {
-                Intent intent = new AuthTabIntent.Builder().setEphemeralBrowsingEnabled(ephemeral).build().intent;
-                intent.setPackage(browser);
-                intent.setData(url);
-                intent.putExtra(AuthTabIntent.EXTRA_REDIRECT_SCHEME, CALLBACK_SCHEME);
-                startActivityForResult(call, intent, "authTabResult");
-                return;
-            }
             customTabCall = call;
             CustomTabsIntent customTab = new CustomTabsIntent.Builder().setEphemeralBrowsingEnabled(ephemeral).build();
             if (browser != null) {
