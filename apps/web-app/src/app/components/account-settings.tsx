@@ -158,10 +158,7 @@ function ConfirmAccountChange({
           </DSButton>
           {!isForThisAccount && (
             <p role="alert">
-              {confirmationMismatchCopy(
-                { acceptedMethods, signInMethod },
-                "Use the same Google account that requested confirmation.",
-              )}
+              {confirmationMismatchCopy({ acceptedMethods, signInMethod }, "challenge")}
             </p>
           )}
         </>

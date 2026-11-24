@@ -30,12 +30,18 @@ const ACCOUNT_CONFIRMATION_MUTATION_KEY = ["account-confirmation"];
 const APPLE_CONFIRMATION_FAILED =
   "Apple couldn't confirm the deletion. Your account is still active, and nothing will be deleted. Try again.";
 const APPLE_ACCOUNT_MISMATCH = "Use the Apple Account linked to this Cup account.";
+const GOOGLE_ACCOUNT_MISMATCH: Record<ConfirmationMismatch, string> = {
+  challenge: "Use the same Google account that requested confirmation.",
+  session: "Use the same Google account.",
+};
 const APPLE_SUPPORT = "Can't sign in with Apple? Email support@cup.audio.";
 const APPLE_REFUSALS: Partial<Record<string, string>> = {
   [ERROR_CODE.APPLE_CONFIRMATION_FAILED]: APPLE_CONFIRMATION_FAILED,
   [ERROR_CODE.APPLE_ACCOUNT_MISMATCH]: APPLE_ACCOUNT_MISMATCH,
   [ERROR_CODE.FRESH_AUTH_REQUIRED]: `${APPLE_CONFIRMATION_FAILED} ${APPLE_SUPPORT}`,
 };
+
+type ConfirmationMismatch = "challenge" | "session";
 
 type ConfirmationMethods = {
   acceptedMethods: readonly SignInMethod[];
@@ -56,7 +62,7 @@ export function useAccountConfirmation(subject: string) {
     await new Promise<void>((resolve) => window.setTimeout(resolve, 1_100));
     if (!isSignedInAs(subject)) {
       throw new UserFacingError({
-        title: confirmationMismatchCopy(next, "Use the same Google account."),
+        title: confirmationMismatchCopy(next, "session"),
       });
     }
     await signInAgain(method);
@@ -77,10 +83,7 @@ export function useAccountConfirmation(subject: string) {
         );
         if (issued.subject !== subject || !isSignedInAs(subject)) {
           throw new UserFacingError({
-            title: confirmationMismatchCopy(
-              issued,
-              "Use the same Google account that requested confirmation.",
-            ),
+            title: confirmationMismatchCopy(issued, "challenge"),
           });
         }
         const next = { ...issued, action: command.action };
@@ -96,10 +99,7 @@ export function useAccountConfirmation(subject: string) {
       const pending = readPendingAccountChallenge();
       if (!pending || pending.subject !== subject) {
         throw new UserFacingError({
-          title: confirmationMismatchCopy(
-            pending,
-            "Use the same Google account that requested confirmation.",
-          ),
+          title: confirmationMismatchCopy(pending, "challenge"),
         });
       }
       if (command.type === "sign-in") {
@@ -110,7 +110,7 @@ export function useAccountConfirmation(subject: string) {
       const session = await getFreshAccountSession();
       if (session?.user.id !== subject) {
         throw new UserFacingError({
-          title: confirmationMismatchCopy(pending, "Use the same Google account."),
+          title: confirmationMismatchCopy(pending, "session"),
         });
       }
       try {
@@ -202,9 +202,11 @@ function credentialOf(
 
 export function confirmationMismatchCopy(
   challenge: ConfirmationMethods | null,
-  googleCopy: string,
+  mismatch: ConfirmationMismatch,
 ): string {
-  return isAppleConfirmation(challenge) ? APPLE_ACCOUNT_MISMATCH : googleCopy;
+  return isAppleConfirmation(challenge)
+    ? APPLE_ACCOUNT_MISMATCH
+    : GOOGLE_ACCOUNT_MISMATCH[mismatch];
 }
 
 function isAppleConfirmation(challenge: ConfirmationMethods | null): boolean {

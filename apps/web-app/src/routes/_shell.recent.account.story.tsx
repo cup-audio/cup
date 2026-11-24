@@ -1,5 +1,7 @@
 import { delay, http, HttpResponse } from "msw";
 
+import { ERROR_CODE } from "@cup/listener-api.client";
+
 import { accountStory } from "#src/ui-gallery/account-fixtures.jsx";
 
 export const ActiveAccount = accountStory({ path: "/recent/account" });
@@ -41,7 +43,7 @@ export const ConfirmAppleDeletionFails = accountStory({
       HttpResponse.json(
         {
           error: {
-            code: "apple-confirmation-failed",
+            code: ERROR_CODE.APPLE_CONFIRMATION_FAILED,
             message: "Apple could not confirm.",
             traceId: "0123456789abcdef0123456789abcdef",
           },
@@ -60,7 +62,7 @@ export const ConfirmAppleDeletionWithOtherAppleAccount = accountStory({
       HttpResponse.json(
         {
           error: {
-            code: "apple-account-mismatch",
+            code: ERROR_CODE.APPLE_ACCOUNT_MISMATCH,
             message: "Another Apple Account.",
             traceId: "0123456789abcdef0123456789abcdef",
           },
@@ -85,7 +87,7 @@ export const ConfirmAppleDeletionWithoutAppleCredential = accountStory({
       HttpResponse.json(
         {
           error: {
-            code: "fresh-auth-required",
+            code: ERROR_CODE.FRESH_AUTH_REQUIRED,
             message: "Confirm deletion with a fresh Apple sign-in.",
             traceId: "0123456789abcdef0123456789abcdef",
           },
