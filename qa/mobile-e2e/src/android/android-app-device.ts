@@ -1,3 +1,9 @@
+import {
+  readDeliveredSwipe,
+  readRecentQueue,
+  type DeliveredSwipe,
+  type Swipe,
+} from "#src/android/input-queue.ts";
 import type { AppDevice, LaunchArguments } from "#src/app-device.ts";
 import { openAppiumSession, toAppiumAppState, type AppiumAppState } from "#src/appium.ts";
 import { appiumFailureArtifacts, type FailureArtifact } from "#src/failure-artifacts.ts";
@@ -25,6 +31,9 @@ const FOREGROUND_GRACE_EXTRA = "cupTestForegroundGraceSeconds";
 const WEBVIEW_CONTEXT = `WEBVIEW_${APP_PACKAGE}`;
 const FOCUS_PROBE_ACTION = `${APP_PACKAGE}.FOCUS_PROBE`;
 const SYSTEM_UI_PACKAGE = "com.android.systemui";
+const RECENTS_SWIPE_DURATION_MILLISECONDS = 200;
+const RECENTS_SWIPE_ATTEMPTS = 3;
+const RECENTS_DISMISS_TIMEOUT_MILLISECONDS = 5_000;
 
 export type FocusProbeRequest = "transient" | "duck" | "full" | "abandon";
 
@@ -130,46 +139,31 @@ export class AndroidAppDevice implements AppDevice {
   async removeFromRecents(): Promise<void> {
     await this.adb(["shell", "input", "keyevent", "KEYCODE_APP_SWITCH"]);
     await this.driver.switchContext("NATIVE_APP");
-    const card = this.driver.$(`android=new UiSelector().resourceIdMatches(".*:id/snapshot")`);
-    await card.waitForExist({ timeout: 10_000 });
-    let location = await card.getLocation();
-    await waitFor(
-      "Cup's card in the recent apps to settle",
-      async () => {
-        await new Promise((resolve) => setTimeout(resolve, 300));
-        const previous = location;
-        location = await card.getLocation();
-        return location.x === previous.x && location.y === previous.y ? true : undefined;
-      },
-      10_000,
+    const keptSwipes: DeliveredSwipe[] = [];
+    while (keptSwipes.length < RECENTS_SWIPE_ATTEMPTS) {
+      const swipe = await this.swipeCupsCardUp();
+      const dumpsysInput = await this.dumpsys("input");
+      if (await this.waitForCupToLeaveRecents()) {
+        await this.adb(["shell", "input", "keyevent", "KEYCODE_HOME"]);
+        return;
+      }
+
+      const keptSwipe = readDeliveredSwipe(dumpsysInput, swipe);
+      if (keptSwipe === undefined) {
+        throw new Error(
+          `Cup's task stayed in the recent apps, and the input dispatcher's recent events show no complete swipe from (${swipe.startX}, ${swipe.startY}) to (${swipe.endX}, ${swipe.endY}):\n${readRecentQueue(dumpsysInput)}`,
+        );
+      }
+      keptSwipes.push(keptSwipe);
+    }
+
+    const releases = keptSwipes.map(
+      ({ lastMoveY, lastMoveToReleaseMilliseconds }) =>
+        `${lastMoveToReleaseMilliseconds} ms after the last move at y=${lastMoveY}`,
     );
-    const { x, y } = location;
-    const { width, height } = await card.getSize();
-    const centerX = Math.round(x + width / 2);
-    await this.adb([
-      "shell",
-      "input",
-      "swipe",
-      String(centerX),
-      String(Math.round(y + height / 2)),
-      String(centerX),
-      "0",
-      "200",
-    ]);
-    await waitFor(
-      "Cup's task to leave the recent apps",
-      async () => {
-        const { stdout } = await this.adb(["shell", "dumpsys", "activity", "recents"]);
-        return new RegExp(
-          String.raw`\bA=(?:\d+:)?${APP_PACKAGE.replaceAll(".", String.raw`\.`)}\b`,
-          "u",
-        ).test(stdout)
-          ? undefined
-          : true;
-      },
-      10_000,
+    throw new Error(
+      `The launcher kept Cup's card after ${RECENTS_SWIPE_ATTEMPTS} complete swipes, released ${releases.join("; ")}.`,
     );
-    await this.adb(["shell", "input", "keyevent", "KEYCODE_HOME"]);
   }
 
   async relaunch(): Promise<void> {
@@ -463,6 +457,56 @@ export class AndroidAppDevice implements AppDevice {
   async appDataPaths(): Promise<string[]> {
     const { stdout } = await this.adb(["shell", "run-as", APP_PACKAGE, "find", "."]);
     return stdout.split("\n").filter((line) => line !== "");
+  }
+
+  private async swipeCupsCardUp(): Promise<Swipe> {
+    const card = this.driver.$(`android=new UiSelector().resourceIdMatches(".*:id/snapshot")`);
+    await card.waitForExist({ timeout: 10_000 });
+    let location = await card.getLocation();
+    await waitFor(
+      "Cup's card in the recent apps to settle",
+      async () => {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        const previous = location;
+        location = await card.getLocation();
+        return location.x === previous.x && location.y === previous.y ? true : undefined;
+      },
+      10_000,
+    );
+    const { width, height } = await card.getSize();
+    const centerX = Math.round(location.x + width / 2);
+    const swipe = {
+      startX: centerX,
+      startY: Math.round(location.y + height / 2),
+      endX: centerX,
+      endY: 0,
+    };
+    await this.adb([
+      "shell",
+      "input",
+      "swipe",
+      String(swipe.startX),
+      String(swipe.startY),
+      String(swipe.endX),
+      String(swipe.endY),
+      String(RECENTS_SWIPE_DURATION_MILLISECONDS),
+    ]);
+    return swipe;
+  }
+
+  private async waitForCupToLeaveRecents(): Promise<boolean> {
+    const taskPattern = new RegExp(
+      String.raw`\bA=(?:\d+:)?${APP_PACKAGE.replaceAll(".", String.raw`\.`)}\b`,
+      "u",
+    );
+    const deadline = performance.now() + RECENTS_DISMISS_TIMEOUT_MILLISECONDS;
+    while (performance.now() < deadline) {
+      if (!taskPattern.test(await this.dumpsys("activity", "recents"))) {
+        return true;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    return false;
   }
 
   private async inNotificationShade<Result>(act: () => Promise<Result>): Promise<Result> {

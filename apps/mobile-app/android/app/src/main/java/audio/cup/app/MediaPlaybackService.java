@@ -56,8 +56,18 @@ public class MediaPlaybackService extends MediaSessionService {
             return false;
         }
         running = null;
-        service.pauseAllPlayersAndStopSelf();
+        service.endSession();
         return true;
+    }
+
+    private void endSession() {
+        if (session != null) {
+            if (isSessionAdded(session)) {
+                removeSession(session);
+            }
+            session.getPlayer().setPlayWhenReady(false);
+        }
+        stopSelf();
     }
 
     @Override
