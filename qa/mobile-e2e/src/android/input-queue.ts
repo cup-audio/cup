@@ -11,7 +11,7 @@ export type DeliveredSwipe = {
 };
 
 type QueuedTouch = {
-  readonly action: string;
+  readonly action: "DOWN" | "MOVE" | "UP" | "OTHER";
   readonly eventTimeMilliseconds: number;
   readonly x: number;
   readonly y: number;
@@ -23,22 +23,25 @@ export function readDeliveredSwipe(dumpsysInput: string, swipe: Swipe): Delivere
   const touches = readRecentTouches(dumpsysInput);
   const releaseIndex = touches.findLastIndex((touch) => touch.action === "UP");
   const release = touches[releaseIndex];
-  if (release === undefined || !isAt(release, swipe.endX, swipe.endY)) {
+  const lastMove = touches[releaseIndex - 1];
+  if (
+    release === undefined ||
+    !isAt(release, swipe.endX, swipe.endY) ||
+    lastMove?.action !== "MOVE"
+  ) {
     return undefined;
   }
 
-  const touchesBeforeRelease = touches.slice(0, releaseIndex);
-  const downIndex = touchesBeforeRelease.findLastIndex((touch) => touch.action === "DOWN");
-  const down = touchesBeforeRelease[downIndex];
-  if (down === undefined || !isAt(down, swipe.startX, swipe.startY)) {
-    return undefined;
-  }
-
-  const lastMove = touchesBeforeRelease
-    .slice(downIndex + 1)
-    .findLast((touch) => touch.action === "MOVE");
-  if (lastMove === undefined) {
-    return undefined;
+  for (const touch of touches.slice(0, releaseIndex).toReversed()) {
+    if (touch.action === "DOWN") {
+      if (!isAt(touch, swipe.startX, swipe.startY)) {
+        return undefined;
+      }
+      break;
+    }
+    if (touch.action !== "MOVE" || !isOnPath(touch, swipe)) {
+      return undefined;
+    }
   }
   return {
     lastMoveY: lastMove.y,
@@ -56,15 +59,28 @@ function readRecentTouches(dumpsysInput: string): QueuedTouch[] {
       /MotionEvent\([^\n]*?eventTime=(\d+), source=TOUCHSCREEN,[^\n]*?action=(\w+),[^\n]*?pointers=\[0: \((-?[\d.]+), (-?[\d.]+)\)/gu,
     ),
   ].map(([, eventTimeNanoseconds, action, x, y]) => ({
-    action: action ?? "",
+    action: toTouchAction(action),
     eventTimeMilliseconds: Number(eventTimeNanoseconds) / 1_000_000,
     x: Number(x),
     y: Number(y),
   }));
 }
 
+function toTouchAction(action: string | undefined): QueuedTouch["action"] {
+  return action === "DOWN" || action === "MOVE" || action === "UP" ? action : "OTHER";
+}
+
 function isAt(touch: QueuedTouch, x: number, y: number): boolean {
   return (
     Math.abs(touch.x - x) <= COORDINATE_TOLERANCE && Math.abs(touch.y - y) <= COORDINATE_TOLERANCE
+  );
+}
+
+function isOnPath(touch: QueuedTouch, swipe: Swipe): boolean {
+  const [topY, bottomY] = [Math.min(swipe.startY, swipe.endY), Math.max(swipe.startY, swipe.endY)];
+  return (
+    Math.abs(touch.x - swipe.startX) <= COORDINATE_TOLERANCE &&
+    touch.y >= topY - COORDINATE_TOLERANCE &&
+    touch.y <= bottomY + COORDINATE_TOLERANCE
   );
 }

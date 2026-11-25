@@ -139,8 +139,8 @@ export class AndroidAppDevice implements AppDevice {
   async removeFromRecents(): Promise<void> {
     await this.adb(["shell", "input", "keyevent", "KEYCODE_APP_SWITCH"]);
     await this.driver.switchContext("NATIVE_APP");
-    const droppedSwipes: DeliveredSwipe[] = [];
-    while (droppedSwipes.length < RECENTS_SWIPE_ATTEMPTS) {
+    const keptSwipes: DeliveredSwipe[] = [];
+    while (keptSwipes.length < RECENTS_SWIPE_ATTEMPTS) {
       const swipe = await this.swipeCupsCardUp();
       const dumpsysInput = await this.dumpsys("input");
       if (await this.waitForCupToLeaveRecents()) {
@@ -148,16 +148,16 @@ export class AndroidAppDevice implements AppDevice {
         return;
       }
 
-      const droppedSwipe = readDeliveredSwipe(dumpsysInput, swipe);
-      if (droppedSwipe === undefined) {
+      const keptSwipe = readDeliveredSwipe(dumpsysInput, swipe);
+      if (keptSwipe === undefined) {
         throw new Error(
           `Cup's task stayed in the recent apps, and the input dispatcher's recent events show no complete swipe from (${swipe.startX}, ${swipe.startY}) to (${swipe.endX}, ${swipe.endY}):\n${readRecentQueue(dumpsysInput)}`,
         );
       }
-      droppedSwipes.push(droppedSwipe);
+      keptSwipes.push(keptSwipe);
     }
 
-    const releases = droppedSwipes.map(
+    const releases = keptSwipes.map(
       ({ lastMoveY, lastMoveToReleaseMilliseconds }) =>
         `${lastMoveToReleaseMilliseconds} ms after the last move at y=${lastMoveY}`,
     );

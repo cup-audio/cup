@@ -65,9 +65,49 @@ test("only the latest swipe counts when the queue holds an earlier one", () => {
   });
 });
 
-test("a swipe whose start fell out of the queue is not reported as delivered", () => {
+test("a swipe whose start fell out of the ten-event queue counts as delivered when every queued move lies on its path", () => {
   const dumpsys = dumpsysInput([
-    touch(352_956, "MOVE", 540, 700),
+    touch(352_961, "MOVE", 540, 1037.9),
+    touch(352_975, "MOVE", 540, 954.4),
+    touch(352_993, "MOVE", 540, 847),
+    touch(353_017, "MOVE", 540, 703.9),
+    touch(353_035, "MOVE", 540, 596.5),
+    touch(353_052, "MOVE", 540, 495.1),
+    touch(353_086, "MOVE", 540, 292.3),
+    touch(353_109, "MOVE", 540, 155.1),
+    touch(353_126, "MOVE", 540, 53.7),
+    touch(353_147, "UP", 540, 0),
+  ]);
+
+  expect(readDeliveredSwipe(dumpsys, SWIPE)).toStrictEqual({
+    lastMoveY: 53.7,
+    lastMoveToReleaseMilliseconds: 21,
+  });
+});
+
+test("a move off the swipe's path is not reported as delivered", () => {
+  const dumpsys = dumpsysInput([
+    touch(352_956, "MOVE", 774, 700),
+    touch(352_979, "MOVE", 540, 346),
+    touch(353_055, "UP", 540, 0),
+  ]);
+
+  expect(readDeliveredSwipe(dumpsys, SWIPE)).toBeUndefined();
+});
+
+test("moves that follow another gesture's release are not reported as delivered", () => {
+  const dumpsys = dumpsysInput([
+    touch(352_900, "UP", 540, 1193),
+    touch(352_979, "MOVE", 540, 346),
+    touch(353_055, "UP", 540, 0),
+  ]);
+
+  expect(readDeliveredSwipe(dumpsys, SWIPE)).toBeUndefined();
+});
+
+test("a swipe that started elsewhere is not reported as delivered", () => {
+  const dumpsys = dumpsysInput([
+    touch(352_900, "DOWN", 540, 1500),
     touch(352_979, "MOVE", 540, 346),
     touch(353_055, "UP", 540, 0),
   ]);
