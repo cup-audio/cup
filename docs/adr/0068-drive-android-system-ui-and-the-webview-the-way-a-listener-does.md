@@ -13,6 +13,7 @@ Recent apps ([Android app device](../../qa/mobile-e2e/src/android/android-app-de
 - **`removeFromRecents` swipes Cup's task away in the recent apps screen**, which destroys its activity; Android then tells its running services through `onTaskRemoved`.
 - **Cup's card is found by its snapshot.** The launcher shows the recent apps with Cup's card, the latest task, in the middle; its snapshot exists only there, unlike a "Cup" label in Cup's own screen.
 - **The card is swiped once it has stopped moving**, since it slides into place first.
+- **A swipe that the launcher received whole but did not act on is repeated, up to three swipes in all** (2026-11-24). The swipe dismisses the card only as a fling, and the launcher reads no fling when the `input` process pauses before the release. The helper repeats a swipe only when `dumpsys input` shows it was delivered from start to release. A drag held before the release avoids the fling, but it dismissed the card reliably only from one narrow start on the card ([swiping Cup out of the recent apps](../../qa/mobile-e2e/README.md#swiping-cup-out-of-the-recent-apps-android)).
 
 The keyboard and the media controls ([Android app device](../../qa/mobile-e2e/src/android/android-app-device.ts)):
 
