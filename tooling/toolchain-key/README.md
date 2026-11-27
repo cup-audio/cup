@@ -8,7 +8,7 @@ This CLI writes the versions of the host toolchain an E2E suite runs on to a key
 toolchain-key playwright --output .toolchain/playwright.json
 ```
 
-`playwright` writes the base image tag and the ID of the Playwright Server image that [`@patricktree-stack/config-playwright`](../../.patricktree-stack/tooling/config-playwright/README.md) runs the browsers in. It derives the image tag as that package's global setup does and, when the image is missing, builds it the same way first, so the key of a machine's first run matches the key of its later runs and the suite's global setup finds the image built.
+`playwright` writes the base image tag and the ID of the Playwright Server image that [`@patricktree-stack/config-playwright`](../../.patricktree-stack/tooling/config-playwright/README.md) runs the browsers in. It derives the image tag through that package's [`playwright-server-image`](../../.patricktree-stack/tooling/config-playwright/README.md#playwright-server-image) export, which the package's global setup uses too, and, when the image is missing, builds it through the same export first, so the key of a machine's first run matches the key of its later runs and the suite's global setup finds the image built.
 
 A version that cannot be read is written as `{ "unreadable": "<reason>" }` in its place, so the reader still writes every other version. The `playwright` command fails only when it cannot write the file.
 
@@ -26,4 +26,4 @@ An E2E package adds a `turbo:e2e:toolchain` script that runs this CLI, starts it
 
 ## Validation
 
-Run `pnpm --filter @cup/toolchain-key test` and `lint`. The [key file tests](test/key-file.test.ts) cover the check: a readable key, nested unreadable versions, a missing file and invalid JSON. One Playwright test points Docker at a socket that does not exist and checks that the key holds the reason and is the same on every run; another puts a fake `docker` without the image first on the `PATH` and checks that the first run builds it and writes the same key as the second.
+Run `pnpm --filter @cup/toolchain-key test` and `lint`. The [key file tests](test/key-file.test.ts) cover the check: a readable key, nested unreadable versions, a missing file and invalid JSON. One Playwright test points Docker at a socket that does not exist and checks that the key holds the reason and is the same on every run; another puts a fake `docker` without the image first on the `PATH` and checks that the first run builds it and writes the same key as the second. A third runs the shared configuration's global setup and the reader against a fake `docker` that fails every build, and checks that both inspect the same image tag and run the same build command, so the test fails when the two derive different images.
