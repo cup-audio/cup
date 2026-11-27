@@ -11,7 +11,6 @@ const FILES = [
   "apps/cloudflare-worker/.env.local",
   "libs/narration-source-analysis/.env.evals",
 ] as const;
-const LEGACY_EVALS_FILE = "libs/narration-content-selection/.env.evals";
 const CREDENTIALS = {
   CLOUDFLARE_ACCOUNT_ID: "abcdef0123456789",
   CLOUDFLARE_API_KEY: "secret-test-token",
@@ -115,33 +114,6 @@ test("conflicts fail before creating another file and never overwrite", async (t
       .join("\n"),
   );
   assert.equal((await run(["check"])).status, 1);
-});
-
-test("setup moves the evals file from the library's old path", async (t) => {
-  const { root, run } = await fixture(t);
-  const content = Object.entries(CREDENTIALS)
-    .map(([key, value]) => `${key}=${value}`)
-    .join("\n");
-  await fs.writeFile(path.join(root, FILES[0]), content);
-  await fs.mkdir(path.join(root, path.dirname(LEGACY_EVALS_FILE)), { recursive: true });
-  await fs.writeFile(path.join(root, LEGACY_EVALS_FILE), `${content}\nEXTRA=value\n`);
-  const result = await run(["setup", "--from", path.join(root, FILES[0])], {});
-  assert.equal(result.status, 0);
-  assert.ok(result.stdout.includes(`Moved ${LEGACY_EVALS_FILE} to ${FILES[1]}`));
-  assert.equal(await fs.readFile(path.join(root, FILES[1]), "utf8"), `${content}\nEXTRA=value\n`);
-  await assert.rejects(fs.stat(path.join(root, LEGACY_EVALS_FILE)), { code: "ENOENT" });
-  assert.equal((await run(["check"], {})).status, 0);
-});
-
-test("setup keeps an evals file at the new path and leaves the old one alone", async (t) => {
-  const { root, run } = await fixture(t);
-  assert.equal((await run(["setup"])).status, 0);
-  const current = await fs.readFile(path.join(root, FILES[1]), "utf8");
-  await fs.mkdir(path.join(root, path.dirname(LEGACY_EVALS_FILE)), { recursive: true });
-  await fs.writeFile(path.join(root, LEGACY_EVALS_FILE), "OLD=value\n");
-  assert.equal((await run(["setup"])).status, 0);
-  assert.equal(await fs.readFile(path.join(root, FILES[1]), "utf8"), current);
-  assert.equal(await fs.readFile(path.join(root, LEGACY_EVALS_FILE), "utf8"), "OLD=value\n");
 });
 
 test("check rejects empty and placeholder values in existing files", async (t) => {

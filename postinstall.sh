@@ -18,10 +18,6 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     fi
 fi
 
-if [ -f libs/narration-content-selection/.env.evals ] && [ ! -f libs/narration-source-analysis/.env.evals ]; then
-    node tooling/env-setup/src/cli.ts setup --from apps/cloudflare-worker/.env.local
-fi
-
 pnpm run env:check
 
 pnpm run cf-typegen
