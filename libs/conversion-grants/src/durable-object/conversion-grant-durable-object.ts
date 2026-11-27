@@ -41,6 +41,7 @@ import type {
   GrantRegistrySnapshot,
   GrantRecord,
   PendingConversion,
+  ProviderUsage,
   StartGrantConversionResult,
   TerminalOutcome,
   ValidateSessionResult,
@@ -512,7 +513,7 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
       hasCoverImage?: true;
       narrationLanguage?: string;
       measurements?: ConversionMeasurements;
-      providerUsage?: Record<string, unknown>;
+      providerUsage?: ProviderUsage;
       completedAtMs?: number;
     },
     narrationTextCharactersBySegment?: readonly number[],

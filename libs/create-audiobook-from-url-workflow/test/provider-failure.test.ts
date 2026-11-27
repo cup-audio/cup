@@ -1080,17 +1080,11 @@ async function createOwnedConversion(kind: "trial" | "account") {
           grant.getReadyAudiobookReference(conversionId),
         hasCoverImage: async (conversionId: string) => {
           const conversion = await grant.getConversion(conversionId);
-          return (
-            conversion !== undefined &&
-            "hasCoverImage" in conversion &&
-            conversion.hasCoverImage === true
-          );
+          return conversion?.status === "ready" && conversion.hasCoverImage === true;
         },
         readyNarrationLanguage: async (conversionId: string) => {
           const conversion = await grant.getConversion(conversionId);
-          return conversion !== undefined && "narrationLanguage" in conversion
-            ? conversion.narrationLanguage
-            : undefined;
+          return conversion?.status === "ready" ? conversion.narrationLanguage : undefined;
         },
       },
     };

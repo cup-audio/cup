@@ -14,6 +14,8 @@ import {
   defineAudioSegments,
 } from "@cup/duration-ledger";
 
+import type { ProviderUsage } from "#src/domain/grant-model.ts";
+
 export { creditBalances, creditLedger, creditOperations };
 
 const CONVERSION_PHASE_SQL_LIST = sql.raw(
@@ -78,7 +80,7 @@ export const conversions = sqliteTable(
     hasCoverImage: integer("has_cover_image", { mode: "boolean" }),
     narrationLanguage: text("narration_language"),
     measurements: text("measurements_json", { mode: "json" }).$type<ConversionMeasurements>(),
-    providerUsage: text("provider_usage_json", { mode: "json" }).$type<Record<string, unknown>>(),
+    providerUsage: text("provider_usage_json", { mode: "json" }).$type<ProviderUsage>(),
     failureCategory: text("failure_category", { enum: FAILURE_CATEGORIES }),
     explanation: text(),
     diagnosticReference: text("diagnostic_reference"),
