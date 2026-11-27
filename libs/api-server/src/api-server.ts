@@ -7,6 +7,7 @@ import { NONCE, secureHeaders } from "hono/secure-headers";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { Temporal } from "temporal-polyfill";
 
+import type { AccountAllowanceAdjustmentResult } from "@cup/accounts/contracts";
 import { countNarrationTextCharactersBySegment } from "@cup/audiobook-production";
 import { findNarrationTrackDurations } from "@cup/conversion-contracts";
 import {
@@ -771,28 +772,27 @@ const listenerApiHandlers: ListenerApiHandlers<ApiServerEnvironment> = {
   },
 };
 
-const ACCOUNT_ADJUSTMENT_CONFLICTS = [
-  {
-    thrownMessage: "Account is not active",
+const ACCOUNT_ADJUSTMENT_CONFLICTS = {
+  "account-not-initialized": {
     code: "account-not-active",
     message: "The account is not active.",
   },
-  {
-    thrownMessage: "Account is not initialized",
+  "account-not-active": {
     code: "account-not-active",
     message: "The account is not active.",
   },
-  {
-    thrownMessage: "Allowance adjustment exceeds available duration",
+  "exceeds-available-duration": {
     code: "adjustment-exceeds-available-duration",
     message: "The reduction exceeds the account's available duration.",
   },
-  {
-    thrownMessage: "Allowance adjustment idempotency conflict",
+  "idempotency-conflict": {
     code: "idempotency-conflict",
     message: "The request ID is already bound to another adjustment.",
   },
-] as const;
+} as const satisfies Record<
+  Exclude<AccountAllowanceAdjustmentResult["result"], "adjusted">,
+  { code: string; message: string }
+>;
 
 const operatorApiHandlers: OperatorApiHandlers<ApiServerEnvironment> = {
   async listAccounts(context) {
@@ -860,16 +860,14 @@ const operatorApiHandlers: OperatorApiHandlers<ApiServerEnvironment> = {
     }
     const account = context.env.ACCOUNTS.get(context.env.ACCOUNTS.idFromName(accountId));
     try {
-      await account.adjustAllowance(requestId, amountMilliseconds, reason);
+      const adjustment = await account.adjustAllowance(requestId, amountMilliseconds, reason);
+      if (adjustment.result !== "adjusted") {
+        const conflict = ACCOUNT_ADJUSTMENT_CONFLICTS[adjustment.result];
+        return jsonError(context.get("traceId"), conflict.code, conflict.message, 409);
+      }
       const snapshot = await account.inspect();
       return context.json({ accountId, balance: snapshot.balance }, 200);
     } catch (error) {
-      const conflict = ACCOUNT_ADJUSTMENT_CONFLICTS.find(
-        ({ thrownMessage }) => error instanceof Error && error.message.includes(thrownMessage),
-      );
-      if (conflict !== undefined) {
-        return jsonError(context.get("traceId"), conflict.code, conflict.message, 409);
-      }
       captureException(error);
       return jsonError(
         context.get("traceId"),

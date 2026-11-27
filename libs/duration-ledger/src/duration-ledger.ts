@@ -19,6 +19,11 @@ export type DurationTotals = {
   spentMilliseconds: number;
 };
 
+export type AllowanceAdjustmentResult =
+  | { result: "adjusted" }
+  | { result: "idempotency-conflict" }
+  | { result: "exceeds-available-duration" };
+
 type DurationLedgerEntry = Pick<
   typeof creditLedger.$inferSelect,
   | "eventKind"
@@ -269,7 +274,12 @@ export class DurationLedger {
       .map(toSegmentUsage);
   }
 
-  adjustAllowance(requestId: string, amount: number, cause: string, nowMs: number): void {
+  adjustAllowance(
+    requestId: string,
+    amount: number,
+    cause: string,
+    nowMs: number,
+  ): AllowanceAdjustmentResult {
     z.number().int().nonnegative().safe().parse(nowMs);
     z.uuidv4().parse(requestId);
     z.number()
@@ -278,7 +288,7 @@ export class DurationLedger {
       .refine((value) => value !== 0)
       .parse(amount);
     z.string().min(1).max(256).parse(cause);
-    this.database.transaction(() => {
+    return this.database.transaction((): AllowanceAdjustmentResult => {
       const operationId = `adjustment:${requestId}`;
       const existing = this.database
         .select({ delta: creditLedger.availableDelta, cause: creditLedger.cause })
@@ -287,12 +297,12 @@ export class DurationLedger {
         .get();
       if (existing) {
         if (existing.delta !== amount || existing.cause !== cause) {
-          throw new CupError("Allowance adjustment idempotency conflict");
+          return { result: "idempotency-conflict" };
         }
-        return;
+        return { result: "adjusted" };
       }
       if (amount < 0 && -amount > this.balance().available) {
-        throw new CupError("Allowance adjustment exceeds available duration");
+        return { result: "exceeds-available-duration" };
       }
       this.database
         .insert(creditOperations)
@@ -307,6 +317,7 @@ export class DurationLedger {
         })
         .run();
       this.appendEntry(operationId, "adjustment", Math.abs(amount), amount, 0, nowMs, cause);
+      return { result: "adjusted" };
     });
   }
 

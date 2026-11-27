@@ -23,6 +23,7 @@ import {
 } from "#src/domain/account-contracts.ts";
 import type {
   AccountAccountingInspection,
+  AccountAllowanceAdjustmentResult,
   AccountLedgerPage,
   AccountConversion,
   AccountConversionDeletion,
@@ -525,9 +526,20 @@ export class AccountSqlite {
     });
   }
 
-  adjustAllowance(requestId: string, amount: number, cause: string, nowMs: number): void {
-    this.requireActive();
-    this.duration.adjustAllowance(requestId, amount, cause, nowMs);
+  adjustAllowance(
+    requestId: string,
+    amount: number,
+    cause: string,
+    nowMs: number,
+  ): AccountAllowanceAdjustmentResult {
+    const identity = this.readIdentity();
+    if (identity === undefined) {
+      return { result: "account-not-initialized" };
+    }
+    if (identity.state !== "active") {
+      return { result: "account-not-active" };
+    }
+    return this.duration.adjustAllowance(requestId, amount, cause, nowMs);
   }
 
   inspectAccounting(): AccountAccountingInspection {
