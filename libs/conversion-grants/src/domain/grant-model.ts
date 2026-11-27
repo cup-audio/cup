@@ -22,6 +22,12 @@ export const GRANT_SCHEMA_VERSION = 6;
 export const DEFAULT_ALLOWANCE_MILLISECONDS = 120 * 60 * 1_000;
 export const RECONCILIATION_CUTOFF_MS = 48 * 60 * 60 * 1_000;
 
+type ProviderUsageScalar = string | number | boolean;
+export type ProviderUsage = Record<
+  string,
+  Record<string, ProviderUsageScalar | Record<string, ProviderUsageScalar>>
+>;
+
 export type PendingConversion = {
   conversionId: string;
   idempotencyKey: string;
@@ -42,7 +48,7 @@ export type ReadyConversion = Omit<PendingConversion, "status"> & {
   hasCoverImage?: true;
   narrationLanguage?: string;
   measurements?: ConversionMeasurements;
-  providerUsage?: Record<string, unknown>;
+  providerUsage?: ProviderUsage;
 };
 export type FailedConversion = Omit<PendingConversion, "status"> & {
   status: "failed";
@@ -63,7 +69,7 @@ export type TerminalOutcome =
       hasCoverImage?: true;
       narrationLanguage?: string;
       measurements?: ConversionMeasurements;
-      providerUsage?: Record<string, unknown>;
+      providerUsage?: ProviderUsage;
     }
   | {
       status: "failed";
