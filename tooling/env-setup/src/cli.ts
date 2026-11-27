@@ -4,9 +4,7 @@ import path from "node:path";
 import util from "node:util";
 
 const ROOT = path.resolve(import.meta.dirname, "../../..");
-const EVALS_FILE = "libs/narration-source-analysis/.env.evals";
-const FILES = ["apps/cloudflare-worker/.env.local", EVALS_FILE];
-const RELOCATIONS = [{ from: "libs/narration-content-selection/.env.evals", to: EVALS_FILE }];
+const FILES = ["apps/cloudflare-worker/.env.local", "libs/narration-source-analysis/.env.evals"];
 const UPLOAD_KEYSTORE = "apps/mobile-app/android/upload-keystore.jks";
 const KEYS = ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_KEY"] as const;
 const SENTRY_AUTH_TOKEN = "SENTRY_AUTH_TOKEN";
@@ -33,10 +31,7 @@ export async function runCli(
     .command("setup")
     .description("Create missing environment files from a file or exported credentials")
     .option("--from <env-file>", "read credentials from an existing environment file")
-    .action(async (options) => {
-      await relocate();
-      await run("setup", options.from);
-    });
+    .action(async (options) => run("setup", options.from));
 
   program
     .command("check")
@@ -119,15 +114,6 @@ export async function runCli(
     await fs.copyFile(source, target, fs.constants.COPYFILE_EXCL);
     await fs.chmod(target, 0o600);
     output.log(`Copied ${UPLOAD_KEYSTORE} from ${path.resolve(from)}`);
-  }
-
-  async function relocate() {
-    for (const { from, to } of RELOCATIONS) {
-      if ((await exists(path.join(root, from))) && !(await exists(path.join(root, to)))) {
-        await fs.rename(path.join(root, from), path.join(root, to));
-        output.log(`Moved ${from} to ${to}`);
-      }
-    }
   }
 }
 
