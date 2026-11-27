@@ -8,8 +8,6 @@ import { createListenerApiClient } from "#src/api-client.js";
 import { getFreshAccountSession, getResourceAccountSession } from "#src/auth/account-session.js";
 import { UserFacingError } from "#src/errors.js";
 
-export { ERROR_CODE, RpcError } from "@cup/listener-api.client";
-
 type ApiResponse = Awaited<Parameters<typeof parseOkResponse>[0]>;
 type ApiResult<Response extends ApiResponse> = ReturnType<typeof parseOkResponse<Response>>;
 type AccountAuth = { subject: string };

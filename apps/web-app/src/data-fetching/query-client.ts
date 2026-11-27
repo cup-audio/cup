@@ -1,7 +1,7 @@
 import { MutationCache, QueryCache, QueryClient } from "@tanstack/react-query";
 
-import { RpcError } from "@cup/listener-api.client";
-
+import { CLEAR_QUERIES_EVENT_NAME } from "#src/data-fetching/query-cache-events.js";
+import { RpcError } from "#src/errors.js";
 import { notifyError, toastManager } from "#src/notifications.js";
 
 type ErrorDisplayMeta = {
@@ -56,6 +56,8 @@ export const queryClient = new QueryClient({
     },
   },
 });
+
+window.addEventListener(CLEAR_QUERIES_EVENT_NAME, () => queryClient.clear());
 
 function isAccessLost(error: unknown): boolean {
   return error instanceof RpcError && (error.status === 403 || error.status === 404);

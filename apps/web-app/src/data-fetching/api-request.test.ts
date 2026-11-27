@@ -1,8 +1,7 @@
 import type { Page } from "@playwright/test";
 
-import { ERROR_CODE } from "@cup/listener-api.client";
-
 import { ACCOUNT_SESSION_STORAGE_KEY } from "#src/auth/account-session-storage.ts";
+import { ERROR_CODE } from "#src/errors.ts";
 import { expect, test } from "#src/test-utils/component-test.ts";
 
 test.use({ serviceWorkers: "block" });
@@ -53,6 +52,7 @@ async function recordAudiobookAuthorization(page: Page) {
 }
 
 type ApiRequestModule = typeof import("#src/data-fetching/api-request.ts");
+type ErrorsModule = typeof import("#src/errors.ts");
 
 test("unsuccessful responses reject with the API error code, status, retry delay, and trace ID", async ({
   page,
@@ -90,7 +90,9 @@ test("unsuccessful responses reject with the API error code, status, retry delay
   await page.goto("/ui-gallery/index.html");
   const failures = await page.evaluate(async (grantId) => {
     const path = "/src/data-fetching/api-request.ts";
-    const { requestApi, RpcError }: ApiRequestModule = await import(path);
+    const errorsPath = "/src/errors.ts";
+    const { requestApi }: ApiRequestModule = await import(path);
+    const { RpcError }: ErrorsModule = await import(errorsPath);
     const results = [];
     for (let attempt = 0; attempt < 4; attempt += 1) {
       const failure: unknown = await requestApi("none", (client) =>
@@ -145,7 +147,9 @@ test("optional account authorization sends no token while signed out", async ({ 
   await page.goto("/ui-gallery/index.html");
   const status = await page.evaluate(async (conversionId) => {
     const path = "/src/data-fetching/api-request.ts";
-    const { requestApi, RpcError }: ApiRequestModule = await import(path);
+    const errorsPath = "/src/errors.ts";
+    const { requestApi }: ApiRequestModule = await import(path);
+    const { RpcError }: ErrorsModule = await import(errorsPath);
     return requestApi("optional", (client) => client.getAudiobook({ conversionId }, {})).then(
       () => null,
       (error: unknown) => (error instanceof RpcError ? error.status : null),

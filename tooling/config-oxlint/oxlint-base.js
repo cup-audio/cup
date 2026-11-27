@@ -5,7 +5,14 @@
 import { config as baseConfig } from "@patricktree-stack/config-oxlint/oxlint-base.js";
 import { defineConfig } from "oxlint";
 
-/** @typedef {{ group: string[]; message: string; allowTypeImports?: boolean }} RestrictedImportsPattern */
+/**
+ * @typedef {{
+ *   group: string[];
+ *   message: string;
+ *   importNames?: string[];
+ *   allowTypeImports?: boolean;
+ * }} RestrictedImportsPattern
+ */
 
 const noRestrictedGlobalsRule = baseConfig.rules?.["no-restricted-globals"];
 const noRestrictedImports = baseConfig.rules?.["no-restricted-imports"];

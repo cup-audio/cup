@@ -11,9 +11,10 @@ import {
 
 import { removeFromCachedAccountHistory } from "#src/data-fetching/account-history.js";
 import { invalidateAccountQueries } from "#src/data-fetching/account.js";
-import { ERROR_CODE, requestApi, RpcError } from "#src/data-fetching/api-request.js";
+import { requestApi } from "#src/data-fetching/api-request.js";
 import { queryClient } from "#src/data-fetching/query-client.js";
 import { QUERY_KEYS } from "#src/data-fetching/query-keys.js";
+import { ERROR_CODE, RpcError } from "#src/errors.js";
 import { notifyError } from "#src/notifications.js";
 
 const POLL_INTERVAL_MS = 1_000;

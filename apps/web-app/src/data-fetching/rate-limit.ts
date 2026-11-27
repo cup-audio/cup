@@ -1,7 +1,7 @@
 import React from "react";
 import { Temporal } from "temporal-polyfill";
 
-import { RpcError } from "#src/data-fetching/api-request.js";
+import { RpcError } from "#src/errors.js";
 
 export function useRateLimitCountdown(error: unknown) {
   const [nowMs, setNowMs] = React.useState(() => Temporal.Now.instant().epochMilliseconds);

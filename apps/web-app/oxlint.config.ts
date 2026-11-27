@@ -8,9 +8,17 @@ const API_CLIENT_RESTRICTION = {
     "Send API requests through `requestApi` in `src/data-fetching/api-request.ts`, which attaches the account token each call asks for.",
 };
 
+const API_ERROR_RESTRICTION = {
+  group: ["@cup/listener-api.client"],
+  importNames: ["ERROR_CODE", "RpcError"],
+  message:
+    "Import `ERROR_CODE` and `RpcError` from `#src/errors.js`, the one module for the app's errors.",
+};
+
 export default defineConfig({
   extends: [repoConfig],
   rules: {
+    "import/no-cycle": "error",
     "eslint/no-restricted-globals": [
       "error",
       {
@@ -29,13 +37,13 @@ export default defineConfig({
     {
       files: ["**"],
       rules: {
-        "no-restricted-imports": restrictImports(API_CLIENT_RESTRICTION),
+        "no-restricted-imports": restrictImports(API_CLIENT_RESTRICTION, API_ERROR_RESTRICTION),
       },
     },
     {
       files: ["src/**/*.test.ts"],
       rules: {
-        "no-restricted-imports": restrictImports(API_CLIENT_RESTRICTION, {
+        "no-restricted-imports": restrictImports(API_CLIENT_RESTRICTION, API_ERROR_RESTRICTION, {
           group: ["@playwright/test"],
           allowTypeImports: true,
           message:
@@ -46,7 +54,13 @@ export default defineConfig({
     {
       files: ["src/data-fetching/api-request.ts", "src/auth/account-session.ts"],
       rules: {
-        "no-restricted-imports": restrictImports(),
+        "no-restricted-imports": restrictImports(API_ERROR_RESTRICTION),
+      },
+    },
+    {
+      files: ["src/errors.ts"],
+      rules: {
+        "no-restricted-imports": restrictImports(API_CLIENT_RESTRICTION),
       },
     },
   ],
