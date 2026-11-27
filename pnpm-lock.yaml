@@ -2859,9 +2859,6 @@ importers:
       '@patricktree-stack/config-playwright':
         specifier: workspace:*
         version: link:../../.patricktree-stack/tooling/config-playwright
-      '@playwright/test':
-        specifier: 'catalog:'
-        version: 1.65.1
       commander:
         specifier: ^15.1.0
         version: 15.1.0

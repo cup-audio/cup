@@ -33,7 +33,6 @@
   "dependencies": {
     "@commander-js/extra-typings": "^15.1.0",
     "@patricktree-stack/config-playwright": "workspace:*",
-    "@playwright/test": "catalog:",
     "commander": "^15.1.0"
   },
   "devDependencies": {
