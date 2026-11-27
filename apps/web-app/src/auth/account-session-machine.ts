@@ -1,4 +1,3 @@
-import * as Sentry from "@sentry/react";
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
 import {
   createAsyncLogic,
@@ -9,6 +8,8 @@ import {
   type SnapshotFrom,
 } from "xstate";
 import { z } from "zod";
+
+import { reportFailure } from "#src/report-failure.ts";
 
 export type Reply<Value> = {
   resolve: (value: Value) => void;
@@ -566,12 +567,6 @@ function rejectAll(replies: readonly Reply<void>[], error: unknown) {
   for (const reply of replies) {
     reply.reject(error);
   }
-}
-
-function reportFailure(message: string) {
-  return (error: unknown) => {
-    Sentry.captureException(new Error(message, { cause: error }));
-  };
 }
 
 function toError(error: unknown) {
