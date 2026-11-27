@@ -497,15 +497,37 @@ test("account inspection results match the account contracts the operator API co
 test("invalid debits roll back operation and ledger while adjustments stay idempotent", async () => {
   const { account } = await createAccount();
   const requestId = crypto.randomUUID();
-  await expectWorkerRpcRejection(
-    account.adjustAllowance(requestId, -1_800_001, "correction", nowMs),
-  );
+  expect(await account.adjustAllowance(requestId, -1_800_001, "correction", nowMs)).toEqual({
+    result: "exceeds-available-duration",
+  });
   expect((await account.inspectAccounting()).entries).toBe(1);
-  await account.adjustAllowance(requestId, 2, "correction", nowMs);
-  await account.adjustAllowance(requestId, 2, "correction", nowMs);
-  await expectWorkerRpcRejection(account.adjustAllowance(requestId, 3, "correction", nowMs));
+  expect(await account.adjustAllowance(requestId, 2, "correction", nowMs)).toEqual({
+    result: "adjusted",
+  });
+  expect(await account.adjustAllowance(requestId, 2, "correction", nowMs)).toEqual({
+    result: "adjusted",
+  });
+  expect(await account.adjustAllowance(requestId, 3, "correction", nowMs)).toEqual({
+    result: "idempotency-conflict",
+  });
   expect((await account.inspect()).balance.available).toBe(1_800_002);
   expect((await account.inspectAccounting()).entries).toBe(2);
+});
+
+test("allowance adjustments are refused for uninitialized and inactive accounts", async () => {
+  const uninitialized = bindings.ACCOUNTS.get(bindings.ACCOUNTS.idFromName(crypto.randomUUID()));
+  expect(await uninitialized.adjustAllowance(crypto.randomUUID(), 60_000, "refund", nowMs)).toEqual(
+    { result: "account-not-initialized" },
+  );
+
+  const { account, accountId } = await createAccount();
+  const before = await account.inspectAccounting();
+  const storage = await worker.getDurableObjectStorage("ACCOUNTS", { name: accountId });
+  await storage.exec("UPDATE account SET state = 'deleting', execution_epoch = 2");
+  expect(await account.adjustAllowance(crypto.randomUUID(), 60_000, "refund", nowMs)).toEqual({
+    result: "account-not-active",
+  });
+  expect(await account.inspectAccounting()).toEqual(before);
 });
 
 test("blocked accounts deny new reservations and final deletion denies settlement", async () => {

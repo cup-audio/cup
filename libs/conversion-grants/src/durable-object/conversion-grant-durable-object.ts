@@ -580,12 +580,15 @@ export class ConversionGrantDurableObject extends DurableObject<ConversionGrantE
         return { result: "below-used-duration" as const };
       }
       if (changed) {
-        this.sqlite.duration.adjustAllowance(
+        const adjustment = this.sqlite.duration.adjustAllowance(
           crypto.randomUUID(),
           change,
           "operator-set-allowance",
           nowMs,
         );
+        if (adjustment.result !== "adjusted") {
+          throw new CupError(`Grant allowance adjustment was refused: ${adjustment.result}`);
+        }
         record.registrySnapshotRevision += 1;
         await this.sqlite.save(record);
         await this.ctx.storage.setAlarm(nowMs + RECONCILIATION_RETRY_MS);

@@ -2,6 +2,7 @@ import { expect, test, vi } from "vitest";
 
 import type {
   AccountAccountingInspection,
+  AccountAllowanceAdjustmentResult,
   AccountArtifactWriter,
   AccountConversionDeletion,
   AccountHistoryPage,
@@ -202,8 +203,8 @@ function fixture() {
     (page: { limit: number; cursor?: string }) => Promise<AccountLedgerPage>
   >(async () => ledgerPage);
   const adjustAllowance = vi.fn<
-    (requestId: string, amount: number, cause: string) => Promise<void>
-  >(async () => undefined);
+    (requestId: string, amount: number, cause: string) => Promise<AccountAllowanceAdjustmentResult>
+  >(async () => ({ result: "adjusted" }));
   const listAccounts = vi.fn<
     (input: { phase?: string; limit: number; cursor?: string }) => Promise<{
       accounts: (typeof identity | typeof projectedIdentity)[];
@@ -480,13 +481,13 @@ test("rejects account allowance adjustments for unknown accounts and invalid inp
 });
 
 test.each([
-  ["Account is not active", "account-not-active"],
-  ["Account is not initialized", "account-not-active"],
-  ["Allowance adjustment exceeds available duration", "adjustment-exceeds-available-duration"],
-  ["Allowance adjustment idempotency conflict", "idempotency-conflict"],
-])("maps the account ledger rejection %s to a conflict", async (message, code) => {
-  const { env, adjustAllowance } = fixture();
-  adjustAllowance.mockRejectedValueOnce(new Error(message));
+  ["account-not-initialized", "account-not-active"],
+  ["account-not-active", "account-not-active"],
+  ["exceeds-available-duration", "adjustment-exceeds-available-duration"],
+  ["idempotency-conflict", "idempotency-conflict"],
+] as const)("maps the account adjustment refusal %s to a conflict", async (result, code) => {
+  const { env, adjustAllowance, readAccount } = fixture();
+  adjustAllowance.mockResolvedValueOnce({ result });
   const app = createApiServer({ validateOperatorAccess: async () => true });
   const response = await app.request(
     adjustmentRequest({
@@ -499,6 +500,7 @@ test.each([
   );
   expect(response.status).toBe(409);
   expect(await response.json()).toMatchObject({ error: { code } });
+  expect(readAccount).not.toHaveBeenCalled();
 });
 
 test("reports unexpected adjustment failures as JSON operational errors", async () => {

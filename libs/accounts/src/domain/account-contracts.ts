@@ -5,6 +5,7 @@ import {
   conversionPhaseSchema,
   type ConversionPhase,
 } from "@cup/conversion-contracts";
+import type { AllowanceAdjustmentResult } from "@cup/duration-ledger";
 
 export const accountIdentitySchema = z
   .object({
@@ -170,6 +171,11 @@ export const accountHistoryPageSchema = z
   .object({ items: z.array(accountHistoryItemSchema), nextCursor: z.string().nullable() })
   .strict();
 export type AccountHistoryPage = z.infer<typeof accountHistoryPageSchema>;
+
+export type AccountAllowanceAdjustmentResult =
+  | AllowanceAdjustmentResult
+  | { result: "account-not-initialized" }
+  | { result: "account-not-active" };
 
 export type AccountWorkflowParams = {
   v: 2;

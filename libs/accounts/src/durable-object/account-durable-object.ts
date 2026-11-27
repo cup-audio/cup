@@ -27,6 +27,7 @@ import {
 import { TELEMETRY_ATTRIBUTES } from "@cup/telemetry.core";
 
 import type {
+  AccountAllowanceAdjustmentResult,
   AccountConversionOutcome,
   AccountIdentity,
   AccountWorkflowParams,
@@ -202,10 +203,14 @@ export class AccountDurableObject extends DurableObject<AccountEnvironment> {
     amount: number,
     cause: string,
     nowMs = Temporal.Now.instant().epochMilliseconds,
-  ) {
-    this.sqlite.adjustAllowance(requestId, amount, cause, nowMs);
+  ): Promise<AccountAllowanceAdjustmentResult> {
+    const adjustment = this.sqlite.adjustAllowance(requestId, amount, cause, nowMs);
+    if (adjustment.result !== "adjusted") {
+      return adjustment;
+    }
     await this.publishRegistryUsage();
     await this.scheduleUsagePublication();
+    return adjustment;
   }
 
   inspectAccounting() {
