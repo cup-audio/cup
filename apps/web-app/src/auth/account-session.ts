@@ -21,7 +21,7 @@ import {
   ACCOUNT_SESSION_CODE_VERIFIER_STORAGE_KEY,
   ACCOUNT_SESSION_STORAGE_KEY,
 } from "#src/auth/account-session-storage.js";
-import { queryClient } from "#src/data-fetching/query-client.js";
+import { CLEAR_QUERIES_EVENT_NAME } from "#src/data-fetching/query-cache-events.js";
 import {
   initializeAuthStorage,
   signInWithGoogle,
@@ -43,7 +43,7 @@ const accountSessionActor = createActor(
       ),
     },
     actions: {
-      clearQueries: () => queryClient.clear(),
+      clearQueries: () => window.dispatchEvent(new Event(CLEAR_QUERIES_EVENT_NAME)),
       stopPlayback,
       unloadAudio,
       clearLastGrantId: () => trialBrowserState.clearLastGrantId(),

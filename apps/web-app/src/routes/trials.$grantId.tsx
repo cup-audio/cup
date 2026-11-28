@@ -16,9 +16,8 @@ import { PageTitle } from "#src/app/components/page-title.js";
 import { StartConversionForm } from "#src/app/components/start-conversion-form.js";
 import { getResourceAccountSession } from "#src/auth/account-session.js";
 import { useAccountSession } from "#src/auth/hooks.js";
-import { ERROR_CODE, type RpcError } from "#src/data-fetching/api-request.js";
 import { createGrantQuery, exchangeCredential } from "#src/data-fetching/conversion-grant.js";
-import { UserFacingError, type ErrorCopy } from "#src/errors.js";
+import { ERROR_CODE, UserFacingError, type ErrorCopy, type RpcError } from "#src/errors.js";
 import { trialBrowserState } from "#src/trial-browser-state.js";
 
 const TRIAL_PAGE_NAME = "Free trial";

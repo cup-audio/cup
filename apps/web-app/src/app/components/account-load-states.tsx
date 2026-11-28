@@ -3,8 +3,8 @@ import React from "react";
 
 import { DSButton } from "#src/app/design-system/button.js";
 import { useRetryRoute } from "#src/app/use-retry-route.js";
-import { RpcError } from "#src/data-fetching/api-request.js";
 import { useRateLimitCountdown } from "#src/data-fetching/rate-limit.js";
+import { RpcError } from "#src/errors.js";
 
 export function AccountLoading(): React.JSX.Element {
   return <output data-loading-state="">Loading account…</output>;

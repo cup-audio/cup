@@ -10,10 +10,10 @@ import {
   clearPendingAccountConversion,
   type PendingAccountConversion,
 } from "#src/data-fetching/account-conversion-storage.js";
-import { requestApi, RpcError } from "#src/data-fetching/api-request.js";
+import { requestApi } from "#src/data-fetching/api-request.js";
 import { queryClient } from "#src/data-fetching/query-client.js";
 import { QUERY_KEYS } from "#src/data-fetching/query-keys.js";
-import { SignInCancelledError } from "#src/errors.js";
+import { RpcError, SignInCancelledError } from "#src/errors.js";
 
 export const accountQuery = (subject: string) =>
   queryOptions({

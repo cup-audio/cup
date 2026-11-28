@@ -1,5 +1,7 @@
 import { RpcError } from "@cup/listener-api.client";
 
+export { ERROR_CODE, RpcError } from "@cup/listener-api.client";
+
 export type ErrorCopy = { title: string; detail: string | undefined };
 
 type ErrorDescription = ErrorCopy & {
