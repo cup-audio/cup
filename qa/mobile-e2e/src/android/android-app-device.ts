@@ -24,6 +24,7 @@ export type AndroidLaunchArguments = LaunchArguments & {
 const APP_PACKAGE = "audio.cup.app";
 const MAIN_ACTIVITY = `${APP_PACKAGE}/.MainActivity`;
 const API_ORIGIN_EXTRA = "cupTestApiOrigin";
+const BACK_SETTLE_MS = 2_000;
 const REAL_GOOGLE_SIGN_IN_EXTRA = "cupTestRealGoogleSignIn";
 const SENTRY_DSN_EXTRA = "cupTestSentryDsn";
 const SIGNED_URL_LIFETIME_EXTRA = "cupTestSignedUrlLifetimeSeconds";
@@ -176,6 +177,11 @@ export class AndroidAppDevice implements AppDevice {
 
   async leaveAndTerminate(): Promise<void> {
     await this.background();
+    await this.waitForStoppedActivity();
+    await this.terminate();
+  }
+
+  private async waitForStoppedActivity(): Promise<void> {
     await waitFor(
       "Cup's activity to stop",
       async () => {
@@ -191,7 +197,6 @@ export class AndroidAppDevice implements AppDevice {
       },
       10_000,
     );
-    await this.terminate();
   }
 
   async clearAppData(): Promise<void> {
@@ -269,6 +274,54 @@ export class AndroidAppDevice implements AppDevice {
       `android=new UiSelector().packageName("${appPackage}").className("android.widget.Button")`,
     );
     return buttons.length > 0;
+  }
+
+  async killInBackground(): Promise<void> {
+    await this.waitForStoppedActivity();
+    await this.adb(["shell", "am", "kill", APP_PACKAGE]);
+    await this.waitForProcessExit();
+  }
+
+  async pressBackUntilFocused(appPackage: string): Promise<void> {
+    let nextBackAtMs = 0;
+    await waitFor(
+      `${appPackage} in front after Back`,
+      async () => {
+        if ((await this.focusedPackage()) === appPackage) {
+          return true;
+        }
+        if (performance.now() >= nextBackAtMs) {
+          await this.pressBack();
+          nextBackAtMs = performance.now() + BACK_SETTLE_MS;
+        }
+        return undefined;
+      },
+      30_000,
+    );
+  }
+
+  async startFromUrl(url: string): Promise<void> {
+    await this.adb([
+      "shell",
+      "am",
+      "start",
+      "-W",
+      "-a",
+      "android.intent.action.VIEW",
+      "-d",
+      url,
+      APP_PACKAGE,
+    ]);
+  }
+
+  async waitForNativeText(text: string): Promise<void> {
+    await this.driver.switchContext("NATIVE_APP");
+    await this.nativeText(text).waitForDisplayed({ timeout: 30_000 });
+  }
+
+  async tapNativeText(text: string): Promise<void> {
+    await this.waitForNativeText(text);
+    await this.nativeText(text).click();
   }
 
   async pressBack(): Promise<void> {
@@ -517,6 +570,10 @@ export class AndroidAppDevice implements AppDevice {
     } finally {
       await this.pressBack();
     }
+  }
+
+  private nativeText(text: string): ReturnType<WebdriverIO.Browser["$"]> {
+    return this.driver.$(`android=new UiSelector().text("${text}")`);
   }
 
   private async findWebViewContext(): Promise<string | undefined> {

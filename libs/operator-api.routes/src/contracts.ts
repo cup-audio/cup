@@ -131,12 +131,14 @@ export const migrationReportSchema = z
 
 export const ERROR_CODE = {
   ACCOUNT_NOT_ACTIVE: "account-not-active",
+  ACCOUNT_NOT_APPLE_LINKED: "account-not-apple-linked",
   ACCOUNT_NOT_FOUND: "account-not-found",
   ACCOUNT_UNAVAILABLE: "account-unavailable",
   ADJUSTMENT_EXCEEDS_AVAILABLE_DURATION: "adjustment-exceeds-available-duration",
   ALLOWANCE_BELOW_USED_DURATION: "allowance-below-used-duration",
   CONVERSION_NOT_ACCOUNT_OWNED: "conversion-not-account-owned",
   CONVERSION_NOT_FOUND: "conversion-not-found",
+  EMAIL_MISMATCH: "email-mismatch",
   GRANT_NOT_FOUND: "grant-not-found",
   IDEMPOTENCY_CONFLICT: "idempotency-conflict",
   INVALID_CURSOR: "invalid-cursor",
@@ -205,6 +207,26 @@ export type InspectAccountLedgerQuery = z.input<typeof inspectAccountLedgerQuery
 export const inspectAccountLedgerResponseSchema = accountLedgerPageSchema;
 export type InspectAccountLedgerResponse = z.infer<typeof inspectAccountLedgerResponseSchema>;
 
+const appleRevocationSchema = z.enum(["unavailable", "revoked", "not-revoked"]);
+
+export const scheduleLostAppleAccountDeletionRequestSchema = z
+  .object({ email: z.string().trim().toLowerCase().pipe(z.email()) })
+  .strict();
+export type ScheduleLostAppleAccountDeletionRequest = z.input<
+  typeof scheduleLostAppleAccountDeletionRequestSchema
+>;
+export const scheduleLostAppleAccountDeletionResponseSchema = z
+  .object({
+    accountId: z.uuid(),
+    attemptId: z.uuid(),
+    recoveryDeadlineMs: z.number().int(),
+    appleRevocation: z.literal("not-revoked"),
+  })
+  .strict();
+export type ScheduleLostAppleAccountDeletionResponse = z.infer<
+  typeof scheduleLostAppleAccountDeletionResponseSchema
+>;
+
 export const listAccountDeletionsResponseSchema = z
   .object({
     attempts: z.array(
@@ -217,6 +239,8 @@ export const listAccountDeletionsResponseSchema = z
           accountDone: z.boolean(),
           failures: z.number().int(),
           overdue: z.boolean(),
+          googleRevocation: z.enum(["unavailable", "revoked", "failed"]),
+          appleRevocation: appleRevocationSchema,
         })
         .strict(),
     ),

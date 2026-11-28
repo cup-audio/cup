@@ -6,6 +6,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 
+import { APPLE_SIGN_IN_KEY } from "#src/apple-sign-in-key.ts";
 import { TEST_ACCOUNT } from "#src/auth-provider.ts";
 
 export type TestWorkerScenario =
@@ -104,9 +105,16 @@ export async function startTestWorker(options: StartTestWorkerOptions = {}): Pro
         persistenceDirectory,
         "--var",
         `QA_SCENARIO:${scenario}`,
+        "--var",
+        `APPLE_SIGN_IN_KEY:${APPLE_SIGN_IN_KEY.privateKey}`,
         ...(options.authProviderOrigin === undefined
           ? []
-          : ["--var", `SUPABASE_URL:${options.authProviderOrigin}`]),
+          : [
+              "--var",
+              `SUPABASE_URL:${options.authProviderOrigin}`,
+              "--var",
+              `APPLE_ORIGIN:${options.authProviderOrigin}`,
+            ]),
         ...(options.sentryTunnelDsns === undefined
           ? []
           : ["--var", `SENTRY_TUNNEL_DSNS:${options.sentryTunnelDsns}`]),

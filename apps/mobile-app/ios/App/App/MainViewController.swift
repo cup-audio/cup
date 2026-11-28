@@ -14,12 +14,26 @@ class MainViewController: CAPBridgeViewController {
     override func capacitorDidLoad() {
         super.capacitorDidLoad()
         bridge?.registerPluginInstance(WebAuthenticationPlugin())
+        bridge?.registerPluginInstance(appleSignInPlugin())
         bridge?.registerPluginInstance(CrashReportingPlugin())
         bridge?.registerPluginInstance(WebViewProcessLossPlugin())
         observeWebContentTermination()
         #if DEBUG
         applyTestLaunchArguments()
         #endif
+    }
+
+    private func appleSignInPlugin() -> CAPPlugin {
+        #if DEBUG
+        let defaults = UserDefaults.standard
+        if let origin = TestApiOrigin.fromDefaults(defaults) {
+            return FakeAppleSignInPlugin(
+                apiOrigin: origin,
+                cancels: defaults.bool(forKey: FakeAppleSignInPlugin.cancelKey)
+            )
+        }
+        #endif
+        return AppleSignInPlugin()
     }
 
     private func observeWebContentTermination() {
@@ -134,6 +148,7 @@ enum TestApiOrigin {
         guard let value = stored as? String, isLocalhostOrigin(value) else {
             fatalError("The \(key) default must be exactly http://localhost:<port>, got \"\(stored)\".")
         }
+        defaults.set(value, forKey: key)
         return value
     }
 

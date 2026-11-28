@@ -66,8 +66,10 @@ test("renders sign-in dialog", { tag: VISUAL_TAG }, async ({ mount, page }) => {
   await expect(
     page.getByRole("heading", { name: "Just listen.", includeHidden: true }),
   ).toBeVisible();
-  await expect(page.getByRole("dialog", { name: "Sign in", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Continue with Google" })).toBeFocused();
+  const dialog = page.getByRole("dialog", { name: "Sign in", exact: true });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Continue with Apple" })).toBeFocused();
+  await expect(dialog.getByRole("button", { name: "Continue with Google" })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "URL", includeHidden: true })).toHaveValue(
     "https://example.com/article",
   );

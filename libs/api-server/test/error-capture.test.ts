@@ -1,17 +1,8 @@
-import { captureException } from "@sentry/core";
-import { beforeEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test } from "vitest";
 
 import { createApiServer } from "#src/api-server.ts";
 
-vi.mock("cloudflare:workers", () => ({
-  DurableObject: class {
-    readonly mocked = true;
-  },
-}));
-vi.mock(import("@sentry/core"), async (importOriginal) => ({
-  ...(await importOriginal()),
-  captureException: vi.fn<typeof captureException>(),
-}));
+import { recordSentry, stopRecordingSentry, type SentryRecorder } from "#test/sentry-recorder.ts";
 
 const grantId = "0b3c9a4e-6f1d-4c2a-9e7b-5d8f1a2c3b4e";
 const sessionsUrl = `https://cup.audio/api/grants/${grantId}/sessions`;
@@ -20,13 +11,19 @@ const browserMutation = {
   "X-Create-Audiobook-From-URL-Request": "1",
 };
 
+let sentry: SentryRecorder;
+
 beforeEach(() => {
-  vi.mocked(captureException).mockClear();
+  sentry = recordSentry();
+});
+
+afterEach(() => {
+  stopRecordingSentry();
 });
 
 function environment(exchangeCredential: () => Promise<unknown>) {
   return {
-    SUPABASE_URL: "https://access-test.supabase.co",
+    SUPABASE_URL: "https://error-capture.supabase.co",
     CONVERSION_GRANTS: { idFromName: (name: string) => name, get: () => ({ exchangeCredential }) },
   };
 }
@@ -47,7 +44,7 @@ test("a session exchange whose grant fails answers 503 and captures the error", 
   );
 
   expect(response.status).toBe(503);
-  expect(vi.mocked(captureException).mock.calls).toEqual([[failure]]);
+  expect(sentry.exceptions).toEqual([failure]);
 });
 
 test("a malformed JSON body answers 400 and captures nothing", async () => {
@@ -61,7 +58,7 @@ test("a malformed JSON body answers 400 and captures nothing", async () => {
 
   expect(response.status).toBe(400);
   expect(await response.json()).toMatchObject({ error: { code: "invalid-input" } });
-  expect(captureException).not.toHaveBeenCalled();
+  expect(sentry.exceptions).toEqual([]);
 });
 
 test("an error thrown before the routes, in the security headers, answers 500 with the trace ID", async () => {
@@ -71,5 +68,5 @@ test("an error thrown before the routes, in the security headers, answers 500 wi
   expect(await response.json()).toMatchObject({
     error: { code: "operational-error", traceId: expect.stringMatching(/^[0-9a-f]{32}$/) },
   });
-  expect(captureException).toHaveBeenCalledTimes(1);
+  expect(sentry.exceptions).toHaveLength(1);
 });

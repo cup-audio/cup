@@ -20,7 +20,10 @@ export type DeletionAttempt = {
   scheduledAtMs: number;
   deadlineMs: number;
   state: "scheduled" | "restored" | "deleting" | "erased";
+  appleRevocation: AppleRevocation;
 };
+
+export type AppleRevocation = z.infer<typeof appleRevocationSchema>;
 
 type StoredDeletionAttemptState = (typeof deletionAttempts.$inferSelect)["state"];
 
@@ -68,7 +71,12 @@ export class AccountLifecycle {
   }
 
   schedule(
-    input: { challengeId: string; authenticatedAtSeconds: number; email: string },
+    input: {
+      challengeId: string;
+      authenticatedAtSeconds: number;
+      email: string;
+      appleRevocation: AppleRevocation;
+    },
     nowMs = Temporal.Now.instant().epochMilliseconds,
   ) {
     z.email().parse(input.email);
@@ -78,29 +86,40 @@ export class AccountLifecycle {
         return this.current();
       }
       this.consume(input.challengeId, input.authenticatedAtSeconds, nowMs);
-      if (account.state !== "active") {
-        throw new AccountLifecycleConflictError("Account deletion has started");
-      }
-      const attempt: DeletionAttempt = {
-        attemptId: crypto.randomUUID(),
-        accountId: account.accountId,
-        subject: account.subject,
-        email: input.email,
-        scheduledAtMs: nowMs,
-        deadlineMs: nowMs + 7 * 24 * 60 * 60 * 1_000,
-        state: "scheduled",
-      };
-      this.database
-        .insert(deletionAttempts)
-        .values({ attemptId: attempt.attemptId, json: JSON.stringify(attempt), state: "scheduled" })
-        .run();
-      this.database
-        .update(accounts)
-        .set({ state: "deletion_scheduled", recoveryDeadlineMs: attempt.deadlineMs })
-        .where(eq(accounts.id, 1))
-        .run();
-      return attempt;
+      return this.insertAttempt(input.email, input.appleRevocation, nowMs);
     });
+  }
+
+  scheduleByOperator(email: string, nowMs = Temporal.Now.instant().epochMilliseconds) {
+    z.email().parse(email);
+    return this.database.transaction(() => this.insertAttempt(email, "not-revoked", nowMs));
+  }
+
+  private insertAttempt(email: string, appleRevocation: AppleRevocation, nowMs: number) {
+    const account = this.snapshot();
+    if (account.state !== "active") {
+      throw new AccountLifecycleConflictError("Account deletion has started");
+    }
+    const attempt: DeletionAttempt = {
+      attemptId: crypto.randomUUID(),
+      accountId: account.accountId,
+      subject: account.subject,
+      email,
+      scheduledAtMs: nowMs,
+      deadlineMs: nowMs + 7 * 24 * 60 * 60 * 1_000,
+      state: "scheduled",
+      appleRevocation,
+    };
+    this.database
+      .insert(deletionAttempts)
+      .values({ attemptId: attempt.attemptId, json: JSON.stringify(attempt), state: "scheduled" })
+      .run();
+    this.database
+      .update(accounts)
+      .set({ state: "deletion_scheduled", recoveryDeadlineMs: attempt.deadlineMs })
+      .where(eq(accounts.id, 1))
+      .run();
+    return attempt;
   }
 
   restore(
@@ -225,6 +244,8 @@ export class AccountLifecycle {
   }
 }
 
+const appleRevocationSchema = z.enum(["unavailable", "revoked", "not-revoked"]);
+
 export const deletionAttemptSchema = z.object({
   attemptId: z.uuidv4(),
   subject: z.uuid(),
@@ -233,4 +254,5 @@ export const deletionAttemptSchema = z.object({
   scheduledAtMs: z.number().int(),
   deadlineMs: z.number().int(),
   state: z.enum(["scheduled", "restored", "deleting", "erased"]),
+  appleRevocation: appleRevocationSchema.default("unavailable"),
 });

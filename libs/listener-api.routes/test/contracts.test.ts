@@ -4,16 +4,19 @@ import {
   accountConfirmationSchema,
   accountHistorySchema,
   accountSnapshotSchema,
+  appleSignInRevocationSchema,
   audiobookQuerySchema,
   audiobookResponseSchema,
   audiobookSchema,
   audioSegmentSchema,
   conversionParamsSchema,
+  deletionChallengeSchema,
   errorResponseSchema,
   exchangeCredentialRequestSchema,
   grantConversionsSchema,
   grantParamsSchema,
   grantSnapshotSchema,
+  isAppleAuthorizationCode,
   signedMediaUrlQuerySchema,
   playbackPositionSchema,
   retryConversionResponseSchema,
@@ -91,6 +94,42 @@ describe("listener API transport contracts", () => {
       request: { challengeId: UUID },
     },
     {
+      name: "account confirmation with a Google credential",
+      schema: accountConfirmationSchema,
+      request: {
+        challengeId: UUID,
+        providerCredential: { provider: "google", accessToken: "google-token" },
+      },
+    },
+    {
+      name: "account confirmation with an Apple refresh token",
+      schema: accountConfirmationSchema,
+      request: {
+        challengeId: UUID,
+        providerCredential: { provider: "apple", refreshToken: "apple-refresh-token" },
+      },
+    },
+    {
+      name: "account confirmation with an Apple authorization code",
+      schema: accountConfirmationSchema,
+      request: {
+        challengeId: UUID,
+        providerCredential: { provider: "apple", authorizationCode: "apple-authorization-code" },
+      },
+    },
+    {
+      name: "Apple sign-in revocation",
+      schema: appleSignInRevocationSchema,
+      request: { providerCredential: { provider: "apple", refreshToken: "apple-refresh-token" } },
+    },
+    {
+      name: "Apple sign-in revocation with an authorization code",
+      schema: appleSignInRevocationSchema,
+      request: {
+        providerCredential: { provider: "apple", authorizationCode: "apple-authorization-code" },
+      },
+    },
+    {
       name: "playback position",
       schema: playbackPositionSchema,
       request: { synchronizationUnitId: "one", offsetMilliseconds: 0 },
@@ -107,6 +146,26 @@ describe("listener API transport contracts", () => {
     [exchangeCredentialRequestSchema, { extra: true }],
     [startConversionRequestSchema, { extra: true }],
     [accountConfirmationSchema, { providerToken: "token" }],
+    [accountConfirmationSchema, { challengeId: UUID, providerCredential: { provider: "google" } }],
+    [accountConfirmationSchema, { challengeId: UUID, providerCredential: { provider: "apple" } }],
+    [
+      accountConfirmationSchema,
+      { challengeId: UUID, providerCredential: { provider: "github", accessToken: "token" } },
+    ],
+    [appleSignInRevocationSchema, {}],
+    [appleSignInRevocationSchema, { providerCredential: { provider: "apple" } }],
+    [
+      appleSignInRevocationSchema,
+      { providerCredential: { provider: "apple", authorizationCode: "" } },
+    ],
+    [
+      appleSignInRevocationSchema,
+      { providerCredential: { provider: "google", accessToken: "token" } },
+    ],
+    [
+      deletionChallengeSchema,
+      { challengeId: UUID, subject: UUID, issuedAtMs: 1, expiresAtMs: 2, acceptedMethods: [] },
+    ],
     [playbackPositionSchema, { synchronizationUnitId: "one" }],
   ])("still requires declared request fields", (schema, value) => {
     expect(schema.safeParse(value).success).toBe(false);
@@ -252,6 +311,25 @@ describe("listener API transport contracts", () => {
           },
         ],
         nextCursor: null,
+      },
+    },
+    {
+      name: "deletion challenge",
+      schema: deletionChallengeSchema,
+      response: {
+        challengeId: UUID,
+        subject: UUID,
+        issuedAtMs: 1,
+        expiresAtMs: 2,
+        acceptedMethods: ["google"],
+        newField: true,
+      },
+      expected: {
+        challengeId: UUID,
+        subject: UUID,
+        issuedAtMs: 1,
+        expiresAtMs: 2,
+        acceptedMethods: ["google"],
       },
     },
     {
@@ -462,5 +540,10 @@ describe("listener API transport contracts", () => {
         },
       ]).success,
     ).toBe(true);
+  });
+
+  test("tells an Apple authorization code apart from an Apple refresh token", () => {
+    expect(isAppleAuthorizationCode({ provider: "apple", authorizationCode: "code" })).toBe(true);
+    expect(isAppleAuthorizationCode({ provider: "apple", refreshToken: "token" })).toBe(false);
   });
 });

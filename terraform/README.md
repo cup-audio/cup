@@ -2,11 +2,12 @@
 
 Run each root independently from the repository root.
 
-| Root                             | Managed resources                                                                                                                                                                               | GCS state prefix |
-| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
-| [bootstrap](bootstrap/main.tf)   | Infrastructure project and state bucket                                                                                                                                                         | bootstrap        |
-| [production](production/main.tf) | Existing cup-production GCP project, its APIs and the Google Play uploader service account; Terraform-created Supabase project; Cloudflare R2 bucket, DNS, Email Routing, Access and AI Gateway | production       |
-| [sentry](sentry/main.tf)         | Sentry team, projects, keys, inbound filters, spike protection, privacy settings, alerts and monitors                                                                                           | sentry           |
+| Root                                               | Managed resources                                                                                                                                                                               | GCS state prefix    |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| [bootstrap](bootstrap/main.tf)                     | Infrastructure project, state bucket, and the [GitHub Actions identity](#github-actions-identity) of the Apple client secret rotation                                                           | bootstrap           |
+| [production](production/main.tf)                   | Existing cup-production GCP project, its APIs and the Google Play uploader service account; Terraform-created Supabase project; Cloudflare R2 bucket, DNS, Email Routing, Access and AI Gateway | production          |
+| [apple-client-secret](apple-client-secret/main.tf) | Supabase's Apple client secret only, applied by the [rotation workflow](#apple-client-secret)                                                                                                   | apple-client-secret |
+| [sentry](sentry/main.tf)                           | Sentry team, projects, keys, inbound filters, spike protection, privacy settings, alerts and monitors                                                                                           | sentry              |
 
 All roots use `cup-infrastructure-646301813623-tfstate` in Frankfurt (`europe-west3`).
 The bootstrap project uses Cup Billing (`01EF28-40C66E-325909`).
@@ -134,6 +135,38 @@ The Android OAuth client must be registered for package `audio.cup.app`.
 On 2026-10-26, after the allow-list apply, the operator signed in with Google on <https://cup.audio/app> and was returned to the starting page. Native Android sign-in remains unverified.
 The Supabase provider preserves masked OAuth secrets in state, so a no-change plan does not prove the secret works or detect an out-of-band secret change.
 
+## Apple sign-in configuration
+
+Terraform enables Supabase's Apple provider in the [Supabase configuration](production/supabase.tf) ([spec #519](https://github.com/cup-audio/cup/issues/519)). Its client ID is the Services ID `audio.cup.app.web`, whose return URL in the Apple Developer account is the Supabase callback shown above; it must come first, because Supabase's web OAuth flow uses only the first client ID. The additional client ID `audio.cup.app`, the App ID, is the audience of the identity tokens that native iOS sign-in exchanges. The web flow asks Apple for email and name, and Cup uses the name only for the avatar's initials. Apple returns to the same callback and Supabase to the redirect allow-list above, so Apple needs no new allow-list entry.
+
+The configuration deliberately leaves out `external_apple_secret`, the client secret Supabase sends Apple's token requests with: the [Apple client secret](#apple-client-secret) root owns that key alone and rotates it monthly. Automatic linking by verified email stays as hosted Supabase does it, and manual linking (`security_manual_linking_enabled`) stays off, so an Apple sign-in with a Google user's email lands in that user. As of this change, the Apple provider is configured but not applied.
+
+## Apple client secret
+
+The [apple-client-secret root](apple-client-secret/main.tf) writes one Supabase auth setting, `external_apple_secret`, the client secret Supabase's Apple provider sends to Apple for web and Android sign-in. The monthly [rotation workflow](../docs/production-configuration.md#apple-client-secret-rotation) signs a new secret with [`tooling/apple-client-secret`](../tooling/apple-client-secret/README.md) and applies this root with it as `TF_VAR_apple_client_secret`; [ADR 0118](../docs/adr/0118-rotate-supabases-apple-client-secret-from-a-scheduled-github-actions-workflow.md) records why. The root needs no other variable, and the Supabase provider reads `SUPABASE_ACCESS_TOKEN`.
+
+[`supabase.tf`](production/supabase.tf) in the production root must never set `external_apple_secret`, and leaves it out on purpose. Supabase provider 1.11.0 refreshes, diffs and sends only the auth keys a configuration writes, so the two roots manage the same `supabase_settings` without drift and without overwriting each other. Were the production root to set the key, every apply that changes its auth settings would send the value in its own state and replace the newer secret the workflow wrote. Removing this root's resource from state, or destroying it, leaves the secret in Supabase.
+
+The state holds the signed JWT in plain text, so only the operator and the workflow's service account can read the `apple-client-secret` prefix. To rotate by hand from an up-to-date `main`, sign a secret with the `.p8` key and apply it with the Supabase access token from `terraform/.env.local`:
+
+```sh
+terraform -chdir=terraform/apple-client-secret init
+export TF_VAR_apple_client_secret="$(APPLE_SIGN_IN_PRIVATE_KEY="$(cat AuthKey_6Y358M9M9A.p8)" node tooling/apple-client-secret/src/cli.ts sign)"
+node --env-file=terraform/.env.local --input-type=module -e 'import cp from "node:child_process"; process.exitCode = cp.spawnSync("terraform", ["-chdir=terraform/apple-client-secret", "apply"], {stdio: "inherit"}).status;'
+unset TF_VAR_apple_client_secret
+```
+
+### GitHub Actions identity
+
+[github-actions.tf](bootstrap/github-actions.tf) in the bootstrap root lets the rotation workflow, and nothing else, reach this root's state without a key:
+
+- It enables the IAM, IAM Service Account Credentials and Security Token Service APIs in `cup-infrastructure`.
+- The Workload Identity Federation pool `github` has one OIDC provider, `github`, for `https://token.actions.githubusercontent.com`, whose attribute condition admits only tokens for the repository `cup-audio/cup` (by name and ID), the environment `production` and the ref `refs/heads/main`.
+- The service account `apple-client-secret-rotation@cup-infrastructure.iam.gserviceaccount.com` has no keys. Only the subject `repo:cup-audio/cup:environment:production` of that pool may impersonate it.
+- The account holds Storage Object User on the state bucket under an IAM condition: objects under `apple-client-secret/`, and the bucket itself, which lets it list object names but read no other state.
+
+The outputs `github_workload_identity_provider` and `apple_client_secret_rotation_service_account` are the values the workflow's `google-github-actions/auth` step names. Whether the GCS backend needs any permission beyond Storage Object User is confirmed only by the workflow's first run.
+
 ## Sentry
 
 The [Sentry root](sentry/main.tf) manages Cup's Sentry production setup through the provider `jianyuan/sentry` 0.16.0 against `https://de.sentry.io/api/`, the API of Sentry's Germany region. It declares:
@@ -178,9 +211,10 @@ Two `terraform_data` resources in [privacy.tf](sentry/privacy.tf) send them with
 
 [alerts.tf](sentry/alerts.tf) declares what emails the operator; the [observability page](../docs/architecture/observability.md#alerts-and-monitors) describes when each fires. It uses Sentry's current monitor and alert model (`sentry_alert`), not the deprecated `sentry_issue_alert`:
 
-- `sentry_alert.new_or_regressed_issue`, one per project, on the project's default issue stream monitor, which Sentry creates with the project and the `sentry_project_issue_stream_monitor` data source reads, and on the project's own metric monitors and, in `cup-worker`, the uptime monitor. It fires on a new issue and on a resolved issue that comes back.
+- `sentry_alert.new_or_regressed_issue`, one per project, on the project's default issue stream monitor, which Sentry creates with the project and the `sentry_project_issue_stream_monitor` data source reads, and on the project's own metric monitors and, in `cup-worker`, the uptime monitor and the cron monitor. It fires on a new issue and on a resolved issue that comes back.
 - `sentry_alert.conversion_failure_frequency`, on the default error monitor of `cup-worker`, for an issue tagged `cup.conversion.failure_category` that is seen more than 5 times in 1 h.
 - `sentry_uptime_monitor.health`, in `cup-worker`, which requests `GET https://cup.audio/api/health` every minute and opens an issue after 3 consecutive checks without a 200. The free plan includes one uptime monitor.
+- `sentry_cron_monitor.apple_client_secret_rotation`, in `cup-worker`, which expects a check-in from the [Apple client secret rotation](../docs/production-configuration.md#apple-client-secret-rotation) at 06:17 UTC on the 1st of each month, with a day's grace period, and opens an issue on the first missed or failed check-in. The free plan includes one cron monitor. The provider exposes no slug; Sentry derives the slug from the monitor's name, which is therefore already slug-shaped, `apple-client-secret-rotation`. The workflow checks in with an HTTP `GET` to `https://o4512441473040384.ingest.de.sentry.io/api/4512441485623377/cron/apple-client-secret-rotation/aa6ceda71485efec30877677d4eb919b/?status=ok`: the organisation's ingest host, the `cup-worker` project ID, the slug and the public key of the `cup-worker` DSN, which is public by design. Renaming the monitor changes the slug and breaks the check-in.
 - `sentry_metric_monitor.daily_errors` and `.daily_spans`, one each per project, which open an issue when a project takes more than 150 errors (error and message events) or 165,000 spans in a day, about a thirtieth of the free plan's monthly 5k errors and 5M spans.
 
 Every alert emails the team `cup` at most once an hour per issue (`frequency_minutes = 60`), so the operator must be a member of that team; a plan on 2026-11-16 found the token user, the operator, a member. Spike protection's notification is the separate `sentry_notification_action` above.

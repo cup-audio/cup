@@ -13,6 +13,7 @@ import {
   type AccountAuthClient,
   type AccountAuthConnection,
   type Reply,
+  type SignInMethod,
 } from "#src/auth/account-session-machine.ts";
 import { ACCOUNT_SESSION_STORAGE_KEY } from "#src/auth/account-session-storage.ts";
 import { expect, test } from "#src/test-utils/component-test.ts";
@@ -141,6 +142,88 @@ test("concurrent session reads share an SDK refresh and cannot restore a signed-
     }, ACCOUNT_SESSION_STORAGE_KEY),
   ).toEqual({ reads: [null, null], stored: null, state: "signed-out" });
   expect(refreshRequests).toBe(1);
+});
+
+test("offers Apple before Google when the auth configuration advertises it, and signs in with Apple's web flow", async ({
+  page,
+}) => {
+  await page.route("**/api/auth/config", (route) =>
+    route.fulfill({
+      json: {
+        supabaseUrl: "https://auth.example.com",
+        publishableKey: "test-key",
+        googleWebClientId: "test-client",
+        appleWebClientId: "audio.cup.app.web",
+      },
+    }),
+  );
+  const authorization = new Promise<URL>((resolve) => {
+    void page.route("https://auth.example.com/auth/v1/authorize**", async (route) => {
+      resolve(new URL(route.request().url()));
+      await route.fulfill({ contentType: "text/html", body: "<p>Apple</p>" });
+    });
+  });
+  await page.goto("/ui-gallery/index.html");
+
+  expect(
+    await page.evaluate(async () => {
+      const modulePath = "/src/auth/account-session.ts";
+      const sessions = await import(modulePath);
+      await sessions.ensureAuthInitialized();
+      const methods = sessions.signInMethodsSnapshot();
+      void sessions.signIn("apple");
+      return methods;
+    }),
+  ).toEqual(["apple", "google"]);
+  const url = await authorization;
+  expect(Object.fromEntries(url.searchParams)).toMatchObject({
+    provider: "apple",
+    scopes: "email name",
+  });
+  expect(url.searchParams.has("prompt")).toBe(false);
+});
+
+test("offers no Apple sign-in when the auth configuration does not advertise it", async ({
+  page,
+}) => {
+  await page.route("**/api/auth/config", (route) =>
+    route.fulfill({
+      json: {
+        supabaseUrl: "https://auth.example.com",
+        publishableKey: "test-key",
+        googleWebClientId: "test-client",
+      },
+    }),
+  );
+  await page.goto("/ui-gallery/index.html");
+
+  expect(
+    await page.evaluate(async () => {
+      const modulePath = "/src/auth/account-session.ts";
+      const sessions = await import(modulePath);
+      await sessions.ensureAuthInitialized();
+      return sessions.signInMethodsSnapshot();
+    }),
+  ).toEqual(["google"]);
+});
+
+test("an Apple sign-in waits for a Google sign-in in progress, so one OAuth flow runs at a time", async () => {
+  const machine = startMachine();
+  await machine.initialize();
+  machine.fakes.shouldHoldSignIns = true;
+
+  const google = machine.signIn(false, "google");
+  await settle();
+  await expect(machine.signIn(false, "apple")).rejects.toThrow(
+    "Wait for the current sign-in to finish.",
+  );
+  machine.pendingSignIns[0]?.();
+  await google;
+  await settle();
+  machine.fakes.shouldHoldSignIns = false;
+  await machine.signIn(false, "apple");
+
+  expect(machine.signInRequests.map(({ method }) => method)).toEqual(["google", "apple"]);
 });
 
 function createSession(subject: string): Session {
@@ -312,10 +395,10 @@ function startMachine({
       }
     },
     readSession: () => request<Session | null>((reply) => ({ type: "READ_SESSION", reply })),
-    signIn: (fresh = false) =>
+    signIn: (fresh = false, method: SignInMethod = "google") =>
       request<void>((reply) => ({
         type: "SIGN_IN",
-        request: { method: "google", fresh },
+        request: { method, fresh },
         reply,
       })),
     signOut: () => request<void>((reply) => ({ type: "SIGN_OUT", reply })),

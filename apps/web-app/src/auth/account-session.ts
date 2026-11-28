@@ -23,9 +23,12 @@ import {
 } from "#src/auth/account-session-storage.js";
 import { CLEAR_QUERIES_EVENT_NAME } from "#src/data-fetching/query-cache-events.js";
 import {
+  completePendingSignIn,
   initializeAuthStorage,
+  signInWithApple,
   signInWithGoogle,
   clearNativeSignIn,
+  watchAppleCredential,
   watchAppState,
 } from "#src/platform/account-auth.js";
 import { STOP_PLAYBACK_EVENT_NAME } from "#src/playback-events.js";
@@ -127,10 +130,8 @@ export async function signIn(method: SignInMethod) {
   );
 }
 
-export async function signInAgain() {
+export async function signInAgain(method: SignInMethod) {
   await ensureAuthInitialized();
-  const method: SignInMethod =
-    sessionSnapshot()?.user.app_metadata.provider === "email" ? "test-account" : "google";
   return request<void>((reply) =>
     accountSessionActor.send({ type: "SIGN_IN", request: { method, fresh: true }, reply }),
   );
@@ -159,9 +160,14 @@ async function loadConnection(): Promise<AccountAuthConnection> {
     },
   });
   Sentry.addIntegration(clientSupabaseIntegration(client));
+  watchAppleCredential(client);
+  await completePendingSignIn(client);
   const { storage } = platformStorage;
   const { testAccount } = config;
   const signInMethods: SignInMethod[] = [];
+  if (config.appleWebClientId && signInWithApple) {
+    signInMethods.push("apple");
+  }
   if (config.googleWebClientId) {
     signInMethods.push("google");
   }
@@ -172,6 +178,13 @@ async function loadConnection(): Promise<AccountAuthConnection> {
     client,
     signInMethods,
     signIn: async ({ method, fresh, chooseAccount }) => {
+      if (method === "apple") {
+        if (!signInWithApple) {
+          throw new Error("Sign-in is temporarily unavailable.");
+        }
+        await signInWithApple(client, { fresh });
+        return;
+      }
       if (method === "google") {
         await signInWithGoogle(client, config.googleWebClientId, { fresh, chooseAccount });
         return;

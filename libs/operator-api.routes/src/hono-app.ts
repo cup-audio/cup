@@ -13,6 +13,8 @@ import {
   listAccountDeletionsResponseSchema,
   listAccountsQuerySchema,
   listAccountsResponseSchema,
+  scheduleLostAppleAccountDeletionRequestSchema,
+  scheduleLostAppleAccountDeletionResponseSchema,
   setGrantAllowanceRequestSchema,
   createGrantRequestSchema,
   createGrantResponseSchema,
@@ -236,6 +238,32 @@ const listAccountDeletionsRoute = createRoute({
     500: errorResponse("Operational error."),
   },
 });
+const scheduleLostAppleAccountDeletionRoute = createRoute({
+  method: "post",
+  path: "/api/operator/accounts/{accountId}/lost-apple-account-deletion",
+  request: {
+    params: accountParamsSchema,
+    body: {
+      required: true,
+      content: { "application/json": { schema: scheduleLostAppleAccountDeletionRequestSchema } },
+    },
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": { schema: scheduleLostAppleAccountDeletionResponseSchema },
+      },
+      description:
+        "Deletion scheduled without Apple revocation; the scheduled-deletion notice follows.",
+    },
+    400: errorResponse("Invalid request."),
+    404: errorResponse("Account not found."),
+    409: errorResponse(
+      "Account not active, without an Apple identity, or holding another email address.",
+    ),
+    500: errorResponse("Operational error."),
+  },
+});
 
 const deleteConversionRoute = createRoute({
   method: "delete",
@@ -276,6 +304,10 @@ export type OperatorApiHandlers<Bindings extends object> = {
   inspectAccount: OperatorApiRouteHandler<typeof inspectAccountRoute, Bindings>;
   inspectAccountLedger: OperatorApiRouteHandler<typeof inspectAccountLedgerRoute, Bindings>;
   listAccountDeletions: OperatorApiRouteHandler<typeof listAccountDeletionsRoute, Bindings>;
+  scheduleLostAppleAccountDeletion: OperatorApiRouteHandler<
+    typeof scheduleLostAppleAccountDeletionRoute,
+    Bindings
+  >;
   deleteConversion: OperatorApiRouteHandler<typeof deleteConversionRoute, Bindings>;
   createGrant: OperatorApiRouteHandler<typeof createGrantRoute, Bindings>;
   listGrants: OperatorApiRouteHandler<typeof listGrantsRoute, Bindings>;
@@ -293,6 +325,7 @@ export function createOperatorApi<Bindings extends object>(
     .openapi(listAccountsRoute, handlers.listAccounts)
     .openapi(listAccountDeletionsRoute, handlers.listAccountDeletions)
     .openapi(adjustAccountAllowanceRoute, handlers.adjustAccountAllowance)
+    .openapi(scheduleLostAppleAccountDeletionRoute, handlers.scheduleLostAppleAccountDeletion)
     .openapi(inspectAccountRoute, handlers.inspectAccount, (result, context) => {
       if (!result.success) {
         return context.json(
@@ -330,6 +363,7 @@ function createOperatorContractApp() {
     inspectAccount: unavailable,
     inspectAccountLedger: unavailable,
     listAccountDeletions: unavailable,
+    scheduleLostAppleAccountDeletion: unavailable,
     deleteConversion: unavailable,
     createGrant: unavailable,
     listGrants: unavailable,

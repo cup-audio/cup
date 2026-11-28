@@ -50,3 +50,135 @@ test("asks Google for the account chooser and a new authentication on a fresh si
     queryParams: { prompt: "select_account", max_age: "0" },
   });
 });
+
+test("an Apple sign-in asks Supabase for Apple's OAuth flow with the email and name scopes", async ({
+  page,
+}) => {
+  await page.goto("");
+  const oauthCredentials = await page.evaluate(async () => {
+    const modulePath = "/src/platform/account-auth.web.ts";
+    const { signInWithApple } = await import(modulePath);
+    let credentials: unknown;
+    const client = {
+      auth: {
+        signInWithOAuth: async (requested: unknown) => {
+          credentials = requested;
+          return { data: {}, error: null };
+        },
+      },
+    };
+    await signInWithApple(client);
+    return credentials;
+  });
+
+  expect(oauthCredentials).toEqual({
+    provider: "apple",
+    options: { redirectTo: expect.stringMatching(/^http/), scopes: "email name" },
+  });
+});
+
+test("after Apple's web flow, reports an error that Supabase's callback returns as a failure, once", async ({
+  page,
+}) => {
+  const { reports, completedSignIns } = await returnFromApple(page, {
+    error: "server_error",
+    error_code: "unexpected_failure",
+    error_description: "Unable to exchange external code",
+  });
+
+  expect(completedSignIns).toEqual([false, false]);
+  expect(reports).toEqual([
+    [
+      expect.stringContaining("Unable to exchange external code"),
+      "Apple sign-in on the web failed",
+    ],
+  ]);
+});
+
+test("after Apple's web flow, reports nothing when Supabase's callback returns a code", async ({
+  page,
+}) => {
+  const { reports } = await returnFromApple(page, { code: "an authorization code" });
+
+  expect(reports).toEqual([]);
+});
+
+test("after Apple's web flow returns a code, tells once that an Apple sign-in completed", async ({
+  page,
+}) => {
+  const { completedSignIns } = await returnFromApple(page, { code: "an authorization code" });
+
+  expect(completedSignIns).toEqual([true, false]);
+});
+
+test("a callback code without a pending Apple sign-in is no completed Apple sign-in", async ({
+  page,
+}) => {
+  await page.goto("?code=a-google-code");
+  const completedSignIn = await page.evaluate(async () => {
+    const modulePath = "/src/platform/account-auth.web.ts";
+    const { initializeAuthStorage, takeCompletedAppleSignIn } = await import(modulePath);
+    await initializeAuthStorage([], () => () => undefined);
+    return takeCompletedAppleSignIn();
+  });
+
+  expect(completedSignIn).toBe(false);
+});
+
+test("holds the refresh token of the session Apple's web flow returned, also after Supabase refreshes that session", async ({
+  page,
+}) => {
+  await page.goto("");
+  const heldCredentials = await page.evaluate(async () => {
+    const modulePath = "/src/platform/account-auth.web.ts";
+    const { watchAppleCredential, appleCredentialOf } = await import(modulePath);
+    let emit: ((event: string, session: unknown) => void) | undefined;
+    watchAppleCredential({
+      auth: {
+        onAuthStateChange: (callback: (event: string, session: unknown) => void) => {
+          emit = callback;
+          return { data: { subscription: { unsubscribe: () => undefined } } };
+        },
+      },
+    });
+    const held = [appleCredentialOf()];
+    emit?.("SIGNED_IN", {
+      user: { id: "the-listener" },
+      provider_refresh_token: "the-apple-refresh-token",
+    });
+    held.push(appleCredentialOf());
+    emit?.("TOKEN_REFRESHED", { user: { id: "the-listener" } });
+    held.push(appleCredentialOf());
+    emit?.("SIGNED_IN", { user: { id: "another-listener" } });
+    held.push(appleCredentialOf());
+    return held;
+  });
+
+  const credential = { provider: "apple", refreshToken: "the-apple-refresh-token" };
+  expect(heldCredentials).toEqual([undefined, credential, credential, undefined]);
+});
+
+async function returnFromApple(page: Page, callbackParams: Record<string, string>) {
+  await page.goto("");
+  return page.evaluate(async (params) => {
+    const modulePath = "/src/platform/account-auth.web.ts";
+    const { signInWithApple, initializeAuthStorage, takeCompletedAppleSignIn } = await import(
+      modulePath
+    );
+    const reports: unknown[] = [];
+    const report = (message: string) => (error: unknown) => {
+      reports.push([error instanceof Error ? error.message : error, message]);
+    };
+    await signInWithApple({ auth: { signInWithOAuth: async () => ({ data: {}, error: null }) } });
+    const url = new URL(window.location.href);
+    for (const [name, value] of Object.entries(params)) {
+      url.searchParams.set(name, value);
+    }
+    window.history.replaceState(null, "", url);
+    await initializeAuthStorage([], report);
+    const completedSignIns = [takeCompletedAppleSignIn()];
+    await initializeAuthStorage([], report);
+    completedSignIns.push(takeCompletedAppleSignIn());
+    return { reports, completedSignIns };
+  }, callbackParams);
+}

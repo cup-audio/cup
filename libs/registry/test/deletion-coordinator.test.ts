@@ -281,6 +281,83 @@ test.for([
   },
 );
 
+test("the Apple revocation recorded at scheduling stays on the deletion job and lands in the receipt", async ({
+  expect,
+}) => {
+  const attempt = await scheduledAccountAttempt("revoked");
+  const name = crypto.randomUUID();
+  const coordinator = bindings.DELETION_TEST.get(bindings.DELETION_TEST.idFromName(name));
+  await coordinator.acceptForTest(attempt);
+  const storage = await worker.getDurableObjectStorage("DELETION_TEST", { name });
+
+  expect(
+    await storage.exec(
+      "SELECT json_extract(payload_json, '$.appleRevocation') AS apple FROM deletion_jobs",
+    ),
+  ).toStrictEqual([{ apple: "revoked" }]);
+
+  await storage.exec(
+    `UPDATE deletion_jobs SET payload_json = json_set(payload_json, '$.state', 'deleting',
+      '$.accountDone', json('true'), '$.nextAttemptMs', 0)`,
+  );
+  await coordinator.reconcileForTest();
+  const receipts = await coordinator.reconcileForTest();
+
+  expect(receipts.map(({ result }) => JSON.parse(result))).toStrictEqual([
+    expect.objectContaining({ result: "erased", appleRevocation: "revoked" }),
+  ]);
+});
+
+test("an operator-scheduled deletion records not-revoked, lists both revocations, sends the usual notice, and refuses a second scheduling", async ({
+  expect,
+  onTestFinished,
+}) => {
+  const stub = await useResendStub({ onTestFinished });
+  const accountId = crypto.randomUUID();
+  const account = bindings.ACCOUNTS.get(bindings.ACCOUNTS.idFromName(accountId));
+  await account.initialize({
+    accountId,
+    subject: crypto.randomUUID(),
+    createdAtMs: Temporal.Now.instant().epochMilliseconds,
+  });
+
+  await expectRejection(account.scheduleOperatorDeletion(RECIPIENT));
+
+  expect((await account.inspect()).state).toBe("deletion_scheduled");
+  await expect(account.scheduleOperatorDeletion(RECIPIENT)).resolves.toEqual({
+    result: "conflict",
+  });
+  const accountStorage = await worker.getDurableObjectStorage("ACCOUNTS", { name: accountId });
+  const [row] = await accountStorage.exec("SELECT payload_json FROM deletion_attempts");
+  if (typeof row?.["payload_json"] !== "string") {
+    throw new Error("The account was not scheduled for deletion");
+  }
+  const attempt: DeletionAttempt = JSON.parse(row["payload_json"]);
+  expect(attempt).toMatchObject({ accountId, email: RECIPIENT, appleRevocation: "not-revoked" });
+  const coordinator = bindings.DELETION_TEST.get(
+    bindings.DELETION_TEST.idFromName(crypto.randomUUID()),
+  );
+  await coordinator.acceptForTest({ ...attempt, state: "scheduled" });
+
+  expect(await coordinator.statusForTest()).toStrictEqual([
+    expect.objectContaining({
+      attemptId: attempt.attemptId,
+      googleRevocation: "unavailable",
+      appleRevocation: "not-revoked",
+    }),
+  ]);
+  await coordinator.reconcileWithProvidersForTest(stub.url, DEFAULT_TIMEOUT_MS);
+  expect(stub.emails).toStrictEqual([
+    expect.objectContaining({
+      idempotencyKey: `${attempt.attemptId}:scheduled`,
+      email: expect.objectContaining({
+        to: [RECIPIENT],
+        subject: "Your Cup account deletion is scheduled",
+      }),
+    }),
+  ]);
+});
+
 async function sentryCoordinator({
   onTestFinished,
   sentryDsn,
@@ -314,6 +391,7 @@ async function sentryCoordinator({
         scheduledAtMs: deadlineMs - 7 * 86_400_000,
         deadlineMs,
         state: "scheduled",
+        appleRevocation: "unavailable",
       };
       await object.acceptForTest(attempt);
       await storage.exec(
@@ -356,6 +434,7 @@ async function scheduledCoordinator() {
     scheduledAtMs: nowMs,
     deadlineMs: nowMs + 7 * 86_400_000,
     state: "scheduled",
+    appleRevocation: "unavailable",
   };
   await object.acceptForTest(attempt);
   const storage = await worker.getDurableObjectStorage("DELETION_TEST", { name });
@@ -402,6 +481,7 @@ async function restoredAccountAttempt(): Promise<DeletionAttempt> {
       challengeId: schedule.challengeId,
       authenticatedAtSeconds: Math.floor(schedule.issuedAtMs / 1000) + 1,
       email: RECIPIENT,
+      appleRevocation: "unavailable",
     }),
   );
   const storage = await worker.getDurableObjectStorage("ACCOUNTS", { name: accountId });
@@ -423,6 +503,34 @@ function expectExactlyOneEmail(expect: TestContext["expect"], stub: ResendStub, 
     .filter(({ idempotencyKey }) => idempotencyKey === key)
     .map(({ body }) => JSON.stringify(body));
   expect(new Set(bodies).size).toBe(1);
+}
+
+async function scheduledAccountAttempt(
+  appleRevocation: "unavailable" | "revoked" | "not-revoked",
+): Promise<DeletionAttempt> {
+  const accountId = crypto.randomUUID();
+  const account = bindings.ACCOUNTS.get(bindings.ACCOUNTS.idFromName(accountId));
+  await account.initialize({
+    accountId,
+    subject: crypto.randomUUID(),
+    createdAtMs: Temporal.Now.instant().epochMilliseconds,
+  });
+  const schedule = await account.deletionChallenge();
+  await expectRejection(
+    account.scheduleDeletion({
+      challengeId: schedule.challengeId,
+      authenticatedAtSeconds: Math.floor(schedule.issuedAtMs / 1000) + 1,
+      email: RECIPIENT,
+      appleRevocation,
+    }),
+  );
+  const storage = await worker.getDurableObjectStorage("ACCOUNTS", { name: accountId });
+  const [row] = await storage.exec("SELECT payload_json FROM deletion_attempts");
+  if (typeof row?.["payload_json"] !== "string") {
+    throw new Error("The account was not scheduled for deletion");
+  }
+  const scheduled: DeletionAttempt = JSON.parse(row["payload_json"]);
+  return { ...scheduled, state: "scheduled" };
 }
 
 async function expectRejection(operation: Promise<unknown>): Promise<void> {

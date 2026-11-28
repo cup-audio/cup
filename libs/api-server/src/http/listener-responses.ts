@@ -19,6 +19,7 @@ import type {
   GrantSnapshot,
   HistoryItem,
   PreparationPhase,
+  SignInMethod,
 } from "@cup/listener-api.routes";
 
 type ReadyAudiobook = Extract<Audiobook, { status: "ready" }>;
@@ -39,12 +40,16 @@ export function toAccountSnapshotResponse(snapshot: StoredAccountSnapshot) {
   } satisfies AccountSnapshot;
 }
 
-export function toDeletionChallengeResponse(challenge: ReturnType<AccountLifecycle["challenge"]>) {
+export function toDeletionChallengeResponse(
+  challenge: ReturnType<AccountLifecycle["challenge"]>,
+  acceptedMethods: SignInMethod[],
+) {
   return {
     challengeId: challenge.challengeId,
     subject: challenge.subject,
     issuedAtMs: challenge.issuedAtMs,
     expiresAtMs: challenge.expiresAtMs,
+    acceptedMethods,
   } satisfies DeletionChallenge;
 }
 

@@ -1,4 +1,4 @@
-import { expect, test, vi } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 
 import type {
   AccountAccountingInspection,
@@ -18,23 +18,16 @@ import {
   listAccountsResponseSchema,
   type ListAccountDeletionsResponse,
 } from "@cup/operator-api.routes";
-import { logEvent } from "@cup/telemetry.cloudflare";
 
 import type { ApiServerEnvironment } from "#src/api-server-environment.ts";
 import { createApiServer } from "#src/api-server.ts";
 import { isDevelopmentOperatorRequest } from "#src/http/operator-access.ts";
 
-vi.mock("@cup/conversion-grants", async () => ({
-  ...(await import("@cup/conversion-grants/contracts")),
-  clearGrantSessionCookie: () => "",
-  createGrantSessionCookie: () => "",
-  createRootCredential: () => "",
-  getGrantSessionCookie: () => undefined,
-}));
-vi.mock(import("@cup/telemetry.cloudflare"), async (importOriginal) => ({
-  ...(await importOriginal()),
-  logEvent: vi.fn<typeof logEvent>(),
-}));
+import { recordSentry, stopRecordingSentry } from "#test/sentry-recorder.ts";
+
+afterEach(() => {
+  stopRecordingSentry();
+});
 
 const accountId = "d1a52e64-3e4d-4a7f-a711-7fb11501e9af";
 const conversionId = "f9cc2e59-46a3-4890-b923-bda04d03b4d0";
@@ -142,6 +135,8 @@ const deletions: ListAccountDeletionsResponse = {
       accountDone: false,
       failures: 1,
       overdue: true,
+      googleRevocation: "revoked",
+      appleRevocation: "unavailable",
     },
   ],
   receipts: [
@@ -215,7 +210,7 @@ function fixture() {
     id === accountId ? identity : undefined,
   );
   const env = {
-    SUPABASE_URL: "https://auth.example.test",
+    SUPABASE_URL: "https://operator-access.supabase.co",
     ACCOUNTS: {
       idFromName: (name: string) => name,
       get: () => ({
@@ -425,8 +420,7 @@ test("records account allowance adjustments and reports the resulting balance", 
 test("records an operator mutation by method, path and status, without the operator's email", async () => {
   const { env } = fixture();
   const app = createApiServer({ validateOperatorAccess: async () => true });
-  const log = vi.mocked(logEvent);
-  log.mockClear();
+  const sentry = recordSentry();
 
   const response = await app.request(
     adjustmentRequest({
@@ -439,20 +433,18 @@ test("records an operator mutation by method, path and status, without the opera
   );
 
   expect(response.status).toBe(200);
-  expect(log.mock.calls).toEqual([
-    [
-      "operator-mutation",
-      expect.any(String),
-      {
-        attributes: {
-          "http.request.method": "POST",
-          "url.path": `/api/operator/accounts/${accountId}/allowance-adjustments`,
-          "http.response.status_code": 200,
-        },
+  expect(sentry.logs).toEqual([
+    {
+      event: "operator-mutation",
+      message: expect.any(String),
+      attributes: {
+        "http.request.method": "POST",
+        "url.path": `/api/operator/accounts/${accountId}/allowance-adjustments`,
+        "http.response.status_code": 200,
       },
-    ],
+    },
   ]);
-  expect(JSON.stringify(log.mock.calls)).not.toContain("operator@example.test");
+  expect(JSON.stringify(sentry.logs)).not.toContain("operator@example.test");
 });
 
 test("rejects account allowance adjustments for unknown accounts and invalid input", async () => {

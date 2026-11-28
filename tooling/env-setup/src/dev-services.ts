@@ -184,6 +184,7 @@ async function run(command: { action: "start"; tailnet: boolean } | { action: "s
       SUPABASE_PUBLISHABLE_KEY: status.ANON_KEY,
       SUPABASE_SECRET_KEY: status.SERVICE_ROLE_KEY,
       GOOGLE_WEB_CLIENT_ID: isGoogleConfigured ? clientId : "",
+      APPLE_WEB_CLIENT_ID: "",
       MEDIA_URL_SIGNING_KEY:
         workerEnv["MEDIA_URL_SIGNING_KEY"] ?? randomBytes(32).toString("base64url"),
       LOCAL_DEVELOPMENT: "true",

@@ -23,6 +23,11 @@ const PENDING_CONVERSION_ID = "5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b";
 const adjustmentBodies: unknown[] = [];
 const conversionDeletionPaths: string[] = [];
 const ledgerQueries: string[] = [];
+const lostAppleAccountDeletionBodies: unknown[] = [];
+const SCHEDULED_ACCOUNT_ID = "7a8b9c0d-1e2f-4a3b-8c4d-5e6f7a8b9c0d";
+const ATTEMPT_ID = "9c0d1e2f-3a4b-4c5d-8e6f-7a8b9c0d1e2f";
+const RELAY_EMAIL = "abc123@privaterelay.appleid.com";
+const RECOVERY_DEADLINE_MS = Temporal.Instant.from("2026-11-30T10:00:00Z").epochMilliseconds;
 let server: http.Server;
 let operatorUrl: string;
 
@@ -77,10 +82,67 @@ describe("actual operator CLI process", () => {
     expect(`${result.stdout}${result.stderr}`).not.toContain("Cf-Access-Token");
   });
 
-  test("lists account deletions through the authenticated operator API", async () => {
+  test("lists account deletions with each attempt's Google and Apple revocation", async () => {
     const result = await runCli("--json", "account", "deletions");
     expect(result.status).toBe(0);
-    expect(JSON.parse(result.stdout) as unknown).toEqual({ attempts: [], receipts: [] });
+    expect(JSON.parse(result.stdout) as unknown).toEqual(deletionsFixture());
+
+    const human = await runCli("account", "deletions");
+    expect(human.status).toBe(0);
+    expect(human.stdout).toContain('"googleRevocation": "unavailable"');
+    expect(human.stdout).toContain('"appleRevocation": "not-revoked"');
+  });
+
+  test("refuses to schedule a lost-Apple-Account deletion without --yes before contacting the API", async () => {
+    lostAppleAccountDeletionBodies.length = 0;
+    const result = await runCli(
+      "account",
+      "delete-lost-apple-account",
+      ACCOUNT_ID,
+      "--email",
+      RELAY_EMAIL,
+    );
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("required option '--yes' not specified");
+    expect(lostAppleAccountDeletionBodies).toEqual([]);
+  });
+
+  test("schedules a lost-Apple-Account deletion for the confirmed address and shows that Apple was not revoked", async () => {
+    lostAppleAccountDeletionBodies.length = 0;
+    const result = await runCli(
+      "account",
+      "delete-lost-apple-account",
+      ACCOUNT_ID,
+      "--email",
+      RELAY_EMAIL,
+      "--yes",
+    );
+    expect(result.status).toBe(0);
+    expect(lostAppleAccountDeletionBodies).toEqual([{ email: RELAY_EMAIL }]);
+    expect(result.stdout).toContain(`Account ID: ${ACCOUNT_ID}`);
+    expect(result.stdout).toContain(`Attempt ID: ${ATTEMPT_ID}`);
+    expect(result.stdout).toContain("Recovery deadline: 2026-11-30T10:00:00Z");
+    expect(result.stdout).toContain("Apple revocation: not-revoked");
+  });
+
+  test("reports the refusal of an already scheduled account", async () => {
+    const result = await runCli(
+      "--json",
+      "account",
+      "delete-lost-apple-account",
+      SCHEDULED_ACCOUNT_ID,
+      "--email",
+      RELAY_EMAIL,
+      "--yes",
+    );
+    expect(result.status).toBe(1);
+    expect(JSON.parse(result.stderr) as unknown).toEqual({
+      error: {
+        code: "account-not-active",
+        message: "The account is already scheduled for deletion or being deleted.",
+        traceId: TRACE_ID,
+      },
+    });
   });
 
   test("lists accounts with a phase filter and next cursor", async () => {
@@ -436,7 +498,7 @@ function handleAccountRead(url: URL, response: http.ServerResponse): boolean {
       nextCursor: "next",
     });
   } else if (url.pathname === "/api/operator/accounts/deletions") {
-    send(response, 200, { attempts: [], receipts: [] });
+    send(response, 200, deletionsFixture());
   } else if (url.pathname === `/api/operator/accounts/${ACCOUNT_ID}`) {
     send(response, 200, accountInspectionFixture());
   } else if (url.pathname === `/api/operator/accounts/${GRANT_ID}`) {
@@ -454,6 +516,28 @@ function handleAccountRead(url: URL, response: http.ServerResponse): boolean {
 }
 
 function handleAccountWrite(url: URL, body: string, response: http.ServerResponse): boolean {
+  if (url.pathname === `/api/operator/accounts/${ACCOUNT_ID}/lost-apple-account-deletion`) {
+    lostAppleAccountDeletionBodies.push(JSON.parse(body));
+    send(response, 200, {
+      accountId: ACCOUNT_ID,
+      attemptId: ATTEMPT_ID,
+      recoveryDeadlineMs: RECOVERY_DEADLINE_MS,
+      appleRevocation: "not-revoked",
+    });
+    return true;
+  }
+  if (
+    url.pathname === `/api/operator/accounts/${SCHEDULED_ACCOUNT_ID}/lost-apple-account-deletion`
+  ) {
+    send(response, 409, {
+      error: {
+        code: "account-not-active",
+        message: "The account is already scheduled for deletion or being deleted.",
+        traceId: TRACE_ID,
+      },
+    });
+    return true;
+  }
   if (url.pathname !== `/api/operator/accounts/${ACCOUNT_ID}/allowance-adjustments`) {
     return false;
   }
@@ -463,6 +547,25 @@ function handleAccountWrite(url: URL, body: string, response: http.ServerRespons
     balance: { unit: "audio-millisecond", available: 3_600_000, reserved: 0 },
   });
   return true;
+}
+
+function deletionsFixture() {
+  return {
+    attempts: [
+      {
+        attemptId: ATTEMPT_ID,
+        accountId: ACCOUNT_ID,
+        state: "scheduled",
+        identityDone: false,
+        accountDone: false,
+        failures: 0,
+        overdue: false,
+        googleRevocation: "unavailable",
+        appleRevocation: "not-revoked",
+      },
+    ],
+    receipts: [],
+  };
 }
 
 function grantFixture(state: "open" | "revoked") {

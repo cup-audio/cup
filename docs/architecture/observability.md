@@ -53,9 +53,10 @@ No runtime sends a listener's email address, IP address, headers, cookies, bodie
 
 Sentry emails the operator, and nobody else, through the alerts in the [Terraform root](../../terraform/README.md#alerts-and-monitors), which also holds each threshold. Each email is Sentry's standard issue email with the issue's tags, such as `cup.conversion.id`.
 
-- **New or regressed issues** of either project, which include client and native crash issues, the stuck checks, and the issues the uptime and volume monitors open.
+- **New or regressed issues** of either project, which include client and native crash issues, the stuck checks, and the issues the uptime, cron and volume monitors open.
 - **Frequent conversion failures**: an issue tagged with a failure category that is seen often within an hour.
 - **Uptime** of `GET https://cup.audio/api/health`, which answers 200 while the Worker runs and calls no binding.
+- **Apple client secret rotation**: a cron monitor in `cup-worker` that expects the monthly [rotation workflow](../production-configuration.md#apple-client-secret-rotation) to check in after it wrote a new secret, and opens an issue for a missed or failed month, months before Supabase's Apple client secret expires.
 - **Volume**: each project's daily errors and spans, each monitor set to a day's share of the free plan's monthly quota, so the operator learns before a quota runs out mid-month, after which alerting is blind until the next month. When one fires, the operator finds the source on Sentry's Stats page and fixes it, or lowers span sampling or upgrades when nothing is broken. Spike protection is on in both projects.
 
 Every alert emails at most once an hour per issue, and the operator's personal workflow notifications are off ([Terraform guide](../../terraform/README.md#personal-notifications)). A true failure-rate monitor, failed conversion outcomes divided by all outcomes, waits for volume or Sentry's Team plan.

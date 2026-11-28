@@ -1,15 +1,15 @@
-import type { captureException } from "@sentry/core";
-import { expect, test, vi } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 
 import type { AccountSnapshot } from "@cup/accounts";
 
 import { authenticateAccount } from "#src/use-cases/authenticate-account.ts";
 import type { AuthenticateAccountDependencies } from "#src/use-cases/authenticate-account.ts";
 
-vi.mock(import("@sentry/core"), async (importOriginal) => ({
-  ...(await importOriginal()),
-  captureException: vi.fn<typeof captureException>(),
-}));
+import { recordSentry, stopRecordingSentry } from "#test/sentry-recorder.ts";
+
+afterEach(() => {
+  stopRecordingSentry();
+});
 
 function fixture() {
   const snapshot: AccountSnapshot = {
@@ -123,13 +123,10 @@ test("a failing registry answers unavailable and captures the error, since every
   const { dependencies } = fixture();
   const failure = new Error("Registry unavailable");
   dependencies.registry.findIdentity.mockRejectedValue(failure);
-  vi.resetModules();
-  const sentry = await import("@sentry/core");
-  const useCase = await import("#src/use-cases/authenticate-account.ts");
-  vi.mocked(sentry.captureException).mockClear();
+  const sentry = recordSentry();
 
-  expect(await useCase.authenticateAccount("subject", dependencies)).toEqual({
+  expect(await authenticateAccount("subject", dependencies)).toEqual({
     result: "unavailable",
   });
-  expect(vi.mocked(sentry.captureException).mock.calls).toEqual([[failure]]);
+  expect(sentry.exceptions).toEqual([failure]);
 });

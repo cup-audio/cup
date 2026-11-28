@@ -29,6 +29,9 @@ const SNAPSHOT_READY_MARKER = path.join(AVD_HOME, `${AVD_NAME}.snapshot-ready`);
 const PREPARATION_LOCK = path.join(AVD_HOME, `${AVD_NAME}.lock`);
 
 const BOOT_TIMEOUT_MS = 180_000;
+const CHROME_PACKAGE = "com.android.chrome";
+const CHROME_COMMAND_LINE_FILE = "/data/local/tmp/chrome-command-line";
+const CHROME_TEST_FLAGS = "--disable-fre --no-default-browser-check --no-first-run";
 
 export async function bootEmulator(host: AndroidHost): Promise<Emulator> {
   await prepareSnapshot(host);
@@ -56,11 +59,31 @@ export async function bootEmulator(host: AndroidHost): Promise<Emulator> {
       "hide_error_dialogs",
       "1",
     ]);
+    await skipChromeFirstRun(host, serial);
   } catch (error) {
     await stop();
     throw error;
   }
   return { serial, stop };
+}
+
+async function skipChromeFirstRun(host: AndroidHost, serial: string): Promise<void> {
+  await run(host.adb, [
+    "-s",
+    serial,
+    "shell",
+    `echo '_ ${CHROME_TEST_FLAGS}' > ${CHROME_COMMAND_LINE_FILE}`,
+  ]);
+  await run(host.adb, [
+    "-s",
+    serial,
+    "shell",
+    "am",
+    "set-debug-app",
+    "--persistent",
+    CHROME_PACKAGE,
+  ]);
+  await run(host.adb, ["-s", serial, "shell", "am", "force-stop", CHROME_PACKAGE]);
 }
 
 export function findOrphanedEmulators(processes: readonly ListedProcess[]): number[] {

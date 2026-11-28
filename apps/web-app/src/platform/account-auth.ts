@@ -5,6 +5,7 @@ import * as ios from "#src/platform/account-auth.ios.js";
 import * as web from "#src/platform/account-auth.web.js";
 
 export type GoogleSignInOptions = { fresh: boolean; chooseAccount: boolean };
+export type AppleSignInOptions = { fresh: boolean };
 
 const platform = Capacitor.getPlatform();
 export const initializeAuthStorage =
@@ -19,6 +20,33 @@ export const signInWithGoogle =
     : platform === "ios"
       ? ios.signInWithGoogle
       : web.signInWithGoogle;
+export const signInWithApple =
+  platform === "android"
+    ? android.signInWithApple
+    : platform === "ios"
+      ? ios.signInWithApple
+      : platform === "web"
+        ? web.signInWithApple
+        : undefined;
+export const completePendingSignIn =
+  platform === "android" ? android.completePendingSignIn : async () => {};
+export const takeCompletedAppleSignIn =
+  platform === "android"
+    ? android.takeCompletedAppleSignIn
+    : platform === "ios"
+      ? ios.takeCompletedAppleSignIn
+      : platform === "web"
+        ? web.takeCompletedAppleSignIn
+        : () => false;
+export const appleCredentialOf =
+  platform === "android"
+    ? android.appleCredentialOf
+    : platform === "ios"
+      ? ios.appleCredentialOf
+      : platform === "web"
+        ? web.appleCredentialOf
+        : () => undefined;
+export const watchAppleCredential = platform === "web" ? web.watchAppleCredential : () => {};
 export const watchAppState =
   platform === "android"
     ? android.watchAppState

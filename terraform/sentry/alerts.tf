@@ -4,6 +4,8 @@ locals {
 
   alert_frequency_minutes = 60
 
+  apple_client_secret_rotation_monitor_slug = "apple-client-secret-rotation"
+
   email_team = {
     target_type = "team"
     target_id   = sentry_team.cup.internal_id
@@ -45,6 +47,27 @@ resource "sentry_uptime_monitor" "health" {
   assertion_json = provider::sentry::assertion(
     provider::sentry::op_status_code_check("equals", 200),
   )
+}
+
+resource "sentry_cron_monitor" "apple_client_secret_rotation" {
+  organization = data.sentry_organization.cup.slug
+  project      = sentry_project.cup["worker"].slug
+  name         = local.apple_client_secret_rotation_monitor_slug
+  description  = "The monthly GitHub Actions workflow rotate-apple-client-secret did not report a successful apply. Supabase's Apple client secret expires about five months after the last success; see docs/production-configuration.md#apple-client-secret-rotation."
+
+  owner = {
+    team_id = sentry_team.cup.internal_id
+  }
+
+  schedule = {
+    crontab = "17 6 1 * *"
+  }
+  timezone = "UTC"
+
+  checkin_margin_minutes  = 1440
+  max_runtime_minutes     = 30
+  failure_issue_threshold = 1
+  recovery_threshold      = 1
 }
 
 resource "sentry_metric_monitor" "daily_errors" {
@@ -138,7 +161,7 @@ resource "sentry_alert" "new_or_regressed_issue" {
       sentry_metric_monitor.daily_errors[each.key].id,
       sentry_metric_monitor.daily_spans[each.key].id,
     ],
-    each.key == "worker" ? [sentry_uptime_monitor.health.id] : [],
+    each.key == "worker" ? [sentry_uptime_monitor.health.id, sentry_cron_monitor.apple_client_secret_rotation.id] : [],
   )
 
   trigger_conditions = [

@@ -17,7 +17,7 @@ public class TestApiOriginPlugin extends Plugin {
     @Override
     public void load() {
         try {
-            String origin = TestApiOrigin.fromIntent(getActivity().getIntent());
+            String origin = TestApiOrigin.of(getActivity(), getActivity().getIntent());
             if (origin == null) {
                 return;
             }

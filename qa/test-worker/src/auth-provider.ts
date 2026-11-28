@@ -4,11 +4,19 @@ import https from "node:https";
 import type net from "node:net";
 import { Temporal } from "temporal-polyfill";
 
+import { createFakeApple, type AppleEndpoint } from "#src/fake-apple.ts";
+
 const SUBJECT = "880ce5b5-6542-40fd-8f2d-380f3066e98a";
 const READER_NAME = "Reader Doe";
 const OTHER_SUBJECT = "70fcf2d9-63c5-48be-b897-d3670f24ed43";
 const GOOGLE_ISSUER = "https://accounts.google.com";
 const GOOGLE_SUBJECT = "qa-google";
+const APPLE_SUBJECT = "000123.qa-apple.0456";
+const APPLE_ISSUER = "https://appleid.apple.com";
+const APPLE_NATIVE_CLIENT_ID = "audio.cup.app";
+const APPLE_GIVEN_NAME = "Ada";
+const APPLE_FAMILY_NAME = "Lovelace";
+const READER_EMAIL = "reader@example.test";
 const IOS_AUTH_CALLBACK_URL = "audio.cup.app://auth/callback";
 const SUPABASE_API_VERSION = "2024-01-01";
 const DEFAULT_ACCESS_TOKEN_LIFETIME_SECONDS = 300;
@@ -25,7 +33,20 @@ type StartAuthProviderOptions = {
 
 export type AuthProvider = Awaited<ReturnType<typeof startAuthProvider>>;
 
-type SignIn = { authenticatedAt: number; method: "oauth" | "id_token" | "password" };
+type OAuthProvider = "google" | "apple";
+
+type User = {
+  id: string;
+  email: string;
+  providers: Array<OAuthProvider | "email">;
+  metadata: Record<string, string>;
+};
+
+type SignIn = {
+  userId: string;
+  authenticatedAt: number;
+  method: "oauth" | "id_token" | "password";
+};
 
 type Rotation = { session: string; rotatedAt: number };
 
@@ -37,7 +58,19 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
     alg: "ES256",
     use: "sig",
   };
-  const codes = new Map<string, { challenge: string; authenticatedAt: number }>();
+  const codes = new Map<
+    string,
+    { challenge: string; authenticatedAt: number; provider: OAuthProvider }
+  >();
+  const testAccountUser: User = {
+    id: TEST_ACCOUNT_SUBJECT,
+    email: TEST_ACCOUNT.email,
+    providers: ["email"],
+    metadata: {},
+  };
+  const users: User[] = [testAccountUser];
+  let appleEmail = READER_EMAIL;
+  let holdsAuthorizations = false;
   const refreshTokens = new Map<string, SignIn & { rotation?: Rotation }>();
   const authorizationRequests: Array<Record<string, string>> = [];
   let origin = "";
@@ -71,67 +104,81 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
     const claims: unknown = JSON.parse(Buffer.from(payload, "base64url").toString());
     return claims && typeof claims === "object" ? { ...claims } : undefined;
   };
+  const apple = createFakeApple({ signIdToken: sign });
   const tokenFor = (
-    subject: string,
+    user: Pick<User, "id" | "email" | "providers">,
     authenticatedAt = nowSeconds(),
     method: SignIn["method"] = "oauth",
   ) => {
     const now = nowSeconds();
     return sign({
       iss: `${origin}/auth/v1`,
-      sub: subject,
+      sub: user.id,
       aud: "authenticated",
       role: "authenticated",
-      email: method === "password" ? TEST_ACCOUNT.email : "reader@example.test",
+      email: user.email,
       iat: now,
       exp: now + accessTokenLifetimeSeconds,
-      app_metadata: { provider: method === "password" ? "email" : "google" },
+      app_metadata: { provider: user.providers[0], providers: [...user.providers] },
       amr: [{ method, timestamp: authenticatedAt }],
     });
   };
-  const sessionFor = ({ authenticatedAt, method }: SignIn) => {
+  const userSignedInWith = (provider: OAuthProvider): User => {
+    const email = provider === "apple" ? appleEmail : READER_EMAIL;
+    const existing = users.find((user) => user.email === email);
+    if (existing) {
+      if (!existing.providers.includes(provider)) {
+        existing.providers.push(provider);
+      }
+      return existing;
+    }
+    const user: User = {
+      id: email === READER_EMAIL ? SUBJECT : crypto.randomUUID(),
+      email,
+      providers: [provider],
+      metadata: provider === "google" ? { name: READER_NAME, full_name: READER_NAME } : {},
+    };
+    users.push(user);
+    return user;
+  };
+  const requireUser = (id: string) => {
+    const user = users.find((candidate) => candidate.id === id);
+    if (!user) {
+      throw new Error(`Unknown QA user ${id}`);
+    }
+    return user;
+  };
+  const userJsonOf = (user: User) => ({
+    id: user.id,
+    email: user.email,
+    aud: "authenticated",
+    app_metadata: { provider: user.providers[0], providers: [...user.providers] },
+    user_metadata: { ...user.metadata },
+    identities: identitiesOf(user),
+  });
+  const sessionFor = (
+    { userId, authenticatedAt, method }: SignIn,
+    providerTokens: { provider_refresh_token?: string } = {},
+  ) => {
     const refreshToken = crypto.randomUUID();
-    refreshTokens.set(refreshToken, { authenticatedAt, method });
-
-    const account =
-      method === "password"
-        ? {
-            id: TEST_ACCOUNT_SUBJECT,
-            email: TEST_ACCOUNT.email,
-            provider: "email",
-            metadata: {},
-            identitySubject: TEST_ACCOUNT_SUBJECT,
-          }
-        : {
-            id: SUBJECT,
-            email: "reader@example.test",
-            provider: "google",
-            metadata: { name: READER_NAME, full_name: READER_NAME },
-            identitySubject: GOOGLE_SUBJECT,
-          };
+    refreshTokens.set(refreshToken, { userId, authenticatedAt, method });
+    const user = requireUser(userId);
 
     return JSON.stringify({
-      access_token: tokenFor(account.id, authenticatedAt, method),
+      access_token: tokenFor(user, authenticatedAt, method),
       token_type: "bearer",
       refresh_token: refreshToken,
       expires_in: accessTokenLifetimeSeconds,
-      user: {
-        id: account.id,
-        email: account.email,
-        aud: "authenticated",
-        app_metadata: { provider: account.provider },
-        user_metadata: account.metadata,
-        identities: [
-          { provider: account.provider, identity_data: { sub: account.identitySubject } },
-        ],
-      },
+      ...providerTokens,
+      user: userJsonOf(user),
     });
   };
   const authorize = (url: URL, response: http.ServerResponse) => {
     authorizationRequests.push(Object.fromEntries(url.searchParams));
     const redirect = new URL(url.searchParams.get("redirect_to") ?? "");
+    const provider = url.searchParams.get("provider");
     if (
-      url.searchParams.get("provider") !== "google" ||
+      (provider !== "google" && provider !== "apple") ||
       url.searchParams.get("code_challenge_method")?.toLowerCase() !== "s256" ||
       !isAllowedRedirect(redirect)
     ) {
@@ -141,8 +188,17 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
     codes.set(code, {
       challenge: url.searchParams.get("code_challenge") ?? "",
       authenticatedAt: nowSeconds(),
+      provider,
     });
     redirect.searchParams.set("code", code);
+    if (holdsAuthorizations) {
+      response
+        .writeHead(200, { "Content-Type": "text/html; charset=utf-8" })
+        .end(
+          `<!doctype html><meta name="viewport" content="width=device-width"><title>QA sign-in</title><a id="continue" href="${redirect.href.replaceAll("&", "&amp;")}">Continue</a>`,
+        );
+      return;
+    }
     response.writeHead(302, { Location: redirect.href }).end();
   };
   const issueGoogleIdToken = async (
@@ -171,6 +227,55 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
         displayName: READER_NAME,
       }),
     );
+  };
+  const issueAppleCredential = async (
+    request: http.IncomingMessage,
+    response: http.ServerResponse,
+  ) => {
+    const body = await readJson(request);
+    if (!body || typeof body !== "object" || !("nonce" in body) || typeof body.nonce !== "string") {
+      throw new Error("Invalid QA Apple credential request");
+    }
+    const now = nowSeconds();
+    const email = appleEmail;
+    response.end(
+      JSON.stringify({
+        identityToken: sign({
+          iss: APPLE_ISSUER,
+          aud: APPLE_NATIVE_CLIENT_ID,
+          sub: APPLE_SUBJECT,
+          email,
+          nonce: body.nonce,
+          iat: now,
+          exp: now + 300,
+        }),
+        authorizationCode: apple.issueAuthorizationCode(() => {
+          const user = users.find((candidate) => candidate.email === email);
+          return user === undefined ? APPLE_SUBJECT : identitySubjectOf(user, "apple");
+        }),
+        givenName: APPLE_GIVEN_NAME,
+        familyName: APPLE_FAMILY_NAME,
+      }),
+    );
+  };
+  const updateUser = async (request: http.IncomingMessage, response: http.ServerResponse) => {
+    const token = /^Bearer (\S+)$/.exec(request.headers.authorization ?? "")?.[1];
+    const subject = token === undefined ? undefined : verify(token)?.["sub"];
+    if (typeof subject !== "string") {
+      throw new Error("A user update needs an access token the QA provider issued");
+    }
+    const body = await readJson(request);
+    const data = body && typeof body === "object" && "data" in body ? body.data : undefined;
+    if (
+      !data ||
+      typeof data !== "object" ||
+      !Object.values(data).every((value) => typeof value === "string")
+    ) {
+      throw new Error("Invalid QA user update: data must map keys to strings");
+    }
+    const user = requireUser(subject);
+    Object.assign(user.metadata, data);
+    response.end(JSON.stringify(userJsonOf(user)));
   };
   const exchange = async (
     url: URL,
@@ -210,7 +315,15 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
     }
     codes.delete(body.auth_code);
     exchanges += 1;
-    response.end(sessionFor({ authenticatedAt: code.authenticatedAt, method: "oauth" }));
+    const user = userSignedInWith(code.provider);
+    response.end(
+      sessionFor(
+        { userId: user.id, authenticatedAt: code.authenticatedAt, method: "oauth" },
+        code.provider === "apple"
+          ? { provider_refresh_token: apple.issueRefreshToken(identitySubjectOf(user, "apple")) }
+          : {},
+      ),
+    );
   };
   const exchangeRefreshToken = (
     body: unknown,
@@ -272,14 +385,16 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
       return;
     }
     exchanges += 1;
-    response.end(sessionFor({ authenticatedAt: nowSeconds(), method: "password" }));
+    response.end(
+      sessionFor({ userId: testAccountUser.id, authenticatedAt: nowSeconds(), method: "password" }),
+    );
   };
   const exchangeIdToken = (body: unknown, response: http.ServerResponse) => {
     if (
       !body ||
       typeof body !== "object" ||
       !("provider" in body) ||
-      body.provider !== "google" ||
+      (body.provider !== "google" && body.provider !== "apple") ||
       !("id_token" in body) ||
       typeof body.id_token !== "string" ||
       !("nonce" in body) ||
@@ -288,14 +403,41 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
       throw new Error("Invalid ID token exchange");
     }
     const claims = verify(body.id_token);
-    if (claims?.["iss"] !== GOOGLE_ISSUER) {
+    const { provider } = body;
+    if (
+      claims === undefined ||
+      (provider === "google"
+        ? claims["iss"] !== GOOGLE_ISSUER
+        : claims["iss"] !== APPLE_ISSUER || claims["aud"] !== APPLE_NATIVE_CLIENT_ID)
+    ) {
       throw new Error("ID token verification failed");
     }
     if (claims["nonce"] !== crypto.createHash("sha256").update(body.nonce).digest("hex")) {
       throw new Error("ID token nonce mismatch");
     }
     exchanges += 1;
-    response.end(sessionFor({ authenticatedAt: nowSeconds(), method: "id_token" }));
+    const user = userSignedInWith(provider);
+    response.end(
+      sessionFor({ userId: user.id, authenticatedAt: nowSeconds(), method: "id_token" }),
+    );
+  };
+  const answerAdminUser = (url: URL, response: http.ServerResponse): boolean => {
+    const id = url.pathname.split("/").at(-1);
+    const user = users.find((candidate) => candidate.id === id);
+    if (user) {
+      response.end(
+        JSON.stringify({
+          id,
+          identities: identitiesOf(user),
+        }),
+      );
+      return true;
+    }
+    if (id === SUBJECT || id === OTHER_SUBJECT) {
+      response.end(JSON.stringify({ id, identities: [] }));
+      return true;
+    }
+    return false;
   };
   const handler: http.RequestListener = (request, response) => {
     response.setHeader("Access-Control-Allow-Origin", "*");
@@ -323,8 +465,23 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
         await issueGoogleIdToken(request, response);
         return;
       }
+      if (url.pathname === "/qa/apple-credential" && request.method === "POST") {
+        await issueAppleCredential(request, response);
+        return;
+      }
       if (url.pathname === "/auth/v1/token") {
         await exchange(url, request, response);
+        return;
+      }
+      if (
+        (url.pathname === "/auth/token" || url.pathname === "/auth/revoke") &&
+        request.method === "POST"
+      ) {
+        await apple.handle(url.pathname, request, response);
+        return;
+      }
+      if (url.pathname === "/auth/v1/user" && request.method === "PUT") {
+        await updateUser(request, response);
         return;
       }
       if (url.pathname === "/auth/v1/logout") {
@@ -333,13 +490,10 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
       }
       if (
         url.pathname.startsWith("/auth/v1/admin/users/") &&
-        request.headers.authorization === "Bearer qa-admin"
+        request.headers.authorization === "Bearer qa-admin" &&
+        answerAdminUser(url, response)
       ) {
-        const id = url.pathname.split("/").at(-1);
-        if (id === SUBJECT || id === OTHER_SUBJECT || id === TEST_ACCOUNT_SUBJECT) {
-          response.end(JSON.stringify({ id }));
-          return;
-        }
+        return;
       }
       response.writeHead(404).end(JSON.stringify({ message: "Unknown QA identity route" }));
     };
@@ -358,8 +512,24 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
   origin = `${options.tls === undefined ? "http" : "https"}://${hostname}:${portOf(servers[0])}`;
   return {
     origin,
-    otherToken: () => tokenFor(OTHER_SUBJECT),
+    otherToken: () => tokenFor({ id: OTHER_SUBJECT, email: READER_EMAIL, providers: ["google"] }),
+    setAppleEmail: (email: string) => {
+      appleEmail = email;
+    },
+    holdAuthorizations: () => {
+      holdsAuthorizations = true;
+    },
     authorizationRequests: () => authorizationRequests.map((query) => ({ ...query })),
+    appleRequests: () => apple.requests(),
+    setAppleFailure: (endpoint: AppleEndpoint | undefined) => {
+      apple.setFailure(endpoint);
+    },
+    expireAppleAuthorizationCodes: () => {
+      apple.expireAuthorizationCodes();
+    },
+    setAppleTokenSubject: (subject: string | undefined) => {
+      apple.setTokenSubject(subject);
+    },
     exchanges: () => exchanges,
     refreshes: () => refreshes,
     setAccessTokenLifetime: (seconds: number) => {
@@ -381,6 +551,23 @@ export async function startAuthProvider(options: StartAuthProviderOptions = {}) 
       await Promise.all(servers.map(close));
     },
   };
+}
+
+function identitiesOf(user: User) {
+  return user.providers.map((provider) => ({
+    provider,
+    identity_data: { sub: identitySubjectOf(user, provider) },
+  }));
+}
+
+function identitySubjectOf(user: User, provider: User["providers"][number]): string {
+  if (provider === "google") {
+    return GOOGLE_SUBJECT;
+  }
+  if (provider === "apple") {
+    return user.email === READER_EMAIL ? APPLE_SUBJECT : `${APPLE_SUBJECT}.${user.id}`;
+  }
+  return user.id;
 }
 
 function isAllowedRedirect(redirect: URL): boolean {
@@ -447,7 +634,11 @@ function portOf(server: net.Server | undefined): number {
 }
 
 function close(server: net.Server): Promise<void> {
-  return new Promise((resolve, reject) =>
+  const closed = new Promise<void>((resolve, reject) =>
     server.close((error) => (error ? reject(error) : resolve())),
   );
+  if (server instanceof http.Server) {
+    server.closeAllConnections();
+  }
+  return closed;
 }

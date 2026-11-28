@@ -4,21 +4,13 @@ import { afterEach, expect, test, vi } from "vitest";
 import type { ApiServerEnvironment } from "#src/api-server-environment.ts";
 import { createApiServer } from "#src/api-server.ts";
 
-vi.mock("@cup/conversion-grants", async () => ({
-  ...(await import("@cup/conversion-grants/contracts")),
-  clearGrantSessionCookie: () => "",
-  createGrantSessionCookie: () => "",
-  createRootCredential: () => "",
-  getGrantSessionCookie: () => undefined,
-}));
-
 const accountId = "d1a52e64-3e4d-4a7f-a711-7fb11501e9af";
 const otherAccountId = "5b0f6a3e-8d0e-4c51-9f0e-2a8f0c6f5d11";
 const subject = "f355f913-ba12-45d6-a7d2-4df95f7cf11f";
 const conversionId = "f9cc2e59-46a3-4890-b923-bda04d03b4d0";
 const otherAccountConversionId = "0c6a9f53-35a4-4c1e-8e57-3f4f8f6c2a10";
 const trialConversionId = "8e1d2b7a-6f43-4d0b-a2c9-1f5e7d3c9b20";
-const url = "https://delete-test.supabase.co";
+const url = "https://delete-account-conversion.supabase.co";
 const keys = await generateKeyPair("ES256");
 const jwk = { ...(await exportJWK(keys.publicKey)), kid: "delete-conversion" };
 
@@ -58,7 +50,7 @@ async function fixture(state = "active") {
   const token = await new SignJWT({
     role: "authenticated",
     is_anonymous: false,
-    app_metadata: { provider: "google" },
+    app_metadata: { provider: "google", providers: ["google"] },
   })
     .setProtectedHeader({ alg: "ES256", kid: "delete-conversion" })
     .setSubject(subject)

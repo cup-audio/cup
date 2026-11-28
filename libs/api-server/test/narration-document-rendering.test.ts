@@ -1,55 +1,20 @@
-import { captureException } from "@sentry/core";
 import { Temporal } from "temporal-polyfill";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import { SPEECH_CONFIG } from "@cup/audiobook-production";
 import { createConversionArtifactPrefix, type ConversionOwner } from "@cup/conversion-contracts";
 import { audiobookResponseSchema, audiobookSchema } from "@cup/listener-api.routes";
-import { renderNarrationDocument } from "@cup/narration-document-creation";
-import { logEvent } from "@cup/telemetry.cloudflare";
 
 import type { ApiServerEnvironment } from "#src/api-server-environment.ts";
 import { createApiServer } from "#src/api-server.ts";
 
+import { createAccountTokenIssuer } from "#test/account-tokens.ts";
+import { recordSentry, stopRecordingSentry, type SentryRecorder } from "#test/sentry-recorder.ts";
 import { toStrictSchema } from "#test/strict-schema.ts";
-
-vi.mock("cloudflare:workers", () => ({
-  DurableObject: class {
-    readonly mocked = true;
-  },
-}));
-vi.mock("@cup/conversion-grants", async () => ({
-  ...(await import("@cup/conversion-grants/contracts")),
-  ...(await import("@cup/conversion-grants/session")),
-}));
-const mocks = vi.hoisted(() => ({
-  authenticate: vi.fn<(...args: unknown[]) => Promise<unknown>>(),
-}));
-vi.mock("#src/http/ingress-identity.ts", () => ({ ingressIdentity: async () => "ingress-key" }));
-vi.mock("#src/http/account-auth.ts", async (original) => ({
-  ...(await original<typeof import("#src/http/account-auth.ts")>()),
-  authenticateAccountRequest: mocks.authenticate,
-}));
-vi.mock(import("@cup/telemetry.cloudflare"), async (importOriginal) => ({
-  ...(await importOriginal()),
-  logEvent: vi.fn<typeof logEvent>(),
-}));
-vi.mock("@cup/narration-document-creation", async (importOriginal) => {
-  const original = await importOriginal<typeof import("@cup/narration-document-creation")>();
-  return {
-    ...original,
-    renderNarrationDocument: vi.fn<typeof original.renderNarrationDocument>(
-      original.renderNarrationDocument,
-    ),
-  };
-});
-vi.mock(import("@sentry/core"), async (importOriginal) => ({
-  ...(await importOriginal()),
-  captureException: vi.fn<typeof captureException>(),
-}));
 
 const conversionId = "f9cc2e59-46a3-4890-b923-bda04d03b4d0";
 const accountId = "d1a52e64-3e4d-4a7f-a711-7fb11501e9af";
+const subject = "f355f913-ba12-45d6-a7d2-4df95f7cf11f";
 const grantId = "6b0f5f2e-8d7c-4b8e-9a51-0f7c3c2d1e4a";
 const origin = "https://cup.audio";
 const audiobookPath = `/api/audiobooks/${conversionId}`;
@@ -57,10 +22,15 @@ const OWNERS: Record<ConversionOwner["kind"], ConversionOwner> = {
   account: { kind: "account", accountId },
   trial: { kind: "trial", grantId },
 };
-const OWNER_HEADERS: Record<ConversionOwner["kind"], Record<string, string>> = {
-  account: { Authorization: "Bearer token" },
-  trial: { Cookie: `__Secure-grant-session-${grantId}=valid-session` },
-};
+const accountTokens = await createAccountTokenIssuer(
+  "https://narration-document-rendering.supabase.co",
+);
+
+async function ownerHeaders(kind: ConversionOwner["kind"]): Promise<Record<string, string>> {
+  return kind === "account"
+    ? { Authorization: `Bearer ${await accountTokens.sign(subject)}` }
+    : { Cookie: `__Secure-grant-session-${grantId}=valid-session` };
+}
 
 const STORED_HTML =
   '<article><h1 id="narration-unit-0001">A document</h1><section id="narration-unit-0002"><h2>A section</h2><p lang="en">See <a href="/cited">the source</a>.</p></section></article>';
@@ -69,13 +39,16 @@ const SYNCHRONIZATION_UNITS = [
   { id: "narration-unit-0002", narrationText: "A section\n\nSee the source." },
 ];
 
+let sentry: SentryRecorder;
+
 beforeEach(() => {
-  vi.mocked(captureException).mockClear();
-  vi.mocked(logEvent).mockClear();
-  vi.mocked(renderNarrationDocument).mockClear();
+  sentry = recordSentry();
+  vi.stubGlobal("fetch", accountTokens.fetchKeySetOnly);
 });
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllGlobals();
+  stopRecordingSentry();
 });
 
 function fixture(
@@ -126,14 +99,8 @@ function fixture(
     getReadyAudiobookReference: async () => reference,
     listAudioSegments: async () => segments,
   };
-  mocks.authenticate.mockResolvedValue({
-    result: "authenticated",
-    snapshot: { accountId, state: "active" },
-    account,
-  });
-
   const env = {
-    SUPABASE_URL: "https://access-test.supabase.co",
+    SUPABASE_URL: accountTokens.supabaseUrl,
     MEDIA_URL_SIGNING_KEY: "test-media-url-signing-key",
     ACCOUNTS: { idFromName: (name: string) => name, get: () => account },
     CONVERSION_GRANTS: { idFromName: (name: string) => name, get: () => grant },
@@ -141,6 +108,7 @@ function fixture(
       idFromName: (name: string) => name,
       get: () => ({
         consumeIngressRequest: async () => undefined,
+        findIdentity: async () => ({ accountId, subject, phase: "active" }),
         findConversionOwner: async () => owner,
       }),
     },
@@ -174,7 +142,7 @@ function fixture(
   return {
     readKeys,
     request: async (path = audiobookPath) =>
-      createApiServer().request(origin + path, { headers: OWNER_HEADERS[owner.kind] }, env),
+      createApiServer().request(origin + path, { headers: await ownerHeaders(owner.kind) }, env),
   };
 }
 
@@ -190,7 +158,7 @@ test.for(["account", "trial"] as const)(
         synchronizationUnits: SYNCHRONIZATION_UNITS,
       },
     });
-    expect(captureException).not.toHaveBeenCalled();
+    expect(sentry.exceptions).toEqual([]);
   },
 );
 
@@ -211,14 +179,14 @@ test.for(["account", "trial"] as const)(
         synchronizationUnits,
       },
     });
-    expect(captureException).toHaveBeenCalledTimes(1);
-    expect(captureException).toHaveBeenCalledWith(expect.any(Error), {
-      tags: {
-        "cup.conversion.id": conversionId,
-        "cup.synchronization_unit.id": "narration-unit-0002",
-      },
+    expect(sentry.exceptions).toEqual([expect.any(Error)]);
+    expect(sentry.events[0]?.tags).toMatchObject({
+      "cup.conversion.id": conversionId,
+      "cup.synchronization_unit.id": "narration-unit-0002",
     });
-    expect(logEvent).toHaveBeenCalledWith("narration-document-mismatch", expect.any(String), {
+    expect(sentry.logs).toContainEqual({
+      event: "narration-document-mismatch",
+      message: expect.any(String),
       attributes: {
         "cup.conversion.id": conversionId,
         "cup.synchronization_unit.id": "narration-unit-0002",
@@ -303,7 +271,7 @@ test.for(["account", "trial"] as const)(
     expect(readKeys.filter((key) => key.endsWith(".html"))).toEqual([
       `${artifactPrefix}narration-source-material.html`,
     ]);
-    expect(captureException).not.toHaveBeenCalled();
+    expect(sentry.exceptions).toEqual([]);
   },
 );
 
@@ -349,7 +317,7 @@ test.for([1, 2] as const)(
         synchronizationUnits,
       },
     });
-    expect(captureException).not.toHaveBeenCalled();
+    expect(sentry.exceptions).toEqual([]);
   },
 );
 
@@ -379,11 +347,10 @@ test("a new conversion whose segmentation disagrees with its stored units serves
       synchronizationUnits,
     },
   });
-  expect(captureException).toHaveBeenCalledWith(expect.any(Error), {
-    tags: {
-      "cup.conversion.id": conversionId,
-      "cup.synchronization_unit.id": "narration-unit-0003",
-    },
+  expect(sentry.exceptions).toEqual([expect.any(Error)]);
+  expect(sentry.events[0]?.tags).toMatchObject({
+    "cup.conversion.id": conversionId,
+    "cup.synchronization_unit.id": "narration-unit-0003",
   });
 });
 
@@ -418,16 +385,19 @@ test.for([
         synchronizationUnits: NEW_SHAPE_UNITS,
       },
     });
-    expect(captureException).toHaveBeenCalledTimes(1);
-    expect(captureException).toHaveBeenCalledWith(
+    expect(sentry.exceptions).toEqual([
       expect.objectContaining({
         cause: expect.objectContaining({ message: expect.stringContaining(rootCause) }),
       }),
-      { tags: { "cup.conversion.id": conversionId } },
-    );
-    expect(logEvent).toHaveBeenCalledWith("narration-document-render-failure", expect.any(String), {
-      attributes: { "cup.conversion.id": conversionId },
-      error: expect.objectContaining({ message: expect.stringContaining(rootCause) }),
+    ]);
+    expect(sentry.events[0]?.tags).toMatchObject({ "cup.conversion.id": conversionId });
+    expect(sentry.logs).toContainEqual({
+      event: "narration-document-render-failure",
+      message: expect.any(String),
+      attributes: expect.objectContaining({
+        "cup.conversion.id": conversionId,
+        "exception.message": expect.stringContaining(rootCause),
+      }),
     });
   },
 );
@@ -480,7 +450,6 @@ test.for(["account", "trial"] as const)(
     const withoutDocument = Object.fromEntries(
       Object.entries(withDocument).filter(([key]) => key !== "narrationDocument"),
     );
-    vi.mocked(renderNarrationDocument).mockClear();
     readKeys.length = 0;
 
     const response = await request(`${audiobookPath}?narrationDocument=omit`);
@@ -489,7 +458,6 @@ test.for(["account", "trial"] as const)(
     expect(toStrictSchema(audiobookResponseSchema).parse(await response.json())).toStrictEqual(
       withoutDocument,
     );
-    expect(renderNarrationDocument).not.toHaveBeenCalled();
     expect(readKeys.filter((key) => key.endsWith(".html"))).toStrictEqual([]);
   },
 );

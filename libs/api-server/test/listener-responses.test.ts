@@ -1,4 +1,4 @@
-import { beforeEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { z } from "zod";
 
 import { SPEECH_CONFIG } from "@cup/audiobook-production";
@@ -20,21 +20,8 @@ import type { ApiServerEnvironment } from "#src/api-server-environment.ts";
 import { createApiServer } from "#src/api-server.ts";
 import { toPreparationPhase } from "#src/http/listener-responses.ts";
 
+import { createAccountTokenIssuer } from "#test/account-tokens.ts";
 import { toStrictSchema } from "#test/strict-schema.ts";
-
-vi.mock("cloudflare:workers", () => ({
-  DurableObject: class {
-    readonly mocked = true;
-  },
-}));
-const mocks = vi.hoisted(() => ({
-  authenticate: vi.fn<(...args: unknown[]) => Promise<unknown>>(),
-}));
-vi.mock("#src/http/ingress-identity.ts", () => ({ ingressIdentity: async () => "ingress-key" }));
-vi.mock("#src/http/account-auth.ts", async (original) => ({
-  ...(await original<typeof import("#src/http/account-auth.ts")>()),
-  authenticateAccountRequest: mocks.authenticate,
-}));
 
 const accountId = "d1a52e64-3e4d-4a7f-a711-7fb11501e9af";
 const subject = "f355f913-ba12-45d6-a7d2-4df95f7cf11f";
@@ -50,6 +37,7 @@ const idempotencyKey = "9d8c7b6a-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
 const origin = "https://cup.audio";
 const grantCookie = `__Secure-grant-session-${grantId}=valid-session`;
 const credential = `v1.${"a".repeat(43)}`;
+const accountTokens = await createAccountTokenIssuer("https://listener-responses.supabase.co");
 
 const accountSnapshot = {
   accountId,
@@ -144,7 +132,7 @@ const settledSegments = [
 ];
 
 const account = {
-  inspect: async () => accountSnapshot,
+  inspect: async () => ({ ...accountSnapshot, internalRevision: 7 }),
   deletionChallenge: async () => ({
     challengeId,
     subject,
@@ -242,9 +230,10 @@ const grant = {
 };
 
 const env = {
-  SUPABASE_URL: "https://access-test.supabase.co",
+  SUPABASE_URL: accountTokens.supabaseUrl,
   SUPABASE_PUBLISHABLE_KEY: "publishable-key",
   GOOGLE_WEB_CLIENT_ID: "google-client",
+  APPLE_WEB_CLIENT_ID: "apple-web-client",
   MEDIA_URL_SIGNING_KEY: "test-media-url-signing-key",
   ACCOUNTS: { idFromName: (name: string) => name, get: () => account },
   CONVERSION_GRANTS: { idFromName: (name: string) => name, get: () => grant },
@@ -252,6 +241,7 @@ const env = {
     idFromName: (name: string) => name,
     get: () => ({
       consumeIngressRequest: async () => undefined,
+      findIdentity: async () => ({ accountId, subject, phase: "active" }),
       findConversionOwner: async (conversionId: string) =>
         trialConversions.some((conversion) => conversion.conversionId === conversionId)
           ? { kind: "trial", grantId }
@@ -275,17 +265,11 @@ function isEnvironment(value: unknown): value is ApiServerEnvironment {
 }
 
 beforeEach(() => {
-  mocks.authenticate.mockResolvedValue({
-    result: "authenticated",
-    identity: {
-      subject,
-      email: "listener@example.com",
-      provider: "google",
-      authenticatedAtSeconds: 10,
-    },
-    snapshot: { ...accountSnapshot, internalRevision: 7 },
-    account,
-  });
+  vi.stubGlobal("fetch", accountTokens.fetchKeySetOnly);
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 const browserMutation = {
@@ -300,15 +284,21 @@ async function request(
   if (!isEnvironment(env)) {
     throw new Error("Invalid fixture");
   }
-  return createApiServer().request(
-    origin + path,
-    {
-      method: init.method ?? "GET",
-      headers: { Authorization: "Bearer token", ...init.headers },
-      ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
+  const body = init.body === undefined ? undefined : JSON.stringify(init.body);
+  const fetchRequest = new Request(origin + path, {
+    method: init.method ?? "GET",
+    headers: {
+      Authorization: `Bearer ${await accountTokens.sign(subject)}`,
+      "CF-Connecting-IP": "192.0.2.1",
+      ...(body === undefined
+        ? {}
+        : { "Content-Length": String(new TextEncoder().encode(body).byteLength) }),
+      ...init.headers,
     },
-    env,
-  );
+    ...(body === undefined ? {} : { body }),
+  });
+  Object.defineProperty(fetchRequest, "cf", { value: {} });
+  return createApiServer().request(fetchRequest, undefined, env);
 }
 
 async function parseStrictly<Schema extends z.ZodType>(
@@ -324,9 +314,10 @@ test("the auth configuration declares only the public sign-in settings", async (
   expect(
     await parseStrictly(await request("/api/auth/config"), 200, authConfigResponseSchema),
   ).toEqual({
-    supabaseUrl: "https://access-test.supabase.co",
+    supabaseUrl: accountTokens.supabaseUrl,
     publishableKey: "publishable-key",
     googleWebClientId: "google-client",
+    appleWebClientId: "apple-web-client",
   });
 });
 
@@ -350,12 +341,38 @@ test("the auth configuration advertises the test account only in local developme
       authConfigResponseSchema,
     );
   expect(await config({ LOCAL_DEVELOPMENT: "false" })).not.toHaveProperty("testAccount");
-  expect(await config({ LOCAL_DEVELOPMENT: "true", GOOGLE_WEB_CLIENT_ID: "" })).toEqual({
-    supabaseUrl: "https://access-test.supabase.co",
+  expect(
+    await config({ LOCAL_DEVELOPMENT: "true", GOOGLE_WEB_CLIENT_ID: "", APPLE_WEB_CLIENT_ID: "" }),
+  ).toEqual({
+    supabaseUrl: accountTokens.supabaseUrl,
     publishableKey: "publishable-key",
     testAccount: { email: "test@cup.local", password: "local-password" },
   });
 });
+
+test.each([
+  ["audio.cup.app.web", { appleWebClientId: "audio.cup.app.web" }],
+  ["", {}],
+])(
+  "the auth configuration with the Apple web client %j advertises Apple sign-in as %j",
+  async (appleWebClientId, advertised) => {
+    const config = await parseStrictly(
+      await createApiServer().request(
+        `${origin}/api/auth/config`,
+        {},
+        { ...env, APPLE_WEB_CLIENT_ID: appleWebClientId },
+      ),
+      200,
+      authConfigResponseSchema,
+    );
+    expect(config).toEqual({
+      supabaseUrl: accountTokens.supabaseUrl,
+      publishableKey: "publishable-key",
+      googleWebClientId: "google-client",
+      ...advertised,
+    });
+  },
+);
 
 test("the account snapshot carries only declared fields", async () => {
   expect(await parseStrictly(await request("/api/account"), 200, accountSnapshotSchema)).toEqual(

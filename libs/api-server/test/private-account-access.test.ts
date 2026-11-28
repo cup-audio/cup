@@ -4,18 +4,10 @@ import { afterEach, expect, test, vi } from "vitest";
 import type { ApiServerEnvironment } from "#src/api-server-environment.ts";
 import { createApiServer } from "#src/api-server.ts";
 
-vi.mock("@cup/conversion-grants", async () => ({
-  ...(await import("@cup/conversion-grants/contracts")),
-  clearGrantSessionCookie: () => "",
-  createGrantSessionCookie: () => "",
-  createRootCredential: () => "",
-  getGrantSessionCookie: () => undefined,
-}));
-
 const accountId = "d1a52e64-3e4d-4a7f-a711-7fb11501e9af";
 const conversionId = "f9cc2e59-46a3-4890-b923-bda04d03b4d0";
 const subject = "f355f913-ba12-45d6-a7d2-4df95f7cf11f";
-const url = "https://access-test.supabase.co";
+const url = "https://private-account-access.supabase.co";
 const keys = await generateKeyPair("ES256");
 const jwk = { ...(await exportJWK(keys.publicKey)), kid: "private-access" };
 
@@ -29,7 +21,7 @@ async function fixture(owner = accountId, state = "active") {
   const token = await new SignJWT({
     role: "authenticated",
     is_anonymous: false,
-    app_metadata: { provider: "google" },
+    app_metadata: { provider: "google", providers: ["google"] },
   })
     .setProtectedHeader({ alg: "ES256", kid: "private-access" })
     .setSubject(subject)

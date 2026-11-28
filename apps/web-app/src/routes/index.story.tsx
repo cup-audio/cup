@@ -29,6 +29,16 @@ export const SignIn = {
     await router.load();
   },
   component: LandingPage,
+  handlers: [
+    http.get("/api/auth/config", () =>
+      HttpResponse.json({
+        supabaseUrl: `${window.location.origin}/__story`,
+        publishableKey: "story-key",
+        googleWebClientId: "story-client",
+        appleWebClientId: "audio.cup.app.web",
+      }),
+    ),
+  ],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const user = userEvent.setup();

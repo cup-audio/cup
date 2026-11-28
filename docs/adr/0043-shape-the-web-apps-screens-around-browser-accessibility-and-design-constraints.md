@@ -4,6 +4,8 @@ status: accepted
 
 # Shape the web app's screens around browser, accessibility and design constraints
 
+> Note, 2026-11-24: the avatar's name now also comes from Apple. On iOS, Supabase cannot fill it from the native sheet's identity token, so the iOS adapter writes the name the sheet returned into the same Supabase `user_metadata` fields with `updateUser`; Cup still stores no name of its own ([account holder's name](../architecture/web-app.md#account-holders-name), [#519](https://github.com/cup-audio/cup/issues/519)).
+
 The redesigned screens (Recents, the detail view, the account chrome and the conversion screens) follow Figma designs on Base UI components, and many of their details exist because of a browser behaviour, an accessibility need or a rule of the design rather than taste. Most of them came with the Recents redesign in [cup-audio/cup#101](https://github.com/cup-audio/cup/pull/101) and the conversion screens in [cup-audio/cup#174](https://github.com/cup-audio/cup/pull/174); others with [cup-audio/cup#138](https://github.com/cup-audio/cup/pull/138) (deleting a conversion, with the status announcer and the deletion dialog), [cup-audio/cup#168](https://github.com/cup-audio/cup/pull/168) (cover images that never flash), [cup-audio/cup#177](https://github.com/cup-audio/cup/pull/177) (a page title per screen), [cup-audio/cup#292](https://github.com/cup-audio/cup/pull/292) (content out from under the iOS status bar) and [cup-audio/cup#502](https://github.com/cup-audio/cup/pull/502) (the narration document's interactions); the visually-hidden recipe dates from the 1.0.0 release. These decisions were recorded from code comments on 2026-11-23.
 
 ## Decision
